@@ -8,7 +8,7 @@ Every change is validated automatically. Matching quality and file safety get th
 | Lint + format | ruff |
 | Types | pyright (strict) |
 | Unit tests | pytest, pytest-asyncio |
-| External API tests | vcrpy cassettes for MusicBrainz, AcoustID, ListenBrainz, Last.fm, so CI never hits live services |
+| External API tests | vcrpy cassettes for MusicBrainz, AcoustID, ListenBrainz, so CI never hits live services |
 | Property tests | Hypothesis for path templating: no collisions, no illegal characters, stable output for the same input |
 | Migrations | Alembic upgrade → downgrade → upgrade on an empty DB |
 

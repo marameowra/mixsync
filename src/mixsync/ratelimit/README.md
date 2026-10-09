@@ -22,12 +22,11 @@ The only way MixSync talks HTTP to the outside world. It provides per-service ra
 | `coverart` | 1 req/s (self-imposed; none published) | art saved to disk | same User-Agent; **follow 307 redirects** (off by default in httpx) |
 | `acoustid` | 3 req/s | lookup 7 d, submit never | app key |
 | `listenbrainz` | 1 req/s, tightened by `X-RateLimit-Remaining` / `-Reset-In` | 1 h | UA required; `Authorization: Token` |
-| `lastfm` (off by default) | 1 req/s (self-imposed) | per HTTP headers, 100 MB cap | identifiable UA; app key |
 | `discogs` (off by default) | 50/min (documented: 60/min per IP) | 1 d | unique UA; user token |
 | `deezer` (off by default) | 1 req/s (self-imposed) | 1 d | UA |
+| `slskd`, `navidrome` | unlimited (local) | none | API key / user |
 
 Every number here is checked against the services' docs; see [services etiquette](../../../docs/design/services-etiquette.md#summary) for sources.
-| `slskd`, `navidrome` | unlimited (local) | none | API key / user |
 
 ## Rules
 - `429` / `503` → honor `Retry-After`, else exponential backoff with jitter (1 s → 2 s → 4 s … cap 5 min). Set `blocked_until` on the bucket so every worker pauses. MusicBrainz signals overload with a bare **503 and no retry header**, so the backoff path is the normal one there.

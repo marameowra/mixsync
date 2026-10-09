@@ -15,6 +15,7 @@
 
 ## Flow
 - One job per album folder (or per loose-file group), resumable through the job table.
+- **Every file gets an AcoustID lookup**, even if it already has MusicBrainz tags (decided). The preflight ETA includes all of them.
 - Each folder goes through [stage 2 matching](matching.md#stage-2-post-download-verification) with the admin's matching profile:
   - auto-accept → imported and canonicalized
   - review → review queue

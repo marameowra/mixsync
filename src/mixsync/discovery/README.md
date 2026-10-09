@@ -4,7 +4,7 @@
 Per-user playlists built from listening history, including tracks not yet owned, plus the retention rules that decide whether those provisional tracks stay.
 
 This folder holds **two kinds of code**. Keep them in separate files:
-- **Adapters** (`listenbrainz.py`, `lastfm.py`) implement `HistorySource`. They follow the adapter rule: `core` + `ratelimit` only.
+- **Adapters** (`listenbrainz.py`) implement `HistorySource`. They follow the adapter rule: `core` + `ratelimit` only.
 - **Services** (`playlists.py`, `retention.py`) follow the service rule: `core`, `db`, `match`, `library`, with adapters injected as Protocols.
 
 ## Owns / does not own
@@ -15,7 +15,6 @@ This folder holds **two kinds of code**. Keep them in separate files:
 | File | Kind | Contents |
 |---|---|---|
 | `listenbrainz.py` | adapter | Recommendations, LB Radio prompts, top artists (`liblistenbrainz` or httpx) |
-| `lastfm.py` | adapter | Similar artists/tracks, top artists (`pylast` or httpx). **Off by default** pending the [ToS question](../../../docs/design/services-etiquette.md#lastfm); if enabled, attribute "via Last.fm" with links |
 | `playlists.py` | service | `build(playlist_def, user) -> list[PlaylistEntry]`; owned resolved by recording MBID; unowned → `Request(provisional=True, source=discovery)` |
 | `retention.py` | service | Daily job: evaluate keep rules, promote kept tracks, trash expired ones |
 

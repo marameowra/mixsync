@@ -14,7 +14,7 @@ MixSync is an **orchestrator**. It owns the decisions: requests, matching, libra
             └───┬─────────┬──────────┬─────────┬───────┘
                 │         │          │         │
              slskd   MusicBrainz  Navidrome  ListenBrainz
-           (Soulseek) AcoustID    (Subsonic)  Last.fm
+           (Soulseek) AcoustID    (Subsonic)
                       CoverArt
                 │                    ▲
                 ▼                    │
@@ -38,7 +38,7 @@ MixSync is an **orchestrator**. It owns the decisions: requests, matching, libra
 | Tag I/O | **mutagen** | Snapshot original tags before every write |
 | Matching heuristics | **beets** `autotag` distance model (MIT) | Explainable scorer, per-user thresholds, calibration |
 | Streaming | **Navidrome** (Subsonic API) | Rescan, playlist push, read stars and plays per user |
-| Recommendations | **ListenBrainz** (`liblistenbrainz`), **Last.fm** (`pylast`) | Per-user playlist generation |
+| Recommendations | **ListenBrainz** (`liblistenbrainz`). Last.fm is deferred. | Per-user playlist generation |
 | MB submission | **MB release-editor seeding**, **Harmony** | Build the seed, open it in the browser |
 | Studied, not adopted | Lidarr, Soularr, Explo, Picard | UX and logic reference |
 
@@ -50,7 +50,7 @@ Every external system sits behind a small interface, so new sources and targets 
 | `DownloadSource` | slskd | Prowlarr + qBittorrent, Prowlarr + SABnzbd, yt-dlp |
 | `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs, Deezer (read-only fallbacks) |
 | `LibraryTarget` | Navidrome | Jellyfin, Plex, Music Assistant |
-| `HistorySource` | ListenBrainz, Last.fm, Navidrome plays | n/a |
+| `HistorySource` | ListenBrainz, Navidrome plays | Last.fm (deferred) |
 
 ## Tech stack
 Rationale lives in [ADR 0002](decisions/0002-python-backend.md), [0003](decisions/0003-htmx-server-rendered-ui.md), and [0004](decisions/0004-sqlite-and-db-job-queue.md).
@@ -65,7 +65,7 @@ Rationale lives in [ADR 0002](decisions/0002-python-backend.md), [0003](decision
 - Local accounts with a standard HTML login form (`autocomplete="username"` / `"current-password"`) so password managers work. OIDC and passkeys are possible later.
 - **Capability-based roles.** A role is a bundle of capabilities: `request`, `download.auto` (skip approval), `approve`, `library.edit`, `workflow.edit`, `admin`.
 - v1 ships with only `admin` and `user` roles. The capability model exists in the schema from day one because discovery is per-user and retrofitting users is painful. The approval queue and role editor come after v1.
-- Each user links to their Navidrome account (for stars and plays) and optionally to ListenBrainz and Last.fm.
+- Each user links to their Navidrome account (for stars and plays) and optionally to ListenBrainz.
 - Each user has a **matching profile** (strict / balanced / loose) that sets their auto-accept and review thresholds.
 
 ## Repo layout
@@ -79,7 +79,7 @@ src/mixsync/
   match/       features.py, scorer.py, profiles.py, calibrate.py
   library/     paths.py, fileops.py, tags.py, canonical.py, importer.py
   targets/     navidrome.py             (LibraryTarget)
-  discovery/   listenbrainz.py, lastfm.py, playlists.py, retention.py
+  discovery/   listenbrainz.py, playlists.py, retention.py
   watchlist/   poller.py
   submit/      mb_seed.py, harmony.py
   web/         routes/, templates/, static/app.css

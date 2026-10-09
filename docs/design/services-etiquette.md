@@ -15,7 +15,7 @@ MixSync uses free, mostly community-run services. It must use them as intended a
 | Cover Art Archive | none in place | 1 req/s (self-imposed) | UA (courtesy) | core |
 | AcoustID | ≤ 3 req/s | 3 req/s | app key + per-user key | core |
 | ListenBrainz | ≤ 1 req/s, plus `X-RateLimit-*` headers | 1 req/s + headers | UA required + user token | core (discovery) |
-| Last.fm | no number; "several calls per second" continuously risks suspension | 1 req/s (self-imposed) | identifiable UA + API key | **off by default** (see the ToS risk below) |
+| Last.fm | no number; "several calls per second" continuously risks suspension | 1 req/s (self-imposed) | identifiable UA + API key | **deferred, not in v1** |
 | Discogs | 60/min authenticated, 25/min unauthenticated, per IP, rolling 60 s | 50/min | unique UA + user token | off by default (fallback) |
 | Deezer | none published | 1 req/s (self-imposed) | n/a | off by default (fallback) |
 | Soulseek | 5 clients per IP | 1 slskd client | Soulseek account | core |
@@ -60,8 +60,7 @@ Source: [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/AP
 
 Source: [AcoustID web service](https://acoustid.org/webservice)
 
-> [!question] Fewer AcoustID lookups during migration
-> Many files in an existing library already carry MusicBrainz recording IDs. Fingerprinting runs locally (`fpcalc`) and costs nothing. Proposal: still fingerprint everything, but call AcoustID only for files whose tags are missing, unresolvable, or disagree with the duration. That could cut lookups a lot, at the cost of trusting existing tags a little more.
+**Decided: AcoustID is always checked.** Every file gets a fingerprint and an AcoustID lookup, including files that already carry MusicBrainz tags and files processed during migration. Existing tags never skip the lookup. If AcoustID is unreachable, the job waits and retries; it never imports without the check.
 
 ## ListenBrainz
 | Rule | What the docs say | What MixSync does |
@@ -75,6 +74,8 @@ Source: [AcoustID web service](https://acoustid.org/webservice)
 Source: [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/index.html)
 
 ## Last.fm
+**Deferred, not in v1.** These findings are kept for reference in case Last.fm is reconsidered.
+
 | Rule | What the docs say | What MixSync does |
 |---|---|---|
 | Rate | "Be reasonable"; continuously making several calls per second risks suspension; limits are at Last.fm's discretion | Self-imposed 1 req/s |
@@ -86,8 +87,7 @@ Source: [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/a
 
 Source: [Last.fm API ToS](https://www.last.fm/api/tos) · [API intro](https://www.last.fm/api/intro)
 
-> [!question] Last.fm terms risk
-> MixSync turns recommendations into Soulseek downloads. Last.fm's terms exclude use alongside unauthorised sharing, so using Last.fm data this way may breach them. Proposal: **Last.fm is off by default and ListenBrainz is the primary discovery source.** MetaBrainz runs ListenBrainz and publishes its data openly. Decide whether to keep Last.fm as an opt-in or drop it from v1.
+**Decided: deferred.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms exclude use alongside unauthorised sharing. ListenBrainz, which MetaBrainz runs with openly published data, is the only discovery source in v1.
 
 ## Discogs (fallback, off by default)
 | Rule | What the docs say | What MixSync does |
@@ -123,8 +123,8 @@ These are community norms, not written rules, and MixSync follows them:
 Source: [Soulseek rules](https://www.slsknet.org/news/node/681)
 
 ## Caching
-- Persistent server-side response cache in `/config` for MB, CAA, AcoustID, ListenBrainz, and Last.fm.
-- MB entities 7 days, searches 1 day. Last.fm follows its HTTP headers and stays under 100 MB.
+- Persistent server-side response cache in `/config` for MB, CAA, AcoustID, and ListenBrainz.
+- MB entities 7 days, searches 1 day.
 - An optional **local MusicBrainz mirror** (musicbrainz-docker) can replace the public API, which is useful for large migrations.
 
 ## Jittered background jobs

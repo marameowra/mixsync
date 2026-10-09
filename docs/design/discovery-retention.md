@@ -5,13 +5,13 @@ Build playlists from each user's listening, including tracks they don't own yet,
 Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendations into Navidrome and cleans them up afterwards.
 
 ## Inputs
-- Navidrome scrobbles to ListenBrainz and/or Last.fm. MixSync doesn't need to collect plays itself.
-- Each user links ListenBrainz (username + token) and/or Last.fm (username + API key).
-- **ListenBrainz is the primary source. Last.fm is off by default**, because its API terms exclude use alongside unauthorised sharing ([details](services-etiquette.md#lastfm)). If enabled, it is cached under 100 MB and attributed in the UI.
+- Navidrome scrobbles to ListenBrainz. MixSync doesn't need to collect plays itself.
+- Each user links ListenBrainz (username + token).
+- **ListenBrainz is the only discovery source in v1.** Last.fm is deferred, because its API terms exclude use alongside unauthorised sharing ([details](services-etiquette.md#lastfm)).
 - Navidrome plays and stars are read through the Subsonic API, per linked Navidrome account.
 
 ## Generator
-- Sources: ListenBrainz personal recommendations and LB Radio prompts, plus Last.fm similar artists/tracks seeded by the user's top artists.
+- Sources: ListenBrainz personal recommendations and LB Radio prompts. LB Radio's artist prompts cover similar-artist expansion.
 - A playlist definition holds: name, sources, size (default 50), share of unowned tracks (default 30%), refresh cadence (default weekly).
 - Owned tracks are resolved by recording MBID. Unowned tracks become requests with `source=discovery` and `provisional=true`.
 - Playlists are pushed to Navidrome per user through Subsonic `createPlaylist` / `updatePlaylist`.

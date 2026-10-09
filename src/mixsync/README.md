@@ -13,7 +13,7 @@ The Python package. Every subfolder has a README describing what goes there. Rea
 | [targets](targets/README.md) | adapter | `LibraryTarget` implementations (Navidrome) |
 | [match](match/README.md) | logic | Feature extraction, scoring, bands, calibration |
 | [library](library/README.md) | logic | Paths, safe file ops, tags, canonical releases, importer |
-| [discovery](discovery/README.md) | adapter + service | ListenBrainz/Last.fm adapters, playlist generator, retention |
+| [discovery](discovery/README.md) | adapter + service | ListenBrainz adapter, playlist generator, retention |
 | [watchlist](watchlist/README.md) | service | Follows and the release poller |
 | [submit](submit/README.md) | service | MusicBrainz seeding, Harmony links, unverified re-check |
 | [web](web/README.md) | composition root | FastAPI app, auth, HTMX UI |

@@ -17,6 +17,7 @@ v1 is done when daily use no longer needs soulsync.
 2. More sources: Prowlarr + qBittorrent, Prowlarr + SABnzbd, yt-dlp
 3. More targets: Jellyfin, Plex, Music Assistant
 4. Stats page (Soulseek uploads, share data, torrent ratios)
+5. Last.fm as a discovery source, only if its terms risk is resolved ([why](design/services-etiquette.md#lastfm))
 
 ### Explicitly out of scope
 - Rebuilding a Soulseek client, chat, or rooms. slskd's UI covers these.
@@ -33,7 +34,7 @@ Estimates are solo weekends.
 | 3 | Canonicalization + unverified + MB submit | 2–3 | Canonical release policy, fragmentation report, unverified flow, seed + Harmony links, re-check job |
 | 4 | Migration re-import | 1 | Preflight, batch import, report. Mostly reuses phase 2. |
 | 5 | Watchlist | 1 | Follows, poller, auto-requests |
-| 6 | Discovery + retention | 2–3 | LB/Last.fm links, generator, provisional library, keep/expire, playlist push |
+| 6 | Discovery + retention | 2–3 | ListenBrainz link, generator, provisional library, keep/expire, playlist push |
 
 **v1 total: about 10–15 weekends.** Phase 2 is the largest and riskiest; matching quality is the main reason MixSync exists.
 

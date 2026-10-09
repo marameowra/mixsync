@@ -46,7 +46,7 @@ Persistent state for MixSync: models, migrations, the repository implementations
 | `role_capabilities` | role_id →, capability (enum) · PK(role_id, capability) |
 | `user_roles` | user_id →, role_id → · PK(user_id, role_id) |
 | `sessions` | id (random token hash), user_id →, expires_at, last_seen_at, user_agent |
-| `user_links` | id, user_id →, service (`navidrome`/`listenbrainz`/`lastfm`/`acoustid`), external_username, secret_encrypted · UQ(user_id, service) |
+| `user_links` | id, user_id →, service (`navidrome`/`listenbrainz`/`acoustid`), external_username, secret_encrypted · UQ(user_id, service) |
 | `matching_profiles` | id, name, preset (`strict`/`balanced`/`loose`/`custom`), auto_accept_max, review_max, quality_pref (JSON) |
 
 ### Work

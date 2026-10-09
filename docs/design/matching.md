@@ -19,7 +19,7 @@ The best-scoring candidate is downloaded. The runners-up are kept as fallbacks i
 ## Stage 2: post-download verification
 | Feature | What it measures |
 |---|---|
-| AcoustID | Fingerprint (`fpcalc`) → AcoustID → recording MBIDs and score; does it include the expected recording? |
+| AcoustID | Fingerprint (`fpcalc`) → AcoustID → recording MBIDs and score; does it include the expected recording? **Mandatory for every file:** existing tags never skip it, and an unreachable AcoustID means retry, not import. |
 | Duration delta | Actual decoded length against MB length |
 | Artist/title similarity | Existing tags and filename against MB |
 | Track position | Track/disc number consistency |

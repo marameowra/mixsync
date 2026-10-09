@@ -1,6 +1,6 @@
 # `tests/cassettes`
 
-vcrpy recordings of real HTTP exchanges with MusicBrainz, AcoustID, Cover Art Archive, ListenBrainz, and Last.fm. Unit tests replay them, so CI never hits live services.
+vcrpy recordings of real HTTP exchanges with MusicBrainz, AcoustID, Cover Art Archive, and ListenBrainz. Unit tests replay them, so CI never hits live services.
 
 ## Layout
 `tests/cassettes/<service>/<test_name>.yaml`

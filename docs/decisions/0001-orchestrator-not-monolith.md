@@ -7,7 +7,7 @@
 The tool being replaced (soulsync) tries to do everything itself, and that is where its bloat comes from. Several of its problems, such as broken Soulseek chat rooms, come from re-implementing things other tools already do well. The project guidelines say to use prior art and to do a limited set of things very well.
 
 ## Decision
-MixSync owns **the decisions**: requests, matching, library policy, playlists, retention, users, and the UI. It delegates **the heavy lifting** to mature tools over their APIs: slskd, MusicBrainz, AcoustID, mutagen, Navidrome, ListenBrainz, and Last.fm. Each external system sits behind a small adapter interface (`DownloadSource`, `MetadataProvider`, `LibraryTarget`, `HistorySource`).
+MixSync owns **the decisions**: requests, matching, library policy, playlists, retention, users, and the UI. It delegates **the heavy lifting** to mature tools over their APIs: slskd, MusicBrainz, AcoustID, mutagen, Navidrome, and ListenBrainz. Each external system sits behind a small adapter interface (`DownloadSource`, `MetadataProvider`, `LibraryTarget`, `HistorySource`).
 
 ## Alternatives considered
 | Option | Pros | Cons |

@@ -39,7 +39,6 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_NAVIDROME_URL` | Navidrome base URL (users link their own credentials) |
-| `MIXSYNC_LASTFM_API_KEY` | optional |
 | `PUID`, `PGID` | file ownership |
 
 ## Health and ops
