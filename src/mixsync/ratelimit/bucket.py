@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
@@ -15,8 +16,9 @@ def aware(dt: datetime) -> datetime:
 class Bucket:
     """Token bucket persisted in `rate_buckets`, so every worker shares one budget.
 
-    shortcut: atomic per process (no await inside a transaction), not across SQLite
-    processes; upgrade to SELECT ... FOR UPDATE / BEGIN IMMEDIATE if contention shows up.
+    Each read-modify-write runs under a write lock (BEGIN IMMEDIATE on SQLite, row
+    FOR UPDATE on Postgres), so concurrent processes never overspend. Callers sleep
+    outside the transaction.
     """
 
     def __init__(
@@ -28,7 +30,10 @@ class Bucket:
         self.clock = clock
 
     def _row(self, s: Session, rate: float, now: datetime) -> RateBucket:
-        row = s.get(RateBucket, self.service)
+        if s.get_bind().dialect.name == "sqlite":
+            # first statement of the transaction: pysqlite does not autobegin for non-DML
+            s.execute(text("BEGIN IMMEDIATE"))
+        row = s.get(RateBucket, self.service, with_for_update=True)
         if row is None:
             cap = max(1.0, rate)
             row = RateBucket(

@@ -177,3 +177,18 @@ async def test_user_agent_is_mixsync(
             await c.get("https://x.test/")
     assert all(ua.startswith("MixSync/") and "github.com/marameowra/mixsync" in ua for ua in seen)
     assert len(seen) == 2
+
+
+def test_two_engines_never_grant_inside_one_window(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    lim = limits("musicbrainz", settings)  # 1 req/s
+    other = make_session_factory(make_engine(settings))  # separate engine, same file
+    buckets = [Bucket("musicbrainz", lim, f, clock) for f in (sessions, other)]
+    grants: list[datetime] = []
+    for i in range(10):
+        b = buckets[i % 2]
+        while (wait := b.reserve()) > timedelta(0):
+            clock.t += wait
+        grants.append(clock.now())
+    assert all(b - a >= timedelta(seconds=1) for a, b in zip(grants, grants[1:], strict=False))
