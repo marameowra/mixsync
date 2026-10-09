@@ -12,6 +12,7 @@ from mixsync.core.matching import Candidate, CandidateFile, TransferInfo, Transf
 from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset({"mp3", "flac", "ogg", "opus", "m4a", "aac", "wav", "wma", "ape", "wv", "aiff"})
+RESPONSE_TRIES = 10
 _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+", re.IGNORECASE)
 
 
@@ -110,10 +111,20 @@ class SlskdSource:
         search_id = str(uuid.uuid4())
         await self._call("POST", "/searches", json={"id": search_id, "searchText": query})
         for _ in range(self._max_polls):
-            if (await self._call("GET", f"/searches/{search_id}"))["isComplete"]:
-                return map_responses(await self._call("GET", f"/searches/{search_id}/responses"))
+            state = await self._call("GET", f"/searches/{search_id}")
+            if state["isComplete"]:
+                return await self._responses(search_id, state["responseCount"])
             await self._sleep(self._poll_interval)
         raise TransientError(f"slskd search {query!r} did not complete")
+
+    async def _responses(self, search_id: str, expected: int) -> list[Candidate]:
+        # slskd persists responses after reporting completion; early reads can be empty.
+        for _ in range(RESPONSE_TRIES):
+            data = await self._call("GET", f"/searches/{search_id}/responses")
+            if data or not expected:
+                return map_responses(data)
+            await self._sleep(self._poll_interval)
+        raise TransientError(f"slskd search {search_id} reports {expected} responses but gave none")
 
     async def enqueue(self, candidate: Candidate) -> None:
         body = [{"filename": f.path, "size": f.size} for f in candidate.files]

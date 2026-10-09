@@ -178,3 +178,35 @@ async def test_status_before_all_files_are_listed(make_client: Make) -> None:
     body = {"username": "peer-001", "directories": []}
     src = source(make_client, lambda r: httpx.Response(200, json=body))
     assert (await src.status(cand)).state is TransferStatus.QUEUED
+
+
+def search_handler(responses: list[object]) -> Callable[[httpx.Request], httpx.Response]:
+    it = iter(responses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json=load("search_running.json"))
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=next(it, []))
+        return httpx.Response(200, json=load("search_complete.json"))
+
+    return handler
+
+
+async def test_search_retries_responses_not_yet_persisted(make_client: Make) -> None:
+    handler = search_handler([[], load("responses.json")])
+    assert len(await source(make_client, handler).search("x")) == 4
+
+
+async def test_search_persistently_empty_responses_is_transient(make_client: Make) -> None:
+    with pytest.raises(TransientError):
+        await source(make_client, search_handler([])).search("x")
+
+
+async def test_search_with_no_results_returns_immediately(make_client: Make) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={**load("search_complete.json"), "responseCount": 0})  # pyright: ignore[reportArgumentType]
+
+    assert await source(make_client, handler).search("x") == []
