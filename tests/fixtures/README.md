@@ -5,11 +5,11 @@ Test data shared by the unit and integration tests.
 ## Layout
 ```
 audio/                      short CC-licensed clips + manifest (see audio/README.md)
-slskd/                      recorded slskd search responses (JSON), added with the slskd adapter
+slskd/                      slskd API responses (JSON). Hand-built to the slskd response shape, not recorded (no live slskd was available)
 labeled/                    matcher regression cases: candidate/file + MB target + expected band
 regression_baseline.json    stored precision/recall per band per profile
 ```
-Only `audio/` exists now. Create the others when the first test needs them.
+Only `audio/` and `slskd/` exist now. Create the others when the first test needs them.
 
 ## Soulseek edge-case catalog
 Fake Soulseek data (`slskd/`) must cover every case below. Each case has a stable ID used in test names (e.g. `test_scoring[SK-F03]`) and an expected outcome: the chosen candidate, the band, or a specific error. Real-world failures get added as new IDs; IDs are never reused.

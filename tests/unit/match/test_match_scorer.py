@@ -7,6 +7,7 @@ from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, TrackInf
 from mixsync.match.profiles import BALANCED
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
+    SCORER_VERSION,
     Distance,
     album_distance,
     assign_tracks,
@@ -240,7 +241,7 @@ def test_assignment_empty() -> None:
 def test_score_files_perfect_auto_accepts() -> None:
     r = score_files(FILES, LIKE, album("one", "two", "three"), BALANCED)
     assert r.distance == 0 and r.band == Band.AUTO_ACCEPT
-    assert r.breakdown == () and r.vetoes == () and r.scorer_version == 1
+    assert r.breakdown == () and r.vetoes == () and r.scorer_version == SCORER_VERSION
 
 
 def test_score_files_veto_forces_review() -> None:

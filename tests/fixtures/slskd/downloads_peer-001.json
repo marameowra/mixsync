@@ -1,0 +1,67 @@
+{
+  "username": "peer-001",
+  "directories": [
+    {
+      "directory": "Music\\Test Artist\\Test Album",
+      "fileCount": 4,
+      "files": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "username": "peer-001",
+          "direction": "Download",
+          "filename": "Music\\Test Artist\\Test Album\\01 Opening.flac",
+          "size": 22000000,
+          "state": "Completed, Succeeded",
+          "requestedAt": "2026-01-01T00:01:00Z",
+          "bytesTransferred": 22000000,
+          "averageSpeed": 0.0,
+          "bytesRemaining": 0,
+          "percentComplete": 100.0,
+          "removed": false
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "username": "peer-001",
+          "direction": "Download",
+          "filename": "Music\\Test Artist\\Test Album\\02 Second Song.flac",
+          "size": 26400000,
+          "state": "InProgress",
+          "requestedAt": "2026-01-01T00:01:00Z",
+          "bytesTransferred": 1000,
+          "averageSpeed": 0.0,
+          "bytesRemaining": 26399000,
+          "percentComplete": 0.003787878787878788,
+          "removed": false
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "username": "peer-001",
+          "direction": "Download",
+          "filename": "Music\\Test Artist\\Test Album\\03 Third Song.flac",
+          "size": 19800000,
+          "state": "Queued, Remotely",
+          "requestedAt": "2026-01-01T00:01:00Z",
+          "bytesTransferred": 0,
+          "averageSpeed": 0.0,
+          "bytesRemaining": 19800000,
+          "percentComplete": 0.0,
+          "removed": false
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "username": "peer-001",
+          "direction": "Download",
+          "filename": "Music\\Test Artist\\Test Album\\04 Closing.flac",
+          "size": 33000000,
+          "state": "Queued, Remotely",
+          "requestedAt": "2026-01-01T00:01:00Z",
+          "bytesTransferred": 0,
+          "averageSpeed": 0.0,
+          "bytesRemaining": 33000000,
+          "percentComplete": 0.0,
+          "removed": false
+        }
+      ]
+    }
+  ]
+}

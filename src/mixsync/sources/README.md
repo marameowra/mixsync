@@ -7,18 +7,17 @@ Adapters that find and download music. v1 has one: **slskd** (Soulseek). Later: 
 - **Owns:** translating `DownloadSource` calls into the slskd REST API; mapping slskd responses to `core` types; search pacing.
 - **Does not own:** choosing a candidate (that's `match`), moving files into the library (`library`), the Soulseek protocol, chat, or rooms (slskd does these).
 
-## Proposed files
+## Files
 | File | Contents |
 |---|---|
 | `slskd.py` | `SlskdSource` implementing `DownloadSource` |
-| `query.py` | Builds search strings from a `Request` (artist + album, with fallbacks: strip punctuation, drop "feat.", album only) |
+| `query.py` | `queries(artist, album)`: search strings (artist + album, with fallbacks: strip punctuation, drop "feat.", album only) |
 
 ## Key interface (`core.protocols.DownloadSource`)
 ```
-search(request) -> list[Candidate]          # stage-1 input; one Candidate per peer folder
-enqueue(candidate) -> TransferHandle
-status(handle) -> TransferStatus            # queued / in_progress / done / failed, bytes, local paths
-release(handle)                             # tell the source it may clean up after a verified import
+search(query) -> list[Candidate]            # stage-1 input; one Candidate per peer folder
+enqueue(candidate)                          # queue every audio file of the folder
+status(candidate) -> TransferInfo           # queued / in_progress / done / failed, bytes
 ```
 
 ## Rules
@@ -28,14 +27,14 @@ release(handle)                             # tell the source it may clean up af
 - Downloads land in `/downloads` (slskd's folder). This module never writes to `/data`.
 - slskd API key comes from `Settings`; talk to slskd through `ratelimit.polite_client("slskd")` (no limit, but uniform retries and logging).
 
-> [!question] slskd client library
-> Evaluate the `slskd-api` PyPI package: is it maintained, typed, and async? If not, write a thin httpx client against the slskd OpenAPI spec.
+- **Not built yet:** the search concurrency cap, the debounce, the no-results backoff (they need per-request DB state), `release()`, and the transfer monitoring loop. `TransferInfo.local_path` is always `None` until then: slskd's API does not report it.
+- **Client library:** `slskd-api` on PyPI is a sync, untyped `requests` wrapper, so `slskd.py` is a thin httpx client over `PoliteClient`.
 
 ## May import from
 `core`, `ratelimit`.
 
 ## Tests
-- `tests/unit/sources/`: slskd response → `Candidate` mapping using recorded JSON in `tests/fixtures/slskd/`; query builder cases (unicode, "feat.", punctuation).
+- `tests/unit/sources/`: slskd response → `Candidate` mapping using hand-built JSON (not recorded) in `tests/fixtures/slskd/`; query builder cases (unicode, "feat.", punctuation).
 - `tests/integration/`: real slskd container (see [testing](../../../docs/testing.md#integration-tests-compose)).
 
 ## Design docs

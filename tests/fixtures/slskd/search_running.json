@@ -1,0 +1,12 @@
+{
+  "id": "6b0e9a7e-6a43-4a49-8d51-3b3d1d8b1a01",
+  "searchText": "Test Artist Test Album",
+  "token": 1,
+  "startedAt": "2026-01-01T00:00:00Z",
+  "fileCount": 0,
+  "lockedFileCount": 0,
+  "responseCount": 0,
+  "state": "InProgress",
+  "isComplete": false,
+  "endedAt": null
+}

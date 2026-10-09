@@ -92,3 +92,43 @@ class MatchResult:
     breakdown: tuple[Penalty, ...]
     vetoes: tuple[str, ...]
     scorer_version: int
+
+
+@dataclass(frozen=True)
+class CandidateFile:
+    """One file in a peer's folder, as the source reports it."""
+
+    path: str  # as the source reports it (slskd: backslash separated)
+    size: int
+    extension: str  # lowercase, no dot
+    bitrate: int | None = None  # kbps
+    duration: float | None = None  # seconds
+    bit_depth: int | None = None
+    sample_rate: int | None = None
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One peer's album folder. Disc subfolders (`CD1`, `Disc 2`) belong to the album folder."""
+
+    username: str
+    folder: str
+    files: tuple[CandidateFile, ...]  # audio files only
+    has_free_slot: bool = True
+    queue_length: int = 0
+    upload_speed: int = 0  # bytes per second
+    has_cue: bool = False  # a .cue sheet was in the folder (the files list drops it)
+
+
+class TransferStatus(StrEnum):
+    QUEUED = "queued"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class TransferInfo:
+    state: TransferStatus
+    bytes: int
+    local_path: str | None = None  # slskd's API does not report it; filled in by a later slice

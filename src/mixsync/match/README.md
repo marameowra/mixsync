@@ -13,6 +13,7 @@ Decide how well a file or candidate matches a MusicBrainz target, in a way a hum
 | `features.py` | One pure function per feature, each returning a penalty in `[0, 1]` plus a human-readable reason |
 | `scorer.py` | `score(evidence, weights) -> MatchResult` (distance, per-feature breakdown, vetoes); `SCORER_VERSION` |
 | `profiles.py` | Strict / balanced / loose presets; `band(distance, vetoes, profile) -> Band` |
+| `candidates.py` | Stage 1: `score_candidate`, `rank` (one folder per peer), filename parsing, `STAGE1_WEIGHTS` |
 | `vetoes.py` | Hard rules that force review (different recording with a high AcoustID score; duration off by > 15 s) |
 | `calibrate.py` | Offline: fit a logistic regression on `match_decisions`, report precision/recall, propose new weights |
 
@@ -24,7 +25,7 @@ Decide how well a file or candidate matches a MusicBrainz target, in a way a hum
 
 ## Key interface
 ```
-score_candidate(candidate, release, profile) -> MatchResult          # stage 1
+score_candidate(candidate, album, profile) -> MatchResult          # stage 1
 score_files(files, release, acoustid_results, profile) -> MatchResult # stage 2
 MatchResult: distance, band, breakdown[(feature, penalty, weight, reason)], vetoes, scorer_version
 ```
@@ -41,7 +42,7 @@ The distance and candidate logic in `features.py` / `scorer.py` is ported from b
 ## beets credit
 `features.py` and `scorer.py` are ported from beets (MIT, Copyright (c) 2010-2016 Adrian Sampson), commit `b8c9661fe10463cc761b83f8efd861cb49224224`. Departures: no unidecode (NFKD + `isalnum`, so non-Latin text still compares), a pure-Python Hungarian assignment instead of lap/numpy, no data_source or preferred country/media options.
 
-The AcoustID veto arrives in a later slice.
+The AcoustID veto arrives in a later slice. Stage 1 (`candidates.py`) is new code, not a beets port; it reuses `Distance`, `assign_tracks`, and `string_dist`. Its vetoes (missing tracks, no filename titles, FLAC/bitrate size mismatch) force review, and a single-file rip with a `.cue` is rejected outright.
 
 ## May import from
 `core` only (plus rapidfuzz).

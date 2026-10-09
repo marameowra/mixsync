@@ -43,7 +43,7 @@ from mixsync.match.features import string_dist
 from mixsync.match.profiles import band
 from mixsync.match.vetoes import find_vetoes
 
-SCORER_VERSION = 1
+SCORER_VERSION = 2  # 2: stage-1 candidate scoring
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
