@@ -1,5 +1,6 @@
 from alembic import context
 
+import mixsync.db.models  # noqa: F401  # pyright: ignore[reportUnusedImport]  # registers tables
 from mixsync.core.config import Settings
 from mixsync.db.base import Base
 from mixsync.db.engine import make_engine
