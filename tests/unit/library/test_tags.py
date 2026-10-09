@@ -2,6 +2,11 @@ import json
 from pathlib import Path
 
 import pytest
+from mutagen.flac import FLAC
+from mutagen.id3 import TDRC, TXXX
+from mutagen.mp3 import MP3
+from mutagen.mp4 import MP4, MP4Tags
+from mutagen.oggvorbis import OggVorbis
 
 from mixsync.library import tags
 
@@ -81,3 +86,55 @@ def test_unsupported_file(tmp_path: Path) -> None:
     bad.write_text("nope")
     with pytest.raises(ValueError):
         tags.read_all(bad)
+
+
+WRONG_ID = "00000000-0000-0000-0000-000000000000"
+GONE = {  # the wrong tags planted by _pretag_wrong, by native key
+    "flac": ["date", "musicbrainz_releasegroupid", "musicbrainz_artistid", "acoustid_id"],
+    "ogg": ["date", "musicbrainz_releasegroupid", "musicbrainz_artistid", "acoustid_id"],
+    "mp3": ["TDRC", "TXXX:MusicBrainz Release Group Id", "TXXX:MusicBrainz Artist Id",
+            "TXXX:Acoustid Id"],
+    "m4a": ["\xa9day", _MP4 + "MusicBrainz Release Group Id", _MP4 + "MusicBrainz Artist Id",
+            _MP4 + "Acoustid Id"],
+}  # fmt: skip
+
+
+def _pretag_wrong(fmt: str, path: Path) -> None:
+    """Wrong date, release group id, artist id and acoustid id, as found in downloads."""
+    values = ["1066", WRONG_ID, WRONG_ID, "wrong"]
+    if fmt in ("flac", "ogg"):
+        f = FLAC(path) if fmt == "flac" else OggVorbis(path)
+        assert f.tags is not None
+        for k, v in zip(  # UPPERCASE: deletion has to be case-insensitive
+            ["DATE", "MUSICBRAINZ_RELEASEGROUPID", "MUSICBRAINZ_ARTISTID", "ACOUSTID_ID"],
+            values,
+            strict=True,
+        ):
+            f.tags[k] = [v]
+    elif fmt == "mp3":
+        f = MP3(path)
+        f.add_tags()
+        assert f.tags is not None
+        f.tags.add(TDRC(encoding=3, text=[values[0]]))
+        for k, v in zip(GONE[fmt][1:], values[1:], strict=True):
+            f.tags.add(TXXX(encoding=3, desc=k[5:], text=[v]))
+    else:
+        f = MP4(path)
+        f.tags = MP4Tags()
+        for k, v in zip(GONE[fmt], values, strict=True):
+            f.tags[k] = [v] if k == "\xa9day" else [v.encode()]
+    f.save()
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_sk_q08_wrong_source_tags_do_not_survive_import(fmt: str, make_src: MakeSrc) -> None:
+    f = make_src(fmt)
+    _pretag_wrong(fmt, f)
+    original = tags.read_all(f)
+    assert all(k in original["tags"] for k in GONE[fmt])
+    tags.write(f, tags.TagSet("T", "A", "Al", "AA", 1, 1, None, RECORDING, RELEASE))
+    got = tags.read_all(f)["tags"]
+    assert [k for k in GONE[fmt] if k in got] == []
+    assert got[NATIVE[fmt][1]] == [RELEASE] and got[TITLE[fmt]] == ["T"]
+    tags.restore(f, original)
+    assert tags.read_all(f) == original

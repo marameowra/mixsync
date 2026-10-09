@@ -181,8 +181,12 @@ def _natives(fmt: str) -> dict[str, str]:
 def write(path: Path, tags: TagSet) -> None:
     fmt, f = _open(path)
     natives = _natives(fmt)
-    for name, values in _fields(tags).items():
-        _set(fmt, f, natives[name], values)
+    fields = _fields(tags)
+    for name in _ALL:  # unset fields must not keep the file's own (often wrong) values
+        if name in fields:
+            _set(fmt, f, natives[name], fields[name])
+        else:
+            _del(fmt, f, natives[name])
     f.save()
 
 
