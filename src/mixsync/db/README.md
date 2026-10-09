@@ -79,8 +79,11 @@ This table is the calibration dataset ([matching](../../../docs/design/matching.
 
 Indexes: `tracks(recording_mbid)`, `tracks(release_id)`, `tracks(status)`.
 
-> [!question] How much MusicBrainz data to cache
-> Option A: store only ids + display fields in `releases`/`release_groups` and rely on the HTTP cache for everything else (the proposal). Option B: store full MB entity JSON. B makes offline browsing richer but duplicates the cache and goes stale.
+**MusicBrainz data storage (decided: ids + key fields only):**
+- `releases` / `release_groups` store only the ids plus the fields that MixSync filters or sorts on: title, type, country, date, media format, track count, status. Those columns are enough for the [canonical release policy](../../../docs/design/library.md#canonical-release-policy-configurable-evaluated-in-order).
+- Full MusicBrainz responses (tracklists, labels, relationships) live only in the **server-side HTTP cache** in `/config`, with expiry dates (see [`ratelimit`](../ratelimit/README.md#limits-and-ttls)). They are never copied into domain tables.
+- Library pages read from `tracks` and never call MusicBrainz.
+- Known cost: a cold fragmentation report refetches one release group per second (about 33 minutes per 2,000 groups). It runs as a background job with progress.
 
 ### Safety
 | Table | Key columns |
