@@ -22,8 +22,7 @@ Follow artists and labels; turn their new release groups into requests automatic
 - `only_after_follow_date` (default on)
 - `weekly_cap` (labels default 5; artists unlimited). Hits over the cap are recorded as `skipped_cap` and shown for manual request.
 
-> [!question] Label cap default
-> 5 per week proposed. See [watchlist design](../../../docs/design/watchlist.md).
+**Decided:** labels default to 5 per week; artists default to unlimited. See [watchlist design](../../../docs/design/watchlist.md).
 
 ## May import from
 `core`, `db`, `match`, `library` (service rule); `MetadataProvider` injected.

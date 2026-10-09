@@ -40,8 +40,7 @@ a track is trashed only when every user's row is expired (never while any user s
 - Expiry → `library.fileops.trash()`. Never deleted outright.
 - A "Expiring in 7 days" digest query backs the UI page.
 
-> [!question] Defaults
-> 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. See [discovery design](../../../docs/design/discovery-retention.md).
+**Defaults (decided):** 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. See [discovery design](../../../docs/design/discovery-retention.md).
 
 ## May import from
 - Adapters: `core`, `ratelimit`.

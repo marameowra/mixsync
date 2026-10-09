@@ -30,8 +30,7 @@ The FastAPI app and the HTMX UI. A **composition root**: it wires adapters into 
 - Progress via SSE (`hx-ext="sse"`), never polling loops.
 - Pages must work without JS for reading. Actions may require HTMX.
 
-> [!question] JSON API
-> Proposal: v1 serves HTML only and a JSON API is deferred, to avoid building two interfaces. Revisit if a mobile client or automation needs it.
+**Decided: HTML only in v1.** There is no JSON API, to avoid building two interfaces. Revisit after v1 if a mobile client or automation needs one. Routes still keep their logic in services, so adding a JSON layer later is mostly new routes.
 
 ## May import from
 Anything (composition root).

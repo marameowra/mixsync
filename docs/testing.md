@@ -31,8 +31,11 @@ A compose file spins up slskd, Navidrome, and MixSync with test volumes.
 
 These run nightly and on demand, not on every push. They depend on the Soulseek network, so the default mode uses a local fixture share.
 
-> [!question] Soulseek in CI
-> Pick an option: point slskd at the real network with a test account, or stub slskd with a fake adapter that serves fixture search results. Recommendation: stub it in CI and use the real network only for manual runs.
+**Soulseek in tests (decided): fake it.** CI never touches the Soulseek network.
+- Unit tests feed the slskd adapter recorded JSON responses.
+- Integration tests run a **fake slskd** service that speaks the slskd REST API and serves fixture search results and files.
+- The real network is used only for manual runs.
+- The fixture set must cover the edge-case catalog in [tests/fixtures](../tests/fixtures/README.md#soulseek-edge-case-catalog). Each case is tested by ID, and a new real-world failure becomes a new case.
 
 ## Crash-safety tests
 - Kill the worker with SIGKILL at each step of an import (after copy, after fsync, after tag write, before rename).

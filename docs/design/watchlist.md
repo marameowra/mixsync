@@ -18,5 +18,4 @@ Follow artists or record labels and request their new releases automatically.
 - The follows list shows the last check, the next check, and the releases found.
 - A per-follow history lists what was auto-requested and what happened to each.
 
-> [!question] Label follows
-> A label can release a lot. Add a per-follow cap on auto-requests per week? Proposed default: 5 per week, with the excess queued for manual approval.
+**Weekly cap (decided):** each follow has a cap on auto-requests per week. Labels default to **5 per week**; artists default to unlimited. Releases over the cap are recorded as `skipped_cap` and listed on the follow's page with a one-click request button.

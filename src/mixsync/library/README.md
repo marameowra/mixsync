@@ -37,8 +37,7 @@ On startup, `worker.py` calls `fileops.recover()`: each pending op is either com
 - Paths in the DB are relative to the library root.
 - Changing a template never moves files by itself; it produces a reorganize `Plan`.
 
-> [!question] Default path template and genre source
-> See [library design](../../../docs/design/library.md#path-templates).
+**Decided:** the default template is `{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}`. `{genre}` comes from MusicBrainz genres (release group → release → artist), top 1 for paths and top 3 for tags. Details: [library design](../../../docs/design/library.md#path-templates).
 
 ## May import from
 `core`, `db`, `match`. (Uses mutagen, blake3/hashlib.)

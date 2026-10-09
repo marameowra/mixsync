@@ -16,8 +16,7 @@ End-to-end tests against real containers: slskd, Navidrome, and MixSync.
 - Runs nightly and on demand in CI, not on every push.
 - Default mode: slskd is replaced by a **fake slskd** serving fixture search results and files, so tests are deterministic and don't use the Soulseek network.
 
-> [!question] Soulseek in CI
-> Stub in CI and use the real network only for manual runs (the proposal). See [testing](../../docs/testing.md#integration-tests-compose).
+**Decided:** fake slskd in CI; the real network is used only for manual runs (`-m integration --real-soulseek`). The fake must be able to reproduce every behavior in the [edge-case catalog](../fixtures/README.md#soulseek-edge-case-catalog): slow peers, failed transfers, disconnects, and empty results.
 
 ## Design docs
 [Testing: integration](../../docs/testing.md#integration-tests-compose)

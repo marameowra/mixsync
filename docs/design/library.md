@@ -8,8 +8,13 @@
 - Collisions get a deterministic suffix and are never overwritten.
 - A template change does **not** move files automatically. It produces a dry-run reorganize plan, which needs confirmation ([data safety](data-safety.md)).
 
-> [!question] Default template and genre source
-> Confirm the default template. For genre-based layouts, choose the genre source (MB tags, Last.fm tags, or a user mapping). Genre is noisy, and a track can only live in one folder.
+**Decided:** the default template above stays.
+
+**Genre source: MusicBrainz genres** (the curated genre list, not free-form folksonomy tags), requested with `inc=genres`:
+1. Use the release group's genres. If it has none, fall back to the release's genres, then the primary artist's.
+2. Rank by vote count; break ties alphabetically.
+3. The `GENRE` tag gets the top 3. The `{genre}` path field uses only the top 1, because a track can only live in one folder.
+4. If there are no genres at any level, `{genre}` renders as `Unknown Genre`. The file is never blocked from importing.
 
 ## Identifiers stored per track
 - `recording_mbid`, `release_mbid`, `release_group_mbid`, `artist_mbids`, `acoustid_id`

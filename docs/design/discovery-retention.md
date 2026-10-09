@@ -30,5 +30,4 @@ Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendatio
 - A provisional track shared by several users' playlists expires only when no user wants to keep it.
 - A digest page lists what expires in the next 7 days.
 
-> [!question] Defaults
-> Confirm the defaults: 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned.
+**Defaults (decided):** 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. All of them can be changed per user or per playlist.
