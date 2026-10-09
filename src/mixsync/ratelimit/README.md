@@ -28,7 +28,7 @@ The only way MixSync talks HTTP to the outside world. It provides per-service ra
 ## Rules
 - `429` / `503` → honor `Retry-After`, else exponential backoff with jitter (1 s → 2 s → 4 s … cap 5 min). Set `blocked_until` on the bucket so every worker pauses.
 - Never cache authenticated or POST responses.
-- Contact for the User-Agent comes from `Settings.mb_contact`. Startup fails if it is unset and MusicBrainz is enabled.
+- Contact for the User-Agent comes from `Settings.mb_contact`, which defaults to `https://github.com/marameowra/mixsync`. Startup fails if it is set to an empty string.
 - A bucket in the DB means separate worker containers share one budget.
 
 > [!question] Bucket contention

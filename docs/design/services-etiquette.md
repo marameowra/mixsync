@@ -15,8 +15,7 @@ MixSync uses free, community-run services. It must use them as intended and neve
 | ListenBrainz | Honor the `X-RateLimit-*` response headers | User token |
 | Last.fm | ≤ 5 req/s (conservative) | Application API key |
 
-> [!question] Contact for the User-Agent
-> MusicBrainz asks for a contact in the User-Agent. Use the project's GitHub URL by default, configurable per install.
+**User-Agent contact (decided):** defaults to the project's GitHub URL, so the header reads `MixSync/<version> ( https://github.com/marameowra/mixsync )`. Each install can override it with `MIXSYNC_MB_CONTACT`.
 
 ## Caching
 - Persistent on-disk response cache for MB, CAA, and AcoustID lookups.
