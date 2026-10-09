@@ -5,7 +5,7 @@ Test data shared by the unit and integration tests.
 ## Layout
 ```
 audio/                      short CC-licensed clips + manifest (see audio/README.md)
-slskd/                      slskd API responses (JSON). Hand-built to the slskd response shape, not recorded (no live slskd was available)
+slskd/                      slskd API responses (JSON). Hand-built to the slskd response shape (field names checked against a live slskd 0.26.0); peer names scrubbed
 labeled/                    matcher regression cases: candidate/file + MB target + expected band
 regression_baseline.json    stored precision/recall per band per profile
 ```
