@@ -224,3 +224,25 @@ def test_nothing_in_src_deletes() -> None:
     src = Path(fileops.__file__).parents[1]
     hits = [str(p) for p in src.rglob("*.py") if banned.search(p.read_text())]
     assert hits == []
+
+
+def test_failure_after_publish_stays_pending_and_recovers(
+    ops: FileOps,
+    data_dir: Path,
+    make_src: MakeSrc,
+    journal: SqlJournal,
+    sessions: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(_step: str) -> None:
+        if _step == "rename":
+            raise OSError("fsync failed")
+
+    monkeypatch.setattr(fileops, "_hook", boom)
+    with pytest.raises(OSError):
+        ops.import_file(make_src(), REL, append_tag, "b")
+    final = data_dir / "library" / REL
+    data = final.read_bytes()
+    assert statuses(sessions) == ["started"] and len(journal.pending()) == 1
+    ops.recover()
+    assert statuses(sessions) == ["done"] and final.read_bytes() == data

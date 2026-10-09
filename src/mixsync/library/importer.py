@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
@@ -63,6 +64,9 @@ class Importer:
             status=status,
         )
         try:
+            if done := self._fileops.find_imported(batch_id, src):
+                self._ensure_row(done, tagset, acoustid_id, status, batch_id)
+                return ImportResult(src, done)
             rel = paths.unique(
                 paths.render(
                     self._template,
@@ -90,20 +94,26 @@ class Importer:
                 tags.write(staging, tagset)
 
             self._fileops.import_file(src, rel, write_tags, batch_id)
-            with self._sessions.begin() as s:
+            self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
+        except Exception as e:
+            return ImportResult(src, None, repr(e))
+        return ImportResult(src, rel)
+
+    def _ensure_row(
+        self, rel: str, t: tags.TagSet, acoustid_id: str | None, status: str, batch_id: str
+    ) -> None:
+        with self._sessions.begin() as s:
+            if s.scalar(select(Track.id).where(Track.path == rel)) is None:
                 s.add(
                     Track(
                         path=rel,
-                        recording_mbid=tagset.recording_id,
-                        release_mbid=tagset.release_id,
-                        release_group_mbid=tagset.release_group_id,
-                        artist_mbids=list(tagset.artist_ids),
+                        recording_mbid=t.recording_id,
+                        release_mbid=t.release_id,
+                        release_group_mbid=t.release_group_id,
+                        artist_mbids=list(t.artist_ids),
                         acoustid_id=acoustid_id,
                         status=status,
                         batch_id=batch_id,
                         imported_at=self._clock.now(),
                     )
                 )
-        except Exception as e:
-            return ImportResult(src, None, repr(e))
-        return ImportResult(src, rel)

@@ -9,9 +9,14 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.clock import SystemClock
+from mixsync.core.config import Settings
+from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.db.journal import SqlJournal
+from mixsync.db.models.library import Track
 from mixsync.db.models.safety import FileOp
 from mixsync.library.fileops import FileOps
+from mixsync.library.importer import Importer
 
 from .conftest import MakeSrc
 from .test_fileops import append_tag, files
@@ -68,3 +73,35 @@ def test_sigkill_at_step(
         assert final.exists()
     assert hashlib.sha256(src.read_bytes()).hexdigest() == before
     assert files(data_dir / ".incoming") == []
+
+
+def test_sigkill_between_import_and_row_insert_then_rerun(
+    ops: FileOps,
+    data_dir: Path,
+    make_src: MakeSrc,
+    journal: SqlJournal,
+    sessions: sessionmaker[Session],
+    settings: Settings,
+) -> None:
+    src = make_src()
+    worker = Path(__file__).with_name("crash_import_worker.py")
+    proc = subprocess.run(
+        [sys.executable, "-I", str(worker), str(data_dir), str(src)],
+        env=os.environ,
+        capture_output=True,
+    )
+    assert proc.returncode == -signal.SIGKILL, proc.stderr
+    assert len(files(data_dir / "library")) == 1  # imported and completed, but no row yet
+    with sessions() as s:
+        assert s.scalars(select(Track)).all() == []
+
+    ops.recover()
+    track = TrackInfo("T1", medium_index=1)
+    importer = Importer(ops, sessions, SystemClock(), settings.path_template)
+    (result,) = importer.import_release(
+        [(src, track, None)], AlbumInfo("A", "B", (), year=2000), "verified", "crash"
+    )
+    assert result.error is None
+    assert files(data_dir / "library") == [result.rel]
+    with sessions() as s:
+        assert [t.path for t in s.scalars(select(Track))] == [result.rel]

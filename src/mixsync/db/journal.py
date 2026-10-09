@@ -45,6 +45,21 @@ class SqlJournal:
             rows = s.scalars(select(FileOp).where(FileOp.status == "started").order_by(FileOp.id))
             return [_to_op(r) for r in rows]
 
+    def find_completed(self, batch_id: str, src: str) -> JournalOp | None:
+        """Most recent completed copy op for this batch and source."""
+        with self._sessions() as s:
+            r = s.scalars(
+                select(FileOp)
+                .where(
+                    FileOp.batch_id == batch_id,
+                    FileOp.src == src,
+                    FileOp.kind == "copy",
+                    FileOp.status == "done",
+                )
+                .order_by(FileOp.id.desc())
+            ).first()
+            return _to_op(r) if r else None
+
     def _finish(
         self, op_id: int, status: str, dst_hash: str | None = None, error: str | None = None
     ) -> None:

@@ -88,3 +88,21 @@ def test_exdev_in_importer_is_reported_per_file(
     monkeypatch.setattr(fileops, "_noreplace", boom)
     (r,) = importer.import_release([(make_src(), T1, None)], ALBUM, "x", "b")
     assert r.rel is None and "SafetyError" in str(r.error)
+
+
+def test_resume_after_crash_window_makes_no_duplicates(
+    importer: Importer, ops: FileOps, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    files = [(make_src("flac", "a"), T1, "ac-1"), (make_src("mp3", "b"), T2, None)]
+    first = importer.import_release(files, ALBUM, "verified", "batch")
+    with sessions.begin() as s:
+        for t in s.scalars(select(Track)):
+            s.delete(t)  # the process died before the rows were written
+    again = importer.import_release(files, ALBUM, "verified", "batch")
+    assert [r.rel for r in again] == [r.rel for r in first]
+    assert len(list(ops.library.rglob("*.*"))) == 2  # no " (2)" copies
+    with sessions() as s:
+        assert sorted(t.path for t in s.scalars(select(Track))) == sorted(str(r.rel) for r in first)
+    importer.import_release(files, ALBUM, "verified", "batch")  # idempotent on rows
+    with sessions() as s:
+        assert len(s.scalars(select(Track)).all()) == 2

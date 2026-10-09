@@ -120,6 +120,7 @@ class FileOps:
         final = self._under(self.library, final_rel)
         op_id = self._journal.begin(batch_id, "copy", str(src), final_rel)
         staging = self.incoming / str(op_id)
+        published = False
         try:
             self.incoming.mkdir(parents=True, exist_ok=True)
             with src.open("rb") as r, staging.open("xb") as w:
@@ -139,15 +140,26 @@ class FileOps:
             final.parent.mkdir(parents=True, exist_ok=True)
             _hook("prerename")
             self._publish(staging, final, op_id)
+            published = True
             _hook("rename")
             _fsync(final.parent)
         except BaseException as e:
+            if published:
+                raise  # in the library: stay pending so recover() verifies and completes
             if staging.exists():
                 self._to_trash(staging, f".incoming/{op_id}")
             self._journal.fail(op_id, repr(e))
             raise
         self._journal.complete(op_id, digest)
         return digest
+
+    def find_imported(self, batch_id: str, src: Path) -> str | None:
+        """Library path of an earlier completed import of src in this batch, if the file is
+        still there and intact."""
+        op = self._journal.find_completed(batch_id, str(src))
+        if op and op.dst_hash and (f := self.library / op.dst).is_file():
+            return op.dst if _sha256(f) == op.dst_hash else None
+        return None
 
     def trash(self, rel: str, batch_id: str) -> str:
         """Move a library file to `.trash/<day>/<rel>`. Returns the trash-relative path."""
