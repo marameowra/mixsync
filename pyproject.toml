@@ -1,0 +1,71 @@
+[project]
+name = "mixsync"
+version = "0.1.0"
+description = "Self-hosted music stack: download, verify, organize, hand off."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy>=2",
+    "alembic",
+    "jinja2",
+    "httpx",
+    "argon2-cffi>=25.1.0",
+    "python-multipart>=0.0.32",
+]
+
+[project.scripts]
+mixsync = "mixsync.__main__:main"
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff", "pyright", "import-linter"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.pyright]
+include = ["src"]
+strict = ["src"]
+pythonVersion = "3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: needs docker compose (slskd, Navidrome, MixSync)",
+    "crash: SIGKILL crash-safety tests",
+]
+addopts = "-m 'not integration and not crash'"
+
+[tool.importlinter]
+root_package = "mixsync"
+
+# Only modules that exist today are listed (import-linter errors on missing modules).
+# Extend as ratelimit, adapters, match, library, services land. See src/mixsync/README.md.
+[[tool.importlinter.contracts]]
+name = "core imports nothing internal"
+type = "forbidden"
+source_modules = ["mixsync.core"]
+forbidden_modules = ["mixsync.db", "mixsync.web", "mixsync.app"]
+
+[[tool.importlinter.contracts]]
+name = "db imports only core"
+type = "forbidden"
+source_modules = ["mixsync.db"]
+forbidden_modules = ["mixsync.web", "mixsync.app"]
+
+[[tool.importlinter.contracts]]
+name = "ratelimit imports only core and db"
+type = "forbidden"
+source_modules = ["mixsync.ratelimit"]
+forbidden_modules = ["mixsync.web", "mixsync.app"]
