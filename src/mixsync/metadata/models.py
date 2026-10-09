@@ -48,6 +48,7 @@ class MbLabelInfo(_Raw):
 
 
 class MbReleaseGroup(_Raw):
+    id: str | None = None
     first_release_date: str | None = Field(default=None, alias="first-release-date")
 
 

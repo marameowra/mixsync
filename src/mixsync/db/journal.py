@@ -30,6 +30,10 @@ class SqlJournal:
     def complete(self, op_id: int, dst_hash: str) -> None:
         self._finish(op_id, "done", dst_hash=dst_hash)
 
+    def set_dst_hash(self, op_id: int, dst_hash: str) -> None:
+        with self._sessions.begin() as s:
+            s.get_one(FileOp, op_id).dst_hash = dst_hash
+
     def fail(self, op_id: int, error: str) -> None:
         self._finish(op_id, "failed", error=error)
 

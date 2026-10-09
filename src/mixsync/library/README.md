@@ -20,18 +20,18 @@ Everything that touches the music library on disk: where files go, how they get 
 
 ## `fileops.import_file` sequence (must match the design doc exactly)
 ```
-1. journal.begin(copy, src, /data/.incoming/<op_id>)
+1. journal.begin(copy, src, final_rel)   # staging is /data/.incoming/<op_id>; the op id is only known after begin
 2. copy → fsync file → fsync dir
 3. hash copy == hash src, else fail (src untouched)
-4. tags.snapshot(); tags.write(copy)
-5. rename copy → final path        # fails if the destination exists; never overwrites
+4. tags.snapshot(); tags.write(copy)   # then journal.set_dst_hash(op_id, hash), so recover() can tell done from abandoned
+5. rename copy → final path        # renameat2(NOREPLACE) / renameatx_np(EXCL); falls back to link(2). Fails if the destination exists
 6. journal.complete(op_id, hash)
 7. caller releases the source (sources.release)
 ```
 On startup, `worker.py` calls `fileops.recover()`: each pending op is either completed or rolled back.
 
 ## Rules
-- **No `os.remove` / `unlink` / `shutil.rmtree` anywhere except `purge()`**, which only acts on `/data/.trash` entries past retention. Enforce with a ruff banned-API rule.
+- **No `os.remove` / `unlink` / `shutil.rmtree` anywhere except `purge()`**, which only acts on `/data/.trash` entries past retention. Enforced by a ruff banned-API rule (`TID251`; it cannot see `Path(...).unlink()` on an instance, so `test_nothing_in_src_deletes` greps for it). Rollback and trash only ever move files into `/data/.trash`.
 - Every bulk change returns a `Plan` first. Executing a plan above 50 ops requires the typed count from the UI.
 - `rename` only within `/data` (one mount). A cross-device error (`EXDEV`) is a `SafetyError`, never a silent copy+delete fallback.
 - Paths in the DB are relative to the library root.

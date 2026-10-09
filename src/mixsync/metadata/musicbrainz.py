@@ -12,6 +12,10 @@ def _credit(credits: list[MbCredit]) -> str:
     return "".join(c.name + c.joinphrase for c in credits)
 
 
+def _artist_ids(credits: list[MbCredit]) -> tuple[str, ...]:
+    return tuple(c.artist.id for c in credits)
+
+
 def _year(date: str | None) -> int | None:
     return int(date[:4]) if date and date[:4].isdigit() else None
 
@@ -30,6 +34,7 @@ def _album(r: MbRelease) -> AlbumInfo:
                     medium_index=t.position,
                     medium=medium.position,
                     recording_id=t.recording.id,
+                    artist_ids=_artist_ids(t.artist_credit or t.recording.artist_credit),
                 )
             )
     label = next((li for li in r.label_info if li.label), None)
@@ -47,6 +52,8 @@ def _album(r: MbRelease) -> AlbumInfo:
         media=next((m.format for m in r.media if m.format), None),
         mediums=len(r.media),
         release_id=r.id,
+        release_group_id=r.release_group.id if r.release_group else None,
+        artist_ids=_artist_ids(r.artist_credit),
     )
 
 
