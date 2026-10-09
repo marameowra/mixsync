@@ -30,8 +30,11 @@ Persistent state for MixSync: models, migrations, the repository implementations
 - **JSON columns** only for opaque payloads you never filter on: feature vectors, raw API snapshots, tag snapshots.
 - **Secrets** (user API tokens) are encrypted at rest with Fernet (`cryptography`).
 
-> [!question] Encryption key source
-> Choose where the Fernet key lives: env var `MIXSYNC_SECRET_KEY`, or a generated `/config/secret.key` (chmod 600). Proposal: support both, with the env var taking precedence. If the key is lost, linked accounts must be re-entered; nothing else is affected.
+**Encryption key source (decided):** the operator chooses an env var or a key file. If both are present, the env var wins. At startup:
+1. If `MIXSYNC_SECRET_KEY` is set, use it. If `/config/secret.key` also exists with a different key, log a warning.
+2. Else, if `/config/secret.key` exists, use it. Refuse to start if the file can be read by anyone other than its owner (mode looser than `600`).
+3. Else, generate a new key, write it to `/config/secret.key` with mode `600`, and log once: "back up this file".
+4. If the key doesn't decrypt the stored secrets (wrong or lost key), start anyway but mark the affected `user_links` as `needs_relink` and show a banner. Nothing else depends on the key.
 
 ## Tables
 
