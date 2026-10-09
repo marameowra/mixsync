@@ -317,3 +317,16 @@ def test_stage1_duration_and_missing_length() -> None:
     assert "duration_match" not in keys(score(cand(near)))
     unknown = [replace(f, duration=None) for f in album_files()]
     assert "duration_match" not in keys(score(cand(unknown)))
+
+
+def test_stage1_ties_break_on_slot_queue_speed() -> None:
+    files = album_files()
+    cands = [
+        cand(files, user="peer-001", has_free_slot=False, queue_length=0, upload_speed=900_000),
+        cand(files, user="peer-002", queue_length=40, upload_speed=900_000),
+        cand(files, user="peer-003", queue_length=10, upload_speed=100_000),
+        cand(files, user="peer-004", queue_length=10, upload_speed=900_000),
+    ]
+    ranked = rank(cands, ALBUM, BALANCED)
+    assert {r.distance for _, r in ranked[:3]} == {0.0}
+    assert [c.username for c, _ in ranked] == ["peer-004", "peer-003", "peer-002", "peer-001"]

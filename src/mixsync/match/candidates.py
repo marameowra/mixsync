@@ -222,10 +222,16 @@ _ORDER = {Band.AUTO_ACCEPT: 0, Band.REVIEW: 1, Band.REJECT: 2}
 def rank(
     candidates: Sequence[Candidate], album: AlbumInfo, profile: Profile
 ) -> list[tuple[Candidate, MatchResult]]:
-    """Best first, at most one folder per peer (SK-P08). Rejected folders sort last."""
+    """Best first (ties: free slot, short queue, fast peer), one folder per peer (SK-P08)."""
     scored = sorted(
         ((c, score_candidate(c, album, profile)) for c in candidates),
-        key=lambda cr: (_ORDER[cr[1].band], cr[1].distance),
+        key=lambda cr: (
+            _ORDER[cr[1].band],
+            cr[1].distance,
+            not cr[0].has_free_slot,
+            cr[0].queue_length,
+            -cr[0].upload_speed,
+        ),
     )
     seen: set[str] = set()
     out: list[tuple[Candidate, MatchResult]] = []
