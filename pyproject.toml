@@ -14,6 +14,7 @@ dependencies = [
     "httpx",
     "argon2-cffi>=25.1.0",
     "python-multipart>=0.0.32",
+    "rapidfuzz>=3.14.6",
 ]
 
 [project.scripts]
@@ -69,3 +70,9 @@ name = "ratelimit imports only core and db"
 type = "forbidden"
 source_modules = ["mixsync.ratelimit"]
 forbidden_modules = ["mixsync.web", "mixsync.app"]
+
+[[tool.importlinter.contracts]]
+name = "match imports only core"
+type = "forbidden"
+source_modules = ["mixsync.match"]
+forbidden_modules = ["mixsync.db", "mixsync.ratelimit", "mixsync.web", "mixsync.app"]
