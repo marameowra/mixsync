@@ -72,6 +72,13 @@ source_modules = ["mixsync.ratelimit"]
 forbidden_modules = ["mixsync.web", "mixsync.app"]
 
 [[tool.importlinter.contracts]]
+name = "metadata imports only core and ratelimit"
+type = "forbidden"
+source_modules = ["mixsync.metadata"]
+forbidden_modules = ["mixsync.db", "mixsync.match", "mixsync.web", "mixsync.app"]
+allow_indirect_imports = true  # ratelimit itself reaches db
+
+[[tool.importlinter.contracts]]
 name = "match imports only core"
 type = "forbidden"
 source_modules = ["mixsync.match"]

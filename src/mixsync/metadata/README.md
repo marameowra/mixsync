@@ -10,8 +10,8 @@ Adapters for metadata and fingerprint services: **MusicBrainz** (WS/2 JSON), **A
 ## Proposed files
 | File | Contents |
 |---|---|
-| `musicbrainz.py` | `MusicBrainzProvider`: search, lookup by MBID (`release`, `release-group`, `recording`, `artist`, `label`), browse (release groups by artist/label), paging |
-| `acoustid.py` | `fingerprint(path)` (runs `fpcalc -json` in a thread), `lookup(fp, duration)`, `submit(fp, duration, recording_mbid)` |
+| `musicbrainz.py` | `MusicBrainzProvider`: `get_release`, `search_releases` (more lookups, browse and paging land with the watchlist) |
+| `acoustid.py` | `fingerprint(path)` (async `fpcalc -json` subprocess), `AcoustIdClient.lookup(fp)`; `submit` is not built yet |
 | `coverart.py` | Front-cover URL and download for a release, falling back to the release group |
 | `models.py` | pydantic models for the raw API JSON, mapped to `core` types at the edge |
 
@@ -23,7 +23,7 @@ get_release_group(mbid) -> ReleaseGroup (with releases)
 new_release_groups_by_artist(artist_mbid, since) -> list[ReleaseGroupRef]   # search: arid + firstreleasedate range
 new_releases_by_label(label_mbid, since) -> list[ReleaseRef]                 # search: laid + date range
 browse_release_groups(artist_mbid) -> list[ReleaseGroupRef]                  # full browse, all pages (rarely)
-lookup_fingerprint(fp, duration) -> list[AcoustIdResult]   # acoustid
+(AcoustID is separate: AcoustIdClient.lookup(fp) -> list[AcoustIdResult])
 ```
 
 ## Rules
@@ -41,14 +41,14 @@ lookup_fingerprint(fp, duration) -> list[AcoustIdResult]   # acoustid
 - **No MusicBrainz API writes.** Edits go through release-editor seeding in the browser ([submit](../submit/README.md)).
 - AcoustID submissions use the **user's** key from `user_links`, never the app key.
 - Raw API JSON is validated with pydantic at the edge. Unknown fields are ignored, never trusted.
-- An optional `Settings.mb_base_url` points at a local MusicBrainz mirror.
+- `Settings.acoustid_app_key` (`MIXSYNC_ACOUSTID_APP_KEY`) is required for lookups. An optional `Settings.mb_base_url` points at a local MusicBrainz mirror.
 
 ## May import from
 `core`, `ratelimit`.
 
 ## Tests
-- `tests/unit/metadata/`: vcrpy cassettes for each endpoint; mapping tests; paging stop conditions.
-- `fpcalc` wrapper against `tests/fixtures/audio/` clips.
+- `tests/unit/metadata/`: recorded JSON in `tests/cassettes/<service>/` served through `httpx.MockTransport` (no vcrpy; the AcoustID fixture is hand-written); mapping tests; paging stop conditions.
+- `fpcalc` wrapper with a faked subprocess; one test runs the real binary and is skipped when it is missing.
 
 ## Design docs
 [Matching](../../../docs/design/matching.md) · [Respecting services](../../../docs/design/services-etiquette.md)

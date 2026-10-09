@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     config_dir: str = "/config"
     mb_contact: str = Field(default="https://github.com/marameowra/mixsync", min_length=1)
     mb_rate: float = Field(default=1.0, gt=0, le=1)  # MusicBrainz allows 1 req/s per IP
+    mb_base_url: str = "https://musicbrainz.org"  # optional local mirror
+    acoustid_app_key: str = ""
 
     @field_validator("database_url")
     @classmethod

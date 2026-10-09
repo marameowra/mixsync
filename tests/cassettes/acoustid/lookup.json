@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "results": [
+    {
+      "id": "9ff43b6a-4f16-427c-93c2-92307ca505e0",
+      "score": 0.97,
+      "recordings": [
+        {"id": "60bd9d53-01ff-4562-8058-eb44b3940317"},
+        {"id": "11111111-2222-3333-4444-555555555555"}
+      ],
+      "note": "hand-written from the documented response shape at https://acoustid.org/webservice (no app key available); unknown fields must be ignored"
+    },
+    {"id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "score": 0.4}
+  ]
+}
