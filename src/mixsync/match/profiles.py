@@ -9,7 +9,9 @@ LOOSE = Profile("loose", auto_accept_max=0.15, review_max=0.55)
 
 
 def band(distance: float, vetoes: Sequence[str], profile: Profile) -> Band:
-    """Thresholds are inclusive. A veto caps the result at review; it never rescues a reject."""
+    """Thresholds are inclusive. Any veto forces review, whatever the distance."""
+    if vetoes:
+        return Band.REVIEW
     if distance > profile.review_max:
         return Band.REJECT
     if distance <= profile.auto_accept_max and not vetoes:

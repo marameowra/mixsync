@@ -17,9 +17,9 @@ def test_band_edges(profile: Profile, auto: float, review: float) -> None:
     assert band(review + 1e-9, (), profile) == Band.REJECT
 
 
-def test_veto_prevents_auto_accept_but_not_reject() -> None:
+def test_veto_forces_review_at_any_distance() -> None:
     assert band(0.0, ["v"], BALANCED) == Band.REVIEW
-    assert band(0.9, ["v"], BALANCED) == Band.REJECT
+    assert band(0.9, ["v"], BALANCED) == Band.REVIEW
 
 
 def test_duration_veto() -> None:
