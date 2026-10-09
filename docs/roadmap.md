@@ -30,7 +30,7 @@ Estimates are solo weekends.
 | # | Phase | Weekends | Contents |
 |---|---|---|---|
 | 1 | Skeleton | 1–2 | uv project, CI, config, DB + Alembic, form login, users + capability model, job queue, operation journal, rate limiter + cache, compose file |
-| 2 | Acquire + import | 3–5 | **beets spike first** (embed `beets.autotag` or port it), MB/AcoustID clients, slskd adapter, scorer + profiles, safe importer, path templates, review UI, Navidrome rescan |
+| 2 | Acquire + import | 3–5 | port beets' autotag scoring ([ADR 0006](decisions/0006-port-beets-autotag.md)), MB/AcoustID clients, slskd adapter, scorer + profiles, safe importer, path templates, review UI, Navidrome rescan |
 | 3 | Canonicalization + unverified + MB submit | 2–3 | Canonical release policy, fragmentation report, unverified flow, seed + Harmony links, re-check job |
 | 4 | Migration re-import | 1 | Preflight, batch import, report. Mostly reuses phase 2. |
 | 5 | Watchlist | 1 | Follows, poller, auto-requests |

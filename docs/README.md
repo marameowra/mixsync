@@ -18,6 +18,7 @@ Design phase. No code yet. These docs are the source of truth for v1.
 - [0003 Server-rendered UI with HTMX](decisions/0003-htmx-server-rendered-ui.md)
 - [0004 SQLite and a DB-backed job queue](decisions/0004-sqlite-and-db-job-queue.md)
 - [0005 Explainable matching score](decisions/0005-explainable-matching-score.md)
+- [0006 Port beets' matching algorithm](decisions/0006-port-beets-autotag.md)
 
 ## Design
 - [Matching](design/matching.md)
