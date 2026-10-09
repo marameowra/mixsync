@@ -33,6 +33,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         with make_session_factory(make_engine())() as s, s.begin():
             create_user(s, args.username, password, admin=args.admin)
+    elif cmd in ("worker", "all"):
+        import asyncio
+
+        from mixsync.worker import serve_all, serve_worker
+
+        asyncio.run(serve_worker() if cmd == "worker" else serve_all())
     else:
         print(f"mixsync {cmd}: not implemented yet", file=sys.stderr)
         return 1
