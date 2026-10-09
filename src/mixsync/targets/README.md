@@ -11,15 +11,17 @@ Adapters for the streaming servers that serve the library. v1 supports **Navidro
 | File | Contents |
 |---|---|
 | `navidrome.py` | `NavidromeTarget` implementing `LibraryTarget` via the Subsonic API (token + salt auth) |
-| `subsonic.py` | Minimal typed Subsonic client: `startScan`, `getScanStatus`, `createPlaylist`, `updatePlaylist`, `getStarred2`, `search3`, `getSong` |
+| `subsonic.py` | Minimal typed Subsonic client. Built: `ping`, `startScan`, `getScanStatus`. Later (phase 6): `createPlaylist`, `updatePlaylist`, `getStarred2`, `search3`, `getSong` |
 
 ## Key interface (`core.protocols.LibraryTarget`)
 ```
-rescan(library) -> None                       # library = main | discover
-push_playlist(user, name, track_paths) -> external_id
-get_stars(user) -> set[track_path]
-get_play_counts(user, paths) -> dict[path, int]
+rescan() -> None                              # built (phase 2); startScan needs an admin user
+rescan(library) -> None                       # phase 6: library = main | discover
+push_playlist(user, name, track_paths) -> external_id   # phase 6
+get_stars(user) -> set[track_path]                      # phase 6
+get_play_counts(user, paths) -> dict[path, int]         # phase 6
 ```
+Errors: transport/5xx → `TransientError`; Subsonic codes 40/41 (credentials) and 50 (not admin) → `PermanentError`. The password and token never appear in messages, and Navidrome responses are never cached.
 
 ## Rules
 - Act per user: playlists and stars use the user's linked Navidrome credentials (`user_links`), not an admin account.
