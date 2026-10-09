@@ -250,6 +250,6 @@ def test_score_files_veto_forces_review() -> None:
 
 
 def test_score_files_garbage_rejects() -> None:
-    files = [FileTrack("qqq", "zzz", length=10.0, track=9)]
+    files = [FileTrack("qqq", "zzz", track=9)]
     r = score_files(files, Likelies(artist="zzz", album="qqq"), album("one", "two"), BALANCED)
     assert r.band == Band.REJECT and r.breakdown
