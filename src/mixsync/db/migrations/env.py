@@ -1,6 +1,7 @@
 from alembic import context
 
 from mixsync.core.config import Settings
+from mixsync.db import models as models  # noqa: F401  # registers tables on metadata
 from mixsync.db.base import Base
 from mixsync.db.engine import make_engine
 

@@ -12,6 +12,8 @@ dependencies = [
     "alembic",
     "jinja2",
     "httpx",
+    "argon2-cffi>=25.1.0",
+    "python-multipart>=0.0.32",
 ]
 
 [project.scripts]
