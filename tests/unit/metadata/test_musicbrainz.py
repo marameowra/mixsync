@@ -43,6 +43,8 @@ async def test_multi_disc_mapping(make_client: Make) -> None:
     # the track has length None, so the recording's length is used, converted ms -> s
     assert album.tracks[0].length == pytest.approx(251.426)
     assert album.tracks[0].recording_id == "60bd9d53-01ff-4562-8058-eb44b3940317"
+    assert album.release_group_id and album.artist_ids == ("a74b1b7f-71a5-4011-9441-d0b5e4122711",)
+    assert album.tracks[0].artist_ids == album.artist_ids
 
 
 async def test_single_disc_request_and_mapping(make_client: Make) -> None:

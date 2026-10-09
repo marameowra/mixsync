@@ -30,6 +30,10 @@ class SqlJournal:
     def complete(self, op_id: int, dst_hash: str) -> None:
         self._finish(op_id, "done", dst_hash=dst_hash)
 
+    def set_dst_hash(self, op_id: int, dst_hash: str) -> None:
+        with self._sessions.begin() as s:
+            s.get_one(FileOp, op_id).dst_hash = dst_hash
+
     def fail(self, op_id: int, error: str) -> None:
         self._finish(op_id, "failed", error=error)
 
@@ -40,6 +44,21 @@ class SqlJournal:
         with self._sessions() as s:
             rows = s.scalars(select(FileOp).where(FileOp.status == "started").order_by(FileOp.id))
             return [_to_op(r) for r in rows]
+
+    def find_completed(self, batch_id: str, src: str) -> JournalOp | None:
+        """Most recent completed copy op for this batch and source."""
+        with self._sessions() as s:
+            r = s.scalars(
+                select(FileOp)
+                .where(
+                    FileOp.batch_id == batch_id,
+                    FileOp.src == src,
+                    FileOp.kind == "copy",
+                    FileOp.status == "done",
+                )
+                .order_by(FileOp.id.desc())
+            ).first()
+            return _to_op(r) if r else None
 
     def _finish(
         self, op_id: int, status: str, dst_hash: str | None = None, error: str | None = None

@@ -5,13 +5,16 @@ import signal
 import socket
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
+from pathlib import Path
 
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind
-from mixsync.db.engine import make_engine
+from mixsync.db.engine import make_engine, make_session_factory
+from mixsync.db.journal import SqlJournal
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
+from mixsync.library.fileops import FileOps
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +76,13 @@ async def run_worker(
 
 
 def _new_queue() -> tuple[JobQueue, str]:
-    queue = JobQueue(make_engine(Settings()), SystemClock())
+    settings = Settings()
+    engine = make_engine(settings)
+    clock = SystemClock()
+    FileOps(
+        Path(settings.data_dir), SqlJournal(make_session_factory(engine), clock), clock
+    ).recover()
+    queue = JobQueue(engine, clock)
     return queue, f"{socket.gethostname()}:{os.getpid()}"
 
 

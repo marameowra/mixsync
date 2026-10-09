@@ -13,6 +13,7 @@ class TrackInfo:
     medium_index: int | None = None  # position within its disc
     medium: int | None = None  # disc number
     recording_id: str | None = None
+    artist_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,8 @@ class AlbumInfo:
     media: str | None = None
     mediums: int | None = None
     release_id: str | None = None
+    release_group_id: str | None = None
+    artist_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

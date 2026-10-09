@@ -15,13 +15,21 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "python-multipart>=0.0.32",
     "rapidfuzz>=3.14.6",
+    "mutagen>=1.48.1",
 ]
 
 [project.scripts]
 mixsync = "mixsync.__main__:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "ruff", "pyright", "import-linter"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "pyright",
+    "import-linter",
+    "hypothesis>=6.168.5",
+]
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
@@ -32,7 +40,16 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "ASYNC"]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "TID"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"os.remove".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"os.unlink".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"os.rmdir".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"os.removedirs".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"shutil.rmtree".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"pathlib.Path.unlink".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
+"pathlib.Path.rmdir".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
 
 [tool.pyright]
 include = ["src"]
@@ -90,3 +107,16 @@ type = "forbidden"
 source_modules = ["mixsync.sources"]
 forbidden_modules = ["mixsync.db", "mixsync.match", "mixsync.metadata", "mixsync.web", "mixsync.app"]
 allow_indirect_imports = true  # ratelimit itself reaches db
+
+[[tool.importlinter.contracts]]
+name = "library imports only core, db and match"
+type = "forbidden"
+source_modules = ["mixsync.library"]
+forbidden_modules = [
+    "mixsync.ratelimit",
+    "mixsync.sources",
+    "mixsync.metadata",
+    "mixsync.web",
+    "mixsync.app",
+]
+allow_indirect_imports = true  # db itself may reach ratelimit

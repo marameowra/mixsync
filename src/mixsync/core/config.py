@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     acoustid_app_key: str = ""
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
+    data_dir: str = "/data"
+    path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
 
     @field_validator("database_url")
     @classmethod
