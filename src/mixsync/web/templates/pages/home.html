@@ -2,5 +2,5 @@
 {% block content %}
 <h1>MixSync</h1>
 <p>Signed in as {{ user.username }}</p>
-<form method="post" action="/logout"><button type="submit">Log out</button></form>
+<p><a href="/review">{{ pending }} item{{ "" if pending == 1 else "s" }} awaiting review</a></p>
 {% endblock %}

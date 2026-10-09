@@ -1,0 +1,2 @@
+{# Import with context: {% import "macros/forms.html" as forms with context %} #}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}

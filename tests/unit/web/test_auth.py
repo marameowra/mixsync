@@ -65,8 +65,10 @@ def test_login_success_and_logout(client: TestClient) -> None:
     assert r.status_code == 303
     cookie = r.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=lax" in cookie
-    assert "alice" in client.get("/").text
-    assert client.post("/logout").status_code == 303
+    home = client.get("/").text
+    assert "alice" in home
+    token = home.split('name="csrf_token" value="')[1].split('"')[0]
+    assert client.post("/logout", data={"csrf_token": token}).status_code == 303
     assert client.get("/").status_code == 303
 
 

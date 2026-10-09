@@ -6,7 +6,9 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from mixsync.core.capabilities import Capability
+from mixsync.db import decisions
 from mixsync.db.auth import AuthUser, user_for_session
+from mixsync.db.models.matching import MatchDecision
 
 SESSION_COOKIE = "mixsync_session"
 
@@ -28,6 +30,16 @@ def current_user(request: Request, db: Db) -> AuthUser:
 
 
 CurrentUser = Annotated[AuthUser, Depends(current_user)]
+
+
+def decision_for(db: Session, user: AuthUser, decision_id: int) -> MatchDecision:
+    """Own items need `request`; anyone's need `approve`."""
+    d = decisions.get(db, decision_id)
+    if d is None:
+        raise HTTPException(404, "no such decision")
+    if d.user_id != user.id and Capability.approve not in user.capabilities:
+        raise HTTPException(403, "missing capability: approve")
+    return d
 
 
 def require(cap: Capability) -> Callable[..., AuthUser]:

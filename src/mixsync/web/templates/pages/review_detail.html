@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Review {{ d.id }} - MixSync{% endblock %}
+{% block content %}
+{% set src = d.evidence.get("source", {}) %}
+{% set tgt = d.evidence.get("target", {}) %}
+{% set files = src.get("files", []) %}
+<h1>Review #{{ d.id }}</h1>
+<p>Band: <span class="band band-{{ d.band }}">{{ d.band }}</span>, distance {{ "%.3f"|format(d.distance) }}, scorer v{{ d.scorer_version }}, status {{ d.status }}</p>
+
+<div class="cols">
+<section>
+  <h2>Source</h2>
+  <p>Peer: {{ src.get("peer", "") }}<br>Folder: {{ src.get("folder", "") }}</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>File</th><th>Format</th><th>Bitrate</th><th>Size</th></tr></thead>
+    <tbody>
+    {% for f in files %}
+    <tr><td>{{ f.get("name", "") }}</td><td>{{ f.get("format", "") }}</td><td>{{ f.get("bitrate", "") }}</td><td>{{ f.get("size")|filesize }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Candidate</h2>
+  <div class="cover" role="img" aria-label="Cover art not available yet"></div>
+  <p>{{ tgt.get("artist", "") }} - {{ tgt.get("title", "") }}<br>MBID {{ d.release_mbid }}</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>#</th><th>Title</th><th>Length</th></tr></thead>
+    <tbody>
+    {% for t in tgt.get("tracks", []) %}
+    <tr><td>{{ t.get("position", "") }}</td><td>{{ t.get("title", "") }}</td><td>{{ t.get("length")|duration }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+</div>
+
+<section>
+  <h2>Evidence</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Feature</th><th>Penalty</th><th>Weight</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for p in d.breakdown %}
+    <tr><td>{{ p.key }}</td><td>{{ "%.3f"|format(p.penalty) }}</td><td>{{ p.weight }}</td><td>{{ p.reason }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if d.vetoes %}
+  <h3>Vetoes</h3>
+  <ul>{% for v in d.vetoes %}<li>{{ v }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% set ac = d.evidence.get("acoustid", []) %}
+  {% if ac %}
+  <h3>AcoustID</h3>
+  <ul>{% for a in ac %}<li>{{ files[loop.index0].get("name", "") if loop.index0 < files|length else "" }}: score {{ a.get("score", "") }}, recordings {{ a.get("recording_ids", [])|join(", ") }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% set dd = d.evidence.get("duration_deltas", []) %}
+  {% if dd %}
+  <h3>Duration deltas</h3>
+  <p>{% for x in dd %}{{ "%.1f"|format(x) }} s{{ ", " if not loop.last }}{% endfor %}</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Preview</h2>
+  {% for f in files %}
+  <p>{{ f.get("name", "") }}<br><audio controls preload="none" src="/media/preview/{{ d.id }}/{{ loop.index0 }}"></audio></p>
+  {% endfor %}
+</section>
+
+{% if d.status == "pending_review" %}
+<section>
+  <h2>Actions</h2>
+  <form method="post" action="/review/{{ d.id }}/accept">{{ forms.csrf() }}<button type="submit">Accept</button></form>
+  <form method="post" action="/review/{{ d.id }}/reject">{{ forms.csrf() }}<button type="submit">Reject</button></form>
+  <form method="post" action="/review/{{ d.id }}/repick">
+    {{ forms.csrf() }}
+    <label>Pick another release (MusicBrainz release URL or MBID) <input name="release" type="text" required></label>
+    <button type="submit">Pick another release</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
