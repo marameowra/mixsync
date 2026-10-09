@@ -1,0 +1,68 @@
+x-mixsync: &mixsync
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: mixsync:local
+  user: "${PUID}:${PGID}"
+  env_file: .env
+  volumes:
+    - ${CONFIG_DIR}:/config
+    - ${DOWNLOADS_DIR}:/downloads
+    # One mount: rename between library/discover/.trash/.incoming must stay atomic.
+    - ${DATA_DIR}:/data
+    - ${IMPORT_SOURCE_DIR}:/import-source:ro
+
+services:
+  mixsync-migrate:
+    <<: *mixsync
+    command: ["migrate"]
+    restart: "no"
+
+  mixsync-web:
+    <<: *mixsync
+    command: ["web"]
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      mixsync-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # No healthcheck yet: the worker heartbeat row does not exist. Add one when it lands.
+  mixsync-worker:
+    <<: *mixsync
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      mixsync-migrate:
+        condition: service_completed_successfully
+
+  slskd:
+    image: slskd/slskd
+    user: "${PUID}:${PGID}"
+    environment:
+      SLSKD_API_KEY: ${MIXSYNC_SLSKD_API_KEY}
+    volumes:
+      - ${CONFIG_DIR}/slskd:/app
+      - ${DOWNLOADS_DIR}:/downloads
+      - ${DATA_DIR}/library:/data/library:ro
+    restart: unless-stopped
+
+  navidrome:
+    image: deluan/navidrome
+    user: "${PUID}:${PGID}"
+    environment:
+      ND_DATAFOLDER: /nd-data
+    ports:
+      - "4533:4533"
+    volumes:
+      - ${CONFIG_DIR}/navidrome:/nd-data
+      - ${DATA_DIR}/library:/data/library:ro
+      - ${DATA_DIR}/discover:/data/discover:ro
+    restart: unless-stopped
