@@ -37,7 +37,7 @@ lookup_fingerprint(fp, duration) -> list[AcoustIdResult]   # acoustid
   - artist: `/ws/2/release-group?query=arid:<mbid> AND firstreleasedate:[<since> TO *]&fmt=json`
   - label: `/ws/2/release?query=laid:<mbid> AND date:[<since> TO *]&fmt=json`
 
-  Verify the range syntax in the phase-2 spike. The search index can lag the database slightly; the watchlist overlaps its `since` window by 7 days to cover that.
+  Verify the range syntax against the live API when building the MusicBrainz client. The search index can lag the database slightly; the watchlist overlaps its `since` window by 7 days to cover that.
 - **No MusicBrainz API writes.** Edits go through release-editor seeding in the browser ([submit](../submit/README.md)).
 - AcoustID submissions use the **user's** key from `user_links`, never the app key.
 - Raw API JSON is validated with pydantic at the edge. Unknown fields are ignored, never trusted.

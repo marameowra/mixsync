@@ -48,5 +48,5 @@ The workload is I/O-bound: HTTP calls to slskd, MusicBrainz, AcoustID, and Navid
 
 ## Consequences
 - pyright strict and pydantic are mandatory, not optional.
-- The beets spike at the start of phase 2 decides between embedding `beets.autotag` and porting its algorithm (MIT license).
+- The beets spike at the start of phase 2 decides between embedding `beets.autotag` and porting its algorithm (MIT license). Decided in [ADR 0006](0006-port-beets-autotag.md): port it.
 - If the footprint ever matters (for example, moving to a NAS), the adapter boundaries make it possible to replace hot paths later.

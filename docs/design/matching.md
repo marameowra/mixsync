@@ -58,8 +58,4 @@ Laid out side by side:
 - After about 300 labels, `match/calibrate.py` fits a logistic regression on the same features. The proposed weights are evaluated on the regression suite and adopted only if precision improves at equal or better recall.
 
 ## beets reuse
-The spike at the start of phase 2 decides between two options:
-1. **Embed `beets.autotag`.** Use its distance and candidate logic directly. This has the most reuse but couples MixSync to beets internals and config.
-2. **Port the algorithm** (MIT license) into `match/`. You own the code and depend on less.
-
-Decision rule: if `beets.autotag` can be called without beets' library database or global config, embed it. Otherwise, port it.
+The distance and candidate logic is **ported** from beets' `autotag` (MIT license) into `match/`, not embedded. See [ADR 0006](../decisions/0006-port-beets-autotag.md).

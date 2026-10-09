@@ -35,15 +35,11 @@ MatchResult: distance, band, breakdown[(feature, penalty, weight, reason)], veto
 - **No ML at runtime** until calibration proves itself on the regression suite ([ADR 0005](../../../docs/decisions/0005-explainable-matching-score.md)).
 - String similarity uses `rapidfuzz` on normalized strings (casefold, NFKC, strip "feat.", punctuation, bracketed suffixes).
 
-## beets spike (first task in phase 2)
-Can `beets.autotag` distance and candidate logic be called **without** beets' library DB or global config, **and without beets making its own MusicBrainz requests**? beets fetches from MB through its own client and User-Agent, which would bypass MixSync's limiter and share the per-IP budget invisibly.
-- **Yes** (MixSync passes in MB data it already fetched) → wrap it behind `scorer.py`.
-- **No** → port the algorithm (MIT license) into `features.py` / `scorer.py`, crediting beets.
-
-Record the outcome as ADR 0006.
+## beets port
+The distance and candidate logic in `features.py` / `scorer.py` is ported from beets' `autotag` (MIT license), not imported ([ADR 0006](../../../docs/decisions/0006-port-beets-autotag.md)). Keep beets' copyright and permission notice in each ported file's header, and note the beets commit the port is based on.
 
 ## May import from
-`core` only (plus rapidfuzz; beets if the spike says embed).
+`core` only (plus rapidfuzz).
 
 ## Tests
 - `tests/unit/match/`: each feature against hand-built cases; banding at threshold edges; vetoes.

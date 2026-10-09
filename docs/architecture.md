@@ -36,7 +36,7 @@ MixSync is an **orchestrator**. It owns the decisions: requests, matching, libra
 | Fingerprinting | **Chromaprint `fpcalc`** (bundled in image) + **AcoustID** API | Gather match evidence |
 | Metadata | **MusicBrainz** WS/2 JSON API, **Cover Art Archive** | Typed client, caching, rate limiting |
 | Tag I/O | **mutagen** | Snapshot original tags before every write |
-| Matching heuristics | **beets** `autotag` distance model (MIT) | Explainable scorer, per-user thresholds, calibration |
+| Matching heuristics | **beets** `autotag` distance model (MIT), ported into `match/` ([ADR 0006](decisions/0006-port-beets-autotag.md)) | Explainable scorer, per-user thresholds, calibration |
 | Streaming | **Navidrome** (Subsonic API) | Rescan, playlist push, read stars and plays per user |
 | Recommendations | **ListenBrainz** (`liblistenbrainz`). Last.fm is deferred. | Per-user playlist generation |
 | MB submission | **MB release-editor seeding**, **Harmony** | Build the seed, open it in the browser |
@@ -59,7 +59,7 @@ Rationale lives in [ADR 0002](decisions/0002-python-backend.md), [0003](decision
 - **Web:** FastAPI, pydantic v2, Jinja2, HTMX, sse-starlette; session-cookie auth, argon2 password hashes
 - **Data:** SQLAlchemy 2 + Alembic. SQLite (WAL mode) by default, Postgres-ready. Job queue is a DB table with leased workers.
 - **HTTP:** httpx (async), a persistent token bucket per service, on-disk response cache (hishel or a DB table)
-- **Music:** mutagen, pyacoustid + fpcalc, rapidfuzz, beets (autotag), slskd REST via httpx
+- **Music:** mutagen, pyacoustid + fpcalc, rapidfuzz, slskd REST via httpx
 
 ## Users and permissions
 - Local accounts with a standard HTML login form (`autocomplete="username"` / `"current-password"`) so password managers work. OIDC and passkeys are possible later.
