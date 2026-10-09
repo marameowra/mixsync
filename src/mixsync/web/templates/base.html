@@ -1,11 +1,20 @@
+{% import "macros/forms.html" as forms with context %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MixSync{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  {% if user %}
+  <nav>
+    <a href="/">Home</a>
+    <a href="/review">Review</a>
+    <form method="post" action="/logout">{{ forms.csrf() }}<button type="submit">Log out</button></form>
+  </nav>
+  {% endif %}
   <main>
   {% block content %}{% endblock %}
   </main>

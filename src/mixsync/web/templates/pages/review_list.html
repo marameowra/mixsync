@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Review - MixSync{% endblock %}
+{% block content %}
+<h1>Review</h1>
+{% if items %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Source</th><th>Release</th><th>Band</th><th>Distance</th></tr></thead>
+  <tbody>
+  {% for d in items %}
+  <tr>
+    <td><a href="/review/{{ d.id }}">{{ d.id }}</a></td>
+    <td>{{ d.evidence.get("source", {}).get("peer", "") }}: {{ d.evidence.get("source", {}).get("folder", "") }}</td>
+    <td>{{ d.evidence.get("target", {}).get("artist", "") }} - {{ d.evidence.get("target", {}).get("title", "") }}</td>
+    <td><span class="band band-{{ d.band }}">{{ d.band }}</span></td>
+    <td>{{ "%.3f"|format(d.distance) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>Nothing to review.</p>
+{% endif %}
+{% endblock %}
