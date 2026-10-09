@@ -44,5 +44,5 @@ Estimates are solo weekends.
 | 2 | A requested album auto-imports with correct MBIDs and appears in Navidrome; a bad file lands in review; killing the worker mid-import loses nothing |
 | 3 | A second release of an owned album files under the canonical one; a non-MB track imports as unverified and produces a working MB seed |
 | 4 | The old library re-imports with a report; the old tree is byte-identical afterwards |
-| 5 | A new release from a followed artist creates a request within 24 hours |
+| 5 | A new release from an active followed artist creates a request within one check interval (≤ 4.5 days with the 3-day cadence and jitter); each check is a single MB request |
 | 6 | A weekly playlist with unowned tracks appears in Navidrome; a starred track is promoted; an expired one moves to `.trash` |

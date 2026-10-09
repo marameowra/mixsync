@@ -20,6 +20,7 @@
   - review → review queue
   - no MB match → review queue with **Mark unverified** offered
 - Throughput is limited by the [service limits](services-etiquette.md).
+- MusicBrainz's 1 req/s limit is **per IP**, so **pause other MusicBrainz clients on the network** (soulsync, Picard, beets, Lidarr) during migration. Otherwise both tools get refused. Preflight shows this as a checklist item.
 - For large libraries, consider pointing MusicBrainz at a local mirror for the duration of the migration.
 
 ## Report

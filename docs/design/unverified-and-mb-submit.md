@@ -11,8 +11,7 @@
 - The file is filed under the normal [path template](library.md#path-templates), tagged `MIXSYNC_STATUS=unverified`, and flagged in the DB.
 - The library view has an "Unverified" filter and a count.
 
-> [!question] Fallback sources
-> Discogs requires a user token and has its own rate limits. Check Deezer's API terms for this use. Both are optional and off by default until confirmed.
+**Fallback sources:** both are off by default. Discogs: 60 req/min per IP, a unique UA, and a user token. Deezer: private, family-scope, non-commercial use only. Details are in [services etiquette](services-etiquette.md#discogs-fallback-off-by-default).
 
 ## Submit to MusicBrainz
 The **Submit to MusicBrainz** button on any unverified item picks a path:
@@ -29,6 +28,7 @@ The **Submit to MusicBrainz** button on any unverified item picks a path:
 > Verify the field names against the current MB "Release Editor Seeding" documentation before implementing.
 
 ## Re-check and promote
-- A background job re-checks unverified items about weekly (rate limited, jittered). It searches MB by artist and title and checks AcoustID.
+- **Primary trigger is the user:** a **Check MusicBrainz now** button on the item or album, used after the user's seeded edit has been applied in MB.
+- **Background re-check backs off**, since MB asks clients not to poll: 1 week → 2 weeks → 1 month → then quarterly, each at a random point in its interval. Checks are grouped per album (one search per album, not per track), followed by AcoustID lookups only for that album's files.
 - When a confident match appears, the item goes to the review queue as **Promote to verified**, with a diff of the tag changes. The user confirms.
 - After promotion, the fingerprint is **submitted to AcoustID** linked to the new recording MBID. This needs an AcoustID user API key in the user's settings.

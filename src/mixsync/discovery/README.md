@@ -15,7 +15,7 @@ This folder holds **two kinds of code**. Keep them in separate files:
 | File | Kind | Contents |
 |---|---|---|
 | `listenbrainz.py` | adapter | Recommendations, LB Radio prompts, top artists (`liblistenbrainz` or httpx) |
-| `lastfm.py` | adapter | Similar artists/tracks, top artists (`pylast` or httpx) |
+| `lastfm.py` | adapter | Similar artists/tracks, top artists (`pylast` or httpx). **Off by default** pending the [ToS question](../../../docs/design/services-etiquette.md#lastfm); if enabled, attribute "via Last.fm" with links |
 | `playlists.py` | service | `build(playlist_def, user) -> list[PlaylistEntry]`; owned resolved by recording MBID; unowned → `Request(provisional=True, source=discovery)` |
 | `retention.py` | service | Daily job: evaluate keep rules, promote kept tracks, trash expired ones |
 

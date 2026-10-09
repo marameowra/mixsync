@@ -7,6 +7,7 @@ Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendatio
 ## Inputs
 - Navidrome scrobbles to ListenBrainz and/or Last.fm. MixSync doesn't need to collect plays itself.
 - Each user links ListenBrainz (username + token) and/or Last.fm (username + API key).
+- **ListenBrainz is the primary source. Last.fm is off by default**, because its API terms exclude use alongside unauthorised sharing ([details](services-etiquette.md#lastfm)). If enabled, it is cached under 100 MB and attributed in the UI.
 - Navidrome plays and stars are read through the Subsonic API, per linked Navidrome account.
 
 ## Generator

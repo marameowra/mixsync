@@ -18,15 +18,21 @@ The only way MixSync talks HTTP to the outside world. It provides per-service ra
 ## Limits and TTLs
 | Service | Rate | Cache TTL | Identity |
 |---|---|---|---|
-| `musicbrainz` | 1 req/s | entity 7 d, search 1 d | `MixSync/<ver> ( <contact> )` |
-| `coverart` | 1 req/s | 30 d | same User-Agent |
+| `musicbrainz` | 1 req/s per IP (`MIXSYNC_MB_RATE`, ≤ 1) | entity 7 d, search 1 d | `MixSync/<ver> ( <contact> )` |
+| `coverart` | 1 req/s (self-imposed; none published) | art saved to disk | same User-Agent; **follow 307 redirects** (off by default in httpx) |
 | `acoustid` | 3 req/s | lookup 7 d, submit never | app key |
-| `listenbrainz` | from `X-RateLimit-*` headers | 1 h | user token |
-| `lastfm` | 5 req/s | 1 d | app key |
+| `listenbrainz` | 1 req/s, tightened by `X-RateLimit-Remaining` / `-Reset-In` | 1 h | UA required; `Authorization: Token` |
+| `lastfm` (off by default) | 1 req/s (self-imposed) | per HTTP headers, 100 MB cap | identifiable UA; app key |
+| `discogs` (off by default) | 50/min (documented: 60/min per IP) | 1 d | unique UA; user token |
+| `deezer` (off by default) | 1 req/s (self-imposed) | 1 d | UA |
+
+Every number here is checked against the services' docs; see [services etiquette](../../../docs/design/services-etiquette.md#summary) for sources.
 | `slskd`, `navidrome` | unlimited (local) | none | API key / user |
 
 ## Rules
-- `429` / `503` → honor `Retry-After`, else exponential backoff with jitter (1 s → 2 s → 4 s … cap 5 min). Set `blocked_until` on the bucket so every worker pauses.
+- `429` / `503` → honor `Retry-After`, else exponential backoff with jitter (1 s → 2 s → 4 s … cap 5 min). Set `blocked_until` on the bucket so every worker pauses. MusicBrainz signals overload with a bare **503 and no retry header**, so the backoff path is the normal one there.
+- **Never send a library default User-Agent** (`python-httpx/…`, `python-musicbrainz/…`). MusicBrainz throttles anonymous and shared agents. A unit test asserts every `PoliteClient` sets the MixSync UA.
+- MusicBrainz's 1 req/s applies to the **whole source IP**, so it's shared with other MB tools on the network. `MIXSYNC_MB_RATE` can lower it (e.g. 0.5) and is rejected if set above 1.
 - Never cache authenticated or POST responses.
 - Contact for the User-Agent comes from `Settings.mb_contact`, which defaults to `https://github.com/marameowra/mixsync`. Startup fails if it is set to an empty string.
 - A bucket in the DB means separate worker containers share one budget.

@@ -17,7 +17,7 @@ Close the loop for tracks MusicBrainz doesn't have. Help the user add them to MB
 
 ## Rules
 - The seed includes an edit note: "Seeded by MixSync from local files."
-- Re-check cadence is weekly per unverified track, jittered, and rate limited via `ratelimit`.
+- Re-checks are **user-triggered first** (Check MusicBrainz now). The background schedule backs off, 1 week → 2 weeks → 1 month → quarterly, randomized within each interval and grouped per album ([design](../../../docs/design/unverified-and-mb-submit.md#re-check-and-promote)).
 - Promotion is never automatic; it always goes through the review queue.
 
 > [!question] Seed field names

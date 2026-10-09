@@ -15,8 +15,10 @@
 - Results are shown as suggestions with the source labeled; the user picks or edits.
 - Rate limits are registered in `ratelimit/services.py` before the provider ships.
 
-> [!question] Terms of service
-> Discogs: per-user token, 60 req/min authenticated. Deezer: confirm the API terms allow metadata lookup for this use. Neither ships until confirmed.
+**Terms (checked 2026-10-09; details in [services etiquette](../../../../docs/design/services-etiquette.md#discogs-fallback-off-by-default)):**
+- **Discogs:** 60 req/min authenticated, per IP; a unique UA is required; per-user personal token. MixSync uses 50/min. Re-check the official page by hand before enabling, because it blocked automated fetching.
+- **Deezer:** no published quota; content use is limited to "strictly private use within a family scope", non-commercial. MixSync allows it only for single-household installs, metadata suggestions only, never audio.
+- Both stay **off by default**.
 
 ## May import from
 `core`, `ratelimit`.
