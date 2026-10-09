@@ -61,3 +61,9 @@ name = "db imports only core"
 type = "forbidden"
 source_modules = ["mixsync.db"]
 forbidden_modules = ["mixsync.web", "mixsync.app"]
+
+[[tool.importlinter.contracts]]
+name = "ratelimit imports only core and db"
+type = "forbidden"
+source_modules = ["mixsync.ratelimit"]
+forbidden_modules = ["mixsync.web", "mixsync.app"]

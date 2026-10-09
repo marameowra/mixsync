@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +7,8 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:////config/mixsync.db"
     config_dir: str = "/config"
+    mb_contact: str = Field(default="https://github.com/marameowra/mixsync", min_length=1)
+    mb_rate: float = Field(default=1.0, gt=0, le=1)  # MusicBrainz allows 1 req/s per IP
 
     @field_validator("database_url")
     @classmethod
