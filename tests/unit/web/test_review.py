@@ -16,6 +16,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
 from mixsync.web.routes.review import parse_release_mbid
+from mixsync.web.templating import duration, filesize
 
 MBID = "22222222-2222-2222-2222-222222222222"
 AUDIO = b"0123456789" * 100
@@ -230,3 +231,38 @@ def test_media_out_of_root_404(
 
 def test_static_css(client: TestClient) -> None:
     assert client.get("/static/app.css").status_code == 200
+
+
+def test_filters() -> None:
+    assert [filesize(x) for x in (0, 30_300_000, 2_500_000_000, None)] == [
+        "0.0 MB",
+        "30.3 MB",
+        "2.5 GB",
+        "–",
+    ]
+    assert [duration(x) for x in (0, 59, 60, 251, 3600, 3661, None)] == [
+        "0:00",
+        "0:59",
+        "1:00",
+        "4:11",
+        "1:00:00",
+        "1:01:01",
+        "–",
+    ]
+
+
+def test_errors_render_html(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    client.post(f"/review/{i}/accept", data={"csrf_token": tok})
+    r = client.post(f"/review/{i}/reject", data={"csrf_token": tok})
+    assert r.status_code == 409 and "text/html" in r.headers["content-type"]
+    assert "not pending review" in r.text and 'href="/review"' in r.text
+    _login(client, "bob")
+    r = client.get(f"/review/{i}")
+    assert r.status_code == 403 and "missing capability: approve" in r.text
+
+
+def test_unauthenticated_still_redirects(client: TestClient) -> None:
+    r = client.get("/review")
+    assert r.status_code == 303 and r.headers["location"] == "/login"

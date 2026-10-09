@@ -16,7 +16,7 @@
     <thead><tr><th>File</th><th>Format</th><th>Bitrate</th><th>Size</th></tr></thead>
     <tbody>
     {% for f in files %}
-    <tr><td>{{ f.get("name", "") }}</td><td>{{ f.get("format", "") }}</td><td>{{ f.get("bitrate", "") }}</td><td>{{ f.get("size", "") }}</td></tr>
+    <tr><td>{{ f.get("name", "") }}</td><td>{{ f.get("format", "") }}</td><td>{{ f.get("bitrate", "") }}</td><td>{{ f.get("size")|filesize }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -32,7 +32,7 @@
     <thead><tr><th>#</th><th>Title</th><th>Length</th></tr></thead>
     <tbody>
     {% for t in tgt.get("tracks", []) %}
-    <tr><td>{{ t.get("position", "") }}</td><td>{{ t.get("title", "") }}</td><td>{{ t.get("length", "") }}</td></tr>
+    <tr><td>{{ t.get("position", "") }}</td><td>{{ t.get("title", "") }}</td><td>{{ t.get("length")|duration }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -63,8 +63,8 @@
   {% endif %}
   {% set dd = d.evidence.get("duration_deltas", []) %}
   {% if dd %}
-  <h3>Duration deltas (s)</h3>
-  <p>{{ dd|join(", ") }}</p>
+  <h3>Duration deltas</h3>
+  <p>{% for x in dd %}{{ "%.1f"|format(x) }} s{{ ", " if not loop.last }}{% endfor %}</p>
   {% endif %}
 </section>
 
