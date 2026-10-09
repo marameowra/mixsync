@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.core.jobs import JobKind, JobState
@@ -31,5 +31,22 @@ class Job(TimestampMixin, Base):
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None]
     idempotency_key: Mapped[str | None] = mapped_column(String(200), unique=True)
-    # request_id -> requests.id arrives with the requests table in Phase 2.
     parent_job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
+
+
+class Request(TimestampMixin, Base):
+    """One requested release and where the acquire pipeline has got to."""
+
+    __tablename__ = "requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    release_mbid: Mapped[str] = mapped_column(String(36))
+    artist: Mapped[str] = mapped_column(String(255), default="")  # display; filled by the search
+    album: Mapped[str] = mapped_column(String(255), default="")
+    # searching/downloading/verifying/importing/review/imported/failed/no_results
+    status: Mapped[str] = mapped_column(String(16), default="searching")
+    tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # [peer, folder] pairs
+    no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None]

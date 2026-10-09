@@ -4,6 +4,11 @@ from enum import StrEnum
 
 class JobKind(StrEnum):
     NOOP = "noop"
+    SEARCH = "search"
+    DOWNLOAD = "download"
+    VERIFY = "verify"
+    IMPORT = "import"
+    RESCAN = "rescan"
 
 
 class JobState(StrEnum):

@@ -3,6 +3,7 @@ import re
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -78,6 +79,7 @@ class SlskdSource:
         base_url: str,
         api_key: str,
         *,
+        downloads_dir: Path,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         poll_interval: float = 1.0,
         max_polls: int = 60,
@@ -85,6 +87,7 @@ class SlskdSource:
         self._client = client
         self._base = base_url.rstrip("/") + "/api/v0"
         self._headers = {"X-API-Key": api_key}
+        self._downloads = downloads_dir
         self._sleep = sleep
         self._poll_interval = poll_interval
         self._max_polls = max_polls
@@ -143,4 +146,12 @@ class SlskdSource:
         for s in (TransferStatus.FAILED, TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
             if s in states:
                 return TransferInfo(s, sent)
-        return TransferInfo(TransferStatus.DONE, sent)
+        return TransferInfo(TransferStatus.DONE, sent, tuple(self._local(f) for f in candidate.files))
+
+    def _local(self, f: CandidateFile) -> str:
+        """slskd saves to <downloads>/<the file's own parent folder name>/<file name> (default
+        `Transfers.Download.Destination.Subdirectory` = ${SOURCE_DIRECTORY}; see
+        DownloadService.DeriveDestination). A disc subfolder is therefore its own directory.
+        Names slskd had to sanitize or de-duplicate will not exist here; callers check."""
+        parts = f.path.split("\\")
+        return str(self._downloads.joinpath(*parts[-2:]))
