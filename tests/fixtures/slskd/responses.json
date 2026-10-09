@@ -1,0 +1,188 @@
+[
+  {
+    "username": "peer-001",
+    "token": 1,
+    "hasFreeUploadSlot": true,
+    "queueLength": 0,
+    "uploadSpeed": 900000,
+    "fileCount": 9,
+    "files": [
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\01 Opening.flac",
+        "size": 22000000,
+        "extension": "",
+        "isLocked": false,
+        "length": 200,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\02 Second Song.flac",
+        "size": 26400000,
+        "extension": "",
+        "isLocked": false,
+        "length": 240,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\03 Third Song.flac",
+        "size": 19800000,
+        "extension": "",
+        "isLocked": false,
+        "length": 180,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\04 Closing.flac",
+        "size": 33000000,
+        "extension": "",
+        "isLocked": false,
+        "length": 300,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\Test Artist - Test Album.cue",
+        "size": 900,
+        "extension": "",
+        "isLocked": false
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\rip.log",
+        "size": 4000,
+        "extension": "",
+        "isLocked": false
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\folder.jpg",
+        "size": 120000,
+        "extension": "",
+        "isLocked": false
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\info.nfo",
+        "size": 800,
+        "extension": "",
+        "isLocked": false
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album\\Test Album.m3u",
+        "size": 300,
+        "extension": "",
+        "isLocked": false
+      }
+    ],
+    "lockedFileCount": 0,
+    "lockedFiles": []
+  },
+  {
+    "username": "peer-002",
+    "token": 1,
+    "hasFreeUploadSlot": false,
+    "queueLength": 120,
+    "uploadSpeed": 20000,
+    "fileCount": 4,
+    "files": [
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Deluxe)\\CD1\\01 Opening.flac",
+        "size": 22000000,
+        "extension": "",
+        "isLocked": false,
+        "length": 200,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Deluxe)\\CD1\\02 Second Song.flac",
+        "size": 26400000,
+        "extension": "",
+        "isLocked": false,
+        "length": 240,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Deluxe)\\Disc 2\\01 Third Song.flac",
+        "size": 19800000,
+        "extension": "",
+        "isLocked": false,
+        "length": 180,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Deluxe)\\Disc 2\\02 Closing.flac",
+        "size": 33000000,
+        "extension": "",
+        "isLocked": false,
+        "length": 300,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      }
+    ],
+    "lockedFileCount": 1,
+    "lockedFiles": [
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Deluxe)\\CD1\\03 Locked.flac",
+        "size": 1000,
+        "extension": "",
+        "isLocked": true
+      }
+    ]
+  },
+  {
+    "username": "peer-003",
+    "token": 1,
+    "hasFreeUploadSlot": true,
+    "queueLength": 0,
+    "uploadSpeed": 900000,
+    "fileCount": 3,
+    "files": [
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Single File)\\Test Artist - Test Album.flac",
+        "size": 101200000,
+        "extension": "",
+        "isLocked": false,
+        "length": 920,
+        "bitDepth": 16,
+        "sampleRate": 44100
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Test Album (Single File)\\Test Artist - Test Album.cue",
+        "size": 1500,
+        "extension": "",
+        "isLocked": false
+      },
+      {
+        "code": 1,
+        "filename": "Music\\Test Artist\\Singles\\Opening.mp3",
+        "size": 8000000,
+        "extension": "",
+        "isLocked": false,
+        "length": 200,
+        "bitRate": 320,
+        "isVariableBitRate": false
+      }
+    ],
+    "lockedFileCount": 0,
+    "lockedFiles": []
+  }
+]

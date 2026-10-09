@@ -44,7 +44,7 @@ SD_PATTERNS = [
 SD_REPLACE = [(r"&", "and")]
 
 
-def _normalize(s: str) -> str:
+def normalize(s: str) -> str:
     # Unlike beets (unidecode + [a-z0-9]) this keeps non-Latin letters, so two different
     # Cyrillic or CJK strings do not both collapse to "" and compare equal.
     s = unicodedata.normalize("NFKD", s.casefold())
@@ -53,7 +53,7 @@ def _normalize(s: str) -> str:
 
 def _string_dist_basic(str1: str, str2: str) -> float:
     """Edit distance ignoring case, accents and punctuation, normalized by length."""
-    str1, str2 = _normalize(str1), _normalize(str2)
+    str1, str2 = normalize(str1), normalize(str2)
     if not str1 and not str2:
         return 0.0
     return Levenshtein.distance(str1, str2) / max(len(str1), len(str2))

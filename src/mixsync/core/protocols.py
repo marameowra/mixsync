@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from mixsync.core.matching import AlbumInfo
+from mixsync.core.matching import AlbumInfo, Candidate, TransferInfo
 from mixsync.core.types import ReleaseRef
 
 
@@ -33,3 +33,9 @@ class MetadataProvider(Protocol):
     async def search_releases(
         self, artist: str, album: str, limit: int = 10
     ) -> list[ReleaseRef]: ...
+
+
+class DownloadSource(Protocol):
+    async def search(self, query: str) -> list[Candidate]: ...
+    async def enqueue(self, candidate: Candidate) -> None: ...
+    async def status(self, candidate: Candidate) -> TransferInfo: ...
