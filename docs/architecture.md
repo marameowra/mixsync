@@ -86,8 +86,11 @@ src/mixsync/
   worker.py, app.py
 tests/
   unit/, integration/, fixtures/audio/, cassettes/
+deploy/        Dockerfile, compose.yml, .env.example (spec in README)
 docs/
 ```
+
+Every folder has a `README.md` with implementation guidance: purpose, boundaries, proposed files, interfaces, rules, and allowed imports. Start with the [package overview](../src/mixsync/README.md), which also defines the module dependency rules.
 
 ## Deployment
 **Target:** Docker Compose on a home server, next to slskd and Navidrome.
