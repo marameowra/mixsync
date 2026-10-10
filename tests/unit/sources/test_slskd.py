@@ -163,6 +163,22 @@ async def test_status_aggregates_transfers(make_client: Make) -> None:
     assert info.bytes == 880 * 125 * 200 + 1000
 
 
+async def test_clear_deletes_only_this_candidates_transfers(make_client: Make) -> None:
+    cand = Candidate("p", "d", (CandidateFile("d\\a.flac", 1, "flac"),))
+    files = [{"id": "ID-A", "filename": "d\\a.flac"}, {"id": "ID-B", "filename": "d\\other.flac"}]
+    body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=body) if request.method == "GET" else httpx.Response(204)
+
+    await source(make_client, handler).clear(cand)
+    (delete,) = [r for r in seen if r.method == "DELETE"]
+    assert delete.url.path == "/api/v0/transfers/downloads/p/ID-A"
+    assert delete.url.params["remove"] == "true"
+
+
 @pytest.mark.parametrize(
     ("states", "expected"),
     [

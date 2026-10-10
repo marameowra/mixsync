@@ -1,6 +1,7 @@
 """The only module that writes under the data dir. See docs/design/data-safety.md.
 
-Nothing here deletes: leftovers and trashed files are moved into `.trash/YYYY-MM-DD/`.
+The only delete is `release()`, which unlinks a hash-verified download from the downloads dir;
+leftovers and trashed files are moved into `.trash/YYYY-MM-DD/`.
 Journal rows: `src` and `dst` of a copy op are the source path and the final library-relative
 path; the staging file is always `.incoming/<op_id>`. `dst_hash` is journaled before the
 rename, so `recover()` can tell a finished import from an abandoned one.
@@ -13,6 +14,7 @@ import logging
 import os
 import sys
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 
 from mixsync.core.clock import Clock
@@ -69,10 +71,11 @@ def _noreplace(src: Path, dst: Path) -> bool:
 
 
 class FileOps:
-    def __init__(self, data_dir: Path, journal: Journal, clock: Clock) -> None:
+    def __init__(self, data_dir: Path, downloads_dir: Path, journal: Journal, clock: Clock) -> None:
         self.library = data_dir / "library"
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
+        self._downloads = downloads_dir
         self._journal = journal
         self._clock = clock
 
@@ -197,6 +200,29 @@ class FileOps:
             return op.dst if _sha256(f) == op.dst_hash else None
         return None
 
+    def release(self, src: Path, batch_id: str) -> None:
+        """Delete a download once its library copy from this batch is verified. Refuses
+        anything not strictly inside the downloads dir (symlinks and `..` included)."""
+        root = self._downloads.resolve()
+        if ".." in src.parts or src.is_symlink() or root not in src.resolve().parents:
+            raise SafetyError(f"{src} is not inside {root}")
+        rel = self.find_imported(batch_id, src)
+        op = self._journal.find_completed(batch_id, str(src))
+        if rel is None or op is None or op.dst_hash is None:
+            raise SafetyError(f"{src} has no verified import in batch {batch_id}")
+        op_id = self._journal.begin(batch_id, "release", str(src), rel)
+        self._journal.set_dst_hash(op_id, op.dst_hash)
+        try:
+            _hook("release")
+            src.unlink(missing_ok=True)
+            if src.parent.resolve() != root:  # never the root itself
+                with suppress(OSError):  # not empty
+                    src.parent.rmdir()
+        except Exception as e:  # an interrupt stays pending: recover() settles it
+            self._journal.fail(op_id, repr(e))
+            raise
+        self._journal.complete(op_id, op.dst_hash)
+
     def trash(self, rel: str, batch_id: str) -> str:
         """Move a library file to `.trash/<day>/<rel>`. Returns the trash-relative path."""
         src = self._under(self.library, rel)
@@ -217,6 +243,8 @@ class FileOps:
                 self._recover_copy(op)
             elif op.kind == "trash":
                 self._recover_trash(op)
+            elif op.kind == "release":
+                self._recover_release(op)
 
     def _recover_copy(self, op: JournalOp) -> None:
         final = self.library / op.dst
@@ -236,3 +264,9 @@ class FileOps:
             self._journal.complete(op.id, _sha256(dst))
         else:
             self._journal.rolled_back(op.id)
+
+    def _recover_release(self, op: JournalOp) -> None:
+        if Path(op.src).exists():
+            self._journal.rolled_back(op.id)  # the next import retry releases it again
+        else:
+            self._journal.complete(op.id, op.dst_hash or "")

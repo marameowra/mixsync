@@ -12,7 +12,7 @@ from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 class JournalOp:
     id: int
     batch_id: str
-    kind: str  # copy / move / trash / retag / purge
+    kind: str  # copy / move / trash / release / retag / purge
     src: str
     dst: str
     src_hash: str | None
@@ -44,6 +44,7 @@ class DownloadSource(Protocol):
     async def search(self, query: str) -> list[Candidate]: ...
     async def enqueue(self, candidate: Candidate) -> None: ...
     async def status(self, candidate: Candidate) -> TransferInfo: ...
+    async def clear(self, candidate: Candidate) -> None: ...
 
 
 Fingerprinter = Callable[[Path], Awaitable[Fingerprint]]

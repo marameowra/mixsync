@@ -29,7 +29,7 @@ def tree(root: Path) -> dict[str, str]:
 
 async def test_e3_kill_mid_import_loses_nothing(env: Env) -> None:
     """Exit criterion 3: SIGKILL between two files of an import; after a restart every file is
-    in the library exactly once and the sources are untouched."""
+    in the library exactly once; the sources are untouched until the import completes."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     rid = request(env)
     await env.drain(until=lambda: status(env, rid) == "importing")
@@ -53,6 +53,7 @@ async def test_e3_kill_mid_import_loses_nothing(env: Env) -> None:
     )
     assert proc.returncode == -signal.SIGKILL, proc.stderr
     assert status(env, rid) == "importing"
+    assert tree(env.downloads) == sources  # nothing is released before the import completes
     assert library(env) == [FIRST, SECOND]  # both published; the second was never completed
     with env.sessions() as s:
         assert [t.path for t in s.scalars(select(Track))] == [FIRST]  # no row for the second
@@ -65,7 +66,7 @@ async def test_e3_kill_mid_import_loses_nothing(env: Env) -> None:
     assert status(env, rid) == "imported"
     assert library(env) == [FIRST, SECOND]  # no " (2)" copies
     assert not list((env.data_dir / ".incoming").iterdir())
-    assert tree(env.downloads) == sources
+    assert tree(env.downloads) == {}  # the resumed import released them
     with env.sessions() as s:
         assert sorted(t.path for t in s.scalars(select(Track))) == [FIRST, SECOND]
     assert env.target.rescans == 1

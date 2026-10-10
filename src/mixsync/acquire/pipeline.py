@@ -285,6 +285,7 @@ class Pipeline:
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
             mbid, assignment = d.chosen_release_mbid or d.release_mbid, d.evidence["assignment"]
+            cand = candidate_from_dict(d.evidence["candidate"])
         album = await self.metadata.get_release(mbid)
         files: list[tuple[Path, TrackInfo, str | None]] = [
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
@@ -296,6 +297,8 @@ class Pipeline:
         )
         await self._cover(album, results, batch)
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
+        if results and not errors:
+            await self._release(cand, [r.src for r in results], batch)
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
@@ -303,6 +306,15 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+
+    async def _release(self, cand: Candidate, srcs: list[Path], batch: str) -> None:
+        """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is
+        logged and the import still counts."""
+        try:
+            await asyncio.to_thread(self.importer.release, srcs, batch)
+            await self.source.clear(cand)
+        except Exception:
+            log.warning("releasing downloads of %s skipped", batch, exc_info=True)
 
     async def _cover(self, album: AlbumInfo, results: list[ImportResult], batch: str) -> None:
         """cover.jpg in the album folder, never replacing one. Art is optional: any failure is

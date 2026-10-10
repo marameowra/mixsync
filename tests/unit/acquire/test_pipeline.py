@@ -2,6 +2,7 @@
 rules around them (backoff, debounce, retries, review)."""
 
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
 from mixsync.library import tags
+from mixsync.library.fileops import WriteTags
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, COVER, OTHER
@@ -89,7 +91,40 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
     assert [j.status for j in env.jobs(JobKind.RESCAN)] == [JobState.SUCCEEDED]
     # the stage 1 pick is not for review; the stage 2 decision was auto-accepted
     assert [d.status for d in decision_rows(env, 2)] == ["auto_accepted"]
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2  # sources stay
+    assert list(env.downloads.iterdir()) == []  # released: files and the album folder are gone
+    assert env.source.cleared == ["peer1"]
+
+
+async def test_partial_failure_releases_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    real = env.ops.import_file
+
+    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+        if "Two" in src.name:
+            raise OSError("disk full")
+        return real(src, rel, write_tags, batch)
+
+    monkeypatch.setattr(env.ops, "import_file", flaky)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "failed"
+    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
+    assert env.source.cleared == []
+
+
+async def test_release_failure_does_not_fail_the_import(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+
+    def boom(_srcs: list[Path], _batch: str) -> None:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(env.pipeline.importer, "release", boom)
+    rid = request(env)
+    await env.drain()
+    assert status(env, rid) == "imported" and env.source.cleared == []
 
 
 async def test_two_imports_close_together_share_one_rescan(env: Env) -> None:
