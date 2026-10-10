@@ -20,6 +20,7 @@ from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
 
@@ -372,3 +373,16 @@ def test_delete_request_409_when_review_acts_first(
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
         assert s.get(AlbumRequest, rid) is not None
+
+
+def test_delete_request_409_when_job_claimed_after_check(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "no_results", JobState.LEASED)  # a worker claimed it after the check
+    monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is not None
+        assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
+

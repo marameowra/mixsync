@@ -74,6 +74,10 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
                 decisions.act(db, d.id, user.id, "reject")
             except decisions.DecisionStateError:
                 raise HTTPException(409, "a review is acting on this request") from None
-    db.execute(delete(Job).where(_of(req.id)))
+    # A worker may have claimed the repeat search since _deletable checked; never delete its job.
+    held = (JobState.LEASED, JobState.RUNNING)
+    db.execute(delete(Job).where(_of(req.id), Job.status.not_in(held)))
+    if db.scalar(select(Job.id).where(_of(req.id)).limit(1)) is not None:
+        raise HTTPException(409, "request is in progress")  # get_db rolls the whole delete back
     db.delete(req)
     return RedirectResponse("/requests", status_code=303)
