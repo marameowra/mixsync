@@ -19,6 +19,8 @@ How MixSync runs: Docker Compose on a home server, next to slskd and Navidrome. 
 
 Small installs can run a single `mixsync all` container instead of web + worker.
 
+`.github/workflows/image.yml` publishes the image as `ghcr.io/marameowra/mixsync:dev` on every push to `main`.
+
 ## Mounts
 ```
 mixsync-*:   /config  (rw)   /downloads (rw)   /data (rw)   /import-source (ro, migration only)
