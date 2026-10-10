@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Plan {{ plan.id }} - MixSync{% endblock %}
+{% block content %}
+<h1>Merge plan {{ plan.id }}</h1>
+<p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>
+{% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
+<p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>
+{% if plan.status == "draft" %}{{ forms.plan_action(plan, "confirm", "Confirm merge") }}{% endif %}
+{% if plan.status in ("done", "failed") %}{{ forms.plan_action(plan, "undo", "Undo merge") }}{% endif %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Op</th><th>File</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for op in plan.ops %}
+  <tr>
+    <td>{{ op.op }}{% if op.done %} (done){% endif %}</td>
+    {% if op.op == "move" %}
+    <td>{{ op.old.path }} &rarr; {{ op.new_path }}</td>
+    <td>release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}</td>
+    {% elif op.op == "trash" %}
+    <td>{{ op.old.path }}</td>
+    <td>duplicate; keeping {{ op.keeper }}</td>
+    {% else %}
+    <td>{{ op.old.path }}</td>
+    <td>not on the canonical release</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p><a href="/library/fragments">Back</a></p>
+{% endblock %}

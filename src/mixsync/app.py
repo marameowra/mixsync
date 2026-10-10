@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from mixsync.core.config import Settings
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.web.csrf import check_csrf
-from mixsync.web.routes import auth, home, media, requests, review
+from mixsync.web.routes import auth, home, library, media, requests, review
 from mixsync.web.templating import templates
 
 
@@ -36,6 +36,7 @@ def create_app(
     app.include_router(home.router)
     app.include_router(review.router)
     app.include_router(requests.router)
+    app.include_router(library.router)
     app.include_router(media.router)
 
     @app.get("/healthz")
