@@ -238,3 +238,24 @@ def test_reaped_superseded_job_leaves_the_request(
     q.reap()
     assert q.get(j.id).status is JobState.FAILED
     assert _status(engine, rid) == ("no_results", None)
+
+
+def test_newer_jobs_of_other_requests_do_not_shield_the_request(
+    q: JobQueue, engine: Engine
+) -> None:
+    rid = _request(engine, "searching")
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    q.enqueue(JobKind.NOOP, {"request_id": rid + 1})
+    q.enqueue(JobKind.NOOP, {})
+    _run(q, PermanentError("boom"))  # claims the first job
+    assert _status(engine, rid)[0] == "failed"
+
+
+def test_newest_job_failing_fails_despite_an_older_one(
+    q: JobQueue, engine: Engine, clock: FakeClock
+) -> None:
+    rid = _request(engine, "searching")
+    q.enqueue(JobKind.NOOP, {"request_id": rid}, run_after=clock.now() + timedelta(hours=1))
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    _run(q, PermanentError("boom"))  # claims the newer, runnable job
+    assert _status(engine, rid)[0] == "failed"
