@@ -4,12 +4,15 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState, backoff
 from mixsync.db.engine import make_engine
 from mixsync.db.migrate import upgrade
+from mixsync.db.models.auth import User
+from mixsync.db.models.work import Request
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.worker import HANDLERS, Handler, run_job
 
@@ -149,3 +152,44 @@ def test_job_that_keeps_killing_its_worker_fails(q: JobQueue, clock: FakeClock) 
     clock.advance(LEASE + timedelta(seconds=1))
     assert q.reap() == 1
     assert q.get(j.id).status is JobState.FAILED
+
+
+def _request(engine: Engine, status: str) -> int:
+    with Session(engine) as s, s.begin():
+        s.add(User(username="u", password_hash="x", status="active"))
+        s.flush()
+        req = Request(user_id=s.query(User).one().id, release_mbid="m", status=status)
+        s.add(req)
+        s.flush()
+        return req.id
+
+
+def _status(engine: Engine, req_id: int) -> tuple[str, str | None]:
+    with Session(engine) as s:
+        req = s.get(Request, req_id)
+        assert req
+        return req.status, req.last_error
+
+
+def test_permanent_failure_fails_the_request(q: JobQueue, engine: Engine) -> None:
+    rid = _request(engine, "searching")
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    _run(q, PermanentError("404"))
+    assert _status(engine, rid) == ("failed", "PermanentError('404')")
+
+
+def test_failure_leaves_a_request_that_moved_on(q: JobQueue, engine: Engine) -> None:
+    rid = _request(engine, "imported")
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    _run(q, PermanentError("stale"))
+    assert _status(engine, rid) == ("imported", None)
+
+
+def test_reaped_dead_job_fails_the_request(q: JobQueue, engine: Engine, clock: FakeClock) -> None:
+    rid = _request(engine, "verifying")
+    j = q.enqueue(JobKind.NOOP, {"request_id": rid}, max_attempts=1)
+    q.claim("w1", LEASE)
+    q.start(j.id, "w1")
+    clock.advance(LEASE + timedelta(seconds=1))
+    q.reap()
+    assert _status(engine, rid)[0] == "failed"
