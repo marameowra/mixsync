@@ -236,6 +236,26 @@ class FileOps:
         self._journal.complete(op_id, _sha256(self.trash_dir / trash_rel))
         return trash_rel
 
+    def restore(self, trash_rel: str, rel: str, batch_id: str) -> None:
+        """Move a trashed file back to library path rel. Never replaces a file: raises
+        FileExistsError if rel is taken, leaving both alone."""
+        src = self._under(self.trash_dir, trash_rel)
+        dst = self._under(self.library, rel)
+        op_id = self._journal.begin(batch_id, "restore", trash_rel, rel)
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            _hook("restore")
+            if not _noreplace(src, dst):
+                # link(2) is atomic and fails with EEXIST; the trash name stays (it is trash).
+                os.link(src, dst)
+            _fsync(dst.parent)
+        except OSError as e:
+            self._journal.fail(op_id, repr(e))
+            if e.errno == errno.EXDEV:
+                raise SafetyError(f"{src} and {dst} are on different devices") from e
+            raise
+        self._journal.complete(op_id, _sha256(dst))
+
     def recover(self) -> None:
         """Finish or roll back every op that was started and never finished."""
         for op in self._journal.pending():
@@ -245,6 +265,8 @@ class FileOps:
                 self._recover_trash(op)
             elif op.kind == "release":
                 self._recover_release(op)
+            elif op.kind == "restore":
+                self._recover_restore(op)
 
     def _recover_copy(self, op: JournalOp) -> None:
         final = self.library / op.dst
@@ -270,3 +292,11 @@ class FileOps:
             self._journal.rolled_back(op.id)  # the next import retry releases it again
         else:
             self._journal.complete(op.id, op.dst_hash or "")
+
+    def _recover_restore(self, op: JournalOp) -> None:
+        src, dst = self.trash_dir / op.src, self.library / op.dst
+        # The file is back if it is at dst and the trash name is gone (or is the same inode).
+        if dst.is_file() and (not src.exists() or src.samefile(dst)):
+            self._journal.complete(op.id, _sha256(dst))
+        else:
+            self._journal.rolled_back(op.id)

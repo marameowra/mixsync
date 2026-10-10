@@ -11,12 +11,11 @@ Everything that touches the music library on disk: where files go, how they get 
 | File | Contents |
 |---|---|
 | `paths.py` | Template rendering + sanitization; collision suffixes |
-| `fileops.py` | **The only module that writes files**: `import_file`, `move`, `trash`, `purge`, `restore` |
+| `fileops.py` | **The only module that writes files**: `import_file`, `trash`, `restore`, `release`, `purge` |
 | `tags.py` | mutagen read/write, standard MusicBrainz tag names (Picard-compatible), snapshot before write, `MIXSYNC_STATUS` |
 | `canonical.py` | Canonical release policy evaluation; the recording → canonical track mapping; bonus-track handling |
 | `importer.py` | Orchestrates: verified match → canonical release → path → `fileops.import_file` → DB `tracks` row |
-| `fragmentation.py` | Finds release groups split across releases; builds a dry-run merge plan |
-| `plans.py` | `Plan` type for dry-runs (list of ops + counts), executed only after confirmation |
+| `fragmentation.py` | Finds release groups split across releases; builds a dry-run merge plan's ops (stored as a `plans` row; fetching, execute and undo live in `acquire/merge.py`) |
 
 ## `fileops.import_file` sequence (must match the design doc exactly)
 ```

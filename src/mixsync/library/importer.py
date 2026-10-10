@@ -9,7 +9,7 @@ from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import paths, tags
-from mixsync.library.fileops import FileOps
+from mixsync.library.fileops import FileOps, WriteTags
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,57 @@ class ImportResult:
     src: Path
     rel: str | None  # library-relative path; None if the file failed
     error: str | None = None
+
+
+def tagset_for(
+    track: TrackInfo, album: AlbumInfo, acoustid_id: str | None, status: str
+) -> tags.TagSet:
+    return tags.TagSet(
+        title=track.title,
+        artist=track.artist or album.artist,
+        album=album.album,
+        albumartist=album.artist,
+        track=track.medium_index or track.index or 1,
+        disc=track.medium or 1,
+        year=album.year,
+        recording_id=track.recording_id,
+        release_id=album.release_id,
+        release_group_id=album.release_group_id,
+        artist_ids=track.artist_ids,
+        albumartist_ids=album.artist_ids,
+        acoustid_id=acoustid_id,
+        status=status,
+        genres=album.genres,
+    )
+
+
+def render_path(template: str, t: tags.TagSet, ext: str) -> str:
+    return paths.render(
+        template,
+        albumartist=t.albumartist,
+        album=t.album,
+        year=t.year,
+        disc=t.disc,
+        track=t.track,
+        title=t.title,
+        ext=ext,
+        genre=t.genres[0] if t.genres else "Unknown Genre",
+    )
+
+
+def snapshotting_writer(
+    sessions: sessionmaker[Session], clock: Clock, rel: str, tagset: tags.TagSet
+) -> WriteTags:
+    def write_tags(staging: Path, op_id: int) -> None:
+        with sessions.begin() as s:  # committed before the write touches the file
+            s.add(
+                TagSnapshot(
+                    file_path=rel, op_id=op_id, tags=tags.read_all(staging), taken_at=clock.now()
+                )
+            )
+        tags.write(staging, tagset)
+
+    return write_tags
 
 
 class Importer:
@@ -57,54 +108,16 @@ class Importer:
         batch_id: str,
     ) -> ImportResult:
         src, track, acoustid_id = file
-        tagset = tags.TagSet(
-            title=track.title,
-            artist=track.artist or album.artist,
-            album=album.album,
-            albumartist=album.artist,
-            track=track.medium_index or track.index or 1,
-            disc=track.medium or 1,
-            year=album.year,
-            recording_id=track.recording_id,
-            release_id=album.release_id,
-            release_group_id=album.release_group_id,
-            artist_ids=track.artist_ids,
-            albumartist_ids=album.artist_ids,
-            acoustid_id=acoustid_id,
-            status=status,
-            genres=album.genres,
-        )
+        tagset = tagset_for(track, album, acoustid_id, status)
         try:
             if done := self._fileops.find_imported(batch_id, src):
                 self._ensure_row(done, tagset, acoustid_id, status, batch_id)
                 return ImportResult(src, done)
             rel = paths.unique(
-                paths.render(
-                    self._template,
-                    albumartist=tagset.albumartist,
-                    album=tagset.album,
-                    year=tagset.year,
-                    disc=tagset.disc,
-                    track=tagset.track,
-                    title=tagset.title,
-                    ext=src.suffix,
-                    genre=album.genres[0] if album.genres else "Unknown Genre",
-                ),
+                render_path(self._template, tagset, src.suffix),
                 lambda r: (self._fileops.library / r).exists(),
             )
-
-            def write_tags(staging: Path, op_id: int) -> None:
-                with self._sessions.begin() as s:  # committed before the write touches the file
-                    s.add(
-                        TagSnapshot(
-                            file_path=rel,
-                            op_id=op_id,
-                            tags=tags.read_all(staging),
-                            taken_at=self._clock.now(),
-                        )
-                    )
-                tags.write(staging, tagset)
-
+            write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
             self._fileops.import_file(src, rel, write_tags, batch_id)
             self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
         except Exception as e:

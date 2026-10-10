@@ -1,0 +1,405 @@
+import asyncio
+import os
+from collections.abc import Iterator
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Any
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from mixsync.acquire.merge import Merger
+from mixsync.core.clock import SystemClock
+from mixsync.core.config import Settings
+from mixsync.core.errors import SafetyError
+from mixsync.core.jobs import JobKind
+from mixsync.core.matching import AlbumInfo, TrackInfo
+from mixsync.core.types import ReleaseRef
+from mixsync.db import canonical as canonical_db
+from mixsync.db.journal import SqlJournal
+from mixsync.db.models.library import CanonicalRelease, Plan, Track
+from mixsync.db.models.safety import FileOp
+from mixsync.db.models.work import Job
+from mixsync.library import fileops, fragmentation, tags
+from mixsync.library.fileops import FileOps
+from mixsync.library.importer import Importer
+
+from .conftest import MakeSrc
+from .test_fileops import files, sha
+
+GROUP, OLD, CANON = "rg", "old", "canon"
+
+
+def album(release: str, year: int, *recs: str) -> AlbumInfo:
+    tracks = tuple(
+        TrackInfo(f"Song {r}", medium=1, medium_index=i, index=i, recording_id=r)
+        for i, r in enumerate(recs, 1)
+    )
+    return AlbumInfo("Band", "Album", tracks, year=year, release_id=release, release_group_id=GROUP)
+
+
+OLD_ALBUM = album(OLD, 2000, "r1", "r2", "r3", "r9")
+CANON_ALBUM = album(CANON, 1999, "r1", "r2", "r3")
+
+
+class FakeMetadata:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def get_release(self, mbid: str) -> AlbumInfo:
+        self.calls.append(f"get:{mbid}")
+        return {OLD: OLD_ALBUM, CANON: CANON_ALBUM}[mbid]
+
+    async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
+        self.calls.append(f"browse:{release_group_mbid}")
+        return [
+            ReleaseRef(OLD, "Album", "Band", "2000", track_count=4),
+            ReleaseRef(CANON, "Album", "Band", "1999", track_count=3),
+        ]
+
+
+class Boom(BaseException):
+    """A hard crash: nothing in the code under test catches it."""
+
+
+@dataclass
+class World:
+    merger: Merger
+    ops: FileOps
+    sessions: sessionmaker[Session]
+    metadata: FakeMetadata
+    importer: Importer
+
+    def imp(self, src: Path, release: str, rec: str) -> str:
+        a = OLD_ALBUM if release == OLD else CANON_ALBUM
+        track = next(t for t in a.tracks if t.recording_id == rec)
+        (r,) = self.importer.import_release([(src, track, "ac-" + rec)], a, "verified", "seed")
+        assert r.rel
+        return r.rel
+
+    def tracks(self) -> dict[str, tuple[str, str]]:
+        with self.sessions() as s:
+            return {
+                str(t.recording_mbid): (t.path, str(t.release_mbid))
+                for t in s.scalars(select(Track).order_by(Track.id))
+            }
+
+    def plan(self, plan_id: int) -> Plan:
+        with self.sessions() as s:
+            return s.get_one(Plan, plan_id)
+
+    def canonical(self) -> str | None:
+        with self.sessions() as s:
+            return canonical_db.get(s, GROUP)
+
+    def lib(self) -> dict[str, str]:
+        return {f: sha(self.ops.library / f) for f in files(self.ops.library)}
+
+    def trashed(self) -> list[str]:
+        return files(self.ops.trash_dir)
+
+
+@pytest.fixture
+def world(
+    ops: FileOps, sessions: sessionmaker[Session], make_src: MakeSrc, settings: Settings
+) -> Iterator[World]:
+    md = FakeMetadata()
+    template = settings.path_template
+    w = World(
+        Merger(sessions, SystemClock(), md, ops, template),
+        ops,
+        sessions,
+        md,
+        Importer(ops, sessions, SystemClock(), template),
+    )
+    w.imp(make_src("flac", "c3"), CANON, "r3")
+    for rec in ("r1", "r2", "r3", "r9"):
+        w.imp(make_src("flac", "o" + rec), OLD, rec)
+    md.calls.clear()
+    yield w
+
+
+def build(w: World) -> int:
+    return asyncio.run(w.merger.build(GROUP))
+
+
+def ops_by_kind(w: World, plan_id: int) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for op in w.plan(plan_id).ops:
+        out.setdefault(op["op"], []).append(op)
+    return out
+
+
+def test_find(world: World) -> None:
+    with world.sessions.begin() as s:
+        for path, rec, rel, grp, status in [
+            ("x", "q", "solo", "g2", "verified"),
+            ("y", "q2", "u1", "g3", "unverified"),
+            ("z", "q3", "u2", "g3", "verified"),
+        ]:
+            s.add(
+                Track(path=path, recording_mbid=rec, release_mbid=rel, release_group_mbid=grp,
+                      status=status, batch_id="b", imported_at=SystemClock().now())
+            )  # fmt: skip
+        s.add(CanonicalRelease(release_group_mbid="g2", release_mbid="elsewhere"))
+    assert world.merger.fragments() == [
+        fragmentation.Fragment("g2", "elsewhere", {"solo": 1}),
+        fragmentation.Fragment(GROUP, None, {OLD: 4, CANON: 1}),
+    ]
+
+
+def test_build_plan_is_a_dry_run(world: World) -> None:
+    before = world.lib()
+    pid = build(world)
+    assert world.metadata.calls == [f"browse:{GROUP}", f"get:{CANON}"]  # one browse, one release
+    assert world.canonical() is None and world.lib() == before and world.trashed() == []
+    plan = world.plan(pid)
+    assert (plan.status, plan.canonical_release_mbid, plan.previous_canonical_mbid) == (
+        "draft", CANON, None,
+    )  # fmt: skip
+    kinds = ops_by_kind(world, pid)
+    assert [o["old"]["recording_mbid"] for o in kinds["trash"]] == ["r3"]
+    assert kinds["trash"][0]["keeper"] == "Band/Album (1999)/01-03 Song r3.flac"
+    assert [o["old"]["recording_mbid"] for o in kinds["move"]] == ["r1", "r2"]
+    assert kinds["move"][0]["new_path"] == "Band/Album (1999)/01-01 Song r1.flac"
+    assert kinds["move"][0]["tags"]["release_id"] == CANON
+    assert [o["old"]["recording_mbid"] for o in kinds["keep"]] == ["r9"]
+
+
+def test_stored_canonical_skips_the_browse(world: World) -> None:
+    with world.sessions.begin() as s:
+        canonical_db.store(s, GROUP, CANON)
+    build(world)
+    assert world.metadata.calls == [f"get:{CANON}"]
+
+
+def test_targets_never_collide(world: World) -> None:
+    # two canonical tracks that render to one path, and that path is already on disk
+    tracks = tuple(
+        TrackInfo("Same", medium=1, medium_index=1, recording_id=r) for r in ("r1", "r2")
+    )
+    canon = replace(CANON_ALBUM, tracks=tracks)
+    (world.ops.library / "Band/Album (1999)/01-01 Same.flac").write_bytes(b"mine")
+    with world.sessions() as s:
+        old = list(s.scalars(select(Track).where(Track.release_mbid == OLD)))
+    ops = fragmentation.build_ops(old, canon, world.merger.template, world.ops.has)
+    assert [o["new_path"] for o in ops if o["op"] == "move"] == [
+        "Band/Album (1999)/01-01 Same (2).flac",
+        "Band/Album (1999)/01-01 Same (3).flac",
+    ]
+
+
+def test_execute_moves_retags_and_trashes(world: World) -> None:
+    before = world.lib()
+    old = world.tracks()
+    pid = build(world)
+    world.merger.execute(pid)
+
+    assert world.plan(pid).status == "done" and world.canonical() == CANON
+    now = world.tracks()
+    canon_dir = "Band/Album (1999)/"
+    assert now["r1"] == (canon_dir + "01-01 Song r1.flac", CANON)
+    assert now["r2"] == (canon_dir + "01-02 Song r2.flac", CANON)
+    assert now["r3"] == (canon_dir + "01-03 Song r3.flac", CANON)  # the canonical copy remains
+    assert now["r9"] == old["r9"]  # kept untouched
+    assert len(now) == 4
+    got = tags.read_fields(world.ops.library / now["r1"][0])
+    assert got["musicbrainz_albumid"] == CANON and got["date"] == "1999"
+    assert got["acoustid_id"] == "ac-r1" and got["mixsync_status"] == "verified"
+    # every original is in the trash, byte for byte
+    trash = {f.rpartition("/")[2]: sha(world.ops.trash_dir / f) for f in world.trashed()}
+    for rec in ("r1", "r2", "r3"):
+        path = old[rec][0]
+        assert trash[path.rpartition("/")[2]] == before[path]
+    assert not (world.ops.library / old["r1"][0]).exists()
+    with world.sessions() as s:
+        assert s.scalar(select(Job.id).where(Job.kind == JobKind.RESCAN)) is not None
+
+
+def test_crash_after_publish_resumes_without_duplicates(world: World) -> None:
+    pid = build(world)
+    real = fileops._hook  # pyright: ignore[reportPrivateUsage]
+
+    def crash(step: str) -> None:
+        if step == "rename":
+            raise Boom
+
+    fileops._hook = crash  # pyright: ignore[reportPrivateUsage]
+    try:
+        with pytest.raises(Boom):
+            world.merger.execute(pid)
+    finally:
+        fileops._hook = real  # pyright: ignore[reportPrivateUsage]
+    world.ops.recover()
+    world.merger.execute(pid)
+    assert_merged_once(world, pid)
+
+
+def test_crash_between_file_op_and_row_update_resumes(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid = build(world)
+    real = Merger._commit_op  # pyright: ignore[reportPrivateUsage]
+    calls: list[int] = []
+
+    def crash(self: Merger, *a: Any, **k: Any) -> None:
+        calls.append(1)
+        if len(calls) in (1, 3):  # after a trash, and after a move's copy and trash
+            raise Boom
+        real(self, *a, **k)
+
+    monkeypatch.setattr(Merger, "_commit_op", crash)
+    for _ in range(2):
+        with pytest.raises(Boom):
+            world.merger.execute(pid)
+    world.merger.execute(pid)
+    assert_merged_once(world, pid)
+
+
+def assert_merged_once(w: World, pid: int) -> None:
+    assert w.plan(pid).status == "done"
+    t = w.tracks()
+    assert sorted(p for p, _ in t.values()) == sorted(w.lib()) and len(t) == 4
+    assert t["r1"][1] == t["r2"][1] == CANON
+    # three originals trashed exactly once each, nothing else
+    assert sorted(f.rpartition("/")[2] for f in w.trashed()) == [
+        "01-01 Song r1.flac", "01-02 Song r2.flac", "01-03 Song r3.flac",
+    ]  # fmt: skip
+    assert files(w.ops.incoming) == []
+    assert SqlJournal(w.sessions, SystemClock()).pending() == []
+
+
+def test_revalidation_failure_stops_before_touching_files(world: World) -> None:
+    pid = build(world)
+    victim = world.tracks()["r2"][0]
+    with world.sessions.begin() as s:  # the row no longer matches what the plan saw
+        s.scalars(select(Track).where(Track.path == victim)).one().status = "unverified"
+    before = world.lib()
+    with pytest.raises(SafetyError):
+        world.merger.execute(pid)
+    plan = world.plan(pid)
+    assert plan.status == "failed" and victim in str(plan.error)
+    ops = ops_by_kind(world, pid)
+    # r3's trash and r1's move ran first; the failing op and the ones after it did not
+    assert [o["done"] for o in ops["trash"]] == [True]
+    assert [o["done"] for o in ops["move"]] == [True, False]
+    assert before[victim] == world.lib()[victim]
+
+
+def test_trash_op_needs_its_keeper(world: World) -> None:
+    pid = build(world)
+    keeper = ops_by_kind(world, pid)["trash"][0]["keeper"]
+    (world.ops.library / keeper).rename(world.ops.library / "elsewhere.flac")
+    with pytest.raises(SafetyError, match="copy to keep"):
+        world.merger.execute(pid)
+    assert world.trashed() == [] and world.plan(pid).status == "failed"
+
+
+def test_canonical_changed_underneath_fails_the_plan(world: World) -> None:
+    pid = build(world)  # built with no stored canonical
+    with world.sessions.begin() as s:
+        canonical_db.store(s, GROUP, OLD)  # someone else stored a choice since
+    before = world.lib()
+    with pytest.raises(SafetyError, match="canonical"):
+        world.merger.execute(pid)
+    assert world.lib() == before and world.trashed() == [] and world.canonical() == OLD
+    assert world.plan(pid).status == "failed"
+
+
+def test_undo_restores_everything(world: World) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:  # a switch from OLD, not a first store
+        canonical_db.store(s, GROUP, OLD)
+        s.get_one(Plan, pid).previous_canonical_mbid = OLD
+    paths_before = world.tracks()
+    lib_before = world.lib()
+    tags_before = {p: tags.read_all(world.ops.library / p) for p in lib_before}
+    rows_before = [fragmentation.row_dict(t) for t in _rows(world)]
+
+    world.merger.execute(pid)
+    assert world.canonical() == CANON and world.lib() != lib_before
+    world.merger.undo_plan(pid)
+
+    assert world.plan(pid).status == "undone" and world.canonical() == OLD
+    assert world.lib() == lib_before  # byte-identical, nothing extra in the library
+    assert {p: tags.read_all(world.ops.library / p) for p in lib_before} == tags_before
+    assert world.tracks() == paths_before
+    assert [fragmentation.row_dict(t) for t in _rows(world)] == rows_before
+    # the merged copies are in the trash, not deleted
+    assert any("Album (1999)" in f for f in world.trashed())
+    with world.sessions() as s:
+        assert s.scalar(select(FileOp.id).where(FileOp.status == "started")) is None
+
+
+def _rows(w: World) -> list[Track]:
+    with w.sessions() as s:
+        return list(s.scalars(select(Track).order_by(Track.id)))
+
+
+def test_undo_of_a_first_store_removes_the_canonical_row(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    world.merger.undo_plan(pid)
+    assert world.canonical() is None
+
+
+def test_undo_of_a_failed_partial_plan_undoes_only_what_ran(world: World) -> None:
+    pid = build(world)
+    lib_before = world.lib()
+    rows_before = [fragmentation.row_dict(t) for t in _rows(world)]
+    victim = world.tracks()["r2"][0]
+    with world.sessions.begin() as s:  # fail on r2, after r3's trash and r1's move are done
+        s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "changed"
+    with pytest.raises(SafetyError):
+        world.merger.execute(pid)
+    assert [o["done"] for o in world.plan(pid).ops].count(True) == 2
+    with world.sessions.begin() as s:
+        s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "ac-r2"
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and world.canonical() is None
+    assert world.lib() == lib_before
+    assert [fragmentation.row_dict(t) for t in _rows(world)] == rows_before
+
+
+def test_restore_refuses_to_overwrite(world: World) -> None:
+    rel = world.tracks()["r1"][0]
+    trash_rel = world.ops.trash(rel, "b")
+    (world.ops.library / rel).write_bytes(b"someone else")
+    with pytest.raises(FileExistsError):
+        world.ops.restore(trash_rel, rel, "b")
+    assert (world.ops.library / rel).read_bytes() == b"someone else"
+    assert (world.ops.trash_dir / trash_rel).exists()
+
+
+def test_recover_handles_an_interrupted_restore(world: World, journal: SqlJournal) -> None:
+    rel = world.tracks()["r1"][0]
+    digest = sha(world.ops.library / rel)
+    trash_rel = world.ops.trash(rel, "b")
+
+    real = fileops._hook  # pyright: ignore[reportPrivateUsage]
+
+    def crash(step: str) -> None:
+        if step == "restore":
+            raise Boom
+
+    fileops._hook = crash  # pyright: ignore[reportPrivateUsage]
+    try:
+        with pytest.raises(Boom):
+            world.ops.restore(trash_rel, rel, "b")  # died before the rename
+    finally:
+        fileops._hook = real  # pyright: ignore[reportPrivateUsage]
+    (op,) = journal.pending()
+    world.ops.recover()
+    assert journal.pending() == [] and not (world.ops.library / rel).exists()
+    assert _status(world, op.id) == "rolled_back"
+
+    op_id = journal.begin("b", "restore", trash_rel, rel)  # died after the rename
+    os.rename(world.ops.trash_dir / trash_rel, world.ops.library / rel)
+    world.ops.recover()
+    assert _status(world, op_id) == "done" and sha(world.ops.library / rel) == digest
+
+
+def _status(w: World, op_id: int) -> str:
+    with w.sessions() as s:
+        return s.get_one(FileOp, op_id).status

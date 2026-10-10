@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,3 +29,20 @@ class Track(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16))  # verified | unverified
     batch_id: Mapped[str] = mapped_column(String(64))
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Plan(TimestampMixin, Base):
+    """A dry-run plan for a bulk change, kept so it can be run and then undone."""
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))  # merge
+    release_group_mbid: Mapped[str] = mapped_column(String(36))
+    canonical_release_mbid: Mapped[str] = mapped_column(String(36))
+    previous_canonical_mbid: Mapped[str | None] = mapped_column(String(36))  # None: none stored
+    batch_id: Mapped[str] = mapped_column(String(64), default="")
+    # draft | running | done | failed | undoing | undone
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    ops: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text)
