@@ -300,13 +300,14 @@ class Pipeline:
                 raise LookupError(f"decision {did} does not exist")
             mbid, assignment = d.chosen_release_mbid or d.release_mbid, d.evidence["assignment"]
             cand = candidate_from_dict(d.evidence["candidate"])
+            switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
         album = await self.metadata.get_release(mbid)
         files: list[tuple[Path, TrackInfo, str | None]] = [
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
-        target = album
+        target, n = album, len(files)
         while (cid := await self._canonical_id(album)) and cid != album.release_id:
             canon = await self.metadata.get_release(cid)
             mapped, rest = canonical.split(files, canon.tracks)
@@ -320,10 +321,22 @@ class Pipeline:
             own, group = str(album.release_id), str(album.release_group_id)
             with self.sessions.begin() as s:
                 if canonical_db.switch(s, group, cid, own) == own:
+                    # Same transaction: a retry must not mistake this for a plain canonical import.
+                    row = decisions.get(s, did)
+                    if row:
+                        row.evidence = {**row.evidence, "canonical_switched_from": cid}
+                    switched = True
                     break
             # lost a race to another switch: decide again against the stored choice
-        if cid and cid == album.release_id:  # already canonical: skip what the group has
+        if cid and cid == album.release_id and not switched:
+            # shortcut: two workers importing the same release at once can still duplicate (rows
+            # not yet committed); the fragmentation merge cleans that up.
             files = await self._unowned(album, files, batch)
+        if n and not files:  # every file is a verified duplicate: nothing to import or rescan
+            with self.sessions.begin() as s:
+                req = self._request(s, job)
+                req.status, req.last_error = "owned", None
+            return
         results = await asyncio.to_thread(
             self.importer.import_release, files, target, "verified", batch
         )
@@ -347,6 +360,12 @@ class Pipeline:
         with self.sessions() as s:
             have = canonical_db.owned(
                 s, str(album.release_group_id), [t.recording_id or "" for _, t, _ in files], batch
+            )
+        if have:
+            log.info(
+                "skipping recordings already owned in %s: %s",
+                album.release_id,
+                sorted(map(str, have)),
             )
         return [f for f in files if f[1].recording_id not in have]
 

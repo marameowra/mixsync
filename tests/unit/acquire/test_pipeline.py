@@ -550,3 +550,38 @@ def test_store_keeps_an_existing_choice(env: Env) -> None:
         assert canonical_db.store(s, "g", "first") == "first"
     with env.sessions.begin() as s:
         assert canonical_db.store(s, "g", "second") == "first"
+
+
+async def test_switch_survives_a_crash_and_still_imports_every_file(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deluxe = add_deluxe(monkeypatch)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    request(env)
+    await env.drain()
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album Deluxe", deluxe)
+    rid = request(env, str(deluxe.release_id))
+    real, calls = env.pipeline.importer.import_release, []
+
+    def crashing(*a: Any) -> Any:
+        calls.append(1)
+        if len(calls) == 1:  # the switch is committed, then the worker dies
+            raise TransientError("killed")
+        return real(*a)
+
+    monkeypatch.setattr(env.pipeline.importer, "import_release", crashing)
+    await env.drain()
+
+    new = [f"Alpha Band/Alpha Album (2022)/01-0{i} {t}.mp3" for i, t in enumerate(
+        ("Song One", "Song Two", "Song Three"), 1)]  # fmt: skip
+    assert status(env, rid) == "imported" and library(env) == sorted([FIRST, SECOND, *new])
+    assert env.metadata.browsed == [ALBUM.release_group_id]
+
+
+async def test_import_of_only_owned_recordings_finishes_as_owned(env: Env) -> None:
+    """Both requests search before either has imported, so only the import can see the dupes."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    first, second = request(env), request(env)
+    await env.drain()
+    assert sorted([status(env, first), status(env, second)]) == ["imported", "owned"]
+    assert len(env.jobs(JobKind.IMPORT)) == 2 and library(env) == [FIRST, SECOND]
