@@ -387,7 +387,6 @@ def test_delete_request_409_when_job_claimed_after_check(
         assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
 
 
-
 def test_delete_request_409_rolls_back_decision_rejects(
     client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
