@@ -386,3 +386,28 @@ def test_delete_request_409_when_job_claimed_after_check(
         assert s.get(AlbumRequest, rid) is not None
         assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
 
+
+
+def test_delete_request_409_rolls_back_decision_rejects(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    dids = [_make_decision(sf, "alice", "/x"), _make_decision(sf, "alice", "/y")]
+    with sf() as s, s.begin():
+        for did in dids:
+            d = decisions.get(s, did)
+            assert d
+            d.evidence = {**d.evidence, "request_id": rid}
+    real, calls = decisions.act, []
+
+    def second_raises(*a: object, **k: object) -> object:
+        calls.append(a)
+        if len(calls) == 2:
+            raise decisions.DecisionStateError("already acted on")
+        return real(*a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(decisions, "act", second_raises)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert [decisions.get(s, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
