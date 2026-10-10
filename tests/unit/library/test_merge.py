@@ -403,3 +403,204 @@ def test_recover_handles_an_interrupted_restore(world: World, journal: SqlJourna
 def _status(w: World, op_id: int) -> str:
     with w.sessions() as s:
         return s.get_one(FileOp, op_id).status
+
+
+def crash_once(monkeypatch: pytest.MonkeyPatch, name: str, nth: int = 1) -> None:
+    """Make the nth call of a Merger method die like a killed process."""
+    real, calls = getattr(Merger, name), []
+
+    def crash(self: Merger, *a: Any, **k: Any) -> Any:
+        calls.append(1)
+        if len(calls) == nth:
+            raise Boom
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Merger, name, crash)
+
+
+def snapshot(w: World) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    return w.lib(), [fragmentation.row_dict(t) for t in _rows(w)]
+
+
+def test_undo_with_the_old_path_taken_fails_the_plan_and_keeps_the_library(world: World) -> None:
+    old = world.tracks()
+    pid = build(world)
+    world.merger.execute(pid)
+    merged = world.tracks()["r1"][0]
+    (world.ops.library / old["r1"][0]).write_bytes(b"other")  # someone reuses the old path
+    with pytest.raises(FileExistsError):
+        world.merger.undo_plan(pid)
+    plan = world.plan(pid)
+    assert plan.status == "failed" and str(plan.error).startswith("undo:")
+    assert (world.ops.library / merged).exists()  # the live merged copy was not trashed
+    assert world.tracks()["r1"][0] == merged
+    assert (world.ops.library / old["r1"][0]).read_bytes() == b"other"
+
+
+def test_retry_after_a_crash_leaves_a_newcomer_at_the_vacated_path(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = world.tracks()
+    pid = build(world)
+    crash_once(monkeypatch, "_commit_op")
+    with pytest.raises(Boom):
+        world.merger.execute(pid)  # r3's original is trashed, its row not yet updated
+    newcomer = world.ops.library / old["r3"][0]
+    newcomer.write_bytes(b"newcomer")
+    world.merger.execute(pid)
+    assert newcomer.read_bytes() == b"newcomer"
+    assert world.plan(pid).status == "done"
+
+
+def test_same_release_folder_is_refiled_in_place_without_a_suffix(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys.modules[__name__], "CANON_ALBUM", replace(CANON_ALBUM, year=2000))
+    old, before = world.tracks(), snapshot(world)
+    pid = build(world)
+    moves = ops_by_kind(world, pid)["move"]
+    assert [m["new_path"] for m in moves] == [m["old"]["path"] for m in moves]  # no " (2)"
+    world.merger.execute(pid)
+    assert world.tracks()["r1"] == (old["r1"][0], CANON)
+    assert tags.read_fields(world.ops.library / old["r1"][0])["musicbrainz_albumid"] == CANON
+    world.merger.undo_plan(pid)
+    assert snapshot(world) == before
+
+
+def test_a_move_onto_an_occupied_path_fails_before_trashing(world: World) -> None:
+    pid = build(world)
+    target = ops_by_kind(world, pid)["move"][1]["new_path"]
+    (world.ops.library / target).write_bytes(b"mine")
+    with pytest.raises(SafetyError, match="already exists"):
+        world.merger.execute(pid)
+    assert (world.ops.library / target).read_bytes() == b"mine"
+    assert world.tracks()["r2"][0] != target
+    assert (world.ops.library / world.tracks()["r2"][0]).exists()
+    assert not any("r2" in f for f in world.trashed())
+
+
+def test_build_avoids_paths_that_only_have_a_row(world: World) -> None:
+    ghost = "Band/Album (1999)/01-01 Song r1.flac"
+    with world.sessions.begin() as s:
+        s.add(Track(path=ghost, recording_mbid="x", release_mbid="z", release_group_mbid="other",
+                    status="verified", batch_id="b", imported_at=SystemClock().now()))  # fmt: skip
+    pid = build(world)
+    assert ops_by_kind(world, pid)["move"][0]["new_path"] == ghost.replace(".flac", " (2).flac")
+
+
+def test_one_copy_per_recording(world: World) -> None:
+    extra = world.importer.import_release(
+        [(world.ops.library / world.tracks()["r1"][0], OLD_ALBUM.tracks[0], "ac-r1")],
+        replace(OLD_ALBUM, release_id="old2", year=2001),
+        "verified",
+        "seed2",
+    )
+    assert extra[0].rel
+    pid = build(world)
+    kinds = ops_by_kind(world, pid)
+    dup = next(o for o in kinds["trash"] if o["old"]["release_mbid"] == "old2")
+    first = kinds["move"][0]
+    assert first["old"]["recording_mbid"] == "r1" and dup["keeper"] == first["new_path"]
+    assert [o["old"]["recording_mbid"] for o in kinds["keep"]] == ["r9"]  # not on the canonical
+    world.merger.execute(pid)
+    assert len([t for t in _rows(world) if t.recording_mbid == "r1"]) == 1
+    assert len([f for f in world.lib() if "r1" in f]) == 1
+
+
+def test_recordings_without_an_mbid_are_not_matched(world: World) -> None:
+    def row(i: int, release: str) -> Track:
+        return Track(id=i, path=str(i), recording_mbid=None, release_mbid=release, artist_mbids=[],
+                     release_group_mbid=GROUP, status="verified", batch_id="b",
+                     imported_at=SystemClock().now())  # fmt: skip
+
+    rows = [row(1, CANON), row(2, OLD)]
+    ops = fragmentation.build_ops(rows, CANON_ALBUM, world.merger.template, world.ops.has)
+    assert [o["op"] for o in ops] == ["keep"]
+
+
+def test_canonical_is_rechecked_before_each_op(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid = build(world)
+    real = Merger._commit_op  # pyright: ignore[reportPrivateUsage]
+
+    def commit_then_switch(self: Merger, *a: Any, **k: Any) -> None:
+        real(self, *a, **k)
+        with world.sessions.begin() as s:
+            s.get_one(CanonicalRelease, GROUP).release_mbid = "elsewhere"
+
+    monkeypatch.setattr(Merger, "_commit_op", commit_then_switch)
+    with pytest.raises(SafetyError, match="canonical"):
+        world.merger.execute(pid)
+    assert [o["done"] for o in world.plan(pid).ops].count(True) == 1
+    assert world.canonical() == "elsewhere"
+
+
+def test_any_error_fails_the_plan_and_it_can_be_requeued(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mixsync.acquire.merge import enqueue_merge
+
+    pid = build(world)
+    monkeypatch.setattr(FileOps, "trash", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    with pytest.raises(OSError):
+        world.merger.execute(pid)
+    assert world.plan(pid).status == "failed" and "disk" in str(world.plan(pid).error)
+    monkeypatch.undo()
+    jobs = []
+    for _ in range(2):  # the double click is one job; the failure made the second a new one
+        with world.sessions.begin() as s:
+            enqueue_merge(s, SystemClock().now(), pid)
+            enqueue_merge(s, SystemClock().now(), pid)
+        with world.sessions() as s:
+            jobs.append(len(s.scalars(select(Job).where(Job.kind == JobKind.MERGE)).all()))
+        if len(jobs) == 1:
+            with world.sessions.begin() as s:
+                s.get_one(Plan, pid).error = "again"
+    assert jobs == [1, 2]
+    world.merger.execute(pid)
+    assert world.plan(pid).status == "done"
+
+
+def test_undo_resumes_after_a_crash_between_restore_and_trashing_the_copy(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = snapshot(world)
+    pid = build(world)
+    world.merger.execute(pid)
+    crash_once(monkeypatch, "_trash_ours")
+    with pytest.raises(Boom):
+        world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undoing"
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and snapshot(world) == before
+
+
+def test_undo_resumes_after_a_crash_between_file_ops_and_the_row_update(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = snapshot(world)
+    pid = build(world)
+    world.merger.execute(pid)
+    crash_once(monkeypatch, "_commit_op", 2)  # the second op, files restored, rows not yet
+    with pytest.raises(Boom):
+        world.merger.undo_plan(pid)
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and snapshot(world) == before
+    assert world.canonical() is None
+
+
+def test_undo_reverses_an_op_that_was_half_done(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = snapshot(world)
+    pid = build(world)
+    crash_once(monkeypatch, "_commit_op", 2)  # r1: original trashed and copied, row not updated
+    with pytest.raises(Boom):
+        world.merger.execute(pid)
+    assert world.plan(pid).status == "running"
+    monkeypatch.undo()
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and snapshot(world) == before

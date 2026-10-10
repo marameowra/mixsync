@@ -75,7 +75,11 @@ def build_ops(
     the canonical track) or `keep` (not on the canonical release). No two ops share a target
     path, and a taken path gets a suffix. `exists` says whether a library path is taken."""
     tracks = sorted((t for t in group_tracks if t.status == "verified"), key=lambda t: t.path)
-    keepers = {t.recording_mbid: t for t in tracks if t.release_mbid == canon.release_id}
+    keepers = {
+        t.recording_mbid: t
+        for t in tracks
+        if t.release_mbid == canon.release_id and t.recording_mbid
+    }
     ops: list[tuple[Track, dict[str, Any]]] = []
     rest: list[Track] = []
     for t in tracks:
@@ -91,13 +95,20 @@ def build_ops(
         canon.tracks,
     )
     taken: set[str] = set()
+    moved: dict[str, str] = {}  # recording -> the path of its one copy
     for path, ctrack, acoustid in mapped:
         t = by_path[str(path)]
         ts = tagset_for(ctrack, canon, acoustid, t.status)
+        # the track's own path is free: its original is trashed before the copy is made
         new = paths.unique(
-            render_path(template, ts, path.suffix), lambda r: r in taken or exists(r)
+            render_path(template, ts, path.suffix),
+            lambda r, own=t.path: r in taken or (r != own and exists(r)),
         )
         taken.add(new)
+        moved.setdefault(str(t.recording_mbid), new)
         ops.append((t, {"op": "move", "new_path": new, "tags": asdict(ts)}))
-    ops += [(by_path[str(p)], {"op": "keep"}) for p, _, _ in bonus]
+    for path, track, _ in bonus:  # one copy only: extras of a moved recording are trashed
+        keeper = moved.get(str(track.recording_id))
+        extra = {"op": "trash", "keeper": keeper} if keeper else {"op": "keep"}
+        ops.append((by_path[str(path)], extra))
     return [{**o, "track_id": t.id, "old": row_dict(t), "done": False} for t, o in ops]
