@@ -150,6 +150,16 @@ class SlskdSource:
             TransferStatus.DONE, sent, tuple(self._local(f) for f in candidate.files)
         )
 
+    async def clear(self, candidate: Candidate) -> None:
+        """Drop the candidate's finished transfers from slskd's list (files are not touched)."""
+        data = await self._call("GET", f"/transfers/downloads/{candidate.username}")
+        wanted = {f.path for f in candidate.files}
+        for d in data["directories"]:
+            for t in d["files"]:
+                if t["filename"] in wanted:
+                    path = f"/transfers/downloads/{candidate.username}/{t['id']}"
+                    await self._call("DELETE", path, params={"remove": "true"})
+
     def _local(self, f: CandidateFile) -> str:
         """slskd saves to <downloads>/<the file's own parent folder name>/<file name> (default
         `Transfers.Download.Destination.Subdirectory` = ${SOURCE_DIRECTORY}; see

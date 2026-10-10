@@ -219,11 +219,11 @@ def test_recover_trash_ops(
     assert journal.pending() == []
 
 
-def test_nothing_in_src_deletes() -> None:
+def test_only_release_deletes() -> None:
     banned = re.compile(r"\.unlink\(|os\.remove|\brmtree\b|\.rmdir\(|removedirs|os\.unlink")
     src = Path(fileops.__file__).parents[1]
-    hits = [str(p) for p in src.rglob("*.py") if banned.search(p.read_text())]
-    assert hits == []
+    hits = [p.name for p in src.rglob("*.py") if banned.search(p.read_text())]
+    assert hits == ["fileops.py"]  # release() is the one delete
 
 
 def test_failure_after_publish_stays_pending_and_recovers(

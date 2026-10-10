@@ -38,7 +38,7 @@ sessions = make_session_factory(engine)
 pipeline = make_pipeline(
     sessions,
     clock,
-    make_fileops(sessions, clock, data_dir),
+    make_fileops(sessions, clock, data_dir, downloads),
     settings.path_template,
     FakeSource(downloads, data_dir),
     FakeAcoustId(),

@@ -38,7 +38,7 @@ def data_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def ops(data_dir: Path, journal: SqlJournal) -> FileOps:
-    return FileOps(data_dir, journal, SystemClock())
+    return FileOps(data_dir, data_dir.parent / "downloads", journal, SystemClock())
 
 
 @pytest.fixture

@@ -96,6 +96,7 @@ class FakeSource:
         self.enqueued: list[str] = []
         self.state: dict[str, TransferStatus] = {}  # by peer; default DONE
         self.write_nothing = False  # DONE, but no file on disk
+        self.cleared: list[str] = []  # peers whose transfers were cleared
 
     def add(
         self,
@@ -159,6 +160,9 @@ class FakeSource:
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
         return TransferInfo(state, 1, tuple(str(self._dir(candidate) / n) for n in names))
 
+    async def clear(self, candidate: Candidate) -> None:
+        self.cleared.append(candidate.username)
+
 
 async def fake_fingerprint(path: Path) -> Fingerprint:
     return Fingerprint(1.0, f"{path.parent.name}/{path.name}")
@@ -201,8 +205,10 @@ class FakeCoverArt:
         return COVER
 
 
-def make_fileops(sessions: sessionmaker[Session], clock: Clock, data_dir: Path) -> FileOps:
-    return FileOps(data_dir, SqlJournal(sessions, clock), clock)
+def make_fileops(
+    sessions: sessionmaker[Session], clock: Clock, data_dir: Path, downloads: Path
+) -> FileOps:
+    return FileOps(data_dir, downloads, SqlJournal(sessions, clock), clock)
 
 
 def make_pipeline(

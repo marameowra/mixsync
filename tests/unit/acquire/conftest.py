@@ -48,7 +48,7 @@ class Env:
         self.source = FakeSource(self.downloads, tmp_path / "scratch")
         self.acoustid, self.metadata, self.target = FakeAcoustId(), FakeMetadata(), FakeTarget()
         self.coverart = FakeCoverArt()
-        self.ops: FileOps = make_fileops(sessions, self.clock, self.data_dir)
+        self.ops: FileOps = make_fileops(sessions, self.clock, self.data_dir, self.downloads)
         self.pipeline: Pipeline = make_pipeline(
             sessions,
             self.clock,

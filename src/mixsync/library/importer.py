@@ -39,6 +39,10 @@ class Importer:
         sources are not released here."""
         return [self._one(f, album, status, batch_id) for f in files]
 
+    def release(self, srcs: list[Path], batch_id: str) -> None:
+        for src in srcs:
+            self._fileops.release(src, batch_id)
+
     def has_file(self, rel: str) -> bool:
         return self._fileops.has(rel)
 

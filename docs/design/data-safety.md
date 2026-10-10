@@ -6,6 +6,7 @@ Non-negotiable rules. Any code that touches files or the library goes through `l
 - "Delete" means **move to `/data/.trash/YYYY-MM-DD/<original relative path>`**.
 - Trash is purged after N days (default 30). The purge is itself a journaled job.
 - Purging early from the UI requires a typed confirmation.
+- One exception: a **released download**. After an import with zero errors, `fileops.release()` hard-deletes each source file from `/downloads` (journaled, and refused unless the path is strictly inside the downloads dir with no symlink or `..` escape). `/downloads` is staging, not library data; the library copy is hash-verified first; and `/downloads` and `/data` are separate mounts, so a "trash" move would be a second full copy.
 
 ## 2. Atomic, verified imports
 1. Copy the source to a temp file **on the same filesystem as the destination** (`/data/.incoming/`).
@@ -13,7 +14,7 @@ Non-negotiable rules. Any code that touches files or the library goes through `l
 3. Verify the hash (BLAKE3 or SHA-256) of the copy against the source.
 4. Write tags to the temp copy, after taking a tag snapshot (rule 3).
 5. Atomically `rename` it to the final path. If the destination exists, the import aborts; it never overwrites.
-6. Only then mark the source as released, so slskd can clean it up.
+6. Only then release the source: `release()` re-checks that the library copy still matches the hash journaled for this batch, journals the release, deletes the download, and removes its folder if empty. Then the pipeline clears the transfers from slskd's list. A partial failure releases nothing.
 
 A crash at any step leaves either the old state or the new state, never a partial file in the library.
 
@@ -22,7 +23,7 @@ A crash at any step leaves either the old state or the new state, never a partia
 - Any retag can be undone from the UI.
 
 ## 4. Operation journal
-- Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
+- Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / release / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
 - A batch (merge, reorganize, migration) can be undone as a unit, replayed in reverse.
 - On startup, the worker scans for ops that were started but not finished and either completes or rolls back each one.
 

@@ -121,7 +121,9 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
     engine = make_engine(settings)
     clock = SystemClock()
     sessions = make_session_factory(engine)
-    fileops = FileOps(Path(settings.data_dir), SqlJournal(sessions, clock), clock)
+    fileops = FileOps(
+        Path(settings.data_dir), Path(settings.downloads_dir), SqlJournal(sessions, clock), clock
+    )
     fileops.recover()
     queue = JobQueue(engine, clock)
     handlers = HANDLERS | _pipeline(settings, fileops, sessions, clock).handlers()

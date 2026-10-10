@@ -29,4 +29,6 @@ def write_tags(path: Path, _op_id: int) -> None:
 
 fileops._hook = hook  # pyright: ignore[reportPrivateUsage]
 journal = SqlJournal(make_session_factory(make_engine(Settings())), SystemClock())
-FileOps(Path(data_dir), journal, SystemClock()).import_file(Path(src), rel, write_tags, "crash")
+FileOps(Path(data_dir), Path(src).parent, journal, SystemClock()).import_file(
+    Path(src), rel, write_tags, "crash"
+)

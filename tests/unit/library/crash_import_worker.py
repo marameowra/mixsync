@@ -24,7 +24,7 @@ def die(*_a: object) -> None:
 
 settings, clock = Settings(), SystemClock()
 sessions = make_session_factory(make_engine(settings))
-ops = FileOps(Path(sys.argv[1]), SqlJournal(sessions, clock), clock)
+ops = FileOps(Path(sys.argv[1]), Path(sys.argv[2]).parent, SqlJournal(sessions, clock), clock)
 importer = Importer(ops, sessions, clock, settings.path_template)
 importer._ensure_row = die  # pyright: ignore[reportPrivateUsage]
 tracks = [
