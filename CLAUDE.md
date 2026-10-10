@@ -14,3 +14,6 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
 - Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
   agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
   PR for the user to merge. Merging to main publishes the `:dev` image.
+- Releases are human-only. Never create or push `v*` tags, create GitHub releases, or approve
+  deployments to the `release` environment. Pushing a `v*` tag runs `release.yml`, which
+  waits for the user's approval before publishing `:<tag>` and `:latest`.
