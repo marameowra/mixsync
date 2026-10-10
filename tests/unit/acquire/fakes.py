@@ -61,6 +61,7 @@ def make_album(prefix: str, release_id: str, titles: tuple[str, str]) -> AlbumIn
         release_id=release_id,
         release_group_id=f"{prefix}-rg",
         artist_ids=(f"{prefix}-artist",),
+        genres=("Shoegaze", "Dream Pop"),
     )
 
 
@@ -188,6 +189,18 @@ class FakeTarget:
         self.rescans += 1
 
 
+COVER = b"\xff\xd8\xff\xe0fake-jpeg"
+
+
+class FakeCoverArt:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def front(self, release_mbid: str, release_group_mbid: str | None) -> bytes | None:
+        self.calls.append(release_mbid)
+        return COVER
+
+
 def make_fileops(sessions: sessionmaker[Session], clock: Clock, data_dir: Path) -> FileOps:
     return FileOps(data_dir, SqlJournal(sessions, clock), clock)
 
@@ -200,6 +213,7 @@ def make_pipeline(
     source: FakeSource,
     acoustid: FakeAcoustId,
     metadata: FakeMetadata,
+    coverart: FakeCoverArt,
     target: FakeTarget,
 ) -> Pipeline:
     return Pipeline(
@@ -211,5 +225,6 @@ def make_pipeline(
         fingerprint=fake_fingerprint,
         acoustid=acoustid,
         importer=Importer(ops, sessions, clock, template),
+        coverart=coverart,
         target=target,
     )

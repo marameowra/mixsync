@@ -37,6 +37,7 @@ class AlbumInfo:
     release_id: str | None = None
     release_group_id: str | None = None
     artist_ids: tuple[str, ...] = ()
+    genres: tuple[str, ...] = ()  # MusicBrainz genres, most voted first
 
 
 @dataclass(frozen=True)

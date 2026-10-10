@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # -I leaves the script's directo
 
 from fakes import (  # noqa: E402
     FakeAcoustId,
+    FakeCoverArt,
     FakeMetadata,
     FakeSource,
     FakeTarget,
@@ -42,6 +43,7 @@ pipeline = make_pipeline(
     FakeSource(downloads, data_dir),
     FakeAcoustId(),
     FakeMetadata(),
+    FakeCoverArt(),
     FakeTarget(),
 )
 renames = 0

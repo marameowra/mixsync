@@ -39,6 +39,7 @@ class TagSet:
     albumartist_ids: tuple[str, ...] = ()
     acoustid_id: str | None = None
     status: str = "unverified"  # MIXSYNC_STATUS: verified | unverified
+    genres: tuple[str, ...] = ()  # ranked; the top 3 are written
 
 
 def _fields(t: TagSet) -> dict[str, list[str]]:
@@ -58,6 +59,7 @@ def _fields(t: TagSet) -> dict[str, list[str]]:
         "musicbrainz_albumartistid": list(t.albumartist_ids),
         "acoustid_id": [t.acoustid_id],
         "mixsync_status": [t.status],
+        "genre": list(t.genres[:3]),
     }
     return {k: [x for x in v if x] for k, v in f.items() if any(v)}
 
@@ -65,7 +67,7 @@ def _fields(t: TagSet) -> dict[str, list[str]]:
 _ALL: Sequence[str] = (
     "title artist album albumartist tracknumber discnumber date musicbrainz_trackid "
     "musicbrainz_albumid musicbrainz_releasegroupid musicbrainz_artistid "
-    "musicbrainz_albumartistid acoustid_id mixsync_status"
+    "musicbrainz_albumartistid acoustid_id mixsync_status genre"
 ).split()
 _ID3: dict[str, str] = dict(
     zip(
@@ -74,7 +76,7 @@ _ID3: dict[str, str] = dict(
             "TIT2", "TPE1", "TALB", "TPE2", "TRCK", "TPOS", "TDRC", _MB_UFID,
             "TXXX:MusicBrainz Album Id", "TXXX:MusicBrainz Release Group Id",
             "TXXX:MusicBrainz Artist Id", "TXXX:MusicBrainz Album Artist Id",
-            "TXXX:Acoustid Id", "TXXX:MIXSYNC_STATUS",
+            "TXXX:Acoustid Id", "TXXX:MIXSYNC_STATUS", "TCON",
         ],
         strict=True,
     )
@@ -92,6 +94,7 @@ _MP4: dict[str, str] = dict(
                     "MusicBrainz Album Artist Id", "Acoustid Id", "MIXSYNC_STATUS",
                 )
             ),
+            "\xa9gen",
         ],
         strict=True,
     )

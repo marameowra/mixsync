@@ -39,6 +39,12 @@ class Importer:
         sources are not released here."""
         return [self._one(f, album, status, batch_id) for f in files]
 
+    def has_file(self, rel: str) -> bool:
+        return self._fileops.has(rel)
+
+    def write_file(self, rel: str, data: bytes, batch_id: str) -> None:
+        self._fileops.write_new(rel, data, batch_id)
+
     def _one(
         self,
         file: tuple[Path, TrackInfo, str | None],
@@ -62,6 +68,7 @@ class Importer:
             albumartist_ids=album.artist_ids,
             acoustid_id=acoustid_id,
             status=status,
+            genres=album.genres,
         )
         try:
             if done := self._fileops.find_imported(batch_id, src):
@@ -77,6 +84,7 @@ class Importer:
                     track=tagset.track,
                     title=tagset.title,
                     ext=src.suffix,
+                    genre=album.genres[0] if album.genres else "Unknown Genre",
                 ),
                 lambda r: (self._fileops.library / r).exists(),
             )

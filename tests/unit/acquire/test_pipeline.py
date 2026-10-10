@@ -18,7 +18,7 @@ from mixsync.db.models.work import Request
 from mixsync.library import tags
 
 from .conftest import Env, login
-from .fakes import ALBUM, ALBUM_B, OTHER
+from .fakes import ALBUM, ALBUM_B, COVER, OTHER
 
 FIRST = "Alpha Band/Alpha Album (2020)/01-01 Song One.mp3"
 SECOND = "Alpha Band/Alpha Album (2020)/01-02 Song Two.mp3"
@@ -45,7 +45,7 @@ def tried(env: Env, rid: int) -> list[list[str]]:
 
 def library(env: Env) -> list[str]:
     lib = env.data_dir / "library"
-    return sorted(str(p.relative_to(lib)) for p in lib.rglob("*") if p.is_file())
+    return sorted(str(p.relative_to(lib)) for p in lib.rglob("*.mp3"))
 
 
 def decision_rows(env: Env, stage: int) -> list[MatchDecision]:
@@ -78,6 +78,8 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
         assert t["TXXX:MusicBrainz Release Group Id"] == [ALBUM.release_group_id]
         assert t["TXXX:MIXSYNC_STATUS"] == ["verified"]
         assert t["UFID:http://musicbrainz.org"] == [track.recording_id]
+        assert t["TCON"] == list(ALBUM.genres)
+    assert (env.data_dir / "library" / FIRST).with_name("cover.jpg").read_bytes() == COVER
     with env.sessions() as s:
         rows = {t.path: t for t in s.scalars(select(Track))}
     assert set(rows) == {FIRST, SECOND}
