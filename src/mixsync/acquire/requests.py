@@ -21,7 +21,8 @@ VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minu
 
 
 def candidate_from_dict(d: dict[str, Any]) -> Candidate:
-    return Candidate(**{**d, "files": tuple(CandidateFile(**f) for f in d["files"])})
+    files = tuple(CandidateFile(**f) for f in d["files"])
+    return Candidate(**{k: v for k, v in d.items() if k != "files"}, files=files)
 
 
 def candidate_dict(c: Candidate) -> dict[str, Any]:
@@ -91,8 +92,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
             {
                 "request_id": req.id,
                 "release_mbid": d.chosen_release_mbid,
-                "peer": src["peer"],
-                "folder": src["folder"],
+                "candidate": d.evidence["candidate"],
                 "paths": [f["local_path"] for f in src["files"]],
             },
             max_attempts=VERIFY_ATTEMPTS,

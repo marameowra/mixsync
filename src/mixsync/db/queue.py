@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import Connection, Engine, Row, Table, select, update
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition

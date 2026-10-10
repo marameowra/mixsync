@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,8 +46,7 @@ class DownloadSource(Protocol):
     async def status(self, candidate: Candidate) -> TransferInfo: ...
 
 
-class Fingerprinter(Protocol):
-    async def fingerprint(self, path: Path) -> Fingerprint: ...
+Fingerprinter = Callable[[Path], Awaitable[Fingerprint]]
 
 
 class AcoustIdLookup(Protocol):

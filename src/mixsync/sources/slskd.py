@@ -146,7 +146,9 @@ class SlskdSource:
         for s in (TransferStatus.FAILED, TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
             if s in states:
                 return TransferInfo(s, sent)
-        return TransferInfo(TransferStatus.DONE, sent, tuple(self._local(f) for f in candidate.files))
+        return TransferInfo(
+            TransferStatus.DONE, sent, tuple(self._local(f) for f in candidate.files)
+        )
 
     def _local(self, f: CandidateFile) -> str:
         """slskd saves to <downloads>/<the file's own parent folder name>/<file name> (default
