@@ -9,7 +9,7 @@ import asyncio
 import logging
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -129,6 +129,17 @@ class Pipeline:
             mbid, tried, profile = req.release_mbid, req.tried, profile_for(s, req.user_id)
 
         album = await self.metadata.get_release(mbid)
+        if album.release_group_id and album.tracks:
+            with self.sessions() as s:
+                have = canonical_db.owned(
+                    s, album.release_group_id, [t.recording_id or "" for t in album.tracks]
+                )
+            if all(t.recording_id in have for t in album.tracks):  # nothing left to fetch
+                with self.sessions.begin() as s:
+                    req = self._request(s, job)
+                    req.artist, req.album = album.artist[:255], album.album[:255]
+                    req.status, req.last_error = "owned", None
+                return
         ranked: list[tuple[Candidate, Any]] = []
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
@@ -295,23 +306,25 @@ class Pipeline:
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
-        target, bonus = album, []
-        if (cid := await self._canonical_id(album)) and cid != album.release_id:
+        target = album
+        while (cid := await self._canonical_id(album)) and cid != album.release_id:
             canon = await self.metadata.get_release(cid)
             mapped, rest = canonical.split(files, canon.tracks)
-            if mapped:  # no overlap at all: the canonical release is not this album, file as is
-                target, files, bonus = canon, mapped, rest
+            if not mapped:  # no overlap at all: the canonical release is not this album
+                break
+            if not rest:
+                target, files = canon, await self._unowned(album, mapped, batch)
+                break
+            # Bonus tracks: this release is the fuller edition, so it becomes canonical. Files
+            # already under the old one stay put; the merge plan will deal with that split.
+            own, group = str(album.release_id), str(album.release_group_id)
+            with self.sessions.begin() as s:
+                if canonical_db.switch(s, group, cid, own) == own:
+                    break
+            # lost a race to another switch: decide again against the stored choice
         results = await asyncio.to_thread(
             self.importer.import_release, files, target, "verified", batch
         )
-        if bonus:  # filed in the canonical folder, but still tagged with their own release
-            results += await asyncio.to_thread(
-                self.importer.import_release,
-                bonus,
-                replace(target, release_id=album.release_id),
-                "verified",
-                batch,
-            )
         await self._cover(target, results, batch)
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         if results and not errors:
@@ -323,6 +336,17 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+
+    async def _unowned(
+        self, album: AlbumInfo, files: list[canonical.File], batch: str
+    ) -> list[canonical.File]:
+        """Drop files whose recording the group already has. They stay in /downloads: release
+        only deletes a download that has a verified import of its own."""
+        with self.sessions() as s:
+            have = canonical_db.owned(
+                s, str(album.release_group_id), [t.recording_id or "" for _, t, _ in files], batch
+            )
+        return [f for f in files if f[1].recording_id not in have]
 
     async def _canonical_id(self, album: AlbumInfo) -> str | None:
         """The canonical release of the album's group: the stored choice, else the policy's pick,

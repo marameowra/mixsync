@@ -36,8 +36,10 @@
 ### Behaviour
 - When the first track from a release group is imported, the policy picks the canonical release and stores it.
 - Later tracks from **any release in that group** are matched by recording MBID to the canonical release's track list, then tagged and filed under the canonical release.
-- If a recording doesn't exist on the canonical release (a bonus track, say), it is filed under the canonical album folder with its own release MBID kept in tags and flagged as a bonus. The user can switch the canonical release to a deluxe edition instead.
-- Changing a release group's canonical release produces a dry-run merge plan.
+- If a download holds recordings that are on the canonical release **and** recordings that are not (bonus tracks), its own release is the fuller edition and **becomes the canonical release**: the stored choice is switched atomically (only if it still holds the old value), and all of its files are filed under it. Files already under the old canonical release are not moved; they show up in the fragmentation report and are handled by a dry-run merge plan.
+- If none of a download's recordings are on the canonical release, it is filed under its own release and the canonical choice is unchanged.
+- **No duplicate downloads:** a request whose recordings are all already in the library (any release in the group) is finished as `owned` without searching. At import time, files whose recording the group already has are skipped and left in `/downloads` (nothing is deleted without a verified import).
+- Changing a release group's canonical release after the fact (other than the bonus-track switch above) produces a dry-run merge plan.
 
 ## Fragmentation report
 - Lists release groups whose owned tracks span more than one release, including anything imported before canonicalization existed.

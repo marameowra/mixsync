@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import TransientError
@@ -353,21 +354,86 @@ def add_deluxe(monkeypatch: pytest.MonkeyPatch) -> AlbumInfo:
     return deluxe
 
 
-async def test_bonus_track_keeps_its_release_but_joins_the_canonical_folder(
+async def test_bonus_tracks_switch_the_canonical_release(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     deluxe = add_deluxe(monkeypatch)
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", deluxe)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    request(env)
+    await env.drain()
+    old = library(env)
+    assert old == [FIRST, SECOND]
+
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album Deluxe", deluxe)
     rid = request(env, str(deluxe.release_id))
     await env.drain()
 
-    third = FIRST.replace("01 Song One", "03 Song Three")
-    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND, third]
-    assert release_tags(env, SECOND)["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
-    assert release_tags(env, third)["TXXX:MusicBrainz Album Id"] == [deluxe.release_id]
+    new = [f"Alpha Band/Alpha Album (2022)/01-0{i} {t}.mp3" for i, t in enumerate(
+        ("Song One", "Song Two", "Song Three"), 1)]  # fmt: skip
+    assert status(env, rid) == "imported" and library(env) == sorted(old + new)
+    for rel in new:
+        assert release_tags(env, rel)["TXXX:MusicBrainz Album Id"] == [deluxe.release_id]
+    assert release_tags(env, FIRST)["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
     with env.sessions() as s:
-        rows = {t.path: t.release_mbid for t in s.scalars(select(Track))}
-    assert rows[third] == deluxe.release_id and rows[FIRST] == ALBUM.release_id
+        assert canonical_db.get(s, str(ALBUM.release_group_id)) == deluxe.release_id
+
+
+async def test_switch_that_lost_a_race_uses_the_stored_choice(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deluxe = add_deluxe(monkeypatch)
+    other = replace(deluxe, release_id="66666666-6666-6666-6666-666666666666", year=2021)
+    monkeypatch.setitem(CATALOG, str(other.release_id), other)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", deluxe)
+    real = canonical_db.switch
+
+    def raced(s: Session, group: str, old: str, new: str) -> str:
+        with env.sessions.begin() as other_session:  # another worker switches first
+            real(other_session, group, old, str(other.release_id))
+        return real(s, group, old, new)
+
+    monkeypatch.setattr(canonical_db, "switch", raced)
+    request(env, str(deluxe.release_id))
+    await env.drain()
+
+    assert library(env) == [
+        f"Alpha Band/Alpha Album (2021)/01-0{i} {t}.mp3"
+        for i, t in enumerate(("Song One", "Song Two", "Song Three"), 1)
+    ]
+    with env.sessions() as s:
+        assert canonical_db.get(s, str(ALBUM.release_group_id)) == other.release_id
+
+
+async def test_search_stops_when_every_recording_is_owned(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    request(env)
+    await env.drain()
+    searched = list(env.source.queries)
+
+    rid = request(env, str(ALBUM_B.release_id))
+    await env.drain()
+    assert status(env, rid) == "owned" and env.source.queries == searched
+    assert env.source.enqueued == ["peer1"]
+
+
+async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
+        s.add(
+            Track(
+                path="elsewhere.mp3",
+                recording_mbid="Alpha-rec-1",
+                release_group_mbid=ALBUM.release_group_id,
+                status="verified",
+                batch_id="old",
+                imported_at=env.clock.now(),
+            )
+        )
+    rid = request(env, str(ALBUM_B.release_id))
+    await env.drain()
+
+    assert status(env, rid) == "imported" and library(env) == [SECOND]
+    assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
 
 
 async def test_canonical_choice_is_stored_and_reused(env: Env) -> None:
@@ -400,28 +466,27 @@ async def test_release_without_a_group_imports_as_is(
     assert release_tags(env, library(env)[0])["TXXX:MusicBrainz Album Id"] == [ALBUM_B.release_id]
 
 
-async def test_crash_between_the_two_imports_resumes_without_duplicates(
+async def test_crash_after_importing_resumes_without_duplicates(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    deluxe = add_deluxe(monkeypatch)
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", deluxe)
-    rid = request(env, str(deluxe.release_id))
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    rid = request(env, str(ALBUM_B.release_id))
     real, calls = env.pipeline.importer.import_release, []
 
     def crashing(*a: Any) -> Any:
         calls.append(1)
-        if len(calls) == 2:  # the bonus batch
+        results = real(*a)
+        if len(calls) == 1:  # the files are in, then the worker dies
             raise TransientError("killed")
-        return real(*a)
+        return results
 
     monkeypatch.setattr(env.pipeline.importer, "import_release", crashing)
     await env.drain()
 
-    third = FIRST.replace("01 Song One", "03 Song Three")
-    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND, third]
+    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
     assert env.metadata.browsed == [ALBUM.release_group_id]
     with env.sessions() as s:
-        assert len(list(s.scalars(select(Track)))) == 3
+        assert len(list(s.scalars(select(Track)))) == 2
 
 
 async def test_canonical_without_shared_recordings_is_ignored(
