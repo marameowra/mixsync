@@ -20,6 +20,7 @@ from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
 
@@ -304,6 +305,23 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
         assert d and d.status == "rejected"  # kept for the record, off the review queue
 
 
+def test_delete_request_with_stage1_pending_decision(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    did = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = decisions.get(s, did)
+        assert d
+        d.stage = 1  # the pipeline's download pick, not a file review
+        d.evidence = {**d.evidence, "request_id": rid}
+    tok = _login(client, "alice")
+    r = client.post(f"/requests/{rid}/delete", data={"csrf_token": tok})
+    assert r.status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None
+
+
 def test_delete_request_refused(client: TestClient, sf: sessionmaker[Session]) -> None:
     mine = _req(sf, "alice", "failed", None)
     busy = _req(sf, "alice", "searching", JobState.RUNNING)
@@ -316,3 +334,79 @@ def test_delete_request_refused(client: TestClient, sf: sessionmaker[Session]) -
         assert f"/requests/{rid}/delete" not in client.get("/requests").text
         assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     assert client.post("/requests/999/delete", data={"csrf_token": tok}).status_code == 404
+
+
+def test_delete_no_results_request(client: TestClient, sf: sessionmaker[Session]) -> None:
+    rid = _req(sf, "alice", "no_results", JobState.QUEUED)
+    tok = _login(client, "alice")
+    assert f"/requests/{rid}/delete" in client.get("/requests").text
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
+
+
+@pytest.mark.parametrize("state", [JobState.LEASED, JobState.RUNNING])
+def test_delete_no_results_request_refused_while_searching(
+    client: TestClient, sf: sessionmaker[Session], state: JobState
+) -> None:
+    rid = _req(sf, "alice", "no_results", state)
+    tok = _login(client, "alice")
+    assert f"/requests/{rid}/delete" not in client.get("/requests").text
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+
+
+def test_delete_request_409_when_review_acts_first(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    did = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = decisions.get(s, did)
+        assert d
+        d.evidence = {**d.evidence, "request_id": rid}
+
+    def raced(*_a: object, **_k: object) -> None:
+        raise decisions.DecisionStateError("already acted on")
+
+    monkeypatch.setattr(decisions, "act", raced)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is not None
+
+
+def test_delete_request_409_when_job_claimed_after_check(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "no_results", JobState.LEASED)  # a worker claimed it after the check
+    monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is not None
+        assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
+
+
+def test_delete_request_409_rolls_back_decision_rejects(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    dids = [_make_decision(sf, "alice", "/x"), _make_decision(sf, "alice", "/y")]
+    with sf() as s, s.begin():
+        for did in dids:
+            d = decisions.get(s, did)
+            assert d
+            d.evidence = {**d.evidence, "request_id": rid}
+    real, calls = decisions.act, []
+
+    def second_raises(*a: object, **k: object) -> object:
+        calls.append(a)
+        if len(calls) == 2:
+            raise decisions.DecisionStateError("already acted on")
+        return real(*a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(decisions, "act", second_raises)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert [decisions.get(s, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
