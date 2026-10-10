@@ -6,6 +6,7 @@ current job's id, so a handler re-run after a crash never forks the chain.
 """
 
 import asyncio
+import logging
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from mixsync.core.matching import (
 )
 from mixsync.core.protocols import (
     AcoustIdLookup,
+    CoverArt,
     DownloadSource,
     Fingerprinter,
     LibraryTarget,
@@ -47,9 +49,11 @@ from mixsync.db import decisions
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
-from mixsync.library.importer import Importer
+from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import assign_tracks, score_files
+
+log = logging.getLogger(__name__)
 
 Handler = Callable[[JobRecord], Awaitable[None]]
 
@@ -77,6 +81,7 @@ class Pipeline:
     fingerprint: Fingerprinter
     acoustid: AcoustIdLookup
     importer: Importer
+    coverart: CoverArt
     target: LibraryTarget
 
     def handlers(self) -> dict[JobKind, Handler]:
@@ -285,9 +290,11 @@ class Pipeline:
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
+        batch = f"request-{rid}-decision-{did}"
         results = await asyncio.to_thread(
-            self.importer.import_release, files, album, "verified", f"request-{rid}-decision-{did}"
+            self.importer.import_release, files, album, "verified", batch
         )
+        await self._cover(album, results, batch)
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         now = self.clock.now()
         with self.sessions.begin() as s:
@@ -296,6 +303,21 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+
+    async def _cover(self, album: AlbumInfo, results: list[ImportResult], batch: str) -> None:
+        """cover.jpg in the album folder, never replacing one. Art is optional: any failure is
+        logged and the import still counts."""
+        rel = next((r.rel for r in results if r.rel), None)
+        if rel is None or album.release_id is None:
+            return
+        cover = f"{rel.rpartition('/')[0]}/cover.jpg".removeprefix("/")
+        try:
+            if self.importer.has_file(cover):
+                return
+            if data := await self.coverart.front(album.release_id, album.release_group_id):
+                await asyncio.to_thread(self.importer.write_file, cover, data, batch)
+        except Exception:
+            log.warning("cover art for %s skipped", album.release_id, exc_info=True)
 
     async def rescan(self, _job: JobRecord) -> None:
         await self.target.rescan()

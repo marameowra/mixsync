@@ -7,8 +7,14 @@ class _Raw(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
 
+class MbGenre(_Raw):
+    name: str
+    count: int = 0
+
+
 class MbArtist(_Raw):
     id: str
+    genres: list[MbGenre] = []
 
 
 class MbCredit(_Raw):
@@ -50,6 +56,7 @@ class MbLabelInfo(_Raw):
 class MbReleaseGroup(_Raw):
     id: str | None = None
     first_release_date: str | None = Field(default=None, alias="first-release-date")
+    genres: list[MbGenre] = []
 
 
 class MbRelease(_Raw):
@@ -58,6 +65,7 @@ class MbRelease(_Raw):
     date: str | None = None
     country: str | None = None
     disambiguation: str = ""
+    genres: list[MbGenre] = []
     artist_credit: list[MbCredit] = Field(default=[], alias="artist-credit")
     media: list[MbMedium] = []
     label_info: list[MbLabelInfo] = Field(default=[], alias="label-info")

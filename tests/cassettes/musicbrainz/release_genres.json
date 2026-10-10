@@ -1,0 +1,17 @@
+{
+  "id": "18e2b05b-937a-3c25-ac78-07267e6411a0",
+  "title": "Kid A",
+  "date": "2000-10-02",
+  "country": "GB",
+  "artist-credit": [
+    {"name": "Radiohead", "joinphrase": "", "artist": {"id": "a74b1b7f-71a5-4011-9441-d0b5e4122711", "genres": [
+      {"name": "rock", "count": 19}, {"name": "alternative rock", "count": 43}
+    ]}}
+  ],
+  "genres": [{"name": "electronic", "count": 1}],
+  "release-group": {"id": "e75c0549-ad55-39e3-8025-c72c5d4a3c5d", "first-release-date": "2000-10-02", "genres": [
+    {"name": "rock", "count": 3}, {"name": "art rock", "count": 11}, {"name": "electronic", "count": 11},
+    {"name": "ambient", "count": 2}
+  ]},
+  "media": []
+}
