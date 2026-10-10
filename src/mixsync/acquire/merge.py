@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.requests import enqueue_rescan
@@ -46,7 +46,7 @@ def enqueue_undo(s: Session, now: datetime, plan_id: int) -> None:
 
 
 class PlanInProgress(ValueError):
-    """The group already has a draft or running merge plan."""
+    """The group has a merge plan that is running or being undone."""
 
 
 @dataclass(frozen=True)
@@ -73,13 +73,13 @@ class Merger:
             stored = canonical_db.get(s, group)
             tracks = list(s.scalars(select(Track).where(Track.release_group_mbid == group)))
             rows = set(s.scalars(select(Track.path)))
-            open_plan = s.scalar(
-                select(Plan.id).where(
-                    Plan.release_group_mbid == group, Plan.status.in_(["draft", "running"])
+            open_plan = s.execute(
+                select(Plan.id, Plan.status).where(
+                    Plan.release_group_mbid == group, Plan.status.in_(["running", "undoing"])
                 )
-            )
+            ).first()
         if open_plan is not None:
-            raise PlanInProgress(f"plan {open_plan} for release group {group} is still open")
+            raise PlanInProgress(f"plan {open_plan[0]} for release group {group} is {open_plan[1]}")
         if not any(t.status == "verified" for t in tracks):
             raise LookupError(f"no verified tracks in release group {group}")
         cid = stored
@@ -93,6 +93,11 @@ class Merger:
             tracks, album, self.template, lambda r: r in rows or self.fileops.has(r), self._size
         )
         with self.sessions.begin() as s:
+            s.execute(  # abandoned previews: never executed, so DB only
+                update(Plan)
+                .where(Plan.release_group_mbid == group, Plan.status == "draft")
+                .values(status="discarded")
+            )
             plan = Plan(
                 kind="merge",
                 release_group_mbid=group,

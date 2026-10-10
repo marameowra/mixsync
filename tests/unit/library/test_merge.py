@@ -606,10 +606,25 @@ def test_undo_reverses_an_op_that_was_half_done(
     assert world.plan(pid).status == "undone" and snapshot(world) == before
 
 
-def test_build_refuses_while_a_plan_is_open(world: World) -> None:
-    build(world)
+def test_build_discards_an_abandoned_draft(world: World) -> None:
+    first = build(world)
+    second = build(world)
+    assert first != second
+    assert world.plan(first).status == "discarded" and world.plan(second).status == "draft"
+    for run in (world.merger.execute, world.merger.undo_plan):
+        with pytest.raises(SafetyError, match="discarded"):
+            run(first)
+    assert world.trashed() == []
+
+
+@pytest.mark.parametrize("status", ["running", "undoing"])
+def test_build_refuses_while_a_plan_is_active(world: World, status: str) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:
+        s.get_one(Plan, pid).status = status
     with pytest.raises(PlanInProgress):
         build(world)
+    assert world.plan(pid).status == status
 
 
 def test_undoing_a_plan_that_set_nothing_leaves_the_canonical_alone(world: World) -> None:
