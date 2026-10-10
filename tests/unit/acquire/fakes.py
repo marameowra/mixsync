@@ -76,6 +76,8 @@ CATALOG = {a.release_id or "": a for a in (ALBUM, ALBUM_B, OTHER)}
 class FakeMetadata:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.browsed: list[str] = []
+        self.group: dict[str, ReleaseRef] = {}  # by release id; overrides the catalog's refs
 
     async def get_release(self, mbid: str) -> AlbumInfo:
         self.calls.append(mbid)
@@ -83,6 +85,15 @@ class FakeMetadata:
 
     async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
         return []
+
+    async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
+        self.browsed.append(release_group_mbid)
+        refs = {
+            i: ReleaseRef(i, a.album, a.artist, str(a.year), track_count=len(a.tracks))
+            for i, a in CATALOG.items()
+            if a.release_group_id == release_group_mbid
+        }
+        return list((refs | self.group).values())
 
 
 class FakeSource:

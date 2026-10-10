@@ -110,6 +110,8 @@ def _pipeline(
         fingerprint=fingerprint,
         acoustid=AcoustIdClient(client("acoustid"), settings),
         importer=Importer(fileops, sessions, clock, settings.path_template),
+        canonical_media=tuple(settings.canonical_media),
+        canonical_countries=tuple(settings.canonical_countries),
         coverart=CoverArtClient(client("coverart")),
         target=NavidromeTarget(
             client("navidrome"),

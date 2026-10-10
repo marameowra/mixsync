@@ -42,6 +42,7 @@ class MbMedium(_Raw):
     position: int = 1  # search hits omit it
     format: str | None = None
     tracks: list[MbTrack] = []
+    track_count: int = Field(default=0, alias="track-count")  # browse omits the tracks
 
 
 class MbLabel(_Raw):
@@ -64,6 +65,7 @@ class MbRelease(_Raw):
     title: str
     date: str | None = None
     country: str | None = None
+    status: str | None = None
     disambiguation: str = ""
     genres: list[MbGenre] = []
     artist_credit: list[MbCredit] = Field(default=[], alias="artist-credit")

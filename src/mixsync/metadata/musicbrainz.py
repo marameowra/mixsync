@@ -98,3 +98,24 @@ class MusicBrainzProvider:
             ReleaseRef(r.id, r.title, _credit(r.artist_credit), r.date, r.country, r.track_count)
             for r in MbSearch.model_validate(data).releases
         ]
+
+    async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
+        # shortcut: one page (100 releases); a larger group is ranked on its first 100 only.
+        data = await get_json(
+            self._client,
+            f"{self._base}/release",
+            {"release-group": release_group_mbid, "inc": "media", "fmt": "json", "limit": 100},
+        )
+        return [
+            ReleaseRef(
+                r.id,
+                r.title,
+                "",
+                r.date or None,  # MB sends "" for an unknown date
+                r.country,
+                sum(m.track_count for m in r.media),
+                tuple(m.format for m in r.media if m.format),
+                r.status,
+            )
+            for r in MbSearch.model_validate(data).releases
+        ]

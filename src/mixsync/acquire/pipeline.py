@@ -9,7 +9,7 @@ import asyncio
 import logging
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -45,10 +45,11 @@ from mixsync.core.protocols import (
     LibraryTarget,
     MetadataProvider,
 )
+from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import tags
+from mixsync.library import canonical, tags
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import assign_tracks, score_files
@@ -83,6 +84,8 @@ class Pipeline:
     importer: Importer
     coverart: CoverArt
     target: LibraryTarget
+    canonical_media: tuple[str, ...] = ("Digital Media", "CD")
+    canonical_countries: tuple[str, ...] = ("XW",)
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -292,10 +295,22 @@ class Pipeline:
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
+        target, bonus = album, []
+        if (cid := await self._canonical_id(album)) and cid != album.release_id:
+            target = await self.metadata.get_release(cid)
+            files, bonus = canonical.split(files, target.tracks)
         results = await asyncio.to_thread(
-            self.importer.import_release, files, album, "verified", batch
+            self.importer.import_release, files, target, "verified", batch
         )
-        await self._cover(album, results, batch)
+        if bonus:  # filed in the canonical folder, but still tagged with their own release
+            results += await asyncio.to_thread(
+                self.importer.import_release,
+                bonus,
+                replace(target, release_id=album.release_id),
+                "verified",
+                batch,
+            )
+        await self._cover(target, results, batch)
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         if results and not errors:
             await self._release(cand, [r.src for r in results], batch)
@@ -306,6 +321,23 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+
+    async def _canonical_id(self, album: AlbumInfo) -> str | None:
+        """The canonical release of the album's group: the stored choice, else the policy's pick,
+        stored. Reading first means a retry never browses again."""
+        group = album.release_group_id
+        if not group:
+            return None
+        with self.sessions() as s:
+            if stored := canonical_db.get(s, group):
+                return stored
+        pick = canonical.choose(
+            await self.metadata.browse_group_releases(group),
+            self.canonical_media,
+            self.canonical_countries,
+        )
+        with self.sessions.begin() as s:
+            return canonical_db.store(s, group, pick)
 
     async def _release(self, cand: Candidate, srcs: list[Path], batch: str) -> None:
         """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is

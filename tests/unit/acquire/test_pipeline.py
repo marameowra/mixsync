@@ -1,6 +1,7 @@
 """The acquire pipeline end to end against fakes: the Phase 2 exit criteria 1 and 2, and the
 rules around them (backoff, debounce, retries, review)."""
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -10,8 +11,8 @@ from sqlalchemy import select
 
 from mixsync.acquire.requests import create_request
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import TransferStatus
-from mixsync.core.types import AcoustIdResult
+from mixsync.core.matching import TrackInfo, TransferStatus
+from mixsync.core.types import AcoustIdResult, ReleaseRef
 from mixsync.db import decisions
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
@@ -20,7 +21,7 @@ from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
 
 from .conftest import Env, login
-from .fakes import ALBUM, ALBUM_B, COVER, OTHER
+from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS
 
 FIRST = "Alpha Band/Alpha Album (2020)/01-01 Song One.mp3"
 SECOND = "Alpha Band/Alpha Album (2020)/01-02 Song Two.mp3"
@@ -313,3 +314,76 @@ def test_new_request_form(env: Env, web: TestClient) -> None:
     r = web.post("/requests", data={"csrf_token": tok, "release": url})
     assert r.status_code == 403 and web.get("/requests").status_code == 403
     assert len(env.jobs(JobKind.SEARCH)) == 1
+
+
+def release_tags(env: Env, rel: str) -> dict[str, list[str]]:
+    return tags.read_all(env.data_dir / "library" / rel)["tags"]
+
+
+async def test_other_release_of_a_group_is_filed_under_the_canonical_one(env: Env) -> None:
+    """ALBUM (2020) is the earliest release of the group, so it is canonical, even though the
+    download is verified against ALBUM_B (2021)."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    rid = request(env, str(ALBUM_B.release_id))
+    await env.drain()
+
+    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
+    for rel in (FIRST, SECOND):
+        assert release_tags(env, rel)["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
+    assert env.coverart.calls == [ALBUM.release_id]
+    with env.sessions() as s:
+        assert {t.release_mbid for t in s.scalars(select(Track))} == {ALBUM.release_id}
+
+
+async def test_bonus_track_keeps_its_release_but_joins_the_canonical_folder(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bonus = TrackInfo("Song Three", length=1.0, index=3, medium_index=3, medium=1)
+    bonus = replace(bonus, recording_id="Alpha-rec-3", artist_ids=("Alpha-artist",))
+    deluxe = replace(
+        ALBUM, release_id="44444444-4444-4444-4444-444444444444", year=2022,
+        tracks=(*ALBUM.tracks, bonus),
+    )  # fmt: skip
+    monkeypatch.setitem(CATALOG, str(deluxe.release_id), deluxe)
+    monkeypatch.setitem(RECORDINGS, "Song Three", "Alpha-rec-3")
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", deluxe)
+    rid = request(env, str(deluxe.release_id))
+    await env.drain()
+
+    third = FIRST.replace("01 Song One", "03 Song Three")
+    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND, third]
+    assert release_tags(env, SECOND)["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
+    assert release_tags(env, third)["TXXX:MusicBrainz Album Id"] == [deluxe.release_id]
+    with env.sessions() as s:
+        rows = {t.path: t.release_mbid for t in s.scalars(select(Track))}
+    assert rows[third] == deluxe.release_id and rows[FIRST] == ALBUM.release_id
+
+
+async def test_canonical_choice_is_stored_and_reused(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    request(env, str(ALBUM_B.release_id))
+    await env.drain()
+    assert env.metadata.browsed == [ALBUM.release_group_id]
+
+    # Another release of the group appears with an earlier date; the stored choice still wins.
+    env.metadata.group[str(ALBUM_B.release_id)] = ReleaseRef(
+        str(ALBUM_B.release_id), "x", "x", "1999", track_count=2
+    )
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album 2", ALBUM_B)
+    request(env, str(ALBUM_B.release_id))
+    await env.drain()
+    assert env.metadata.browsed == [ALBUM.release_group_id]
+
+
+async def test_release_without_a_group_imports_as_is(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ungrouped = replace(ALBUM_B, release_group_id=None)
+    monkeypatch.setitem(CATALOG, str(ALBUM_B.release_id), ungrouped)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ungrouped)
+    request(env, str(ALBUM_B.release_id))
+    await env.drain()
+
+    assert env.metadata.browsed == []
+    assert library(env) == [FIRST.replace("(2020)", "(2021)"), SECOND.replace("(2020)", "(2021)")]
+    assert release_tags(env, library(env)[0])["TXXX:MusicBrainz Album Id"] == [ALBUM_B.release_id]
