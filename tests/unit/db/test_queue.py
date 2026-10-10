@@ -216,3 +216,25 @@ def test_permanent_failure_fails_a_no_results_request(q: JobQueue, engine: Engin
     q.enqueue(JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("gone"))
     assert _status(engine, rid)[0] == "failed"
+
+
+def test_failure_of_a_superseded_job_leaves_the_request(q: JobQueue, engine: Engine) -> None:
+    rid = _request(engine, "no_results")
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    q.enqueue(JobKind.NOOP, {"request_id": rid})  # the newer job now drives the request
+    _run(q, PermanentError("stale"))  # fails the older job
+    assert _status(engine, rid) == ("no_results", None)
+
+
+def test_reaped_superseded_job_leaves_the_request(
+    q: JobQueue, engine: Engine, clock: FakeClock
+) -> None:
+    rid = _request(engine, "no_results")
+    j = q.enqueue(JobKind.NOOP, {"request_id": rid}, max_attempts=1)
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    q.claim("w1", LEASE)
+    q.start(j.id, "w1")
+    clock.advance(LEASE + timedelta(seconds=1))
+    q.reap()
+    assert q.get(j.id).status is JobState.FAILED
+    assert _status(engine, rid) == ("no_results", None)
