@@ -436,6 +436,26 @@ async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
     assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
 
 
+async def test_import_skips_owned_recordings_when_own_release_is_canonical(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM)
+    with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
+        s.add(
+            Track(
+                path="elsewhere.mp3",
+                recording_mbid="Alpha-rec-1",
+                release_group_mbid=ALBUM.release_group_id,
+                status="verified",
+                batch_id="old",
+                imported_at=env.clock.now(),
+            )
+        )
+    rid = request(env, str(ALBUM.release_id))
+    await env.drain()
+
+    assert status(env, rid) == "imported" and library(env) == [SECOND]
+    assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
+
+
 async def test_canonical_choice_is_stored_and_reused(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
     request(env, str(ALBUM_B.release_id))

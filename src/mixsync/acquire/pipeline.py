@@ -322,6 +322,8 @@ class Pipeline:
                 if canonical_db.switch(s, group, cid, own) == own:
                     break
             # lost a race to another switch: decide again against the stored choice
+        if cid and cid == album.release_id:  # already canonical: skip what the group has
+            files = await self._unowned(album, files, batch)
         results = await asyncio.to_thread(
             self.importer.import_release, files, target, "verified", batch
         )
@@ -358,8 +360,8 @@ class Pipeline:
             if stored := canonical_db.get(s, group):
                 return stored
         releases = await self.metadata.browse_group_releases(group)
-        if not releases:  # nothing to choose from: use this release now, decide next time
-            return album.release_id
+        if not releases:  # nothing to choose from: file this release as is, decide next time
+            return None
         pick = canonical.choose(releases, self.canonical_media, self.canonical_countries)
         with self.sessions.begin() as s:
             return canonical_db.store(s, group, pick)
