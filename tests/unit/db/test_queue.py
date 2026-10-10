@@ -193,3 +193,10 @@ def test_reaped_dead_job_fails_the_request(q: JobQueue, engine: Engine, clock: F
     clock.advance(LEASE + timedelta(seconds=1))
     q.reap()
     assert _status(engine, rid)[0] == "failed"
+
+
+def test_permanent_failure_fails_a_no_results_request(q: JobQueue, engine: Engine) -> None:
+    rid = _request(engine, "no_results")
+    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    _run(q, PermanentError("gone"))
+    assert _status(engine, rid)[0] == "failed"

@@ -12,7 +12,7 @@ from mixsync.db.models.work import Job, Request
 
 _J = cast(Table, Job.__table__)
 _R = cast(Table, Request.__table__)
-_IN_PROGRESS = ("searching", "downloading", "verifying", "importing")
+_IN_PROGRESS = ("searching", "no_results", "downloading", "verifying", "importing")
 
 
 class LeaseLostError(Exception):
