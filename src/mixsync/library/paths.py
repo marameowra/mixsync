@@ -27,6 +27,7 @@ def render(
     track: int,
     title: str,
     ext: str,
+    genre: str = "Unknown Genre",
 ) -> str:
     """Relative "/" separated path. The template must end in ".{ext}". Field values are
     sanitized before substitution so they cannot add directories, and the extension survives
@@ -47,7 +48,7 @@ def render(
             disc=disc,
             track=track,
             title=sanitize(title),
-            genre="Unknown Genre",  # shortcut: genre lookup is a later slice
+            genre=sanitize(genre),
         )
         out.append(sanitize(text, SEGMENT_MAX_BYTES - len(end)) + end)
     return "/".join(out)

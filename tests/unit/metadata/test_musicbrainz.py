@@ -62,6 +62,7 @@ async def test_single_disc_request_and_mapping(make_client: Make) -> None:
         "recordings",
         "artist-credits",
         "media",
+        "genres",
         "labels",
         "release-groups",
     }

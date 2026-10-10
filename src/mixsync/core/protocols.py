@@ -53,5 +53,9 @@ class AcoustIdLookup(Protocol):
     async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]: ...
 
 
+class CoverArt(Protocol):
+    async def front(self, release_mbid: str, release_group_mbid: str | None) -> bytes | None: ...
+
+
 class LibraryTarget(Protocol):
     async def rescan(self) -> None: ...

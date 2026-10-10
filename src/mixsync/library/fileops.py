@@ -153,6 +153,42 @@ class FileOps:
         self._journal.complete(op_id, digest)
         return digest
 
+    def has(self, rel: str) -> bool:
+        return self._under(self.library, rel).exists()
+
+    def write_new(self, rel: str, data: bytes, batch_id: str) -> None:
+        """Create a library file from bytes (cover art). Same journal/staging/no-replace publish
+        as import_file, so recover() treats it as a copy. Raises FileExistsError, leaving the
+        existing file alone, if rel is taken."""
+        final = self._under(self.library, rel)
+        op_id = self._journal.begin(batch_id, "copy", "(generated)", rel)
+        staging = self.incoming / str(op_id)
+        published = False
+        try:
+            self.incoming.mkdir(parents=True, exist_ok=True)
+            with staging.open("xb") as w:
+                w.write(data)
+            _fsync(staging)
+            _fsync(self.incoming)
+            digest = _sha256(staging)
+            if digest != hashlib.sha256(data).hexdigest():
+                raise SafetyError(f"hash mismatch writing {rel}")
+            self._journal.set_dst_hash(op_id, digest)
+            final.parent.mkdir(parents=True, exist_ok=True)
+            _hook("prerename")
+            self._publish(staging, final, op_id)
+            published = True
+            _hook("rename")
+            _fsync(final.parent)
+        except BaseException as e:
+            if published:
+                raise
+            if staging.exists():
+                self._to_trash(staging, f".incoming/{op_id}")
+            self._journal.fail(op_id, repr(e))
+            raise
+        self._journal.complete(op_id, digest)
+
     def find_imported(self, batch_id: str, src: Path) -> str | None:
         """Library path of an earlier completed import of src in this batch, if the file is
         still there and intact."""

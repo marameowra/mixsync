@@ -1,11 +1,11 @@
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import ReleaseRef
 from mixsync.metadata._http import get_json
-from mixsync.metadata.models import MbCredit, MbRelease, MbSearch
+from mixsync.metadata.models import MbCredit, MbGenre, MbRelease, MbSearch
 from mixsync.ratelimit.client import PoliteClient
 
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
-_INC = "recordings artist-credits media labels release-groups"  # httpx sends spaces as +
+_INC = "recordings artist-credits media labels release-groups genres"  # httpx sends spaces as +
 
 
 def _credit(credits: list[MbCredit]) -> str:
@@ -18,6 +18,17 @@ def _artist_ids(credits: list[MbCredit]) -> tuple[str, ...]:
 
 def _year(date: str | None) -> int | None:
     return int(date[:4]) if date and date[:4].isdigit() else None
+
+
+def _genres(r: MbRelease) -> tuple[str, ...]:
+    """Release group's genres, else the release's, else the primary artist's; most votes first."""
+    levels: list[list[MbGenre]] = [
+        r.release_group.genres if r.release_group else [],
+        r.genres,
+        r.artist_credit[0].artist.genres if r.artist_credit else [],
+    ]
+    found: list[MbGenre] = next(filter(None, levels), None) or []
+    return tuple(g.name for g in sorted(found, key=lambda g: (-g.count, g.name)))
 
 
 def _album(r: MbRelease) -> AlbumInfo:
@@ -54,6 +65,7 @@ def _album(r: MbRelease) -> AlbumInfo:
         release_id=r.id,
         release_group_id=r.release_group.id if r.release_group else None,
         artist_ids=_artist_ids(r.artist_credit),
+        genres=_genres(r),
     )
 
 

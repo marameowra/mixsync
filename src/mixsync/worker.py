@@ -20,6 +20,7 @@ from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
+from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.sources.query import queries
@@ -105,6 +106,7 @@ def _pipeline(
         fingerprint=fingerprint,
         acoustid=AcoustIdClient(client("acoustid"), settings),
         importer=Importer(fileops, sessions, clock, settings.path_template),
+        coverart=CoverArtClient(client("coverart")),
         target=NavidromeTarget(
             client("navidrome"),
             settings.navidrome_url,
