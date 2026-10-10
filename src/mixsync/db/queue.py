@@ -2,7 +2,7 @@ from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import Connection, Engine, Row, Table, select, update
+from sqlalchemy import Connection, Engine, Row, Table, exists, select, update
 from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session
 
@@ -38,14 +38,22 @@ def _record(r: Row[Any]) -> JobRecord:
 
 
 def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None:
-    """A pipeline job that failed for good must not leave its request in progress forever."""
+    """A pipeline job that failed for good must not leave its request in progress forever,
+    unless a newer job for the request has taken over."""
     payload: dict[str, Any] = (
         c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
     )
     if "request_id" in payload:
         c.execute(
             update(_R)
-            .where(_R.c.id == payload["request_id"], _R.c.status.in_(_IN_PROGRESS))
+            .where(
+                _R.c.id == payload["request_id"],
+                _R.c.status.in_(_IN_PROGRESS),
+                ~exists().where(
+                    _J.c.id > job_id,
+                    _J.c.payload["request_id"].as_integer() == payload["request_id"],
+                ),
+            )
             .values(status="failed", last_error=error, updated_at=now)
         )
 
