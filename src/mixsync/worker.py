@@ -56,11 +56,15 @@ async def run_job(
         queue.complete(job.id, worker)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
-    except TransientError as e:
-        queue.retry(job.id, worker, str(e))
-    except Exception as e:  # PermanentError, SafetyError, bugs: never retried
-        log.exception("job %s failed", job.id)
-        queue.fail(job.id, worker, repr(e))
+    except Exception as e:
+        try:
+            if isinstance(e, TransientError):
+                queue.retry(job.id, worker, str(e))
+            else:  # PermanentError, SafetyError, bugs: never retried
+                log.exception("job %s failed", job.id)
+                queue.fail(job.id, worker, repr(e))
+        except LeaseLostError:  # the job row was deleted or reaped while the handler ran
+            log.warning("lost lease on job %s", job.id)
     finally:
         hb.cancel()
 

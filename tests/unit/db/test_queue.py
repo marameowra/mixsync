@@ -12,7 +12,7 @@ from mixsync.core.jobs import JobKind, JobState, backoff
 from mixsync.db.engine import make_engine
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import User
-from mixsync.db.models.work import Request
+from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.worker import HANDLERS, Handler, run_job
 
@@ -143,6 +143,22 @@ def test_transient_error_fails_when_attempts_exhausted(q: JobQueue) -> None:
 def test_permanent_error_fails(q: JobQueue) -> None:
     q.enqueue(JobKind.NOOP)
     assert _run(q, PermanentError("no")).status is JobState.FAILED
+
+
+@pytest.mark.parametrize("exc", [TransientError("x"), RuntimeError("bug")])
+def test_handler_error_after_job_deleted_does_not_raise(
+    q: JobQueue, engine: Engine, exc: Exception
+) -> None:
+    q.enqueue(JobKind.NOOP)
+
+    async def delete_then_boom(j: JobRecord) -> None:
+        with Session(engine) as s, s.begin():
+            s.delete(s.get(Job, j.id))
+        raise exc
+
+    job = q.claim("w", LEASE)
+    assert job is not None
+    asyncio.run(run_job(q, job, "w", {JobKind.NOOP: delete_then_boom}, LEASE))  # no LeaseLostError
 
 
 def test_job_that_keeps_killing_its_worker_fails(q: JobQueue, clock: FakeClock) -> None:

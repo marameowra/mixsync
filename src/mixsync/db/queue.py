@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import Connection, Engine, Row, Table, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session
 
 from mixsync.core.clock import Clock
@@ -153,7 +153,10 @@ class JobQueue:
 
     def retry(self, job_id: int, worker: str, error: str) -> JobState:
         """-> retry_wait with a backoff delay, or failed once attempts are exhausted."""
-        job = self.get(job_id)
+        try:
+            job = self.get(job_id)
+        except NoResultFound:  # the row was deleted under us
+            raise LeaseLostError(f"job {job_id} is gone") from None
         if job.attempts >= job.max_attempts:
             self.fail(job_id, worker, error)
             return JobState.FAILED
