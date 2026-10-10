@@ -1,14 +1,21 @@
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import SystemClock
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser, user_for_session
+from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
+from mixsync.library.fileops import FileOps
+from mixsync.metadata.musicbrainz import MusicBrainzProvider
+from mixsync.ratelimit.client import polite_client
 
 SESSION_COOKIE = "mixsync_session"
 
@@ -19,6 +26,31 @@ def get_db(request: Request) -> Iterator[Session]:
 
 
 Db = Annotated[Session, Depends(get_db)]
+
+
+def get_merger(request: Request) -> Merger:
+    """Built on first use. MusicBrainz goes through the same DB-backed bucket and cache as the
+    worker's, so the rate limit holds across both processes. No FileOps.recover() here."""
+    state = request.app.state
+    if getattr(state, "merger", None) is None:
+        st, sessions, clock = state.settings, state.session_factory, SystemClock()
+        fileops = FileOps(
+            Path(st.data_dir), Path(st.downloads_dir), SqlJournal(sessions, clock), clock
+        )
+        state.merger = Merger(
+            sessions,
+            clock,
+            MusicBrainzProvider(polite_client("musicbrainz", st, sessions)),
+            fileops,
+            st.path_template,
+            tuple(st.canonical_media),
+            tuple(st.canonical_countries),
+        )
+    merger: Merger = state.merger
+    return merger
+
+
+Merge = Annotated[Merger, Depends(get_merger)]
 
 
 def current_user(request: Request, db: Db) -> AuthUser:

@@ -10,7 +10,7 @@ One module per page group. Each route: check the capability → call a service �
 | `search.py` | `/search`: MusicBrainz search → request button | `request` |
 | `requests.py` | `/requests`, `/requests/{id}`: status, candidates, download progress (SSE) | `request` |
 | `review.py` | `/review`, `/review/{decision_id}`: side-by-side evidence, `<audio>` preview, Accept / Pick other / Mark unverified / Reject | `request` (own items); `approve` (anyone's) |
-| `library.py` | `/library`, `/library/unverified`, `/library/fragmentation`, `/library/trash` | `request` to view; `library.edit` to act |
+| `library.py` | `/library`, `/library/unverified`, `/library/fragments`, `/library/plans/{id}`, `/library/trash` | `library.edit` (fragments and plans so far) |
 | `watchlist.py` | `/watchlist`, `/watchlist/{follow_id}` | `request` |
 | `discover.py` | `/discover` (playlists + definitions), `/discover/expiring` | `request` |
 | `migration.py` | `/migration`: preflight, progress, report | `admin` |

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Fragments - MixSync{% endblock %}
+{% block content %}
+<h1>Fragmented release groups</h1>
+{% if items %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Release group</th><th>Releases (tracks)</th><th>Canonical</th><th></th></tr></thead>
+  <tbody>
+  {% for f in items %}
+  <tr>
+    <td>{{ f.group_mbid }}</td>
+    <td>{% for rel, n in f.releases.items() %}{{ rel }} ({{ n }}){% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+    <td>{{ f.canonical or "not chosen yet" }}</td>
+    <td><form method="post" action="/library/fragments/plan">{{ forms.csrf() }}<input type="hidden" name="group" value="{{ f.group_mbid }}"><button type="submit">Preview merge</button></form></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No fragmented release groups.</p>
+{% endif %}
+<h2>Recent plans</h2>
+{% if plans %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Release group</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for p in plans %}
+  <tr>
+    <td><a href="/library/plans/{{ p.id }}">{{ p.id }}</a></td>
+    <td>{{ p.release_group_mbid }}</td>
+    <td>{{ p.status }}</td>
+    <td>{% if "undo" in allowed[p.id] %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No plans yet.</p>
+{% endif %}
+{% endblock %}
