@@ -8,3 +8,6 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   route, stop and report back instead.
 - Respect external services. Obey rate limits and terms (MusicBrainz: 1 req/s with a proper
   User-Agent). Cache where sensible, and never hammer an API.
+- Before reporting work as done, run every CI step (`.github/workflows/ci.yml`), not just
+  tests: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`,
+  `uv run lint-imports`, `uv run pytest`.
