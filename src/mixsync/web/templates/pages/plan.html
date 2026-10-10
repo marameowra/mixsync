@@ -5,8 +5,9 @@
 <p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>
 {% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
 <p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>
-{% if plan.status == "draft" %}{{ forms.plan_action(plan, "confirm", "Confirm merge") }}{% endif %}
-{% if plan.status in ("done", "failed") %}{{ forms.plan_action(plan, "undo", "Undo merge") }}{% endif %}
+{% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm merge") }}{% endif %}
+{% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume merge") }}{% endif %}
+{% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo merge") }}{% endif %}
 <div class="scroll">
 <table>
   <thead><tr><th>Op</th><th>File</th><th>Detail</th></tr></thead>

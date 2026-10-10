@@ -32,7 +32,7 @@
     <td><a href="/library/plans/{{ p.id }}">{{ p.id }}</a></td>
     <td>{{ p.release_group_mbid }}</td>
     <td>{{ p.status }}</td>
-    <td>{% if p.status in ("done", "failed") %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
+    <td>{% if "undo" in allowed[p.id] %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

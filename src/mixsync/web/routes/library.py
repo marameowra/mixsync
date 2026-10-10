@@ -1,14 +1,20 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from mixsync.acquire.merge import enqueue_merge, enqueue_undo
+from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo
 from mixsync.core.capabilities import Capability
+from mixsync.core.errors import TransientError
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan
+from mixsync.db.models.work import Job
 from mixsync.library import fragmentation
 from mixsync.web.deps import Db, Merge, require
 from mixsync.web.templating import templates
@@ -31,6 +37,30 @@ def _plan(db: Db, plan_id: int) -> Plan:
     return plan
 
 
+_LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
+
+
+def _allowed(db: Session, plan: Plan) -> set[str]:
+    """The actions this plan's state allows. Resume and undo also need no live job on the plan,
+    or a second worker would race the first."""
+    live = db.scalar(
+        select(Job.id)
+        .where(
+            Job.kind.in_([JobKind.MERGE, JobKind.UNDO_MERGE]),
+            Job.payload["plan_id"].as_integer() == plan.id,
+            Job.status.in_(_LIVE),
+        )
+        .limit(1)
+    )
+    if plan.status == "draft":
+        return {"confirm"}
+    if live is not None:
+        return set()
+    if plan.status == "failed" and not (plan.error or "").startswith("undo:"):
+        return {"resume", "undo"}
+    return {"undo"} if plan.status in ("done", "failed", "running", "undoing") else set()
+
+
 def _check_count(plan: Plan, count: str) -> None:
     if _changes(plan) > _TYPED_ABOVE and count.strip() != str(_changes(plan)):
         raise HTTPException(400, f"type {_changes(plan)} to confirm")
@@ -42,7 +72,12 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "pages/fragments.html",
-        {"user": user, "items": fragmentation.find(db), "plans": plans},
+        {
+            "user": user,
+            "items": fragmentation.find(db),
+            "plans": plans,
+            "allowed": {p.id: _allowed(db, p) for p in plans},
+        },
     )
 
 
@@ -53,8 +88,12 @@ async def build_plan(
     db.commit()  # the login's last_seen write must not hold the SQLite lock while build() writes
     try:
         plan_id = await merger.build(group)
+    except PlanInProgress as e:  # a ValueError, not a LookupError
+        raise HTTPException(409, str(e)) from None
     except LookupError as e:
         raise HTTPException(404, str(e)) from None
+    except (TransientError, httpx.HTTPError):
+        raise HTTPException(503, "MusicBrainz is unavailable; try again later") from None
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
@@ -62,27 +101,39 @@ async def build_plan(
 def plan_detail(plan_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
     plan = _plan(db, plan_id)
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
-    ctx = {"user": user, "plan": plan, "counts": counts, "changes": _changes(plan)}
+    ctx = {"user": user, "plan": plan, "counts": counts, "allowed": _allowed(db, plan)}
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
+
+
+def _act(
+    plan_id: int,
+    action: str,
+    db: Session,
+    count: str,
+    enqueue: Callable[[Session, datetime, int], None],
+) -> RedirectResponse:
+    plan = _plan(db, plan_id)
+    if action not in _allowed(db, plan):
+        raise HTTPException(409, f"plan is {plan.status}")
+    _check_count(plan, count)
+    enqueue(db, datetime.now(UTC), plan.id)
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
 @router.post("/plans/{plan_id}/confirm")
 def confirm(
     plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    plan = _plan(db, plan_id)
-    if plan.status != "draft":
-        raise HTTPException(409, f"plan is {plan.status}")
-    _check_count(plan, count)
-    enqueue_merge(db, datetime.now(UTC), plan.id)
-    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+    return _act(plan_id, "confirm", db, count, enqueue_merge)
+
+
+@router.post("/plans/{plan_id}/resume")
+def resume(
+    plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = ""
+) -> RedirectResponse:
+    return _act(plan_id, "resume", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/undo")
 def undo(plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = "") -> RedirectResponse:
-    plan = _plan(db, plan_id)
-    if plan.status not in ("done", "failed"):
-        raise HTTPException(409, f"plan is {plan.status}")
-    _check_count(plan, count)
-    enqueue_undo(db, datetime.now(UTC), plan.id)
-    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+    return _act(plan_id, "undo", db, count, enqueue_undo)

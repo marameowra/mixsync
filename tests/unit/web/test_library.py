@@ -8,9 +8,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.merge import PlanInProgress
 from mixsync.app import create_app
 from mixsync.core.config import Settings
-from mixsync.core.jobs import JobKind
+from mixsync.core.errors import TransientError
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
@@ -27,6 +29,10 @@ class FakeMerger:
         self.sf = sf
 
     async def build(self, group: str) -> int:
+        if group == "busy":
+            raise PlanInProgress("plan 1 is running")
+        if group == "mb":
+            raise TransientError("musicbrainz still refusing")
         if group == "missing":
             raise LookupError("no verified tracks")
         return _plan(self.sf, "draft", [_op("move", 0)])
@@ -195,3 +201,85 @@ def test_non_admin_forbidden(client: TestClient, sf: sessionmaker[Session]) -> N
     ]:
         assert client.post(url, data={"csrf_token": tok, **data}).status_code == 403
     assert _jobs(sf) == []
+
+
+def test_build_errors(client: TestClient) -> None:
+    tok = _login(client, "root")
+    for group, code in [("busy", 409), ("mb", 503)]:
+        r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": group})
+        assert r.status_code == code
+
+
+def _live_job(sf: sessionmaker[Session], kind: JobKind, pid: int, state: JobState) -> None:
+    with sf() as s, s.begin():
+        s.add(
+            Job(
+                kind=kind,
+                payload={"plan_id": pid},
+                status=state,
+                run_after=datetime.now(UTC),
+            )
+        )
+
+
+def test_resume_failed(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "failed", [_op("move", 0)], error="x is gone")
+    tok = _login(client, "root")
+    assert "Resume merge" in client.get(f"/library/plans/{pid}").text
+    assert client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok}).status_code == 303
+    assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
+
+
+def test_resume_count_required(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "failed", [_op("move", i) for i in range(51)], error="x")
+    tok = _login(client, "root")
+    assert client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok}).status_code == 400
+    r = client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok, "count": "51"})
+    assert r.status_code == 303
+
+
+@pytest.mark.parametrize("status", ["draft", "done", "running", "discarded"])
+def test_resume_wrong_state_409(client: TestClient, sf: sessionmaker[Session], status: str) -> None:
+    pid = _plan(sf, status, [_op("move", 0)])
+    tok = _login(client, "root")
+    assert client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok}).status_code == 409
+
+
+def test_failed_undo_error_cannot_resume(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "failed", [_op("move", 0)], error="undo: row changed")
+    tok = _login(client, "root")
+    assert "Resume merge" not in client.get(f"/library/plans/{pid}").text
+    assert client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok}).status_code == 409
+    assert client.post(f"/library/plans/{pid}/undo", data={"csrf_token": tok}).status_code == 303
+
+
+@pytest.mark.parametrize("status", ["running", "undoing"])
+def test_undo_stuck_plan_only_without_live_job(
+    client: TestClient, sf: sessionmaker[Session], status: str
+) -> None:
+    pid = _plan(sf, status, [_op("move", 0)])
+    tok = _login(client, "root")
+    _live_job(sf, JobKind.MERGE, pid, JobState.RUNNING)
+    assert client.post(f"/library/plans/{pid}/undo", data={"csrf_token": tok}).status_code == 409
+    assert "Undo merge" not in client.get(f"/library/plans/{pid}").text
+    with sf() as s, s.begin():
+        s.execute(Job.__table__.delete())
+    assert client.post(f"/library/plans/{pid}/undo", data={"csrf_token": tok}).status_code == 303
+
+
+def test_resume_blocked_by_live_job(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "failed", [_op("move", 0)], error="x")
+    tok = _login(client, "root")
+    _live_job(sf, JobKind.MERGE, pid, JobState.QUEUED)
+    assert client.post(f"/library/plans/{pid}/resume", data={"csrf_token": tok}).status_code == 409
+
+
+def test_discarded_is_terminal(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "discarded", [_op("move", 0)])
+    tok = _login(client, "root")
+    assert "discarded" in client.get("/library/fragments").text
+    html = client.get(f"/library/plans/{pid}").text
+    assert "<button" not in html.split("<main>")[1]
+    for action in ("confirm", "undo"):
+        r = client.post(f"/library/plans/{pid}/{action}", data={"csrf_token": tok})
+        assert r.status_code == 409
