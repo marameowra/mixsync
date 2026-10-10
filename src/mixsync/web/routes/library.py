@@ -8,13 +8,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo
+from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
-from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan
-from mixsync.db.models.work import Job
 from mixsync.library import fragmentation
 from mixsync.web.deps import Db, Merge, require
 from mixsync.web.templating import templates
@@ -37,24 +35,12 @@ def _plan(db: Db, plan_id: int) -> Plan:
     return plan
 
 
-_LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
-
-
 def _allowed(db: Session, plan: Plan) -> set[str]:
     """The actions this plan's state allows. Resume and undo also need no live job on the plan,
     or a second worker would race the first."""
-    live = db.scalar(
-        select(Job.id)
-        .where(
-            Job.kind.in_([JobKind.MERGE, JobKind.UNDO_MERGE]),
-            Job.payload["plan_id"].as_integer() == plan.id,
-            Job.status.in_(_LIVE),
-        )
-        .limit(1)
-    )
     if plan.status == "draft":
         return {"confirm"}
-    if live is not None:
+    if live_job(db, plan.id):
         return set()
     if plan.status == "failed" and not (plan.error or "").startswith("undo:"):
         return {"resume", "undo"}
