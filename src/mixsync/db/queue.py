@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition
-from mixsync.db.models.work import Job
+from mixsync.db.models.work import Job, Request
 
 _J = cast(Table, Job.__table__)
+_R = cast(Table, Request.__table__)
+_IN_PROGRESS = ("searching", "downloading", "verifying", "importing")
 
 
 class LeaseLostError(Exception):
@@ -33,6 +35,19 @@ class JobRecord:
 
 def _record(r: Row[Any]) -> JobRecord:
     return JobRecord(**{f.name: getattr(r, f.name) for f in fields(JobRecord)})
+
+
+def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None:
+    """A pipeline job that failed for good must not leave its request in progress forever."""
+    payload: dict[str, Any] = (
+        c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
+    )
+    if "request_id" in payload:
+        c.execute(
+            update(_R)
+            .where(_R.c.id == payload["request_id"], _R.c.status.in_(_IN_PROGRESS))
+            .values(status="failed", last_error=error, updated_at=now)
+        )
 
 
 class JobQueue:
@@ -152,13 +167,16 @@ class JobQueue:
         n = 0
         with self._engine.begin() as c:
             # A job that keeps killing its worker must not be requeued forever.
+            dead = (
+                _J.c.status == JobState.RUNNING,
+                _J.c.lease_expires_at < now,
+                _J.c.attempts >= _J.c.max_attempts,
+            )
+            for (job_id,) in c.execute(select(_J.c.id).where(*dead)).all():
+                _fail_request(c, job_id, "lease expired with no attempts left", now)
             n += c.execute(
                 update(_J)
-                .where(
-                    _J.c.status == JobState.RUNNING,
-                    _J.c.lease_expires_at < now,
-                    _J.c.attempts >= _J.c.max_attempts,
-                )
+                .where(*dead)
                 .values(
                     status=transition(JobState.RUNNING, JobState.FAILED),
                     locked_by=None,
@@ -199,6 +217,8 @@ class JobQueue:
             )
             if res.rowcount != 1:
                 raise LeaseLostError(f"job {job_id} is no longer held by {worker}")
+            if new is JobState.FAILED:
+                _fail_request(c, job_id, values["last_error"], now)
 
     @staticmethod
     def _status(c: Connection, job_id: int, worker: str) -> JobState:

@@ -1,20 +1,25 @@
 import re
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
+from mixsync.core.jobs import JobState
 from mixsync.core.matching import Band, MatchResult, Penalty
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
+from mixsync.db.models.work import Job
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
 
@@ -266,3 +271,48 @@ def test_errors_render_html(client: TestClient, sf: sessionmaker[Session]) -> No
 def test_unauthenticated_still_redirects(client: TestClient) -> None:
     r = client.get("/review")
     assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+def _req(sf: sessionmaker[Session], user: str, status: str, job: JobState | None) -> int:
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username=user).one().id
+        req = create_request(s, datetime.now(UTC), uid, MBID)
+        req.status = status
+        j = s.scalars(select(Job).order_by(Job.id.desc())).first()
+        assert j
+        if job is None:
+            s.delete(j)
+        else:
+            j.status = job
+        return req.id
+
+
+def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Session]) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    did = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = decisions.get(s, did)
+        assert d
+        d.evidence = {**d.evidence, "request_id": rid}
+    tok = _login(client, "alice")
+    assert f"/requests/{rid}/delete" in client.get("/requests").text
+    r = client.post(f"/requests/{rid}/delete", data={"csrf_token": tok})
+    assert r.status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
+        d = decisions.get(s, did)
+        assert d and d.status == "rejected"  # kept for the record, off the review queue
+
+
+def test_delete_request_refused(client: TestClient, sf: sessionmaker[Session]) -> None:
+    mine = _req(sf, "alice", "failed", None)
+    busy = _req(sf, "alice", "searching", JobState.RUNNING)
+    queued = _req(sf, "alice", "searching", JobState.QUEUED)
+    tok = _login(client, "bob")
+    assert client.post(f"/requests/{mine}/delete", data={"csrf_token": tok}).status_code == 403
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{mine}/delete").status_code == 403  # no CSRF token
+    for rid in (busy, queued):
+        assert f"/requests/{rid}/delete" not in client.get("/requests").text
+        assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    assert client.post("/requests/999/delete", data={"csrf_token": tok}).status_code == 404
