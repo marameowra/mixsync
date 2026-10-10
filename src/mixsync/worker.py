@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.merge import Merger
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
@@ -132,7 +133,18 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
     )
     fileops.recover()
     queue = JobQueue(engine, clock)
-    handlers = HANDLERS | _pipeline(settings, fileops, sessions, clock).handlers()
+    merger = Merger(
+        sessions,
+        clock,
+        MusicBrainzProvider(polite_client("musicbrainz", settings, sessions)),
+        fileops,
+        settings.path_template,
+        tuple(settings.canonical_media),
+        tuple(settings.canonical_countries),
+    )
+    handlers = (
+        HANDLERS | _pipeline(settings, fileops, sessions, clock).handlers() | merger.handlers()
+    )
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers
 
 

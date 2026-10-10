@@ -11,12 +11,11 @@ Everything that touches the music library on disk: where files go, how they get 
 | File | Contents |
 |---|---|
 | `paths.py` | Template rendering + sanitization; collision suffixes |
-| `fileops.py` | **The only module that writes files**: `import_file`, `move`, `trash`, `purge`, `restore` |
+| `fileops.py` | **The only module that writes files**: `import_file`, `trash`, `restore`, `release`, `purge` |
 | `tags.py` | mutagen read/write, standard MusicBrainz tag names (Picard-compatible), snapshot before write, `MIXSYNC_STATUS` |
 | `canonical.py` | Canonical release policy evaluation; the recording → canonical track mapping; bonus-track handling |
 | `importer.py` | Orchestrates: verified match → canonical release → path → `fileops.import_file` → DB `tracks` row |
-| `fragmentation.py` | Finds release groups split across releases; builds a dry-run merge plan |
-| `plans.py` | `Plan` type for dry-runs (list of ops + counts), executed only after confirmation |
+| `fragmentation.py` | Finds release groups split across releases; builds a dry-run merge plan's ops (stored as a `plans` row; fetching, execute and undo live in `acquire/merge.py`) |
 
 ## `fileops.import_file` sequence (must match the design doc exactly)
 ```
@@ -35,6 +34,7 @@ On startup, `worker.py` calls `fileops.recover()`: each pending op is either com
 - Every bulk change returns a `Plan` first. Executing a plan above 50 ops requires the typed count from the UI.
 - `rename` only within `/data` (one mount). A cross-device error (`EXDEV`) is a `SafetyError`, never a silent copy+delete fallback.
 - Paths in the DB are relative to the library root.
+- `purge()` must skip `.trash` entries that a plan not in `done`/`undone` still refers to (journal `trash` ops of its batch).
 - Changing a template never moves files by itself; it produces a reorganize `Plan`.
 
 **Decided:** the default template is `{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}`. `{genre}` comes from MusicBrainz genres (release group → release → artist), top 1 for paths and top 3 for tags. Details: [library design](../../../docs/design/library.md#path-templates).

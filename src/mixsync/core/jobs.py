@@ -9,6 +9,8 @@ class JobKind(StrEnum):
     VERIFY = "verify"
     IMPORT = "import"
     RESCAN = "rescan"
+    MERGE = "merge"
+    UNDO_MERGE = "undo_merge"
 
 
 class JobState(StrEnum):
