@@ -333,3 +333,22 @@ def test_delete_request_refused(client: TestClient, sf: sessionmaker[Session]) -
         assert f"/requests/{rid}/delete" not in client.get("/requests").text
         assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     assert client.post("/requests/999/delete", data={"csrf_token": tok}).status_code == 404
+
+
+def test_delete_no_results_request(client: TestClient, sf: sessionmaker[Session]) -> None:
+    rid = _req(sf, "alice", "no_results", JobState.QUEUED)
+    tok = _login(client, "alice")
+    assert f"/requests/{rid}/delete" in client.get("/requests").text
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
+
+
+@pytest.mark.parametrize("state", [JobState.LEASED, JobState.RUNNING])
+def test_delete_no_results_request_refused_while_searching(
+    client: TestClient, sf: sessionmaker[Session], state: JobState
+) -> None:
+    rid = _req(sf, "alice", "no_results", state)
+    tok = _login(client, "alice")
+    assert f"/requests/{rid}/delete" not in client.get("/requests").text
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409

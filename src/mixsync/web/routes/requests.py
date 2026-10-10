@@ -30,8 +30,12 @@ def _of(req_id: int) -> ColumnElement[bool]:
     return Job.payload["request_id"].as_integer() == req_id
 
 
-def _live_job(db: Session, req: AlbumRequest) -> bool:
-    return db.scalar(select(Job.id).where(_of(req.id), Job.status.in_(_LIVE)).limit(1)) is not None
+def _deletable(db: Session, req: AlbumRequest) -> bool:
+    """A no_results request always has a queued repeat search, which delete removes with it."""
+    if req.status in _BUSY:
+        return False
+    blocking = (JobState.LEASED, JobState.RUNNING) if req.status == "no_results" else _LIVE
+    return db.scalar(select(Job.id).where(_of(req.id), Job.status.in_(blocking)).limit(1)) is None
 
 
 @router.get("")
@@ -39,7 +43,7 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
     items = db.scalars(
         select(AlbumRequest).where(AlbumRequest.user_id == user.id).order_by(AlbumRequest.id.desc())
     ).all()
-    deletable = {r.id for r in items if r.status not in _BUSY and not _live_job(db, r)}
+    deletable = {r.id for r in items if _deletable(db, r)}
     return templates.TemplateResponse(
         request, "pages/requests.html", {"user": user, "items": items, "deletable": deletable}
     )
@@ -57,7 +61,7 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     req = db.get(AlbumRequest, request_id)
     if req is None or req.user_id != user.id:
         raise HTTPException(403 if req else 404, "not your request")
-    if req.status in _BUSY or _live_job(db, req):
+    if not _deletable(db, req):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.
     # Stage 1 decisions are never in /review and decisions.act rejects them.
