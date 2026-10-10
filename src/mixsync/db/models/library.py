@@ -6,6 +6,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from mixsync.db.base import Base, TimestampMixin
 
 
+class CanonicalRelease(TimestampMixin, Base):
+    """The one release of a release group that tracks are filed under."""
+
+    __tablename__ = "canonical_releases"
+
+    release_group_mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    release_mbid: Mapped[str] = mapped_column(String(36))
+
+
 class Track(TimestampMixin, Base):
     __tablename__ = "tracks"
 

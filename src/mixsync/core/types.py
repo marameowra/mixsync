@@ -24,3 +24,5 @@ class ReleaseRef:
     date: str | None = None
     country: str | None = None
     track_count: int | None = None
+    formats: tuple[str, ...] = ()  # media formats, one per disc
+    status: str | None = None

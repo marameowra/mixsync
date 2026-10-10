@@ -11,6 +11,7 @@ from mixsync.ratelimit.client import PoliteClient
 
 MB = Path(__file__).parents[2] / "cassettes" / "musicbrainz"
 SINGLE = "18e2b05b-937a-3c25-ac78-07267e6411a0"
+KID_A = "e75c0549-ad55-39e3-8025-c72c5d4a3c5d"
 MULTI = "4393b20c-f635-491e-92c0-2a5519151e5d"
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
@@ -101,3 +102,28 @@ async def test_error_mapping(make_client: Make) -> None:
         await MusicBrainzProvider(make_client("musicbrainz", status(404))).get_release(SINGLE)
     with pytest.raises(TransientError):
         await MusicBrainzProvider(make_client("musicbrainz", status(502))).get_release(SINGLE)
+
+
+async def test_browse_group_releases_one_request_and_mapping(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    body = (MB / "browse_group_releases.json").read_text()
+    refs = await MusicBrainzProvider(
+        make_client("musicbrainz", serve(body, seen))
+    ).browse_group_releases(KID_A)
+    (req,) = seen
+    assert req.url.path == "/ws/2/release"
+    assert dict(req.url.params) == {
+        "release-group": KID_A,
+        "inc": "media",
+        "fmt": "json",
+        "limit": "100",
+    }
+    digital, vinyl = refs[1], refs[4]
+    assert (digital.formats, digital.track_count, digital.status) == (
+        ("Digital Media",),
+        11,
+        "Official",
+    )
+    assert (digital.date, digital.country) == ("2016-04-01", "XW")
+    assert vinyl.formats == ('12" Vinyl', '12" Vinyl') and vinyl.track_count == 10
+    assert vinyl.date is None  # MB's "" means unknown

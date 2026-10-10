@@ -45,10 +45,11 @@ from mixsync.core.protocols import (
     LibraryTarget,
     MetadataProvider,
 )
+from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import tags
+from mixsync.library import canonical, tags
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import assign_tracks, score_files
@@ -83,6 +84,8 @@ class Pipeline:
     importer: Importer
     coverart: CoverArt
     target: LibraryTarget
+    canonical_media: tuple[str, ...] = ("Digital Media", "CD")
+    canonical_countries: tuple[str, ...] = ("XW",)
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -126,6 +129,17 @@ class Pipeline:
             mbid, tried, profile = req.release_mbid, req.tried, profile_for(s, req.user_id)
 
         album = await self.metadata.get_release(mbid)
+        if album.release_group_id and album.tracks:
+            with self.sessions() as s:
+                have = canonical_db.owned(
+                    s, album.release_group_id, [t.recording_id or "" for t in album.tracks]
+                )
+            if all(t.recording_id in have for t in album.tracks):  # nothing left to fetch
+                with self.sessions.begin() as s:
+                    req = self._request(s, job)
+                    req.artist, req.album = album.artist[:255], album.album[:255]
+                    req.status, req.last_error = "owned", None
+                return
         ranked: list[tuple[Candidate, Any]] = []
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
@@ -286,16 +300,47 @@ class Pipeline:
                 raise LookupError(f"decision {did} does not exist")
             mbid, assignment = d.chosen_release_mbid or d.release_mbid, d.evidence["assignment"]
             cand = candidate_from_dict(d.evidence["candidate"])
+            switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
         album = await self.metadata.get_release(mbid)
         files: list[tuple[Path, TrackInfo, str | None]] = [
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
+        target, n = album, len(files)
+        while (cid := await self._canonical_id(album)) and cid != album.release_id:
+            canon = await self.metadata.get_release(cid)
+            mapped, rest = canonical.split(files, canon.tracks)
+            if not mapped:  # no overlap at all: the canonical release is not this album
+                break
+            if not rest:
+                target, files = canon, await self._unowned(album, mapped, batch)
+                break
+            # Bonus tracks: this release is the fuller edition, so it becomes canonical. Files
+            # already under the old one stay put; the merge plan will deal with that split.
+            own, group = str(album.release_id), str(album.release_group_id)
+            with self.sessions.begin() as s:
+                if canonical_db.switch(s, group, cid, own) == own:
+                    # Same transaction: a retry must not mistake this for a plain canonical import.
+                    row = decisions.get(s, did)
+                    if row:
+                        row.evidence = {**row.evidence, "canonical_switched_from": cid}
+                    switched = True
+                    break
+            # lost a race to another switch: decide again against the stored choice
+        if cid and cid == album.release_id and not switched:
+            # shortcut: two workers importing the same release at once can still duplicate (rows
+            # not yet committed); the fragmentation merge cleans that up.
+            files = await self._unowned(album, files, batch)
+        if n and not files:  # every file is a verified duplicate: nothing to import or rescan
+            with self.sessions.begin() as s:
+                req = self._request(s, job)
+                req.status, req.last_error = "owned", None
+            return
         results = await asyncio.to_thread(
-            self.importer.import_release, files, album, "verified", batch
+            self.importer.import_release, files, target, "verified", batch
         )
-        await self._cover(album, results, batch)
+        await self._cover(target, results, batch)
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         if results and not errors:
             await self._release(cand, [r.src for r in results], batch)
@@ -306,6 +351,39 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+
+    async def _unowned(
+        self, album: AlbumInfo, files: list[canonical.File], batch: str
+    ) -> list[canonical.File]:
+        """Drop files whose recording the group already has. They stay in /downloads: release
+        only deletes a download that has a verified import of its own."""
+        with self.sessions() as s:
+            have = canonical_db.owned(
+                s, str(album.release_group_id), [t.recording_id or "" for _, t, _ in files], batch
+            )
+        if have:
+            log.info(
+                "skipping recordings already owned in %s: %s",
+                album.release_id,
+                sorted(map(str, have)),
+            )
+        return [f for f in files if f[1].recording_id not in have]
+
+    async def _canonical_id(self, album: AlbumInfo) -> str | None:
+        """The canonical release of the album's group: the stored choice, else the policy's pick,
+        stored. Reading first means a retry never browses again."""
+        group = album.release_group_id
+        if not group:
+            return None
+        with self.sessions() as s:
+            if stored := canonical_db.get(s, group):
+                return stored
+        releases = await self.metadata.browse_group_releases(group)
+        if not releases:  # nothing to choose from: file this release as is, decide next time
+            return None
+        pick = canonical.choose(releases, self.canonical_media, self.canonical_countries)
+        with self.sessions.begin() as s:
+            return canonical_db.store(s, group, pick)
 
     async def _release(self, cand: Candidate, srcs: list[Path], batch: str) -> None:
         """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is

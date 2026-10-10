@@ -38,6 +38,7 @@ class MetadataProvider(Protocol):
     async def search_releases(
         self, artist: str, album: str, limit: int = 10
     ) -> list[ReleaseRef]: ...
+    async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]: ...
 
 
 class DownloadSource(Protocol):
