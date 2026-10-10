@@ -21,6 +21,7 @@ def upgrade() -> None:
         sa.Column("release_group_mbid", sa.String(36), nullable=False),
         sa.Column("canonical_release_mbid", sa.String(36), nullable=False),
         sa.Column("previous_canonical_mbid", sa.String(36), nullable=True),
+        sa.Column("canonical_set", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("batch_id", sa.String(64), nullable=False),
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("ops", sa.JSON(), nullable=False),

@@ -45,6 +45,10 @@ def enqueue_undo(s: Session, now: datetime, plan_id: int) -> None:
     _enqueue(s, now, JobKind.UNDO_MERGE, "undo", plan_id)
 
 
+class PlanInProgress(ValueError):
+    """The group already has a draft or running merge plan."""
+
+
 @dataclass(frozen=True)
 class Merger:
     sessions: sessionmaker[Session]
@@ -69,6 +73,13 @@ class Merger:
             stored = canonical_db.get(s, group)
             tracks = list(s.scalars(select(Track).where(Track.release_group_mbid == group)))
             rows = set(s.scalars(select(Track.path)))
+            open_plan = s.scalar(
+                select(Plan.id).where(
+                    Plan.release_group_mbid == group, Plan.status.in_(["draft", "running"])
+                )
+            )
+        if open_plan is not None:
+            raise PlanInProgress(f"plan {open_plan} for release group {group} is still open")
         if not any(t.status == "verified" for t in tracks):
             raise LookupError(f"no verified tracks in release group {group}")
         cid = stored
@@ -79,7 +90,7 @@ class Merger:
             cid = canonical.choose(releases, self.canonical_media, self.canonical_countries)
         album = await self.metadata.get_release(cid)
         ops = fragmentation.build_ops(
-            tracks, album, self.template, lambda r: r in rows or self.fileops.has(r)
+            tracks, album, self.template, lambda r: r in rows or self.fileops.has(r), self._size
         )
         with self.sessions.begin() as s:
             plan = Plan(
@@ -93,6 +104,12 @@ class Merger:
             s.flush()
             plan.batch_id = f"merge-{plan.id}"
             return plan.id
+
+    def _size(self, rel: str) -> int:
+        try:
+            return (self.fileops.library / rel).stat().st_size
+        except OSError:
+            return 0
 
     async def merge(self, job: JobRecord) -> None:
         await asyncio.to_thread(self.execute, job.payload["plan_id"])
@@ -111,7 +128,10 @@ class Merger:
             if plan.status not in ("draft", "running", "failed") or undo_failed:
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status, plan.error = "running", None
+            before = canonical_db.get(s, plan.release_group_mbid)
             ok = self._set_canonical(s, plan)
+            if ok and before != plan.canonical_release_mbid:
+                plan.canonical_set = True
             batch, ops = plan.batch_id, plan.ops
         try:
             if not ok:
@@ -263,7 +283,7 @@ class Merger:
                 plan.canonical_release_mbid,
                 plan.previous_canonical_mbid,
             )
-            if new != prev and canonical_db.get(s, group) == new:  # else someone else changed it
+            if plan.canonical_set and canonical_db.get(s, group) == new:  # else not ours to undo
                 if prev is None:
                     s.execute(
                         delete(CanonicalRelease).where(
@@ -273,7 +293,7 @@ class Merger:
                     )
                 else:
                     canonical_db.switch(s, group, new, prev)
-            plan.status, plan.error = "undone", None
+            plan.status, plan.error, plan.canonical_set = "undone", None, False
             enqueue_rescan(s, self.clock.now())
 
     def _undo_op(self, plan_id: int, batch: str, ubatch: str, i: int, op: dict[str, Any]) -> None:
@@ -287,12 +307,20 @@ class Merger:
         if op["op"] == "move" and (row is None or row.path not in (new, path)):
             raise SafetyError(f"track row for {new} changed since the merge")
         restored = self._journaled(ubatch, "restore", dst=path) is not None
-        if new is not None and new == path and not restored:  # the merged copy is in the way
-            self._trash_ours(batch, ubatch, trashed, new)
+        # The file at new_path is ours if it is the batch's copy, or if the library still lists
+        # it (the user may have retagged it). Decided before anything moves.
+        trash_new = new is not None and not (new == path and restored) and fo.has(new)
+        if trash_new and not (
+            (row is not None and row.path == new)
+            or fo.find_imported(batch, fo.trash_dir / trashed.dst) == new
+        ):
+            raise SafetyError(f"{new} is not the merged copy; left alone")
+        if trash_new and new == path:  # the merged copy is in the way
+            fo.trash(path, ubatch)
         if not restored:  # refuses, touching nothing, if the old path is taken
             fo.restore(trashed.dst, path, ubatch)
-        if new is not None and new != path:
-            self._trash_ours(batch, ubatch, trashed, new)
+        if trash_new and new != path:
+            self._trash_new(ubatch, str(new))
 
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
@@ -303,11 +331,5 @@ class Merger:
                 s.add(Track(**{**old, "imported_at": datetime.fromisoformat(old["imported_at"])}))
         self._commit_op(plan_id, i, op, apply, done=False)
 
-    def _trash_ours(self, batch: str, ubatch: str, trashed: FileOp, new: str) -> None:
-        """Trash the file at `new` if it is the copy this batch made; leave anything else."""
-        fo = self.fileops
-        if not fo.has(new):
-            return
-        if fo.find_imported(batch, fo.trash_dir / trashed.dst) != new:
-            raise SafetyError(f"{new} is not the copy the merge made; left alone")
-        fo.trash(new, ubatch)
+    def _trash_new(self, ubatch: str, new: str) -> None:
+        self.fileops.trash(new, ubatch)

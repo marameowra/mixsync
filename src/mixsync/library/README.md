@@ -34,6 +34,7 @@ On startup, `worker.py` calls `fileops.recover()`: each pending op is either com
 - Every bulk change returns a `Plan` first. Executing a plan above 50 ops requires the typed count from the UI.
 - `rename` only within `/data` (one mount). A cross-device error (`EXDEV`) is a `SafetyError`, never a silent copy+delete fallback.
 - Paths in the DB are relative to the library root.
+- `purge()` must skip `.trash` entries that a plan not in `done`/`undone` still refers to (journal `trash` ops of its batch).
 - Changing a template never moves files by itself; it produces a reorganize `Plan`.
 
 **Decided:** the default template is `{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}`. `{genre}` comes from MusicBrainz genres (release group → release → artist), top 1 for paths and top 3 for tags. Details: [library design](../../../docs/design/library.md#path-templates).

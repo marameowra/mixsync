@@ -68,7 +68,11 @@ def tagset_from_dict(d: dict[str, Any]) -> tags.TagSet:
 
 
 def build_ops(
-    group_tracks: list[Track], canon: AlbumInfo, template: str, exists: Callable[[str], bool]
+    group_tracks: list[Track],
+    canon: AlbumInfo,
+    template: str,
+    exists: Callable[[str], bool],
+    size: Callable[[str], int] = lambda _: 0,
 ) -> list[dict[str, Any]]:
     """What merging the group onto `canon` would do to each verified track not on it:
     `trash` (the canonical release already has that recording), `move` (retag and refile under
@@ -89,6 +93,7 @@ def build_ops(
             ops.append((t, {"op": "trash", "keeper": keepers[t.recording_mbid].path}))
         else:
             rest.append(t)
+    rest.sort(key=lambda t: -size(t.path))  # of several copies of a recording, keep the biggest
     by_path = {t.path: t for t in rest}
     mapped, bonus = canonical.split(
         [(Path(t.path), TrackInfo("", recording_id=t.recording_mbid), t.acoustid_id) for t in rest],

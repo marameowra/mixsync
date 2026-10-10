@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.merge import Merger
+from mixsync.acquire.merge import Merger, PlanInProgress
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import SafetyError
@@ -570,7 +570,7 @@ def test_undo_resumes_after_a_crash_between_restore_and_trashing_the_copy(
     before = snapshot(world)
     pid = build(world)
     world.merger.execute(pid)
-    crash_once(monkeypatch, "_trash_ours")
+    crash_once(monkeypatch, "_trash_new")
     with pytest.raises(Boom):
         world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undoing"
@@ -602,5 +602,96 @@ def test_undo_reverses_an_op_that_was_half_done(
         world.merger.execute(pid)
     assert world.plan(pid).status == "running"
     monkeypatch.undo()
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and snapshot(world) == before
+
+
+def test_build_refuses_while_a_plan_is_open(world: World) -> None:
+    build(world)
+    with pytest.raises(PlanInProgress):
+        build(world)
+
+
+def test_undoing_a_plan_that_set_nothing_leaves_the_canonical_alone(world: World) -> None:
+    p1 = build(world)
+    with world.sessions.begin() as s:
+        s.get_one(Plan, p1).status = "failed"  # e.g. it failed on a stale row before doing anything
+    p2 = build(world)
+    world.merger.execute(p2)
+    assert world.canonical() == CANON
+    world.merger.undo_plan(p1)
+    assert world.plan(p1).status == "undone" and world.canonical() == CANON
+
+
+def test_undo_after_the_user_retagged_the_merged_file(world: World) -> None:
+    import mutagen
+
+    before = snapshot(world)
+    pid = build(world)
+    world.merger.execute(pid)
+    f = world.ops.library / world.tracks()["r1"][0]
+    m = mutagen.File(f)  # pyright: ignore[reportUnknownMemberType]
+    m["title"] = ["edited"]
+    m.save()
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone" and snapshot(world) == before
+    assert any("edited" not in f and "01-01" in f for f in world.trashed())  # kept in .trash
+
+
+def test_undo_leaves_a_file_that_is_not_the_merged_copy(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    row = _rows(world)
+    r1 = next(t for t in row if t.recording_mbid == "r1")
+    (world.ops.library / r1.path).write_bytes(b"not ours")
+    with world.sessions.begin() as s:  # and the library no longer lists it at that path
+        s.get_one(Track, r1.id).path = ops_by_kind(world, pid)["move"][0]["old"]["path"]
+    after = snapshot(world)
+    with pytest.raises(SafetyError, match="not the merged copy"):
+        world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "failed"
+    assert (world.ops.library / r1.path).read_bytes() == b"not ours"
+    assert snapshot(world)[0].get(r1.path) == after[0][r1.path]
+
+
+def test_the_bigger_copy_is_the_one_kept(world: World) -> None:
+    (extra,) = world.importer.import_release(
+        [(world.ops.library / world.tracks()["r1"][0], OLD_ALBUM.tracks[0], "ac-r1")],
+        replace(OLD_ALBUM, release_id="old2", year=2001),
+        "verified",
+        "seed2",
+    )
+    assert extra.rel
+    with (world.ops.library / extra.rel).open("ab") as f:
+        f.write(b"\0" * 5000)  # the 2001 copy is the larger one
+    pid = build(world)
+    kinds = ops_by_kind(world, pid)
+    moved = next(o for o in kinds["move"] if o["old"]["recording_mbid"] == "r1")
+    dup = next(o for o in kinds["trash"] if o["old"]["recording_mbid"] == "r1")
+    assert moved["old"]["path"] == extra.rel and dup["keeper"] == moved["new_path"]
+
+
+def test_same_path_undo_resumes_after_the_copy_is_trashed_but_not_restored(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys.modules[__name__], "CANON_ALBUM", replace(CANON_ALBUM, year=2000))
+    before = snapshot(world)
+    pid = build(world)
+    world.merger.execute(pid)
+
+    def crash(step: str) -> None:
+        if step == "restore":
+            raise Boom
+
+    real = fileops._hook  # pyright: ignore[reportPrivateUsage]
+    fileops._hook = crash  # pyright: ignore[reportPrivateUsage]
+    try:
+        with pytest.raises(Boom):
+            world.merger.undo_plan(pid)
+    finally:
+        fileops._hook = real  # pyright: ignore[reportPrivateUsage]
+    world.ops.recover()
     world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undone" and snapshot(world) == before

@@ -41,6 +41,7 @@ class Plan(TimestampMixin, Base):
     release_group_mbid: Mapped[str] = mapped_column(String(36))
     canonical_release_mbid: Mapped[str] = mapped_column(String(36))
     previous_canonical_mbid: Mapped[str | None] = mapped_column(String(36))  # None: none stored
+    canonical_set: Mapped[bool] = mapped_column(default=False)  # this plan stored/switched it
     batch_id: Mapped[str] = mapped_column(String(64), default="")
     # draft | running | done | failed | undoing | undone
     status: Mapped[str] = mapped_column(String(16), default="draft")
