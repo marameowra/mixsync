@@ -38,7 +38,8 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_MB_BASE_URL` | optional local MusicBrainz mirror |
 | `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
-| `MIXSYNC_NAVIDROME_URL` | Navidrome base URL (users link their own credentials) |
+| `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
+| `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |
 
 ## Health and ops
