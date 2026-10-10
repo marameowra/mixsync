@@ -352,3 +352,23 @@ def test_delete_no_results_request_refused_while_searching(
     tok = _login(client, "alice")
     assert f"/requests/{rid}/delete" not in client.get("/requests").text
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+
+
+def test_delete_request_409_when_review_acts_first(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    did = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = decisions.get(s, did)
+        assert d
+        d.evidence = {**d.evidence, "request_id": rid}
+
+    def raced(*_a: object, **_k: object) -> None:
+        raise decisions.DecisionStateError("already acted on")
+
+    monkeypatch.setattr(decisions, "act", raced)
+    tok = _login(client, "alice")
+    assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is not None

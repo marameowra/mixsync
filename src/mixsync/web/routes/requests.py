@@ -70,7 +70,10 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     )
     for d in db.scalars(pending):
         if d.evidence.get("request_id") == req.id:
-            decisions.act(db, d.id, user.id, "reject")
+            try:
+                decisions.act(db, d.id, user.id, "reject")
+            except decisions.DecisionStateError:
+                raise HTTPException(409, "a review is acting on this request") from None
     db.execute(delete(Job).where(_of(req.id)))
     db.delete(req)
     return RedirectResponse("/requests", status_code=303)
