@@ -19,30 +19,55 @@ from sqlalchemy.orm import Session, sessionmaker
 from mixsync.acquire.requests import enqueue_rescan
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
-from mixsync.core.jobs import JobKind
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.protocols import MetadataProvider
 from mixsync.db import canonical as canonical_db
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
+from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, fragmentation
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
+LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 
-def _enqueue(s: Session, now: datetime, kind: JobKind, name: str, plan_id: int) -> None:
-    # The key includes the plan's last change, so a double click is one job but a re-queue after
-    # a failed attempt (which changes the plan) is a new one.
+
+def live_job(s: Session, plan_id: int) -> bool:
+    """Is a MERGE or UNDO_MERGE job for this plan queued or running?"""
+    jobs = s.scalars(
+        select(Job).where(Job.kind.in_([JobKind.MERGE, JobKind.UNDO_MERGE]), Job.status.in_(LIVE))
+    )
+    return any(j.payload.get("plan_id") == plan_id for j in jobs)
+
+
+def _open_plan(s: Session, group: str) -> str | None:
+    """Why this group cannot get a new plan: one is running or being undone, or a draft has been
+    confirmed (its job is waiting). An unconfirmed draft is an abandoned preview."""
+    plans = s.scalars(
+        select(Plan).where(
+            Plan.release_group_mbid == group, Plan.status.in_(["draft", "running", "undoing"])
+        )
+    )
+    for p in plans:
+        if p.status != "draft" or live_job(s, p.id):
+            return f"plan {p.id} for release group {group} is {p.status}"
+    return None
+
+
+def _enqueue(s: Session, now: datetime, kind: JobKind, plan_id: int) -> None:
+    # One key per plan state for merge and undo alike, so two requests racing on the same plan
+    # enqueue one job. The plan's last change is in it: a re-queue after a failure is new.
     stamp = s.get_one(Plan, plan_id).updated_at.isoformat()
-    enqueue_in(s, now, kind, {"plan_id": plan_id}, idempotency_key=f"{name}:{plan_id}:{stamp}")
+    enqueue_in(s, now, kind, {"plan_id": plan_id}, idempotency_key=f"plan:{plan_id}:{stamp}")
 
 
 def enqueue_merge(s: Session, now: datetime, plan_id: int) -> None:
-    _enqueue(s, now, JobKind.MERGE, "merge", plan_id)
+    _enqueue(s, now, JobKind.MERGE, plan_id)
 
 
 def enqueue_undo(s: Session, now: datetime, plan_id: int) -> None:
-    _enqueue(s, now, JobKind.UNDO_MERGE, "undo", plan_id)
+    _enqueue(s, now, JobKind.UNDO_MERGE, plan_id)
 
 
 class PlanInProgress(ValueError):
@@ -73,13 +98,9 @@ class Merger:
             stored = canonical_db.get(s, group)
             tracks = list(s.scalars(select(Track).where(Track.release_group_mbid == group)))
             rows = set(s.scalars(select(Track.path)))
-            open_plan = s.execute(
-                select(Plan.id, Plan.status).where(
-                    Plan.release_group_mbid == group, Plan.status.in_(["running", "undoing"])
-                )
-            ).first()
-        if open_plan is not None:
-            raise PlanInProgress(f"plan {open_plan[0]} for release group {group} is {open_plan[1]}")
+            busy = _open_plan(s, group)
+        if busy:
+            raise PlanInProgress(busy)
         if not any(t.status == "verified" for t in tracks):
             raise LookupError(f"no verified tracks in release group {group}")
         cid = stored
@@ -93,6 +114,8 @@ class Merger:
             tracks, album, self.template, lambda r: r in rows or self.fileops.has(r), self._size
         )
         with self.sessions.begin() as s:
+            if busy := _open_plan(s, group):  # confirmed since we looked
+                raise PlanInProgress(busy)
             s.execute(  # abandoned previews: never executed, so DB only
                 update(Plan)
                 .where(Plan.release_group_mbid == group, Plan.status == "draft")
@@ -130,6 +153,9 @@ class Merger:
             if plan.status == "done":
                 return
             undo_failed = plan.status == "failed" and (plan.error or "").startswith("undo:")
+            # shortcut: "running" is accepted so a crashed run resumes, but with several worker
+            # processes a lost lease can let a merge and its undo overlap (noreplace + trash only,
+            # so nothing is lost); add a plan-level lock before running more than one worker.
             if plan.status not in ("draft", "running", "failed") or undo_failed:
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status, plan.error = "running", None
@@ -270,6 +296,7 @@ class Merger:
             plan = s.get_one(Plan, plan_id)
             if plan.status == "undone":
                 return
+            # shortcut: "running" is accepted to clean up after a crash; see execute.
             if plan.status not in ("done", "failed", "running", "undoing"):
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status = "undoing"

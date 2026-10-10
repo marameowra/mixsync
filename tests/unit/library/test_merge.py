@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.merge import Merger, PlanInProgress
+from mixsync.acquire.merge import Merger, PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import SafetyError
@@ -541,7 +541,6 @@ def test_canonical_is_rechecked_before_each_op(
 def test_any_error_fails_the_plan_and_it_can_be_requeued(
     world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from mixsync.acquire.merge import enqueue_merge
 
     pid = build(world)
     monkeypatch.setattr(FileOps, "trash", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
@@ -710,3 +709,29 @@ def test_same_path_undo_resumes_after_the_copy_is_trashed_but_not_restored(
     world.ops.recover()
     world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undone" and snapshot(world) == before
+
+
+def test_a_confirmed_draft_is_not_discarded_by_a_new_preview(world: World) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:
+        enqueue_merge(s, SystemClock().now(), pid)  # confirmed; the worker has not run it yet
+    with world.sessions() as s:
+        assert live_job(s, pid)
+    with pytest.raises(PlanInProgress):
+        build(world)
+    assert world.plan(pid).status == "draft"
+    world.merger.execute(pid)  # the confirmed merge still runs
+    assert world.plan(pid).status == "done"
+    with world.sessions() as s:
+        assert not live_job(s, pid + 1000)
+
+
+def test_merge_and_undo_requests_share_one_job_per_plan_state(world: World) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:
+        enqueue_merge(s, SystemClock().now(), pid)
+    with world.sessions.begin() as s:
+        enqueue_undo(s, SystemClock().now(), pid)
+    with world.sessions() as s:
+        kinds = [j.kind for j in s.scalars(select(Job).where(Job.kind != JobKind.RESCAN))]
+    assert kinds == [JobKind.MERGE]
