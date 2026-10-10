@@ -1,10 +1,12 @@
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from mixsync.acquire.requests import apply_review
 from mixsync.core.capabilities import Capability
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
@@ -52,6 +54,7 @@ def _act(
         decisions.act(db, decision_id, user.id, action, mbid)
     except decisions.DecisionStateError as e:
         raise HTTPException(409, str(e)) from e
+    apply_review(db, datetime.now(UTC), decision_id)
     return RedirectResponse("/review", status_code=303)
 
 

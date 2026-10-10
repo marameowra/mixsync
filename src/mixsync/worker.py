@@ -7,7 +7,10 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 
-from mixsync.core.clock import SystemClock
+from sqlalchemy.orm import Session, sessionmaker
+
+from mixsync.acquire.pipeline import Pipeline
+from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind
@@ -15,6 +18,13 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.library.fileops import FileOps
+from mixsync.library.importer import Importer
+from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
+from mixsync.metadata.musicbrainz import MusicBrainzProvider
+from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.sources.query import queries
+from mixsync.sources.slskd import SlskdSource
+from mixsync.targets.navidrome import NavidromeTarget
 
 log = logging.getLogger(__name__)
 
@@ -75,35 +85,65 @@ async def run_worker(
         await run_job(queue, job, worker, handlers, lease)
 
 
-def _new_queue() -> tuple[JobQueue, str]:
+def _pipeline(
+    settings: Settings, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> Pipeline:
+    def client(service: str) -> PoliteClient:
+        return polite_client(service, settings, sessions)
+
+    return Pipeline(
+        sessions=sessions,
+        clock=clock,
+        source=SlskdSource(
+            client("slskd"),
+            settings.slskd_url,
+            settings.slskd_api_key,
+            downloads_dir=Path(settings.downloads_dir),
+        ),
+        queries=queries,
+        metadata=MusicBrainzProvider(client("musicbrainz")),
+        fingerprint=fingerprint,
+        acoustid=AcoustIdClient(client("acoustid"), settings),
+        importer=Importer(fileops, sessions, clock, settings.path_template),
+        target=NavidromeTarget(
+            client("navidrome"),
+            settings.navidrome_url,
+            settings.navidrome_user,
+            settings.navidrome_password,
+        ),
+    )
+
+
+def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
     settings = Settings()
     engine = make_engine(settings)
     clock = SystemClock()
-    FileOps(
-        Path(settings.data_dir), SqlJournal(make_session_factory(engine), clock), clock
-    ).recover()
+    sessions = make_session_factory(engine)
+    fileops = FileOps(Path(settings.data_dir), SqlJournal(sessions, clock), clock)
+    fileops.recover()
     queue = JobQueue(engine, clock)
-    return queue, f"{socket.gethostname()}:{os.getpid()}"
+    handlers = HANDLERS | _pipeline(settings, fileops, sessions, clock).handlers()
+    return queue, f"{socket.gethostname()}:{os.getpid()}", handlers
 
 
 async def serve_worker() -> None:
-    queue, worker = _new_queue()
+    queue, worker, handlers = _new_queue()
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
-    await run_worker(queue, worker, stop)
+    await run_worker(queue, worker, stop, handlers)
 
 
 async def serve_all() -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    queue, worker = _new_queue()
+    queue, worker, handlers = _new_queue()
     stop = asyncio.Event()
     server = uvicorn.Server(
         uvicorn.Config("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
     )
-    task = asyncio.create_task(run_worker(queue, worker, stop))
+    task = asyncio.create_task(run_worker(queue, worker, stop, handlers))
     try:
         await server.serve()
     finally:

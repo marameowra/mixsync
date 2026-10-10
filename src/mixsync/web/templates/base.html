@@ -11,6 +11,7 @@
   {% if user %}
   <nav>
     <a href="/">Home</a>
+    <a href="/requests">Requests</a>
     <a href="/review">Review</a>
     <form method="post" action="/logout">{{ forms.csrf() }}<button type="submit">Log out</button></form>
   </nav>

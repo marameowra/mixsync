@@ -120,3 +120,34 @@ forbidden_modules = [
     "mixsync.app",
 ]
 allow_indirect_imports = true  # db itself may reach ratelimit
+
+[[tool.importlinter.contracts]]
+name = "acquire imports only core, db, match and library"
+type = "forbidden"
+source_modules = ["mixsync.acquire"]
+forbidden_modules = [
+    "mixsync.ratelimit",
+    "mixsync.sources",
+    "mixsync.metadata",
+    "mixsync.targets",
+    "mixsync.web",
+    "mixsync.app",
+    "mixsync.worker",
+]
+allow_indirect_imports = true  # db itself may reach ratelimit
+
+[[tool.importlinter.contracts]]
+name = "targets imports only core and ratelimit"
+type = "forbidden"
+source_modules = ["mixsync.targets"]
+forbidden_modules = [
+    "mixsync.db",
+    "mixsync.match",
+    "mixsync.library",
+    "mixsync.metadata",
+    "mixsync.sources",
+    "mixsync.acquire",
+    "mixsync.web",
+    "mixsync.app",
+]
+allow_indirect_imports = true  # ratelimit itself reaches db

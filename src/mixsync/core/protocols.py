@@ -1,9 +1,11 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 from mixsync.core.matching import AlbumInfo, Candidate, TransferInfo
-from mixsync.core.types import ReleaseRef
+from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 
 
 @dataclass(frozen=True)
@@ -42,3 +44,14 @@ class DownloadSource(Protocol):
     async def search(self, query: str) -> list[Candidate]: ...
     async def enqueue(self, candidate: Candidate) -> None: ...
     async def status(self, candidate: Candidate) -> TransferInfo: ...
+
+
+Fingerprinter = Callable[[Path], Awaitable[Fingerprint]]
+
+
+class AcoustIdLookup(Protocol):
+    async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]: ...
+
+
+class LibraryTarget(Protocol):
+    async def rescan(self) -> None: ...

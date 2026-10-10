@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     acoustid_app_key: str = ""
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
+    navidrome_url: str = "http://navidrome:4533"
+    navidrome_user: str = ""  # an admin: startScan needs it
+    navidrome_password: str = ""
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"

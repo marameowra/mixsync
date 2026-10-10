@@ -48,7 +48,12 @@ def record(
 
 
 def pending_for(s: Session, user_id: int | None) -> list[MatchDecision]:
-    q = select(MatchDecision).where(MatchDecision.status == PENDING).order_by(MatchDecision.id)
+    # Stage 1 only picks what to download; a human reviews downloaded files (stage 2).
+    q = (
+        select(MatchDecision)
+        .where(MatchDecision.status == PENDING, MatchDecision.stage == 2)
+        .order_by(MatchDecision.id)
+    )
     if user_id is not None:
         q = q.where(MatchDecision.user_id == user_id)
     return list(s.scalars(q))
@@ -72,7 +77,11 @@ def act(
     # Conditional UPDATE so two concurrent submits cannot both win.
     done = s.execute(
         update(MatchDecision)
-        .where(MatchDecision.id == decision_id, MatchDecision.status == PENDING)
+        .where(
+            MatchDecision.id == decision_id,
+            MatchDecision.status == PENDING,
+            MatchDecision.stage == 2,
+        )
         .values(
             status=_STATUS_BY_ACTION[action],
             final_action=action,

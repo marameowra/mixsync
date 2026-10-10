@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from sqlalchemy import Connection, Engine, Row, Table, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition
@@ -207,3 +208,31 @@ class JobQueue:
         if status is None:
             raise LeaseLostError(f"job {job_id} is no longer held by {worker}")
         return status
+
+
+def enqueue_in(
+    s: Session,
+    now: datetime,
+    kind: JobKind,
+    payload: dict[str, Any],
+    *,
+    run_after: datetime | None = None,
+    max_attempts: int = 5,
+    idempotency_key: str | None = None,
+) -> None:
+    """Add a job inside the caller's transaction, so it commits (or not) with the caller's own
+    changes. With an existing idempotency_key, adds nothing."""
+    if idempotency_key and s.scalar(select(Job.id).where(Job.idempotency_key == idempotency_key)):
+        return
+    s.add(
+        Job(
+            kind=kind,
+            payload=payload,
+            status=JobState.QUEUED,
+            attempts=0,
+            max_attempts=max_attempts,
+            run_after=run_after or now,
+            idempotency_key=idempotency_key,
+        )
+    )
+    s.flush()

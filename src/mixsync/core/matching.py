@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from mixsync.core.types import AcoustIdResult
+
 
 @dataclass(frozen=True)
 class TrackInfo:
@@ -47,6 +49,7 @@ class FileTrack:
     track: int | None = None
     disc: int | None = None
     recording_id: str | None = None
+    acoustid: tuple[AcoustIdResult, ...] = ()  # lookup results for the audio, any order
 
 
 @dataclass(frozen=True)
@@ -134,4 +137,4 @@ class TransferStatus(StrEnum):
 class TransferInfo:
     state: TransferStatus
     bytes: int
-    local_path: str | None = None  # slskd's API does not report it; filled in by a later slice
+    local_paths: tuple[str, ...] = ()  # one per candidate file, same order; set once DONE

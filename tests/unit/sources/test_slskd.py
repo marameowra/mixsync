@@ -12,6 +12,7 @@ from mixsync.sources.slskd import SlskdSource, map_responses
 
 FX = Path(__file__).parents[2] / "fixtures" / "slskd"
 BASE = "http://slskd:5030"
+DOWNLOADS = Path("/downloads")
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
 
@@ -25,7 +26,9 @@ async def _no_sleep(_s: float) -> None:
 
 
 def source(make_client: Make, handler: Callable[[httpx.Request], httpx.Response]) -> SlskdSource:
-    return SlskdSource(make_client("slskd", handler), BASE, "key-123", sleep=_no_sleep)
+    return SlskdSource(
+        make_client("slskd", handler), BASE, "key-123", downloads_dir=DOWNLOADS, sleep=_no_sleep
+    )
 
 
 def test_mapping_groups_folders_and_drops_non_audio() -> None:
@@ -72,7 +75,9 @@ async def test_search_polls_until_complete(make_client: Make) -> None:
     async def sleep(s: float) -> None:
         sleeps.append(s)
 
-    src = SlskdSource(make_client("slskd", handler), BASE + "/", "key-123", sleep=sleep)
+    src = SlskdSource(
+        make_client("slskd", handler), BASE + "/", "key-123", downloads_dir=DOWNLOADS, sleep=sleep
+    )
     cands = await src.search("Test Artist Test Album")
     assert len(cands) == 4 and sleeps == [1.0, 1.0]
     post = seen[0]
@@ -87,7 +92,14 @@ async def test_search_gives_up(make_client: Make) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=load("search_running.json"))
 
-    src = SlskdSource(make_client("slskd", handler), BASE, "k", sleep=_no_sleep, max_polls=3)
+    src = SlskdSource(
+        make_client("slskd", handler),
+        BASE,
+        "k",
+        downloads_dir=DOWNLOADS,
+        sleep=_no_sleep,
+        max_polls=3,
+    )
     with pytest.raises(TransientError):
         await src.search("x")
 
@@ -171,6 +183,22 @@ async def test_status_states(
     body = {"username": "peer-001", "directories": [{"directory": "d", "files": files}]}
     src = source(make_client, lambda r: httpx.Response(200, json=body))
     assert (await src.status(cand)).state is expected
+
+
+async def test_done_reports_local_paths_by_each_files_own_folder(make_client: Make) -> None:
+    cand = Candidate(
+        "p",
+        "Music\\A\\Album",
+        (
+            CandidateFile("Music\\A\\Album\\01 x.flac", 1, "flac"),
+            CandidateFile("Music\\A\\Album\\CD2\\01 y.flac", 1, "flac"),
+        ),
+    )
+    files = [{"filename": f.path, "state": "Completed, Succeeded", "bytesTransferred": 1}
+             for f in cand.files]  # fmt: skip
+    body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
+    info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+    assert info.local_paths == ("/downloads/Album/01 x.flac", "/downloads/CD2/01 y.flac")
 
 
 async def test_status_before_all_files_are_listed(make_client: Make) -> None:

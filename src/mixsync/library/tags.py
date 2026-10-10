@@ -148,6 +148,18 @@ def read_all(path: Path) -> Snapshot:
     return {"format": fmt, "tags": tags}
 
 
+def read_fields(path: Path) -> dict[str, str]:
+    """First value of each managed field, by Picard's Vorbis name (`title`, `tracknumber`...).
+    `tracknumber`/`discnumber` lose any `/total`."""
+    snap = read_all(path)
+    natives = _natives(snap["format"])
+    out: dict[str, str] = {}
+    for name in _ALL:
+        if vals := snap["tags"].get(natives[name]):
+            out[name] = vals[0].partition("/")[0] if name.endswith("number") else vals[0]
+    return out
+
+
 def _set(fmt: str, f: Any, native: str, values: list[str]) -> None:
     if fmt in ("flac", "ogg"):
         f.tags[native] = values

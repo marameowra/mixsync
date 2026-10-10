@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Requests - MixSync{% endblock %}
+{% block content %}
+<h1>Requests</h1>
+<form method="post" action="/requests">
+  {{ forms.csrf() }}
+  <label>MusicBrainz release URL or MBID <input name="release" type="text" required></label>
+  <button type="submit">Request</button>
+</form>
+{% if items %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Release</th><th>Status</th><th>Last error</th></tr></thead>
+  <tbody>
+  {% for r in items %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td>{% if r.album %}{{ r.artist }} - {{ r.album }}{% else %}{{ r.release_mbid }}{% endif %}</td>
+    <td>{% if r.status == "review" %}<a href="/review">review</a>{% else %}{{ r.status }}{% endif %}</td>
+    <td>{{ r.last_error or "" }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No requests yet.</p>
+{% endif %}
+{% endblock %}
