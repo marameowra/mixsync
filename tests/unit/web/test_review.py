@@ -304,6 +304,23 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
         assert d and d.status == "rejected"  # kept for the record, off the review queue
 
 
+def test_delete_request_with_stage1_pending_decision(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    did = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = decisions.get(s, did)
+        assert d
+        d.stage = 1  # the pipeline's download pick, not a file review
+        d.evidence = {**d.evidence, "request_id": rid}
+    tok = _login(client, "alice")
+    r = client.post(f"/requests/{rid}/delete", data={"csrf_token": tok})
+    assert r.status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None
+
+
 def test_delete_request_refused(client: TestClient, sf: sessionmaker[Session]) -> None:
     mine = _req(sf, "alice", "failed", None)
     busy = _req(sf, "alice", "searching", JobState.RUNNING)

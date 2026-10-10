@@ -60,7 +60,11 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     if req.status in _BUSY or _live_job(db, req):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.
-    for d in db.scalars(select(MatchDecision).where(MatchDecision.status == decisions.PENDING)):
+    # Stage 1 decisions are never in /review and decisions.act rejects them.
+    pending = select(MatchDecision).where(
+        MatchDecision.status == decisions.PENDING, MatchDecision.stage == 2
+    )
+    for d in db.scalars(pending):
         if d.evidence.get("request_id") == req.id:
             decisions.act(db, d.id, user.id, "reject")
     db.execute(delete(Job).where(_of(req.id)))
