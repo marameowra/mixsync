@@ -297,8 +297,10 @@ class Pipeline:
         batch = f"request-{rid}-decision-{did}"
         target, bonus = album, []
         if (cid := await self._canonical_id(album)) and cid != album.release_id:
-            target = await self.metadata.get_release(cid)
-            files, bonus = canonical.split(files, target.tracks)
+            canon = await self.metadata.get_release(cid)
+            mapped, rest = canonical.split(files, canon.tracks)
+            if mapped:  # no overlap at all: the canonical release is not this album, file as is
+                target, files, bonus = canon, mapped, rest
         results = await asyncio.to_thread(
             self.importer.import_release, files, target, "verified", batch
         )
@@ -331,11 +333,10 @@ class Pipeline:
         with self.sessions() as s:
             if stored := canonical_db.get(s, group):
                 return stored
-        pick = canonical.choose(
-            await self.metadata.browse_group_releases(group),
-            self.canonical_media,
-            self.canonical_countries,
-        )
+        releases = await self.metadata.browse_group_releases(group)
+        if not releases:  # nothing to choose from: use this release now, decide next time
+            return album.release_id
+        pick = canonical.choose(releases, self.canonical_media, self.canonical_countries)
         with self.sessions.begin() as s:
             return canonical_db.store(s, group, pick)
 
