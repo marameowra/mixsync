@@ -305,7 +305,6 @@ class Pipeline:
         if (  # deliberately partial: missing tracks cost nothing when every file is sure
             migrating
             and result.band is Band.REVIEW
-            and not unassigned
             and len(pairs) < len(album.tracks)
             and all_confident(pairs)
         ):
