@@ -30,6 +30,7 @@ dev = [
     "import-linter",
     "hypothesis>=6.168.5",
     "pytest-xdist>=3.8.0",
+    "psycopg[binary]>=3.3.6",
 ]
 
 [build-system]

@@ -3,6 +3,7 @@ import threading
 import time
 from collections.abc import Iterator
 
+import pytest
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
@@ -18,6 +19,8 @@ def test_a_streamed_response_does_not_hold_the_write_lock(
 ) -> None:
     """Every request writes (last_seen_at); a slow body, like an audio preview, must not keep
     that transaction open and lock the worker out."""
+    if not settings.database_url.startswith("sqlite"):
+        pytest.skip("SQLite single-writer lock")
     app = FastAPI()
     app.state.session_factory = sessions
 

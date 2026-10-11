@@ -22,7 +22,7 @@ Persistent state for MixSync: models, migrations, the repository implementations
 ## Conventions
 - **SQLAlchemy 2 typed ORM** (`Mapped[]`, `mapped_column`) + **Alembic**. One migration per schema change; every migration has a working `downgrade`.
 - **Naming convention** on `MetaData` (`ix_`, `uq_`, `fk_`, `ck_`, `pk_`), so constraint names are stable across databases and Alembic autogenerate works.
-- **Postgres-compatible only.** No SQLite-only features in models. CI runs the suite on both databases.
+- **Postgres-compatible only.** No SQLite-only features in models. CI runs the suite on both databases (the `check` job on SQLite, the `postgres` job on `postgres:16`; see [tests/README.md](../../../tests/README.md)).
 - **SQLite pragmas** on every connection: `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL`. Writes that claim jobs use `BEGIN IMMEDIATE`.
 - **Keys:** integer surrogate PKs. MBIDs are stored as `Uuid` columns, unique where they identify a row.
 - **Time:** UTC everywhere, `DateTime(timezone=True)`. Every table has `created_at` / `updated_at`.
