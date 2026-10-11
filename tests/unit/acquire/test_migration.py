@@ -21,9 +21,8 @@ from mixsync.acquire.migration import Migrator
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band
-from mixsync.core.types import ReleaseRef
+from mixsync.core.types import AcoustIdResult, ReleaseRef
 from mixsync.db.auth import create_user
-from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -675,24 +674,117 @@ async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
     assert web.post(f"/migration/{mid}/retry/999", data=form).status_code == 404
 
 
-async def test_retry_refuses_an_album_with_files_in_the_library(rig: Rig) -> None:
-    put_album(rig.root, "Alpha Band/Alpha Album")
+async def test_extra_files_send_a_migrated_album_to_review_and_are_reported(
+    rig: Rig, web: TestClient
+) -> None:
+    d = put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
+    shutil.copy(d / "01 Song One.mp3", d / "03 Extra.mp3")  # the release has two tracks
+    rig.env.acoustid.override["Alpha Album/03 Extra.mp3"] = [AcoustIdResult("aid-x", 0.95, ("x",))]
     rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    (dec,) = decision_rows(rig.env, 2)
+    assert rig.requests()[0].status == "review" and dec.status == "pending_review"
+    assert [Path(x).name for x in dec.evidence["unassigned"]] == ["03 Extra.mp3"]
+    tok = login(web, "root")
+    assert "03 Extra.mp3" in web.get(f"/review/{dec.id}").text
+
+    assert web.post(f"/review/{dec.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await rig.env.drain()
     (req,) = rig.requests()
+    assert (req.status, req.last_error) == (
+        "imported",
+        "1 file(s) not on the release: 03 Extra.mp3",
+    )
+    assert len(library(rig.env)) == 2
+
+
+async def test_retry_of_a_partly_imported_album_imports_the_same_decision_again(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
+    real = rig.env.ops.import_file
+
+    def flaky(src: Path, rel: str, write_tags: Any, batch: str) -> str:
+        if "Two" in src.name:
+            raise OSError("disk full")
+        return real(src, rel, write_tags, batch)
+
+    monkeypatch.setattr(rig.env.ops, "import_file", flaky)
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (req,) = rig.requests()
+    assert req.status == "failed" and len(library(rig.env)) == 1
+
+    monkeypatch.setattr(rig.env.ops, "import_file", real)
+    form = {"csrf_token": login(web, "root")}
+    assert "Retry" in web.get("/migration").text
+    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
+    await rig.env.drain()
+    (req,) = rig.requests()
+    assert (req.status, req.last_error) == ("imported", None) and len(library(rig.env)) == 2
+    assert len(decision_rows(rig.env, 2)) == 1  # the same decision, not a new match
+
+
+async def test_a_skipped_album_can_be_retried(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (d,) = decision_rows(rig.env, 2)
+    form = {"csrf_token": login(web, "root")}
+    web.post(f"/review/{d.id}/reject", data=form)
+    (req,) = rig.requests()
+    assert req.status == "skipped" and "Retry" in web.get("/migration").text
+    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
+    assert rig.requests()[0].status == "verifying"
+
+
+async def test_the_page_reports_every_running_migration_and_all_failures(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "A/One")
+    first = await rig.preflight()
+    rig.confirm(first)
+    await rig.env.drain()
+    second = await rig.preflight()
+    rig.confirm(second)
     with rig.env.sessions.begin() as s:
-        r = s.get(Request, req.id)
-        assert r
-        r.status = "failed"
-        s.add(
-            Track(
-                path="x.mp3",
-                status="verified",
-                batch_id=f"request-{req.id}-decision-1",
-                imported_at=rig.env.clock.now(),
+        for r in s.scalars(select(Request).where(Request.migration_id == first)):
+            r.status, r.last_error = "failed", "first broke"
+        for i in range(120):
+            s.add(
+                Request(
+                    user_id=rig.admin,
+                    release_mbid="",
+                    status="failed",
+                    migration_id=second,
+                    last_error=f"fail {i}",
+                )
             )
-        )
+    login(web, "root")
+    html = web.get("/migration").text
+    assert f"Migration {first}: running" in html and f"Migration {second}: running" in html
+    assert "first broke" in html and "fail 119" in html
+
+
+async def test_discard_is_hidden_while_the_preflight_job_is_live(rig: Rig, web: TestClient) -> None:
+    form = {"csrf_token": login(web, "root")}
+    web.post("/migration/preflight", data=form)
+    assert "Discard preflight" not in web.get("/migration").text
+    (job,) = rig.env.jobs(JobKind.MIGRATE_PREFLIGHT)
     with rig.env.sessions.begin() as s:
-        r = s.get(Request, req.id)
-        assert r
-        assert mig.retry(s, rig.env.clock.now(), r) == "some of its files were imported already"
-    assert rig.requests()[0].status == "failed" and len(rig.env.jobs(JobKind.VERIFY)) == 1
+        j = s.get(Job, job.id)
+        assert j
+        j.status = JobState.FAILED
+    assert "Discard preflight" in web.get("/migration").text
+
+
+async def test_a_migration_album_cannot_be_deleted(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "A/One")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    (req,) = rig.requests()
+    form = {"csrf_token": login(web, "root")}
+    assert web.post(f"/requests/{req.id}/delete", data=form).status_code == 409
+    assert len(rig.requests()) == 1

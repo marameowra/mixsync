@@ -68,19 +68,42 @@ def _checking(db: Db, m: Migration) -> bool:
     )
 
 
+def _preflight_live(db: Db, m: Migration) -> bool:
+    return (
+        db.scalar(
+            select(Job.id)
+            .where(
+                Job.kind == JobKind.MIGRATE_PREFLIGHT,
+                Job.status.in_(LIVE),
+                Job.payload["migration_id"].as_integer() == m.id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 @router.get("")
 def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
-    m = _latest(db)
-    rows = mig.report(db, m) if m and m.status == "running" else []
-    ctx = {
-        "user": user,
-        "m": m,
-        "busy": _busy(db, m),
-        "totals": mig.totals(rows),
-        "failures": [r for r in rows if r["status"] == "failed"][:100],
-        "checking": m is not None and _checking(db, m),
-        "typed_needed": bool(m and m.summary.get("albums", 0) > TYPED_ABOVE),
-    }
+    latest = _latest(db)
+    running = db.scalars(
+        select(Migration).where(Migration.status == "running").order_by(Migration.id.desc())
+    ).all()
+    shown = [latest, *running] if latest and latest.status != "running" else list(running)
+    entries: list[dict[str, Any]] = []
+    for m in shown:
+        rows = mig.report(db, m) if m.status == "running" else []
+        entries.append(
+            {
+                "m": m,
+                "totals": mig.totals(rows),
+                "failures": [r for r in rows if r["status"] in ("failed", "skipped")],
+                "checking": _checking(db, m),
+                "preflight_live": _preflight_live(db, m),
+                "typed_needed": m.summary.get("albums", 0) > TYPED_ABOVE,
+            }
+        )
+    ctx = {"user": user, "migs": entries, "busy": _busy(db, latest)}
     return templates.TemplateResponse(request, "pages/migration.html", ctx)
 
 
@@ -119,16 +142,7 @@ def confirm(
 def discard(migration_id: int, user: Admin, db: Db) -> RedirectResponse:
     """Drop an unconfirmed preflight (or one whose job died) so a new one can start."""
     m = _get(db, migration_id)
-    live = db.scalar(
-        select(Job.id)
-        .where(
-            Job.kind == JobKind.MIGRATE_PREFLIGHT,
-            Job.status.in_(LIVE),
-            Job.payload["migration_id"].as_integer() == m.id,
-        )
-        .limit(1)
-    )
-    ok = ("ready",) if live else ("ready", "preflight")
+    ok = ("ready",) if _preflight_live(db, m) else ("ready", "preflight")
     done = cast(
         CursorResult[Any],
         db.execute(

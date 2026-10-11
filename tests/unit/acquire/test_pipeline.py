@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import create_request
-from mixsync.core.errors import TransientError
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo, TransferStatus
 from mixsync.core.types import AcoustIdResult, ReleaseRef
@@ -740,3 +740,31 @@ async def test_a_verify_superseded_by_a_repick_records_nothing(env: Env) -> None
     before = len(decision_rows(env, 2))
     await env.handlers[JobKind.VERIFY](env.queue.get(old.id))  # the stale re-run
     assert len(decision_rows(env, 2)) == before
+
+
+async def test_a_repick_of_a_nonexistent_release_reopens_the_review(
+    env: Env, web: TestClient
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    ghost = "44444444-4444-4444-4444-444444444444"
+    tok = login(web, "alice")
+    r = web.post(f"/review/{d.id}/repick", data={"csrf_token": tok, "release": ghost})
+    assert r.status_code == 303
+
+    async def missing(mbid: str) -> Any:
+        raise PermanentError("returned 404")
+
+    env.pipeline.metadata.get_release = missing  # type: ignore[method-assign]
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    assert (d.status, d.final_action, d.chosen_release_mbid) == ("pending_review", None, None)
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and (req.status, req.last_error) == (
+            "review",
+            f"release {ghost} not found on MusicBrainz",
+        )

@@ -61,6 +61,12 @@
   <h3>AcoustID</h3>
   <ul>{% for a in ac %}<li>{{ files[loop.index0].get("name", "") if loop.index0 < files|length else "" }}: score {{ a.get("score", "") }}, recordings {{ a.get("recording_ids", [])|join(", ") }}</li>{% endfor %}</ul>
   {% endif %}
+  {% set extra = d.evidence.get("unassigned", []) %}
+  {% if extra %}
+  <h3>Files not on the release</h3>
+  <p>These are not imported by Accept:</p>
+  <ul>{% for x in extra %}<li>{{ x }}</li>{% endfor %}</ul>
+  {% endif %}
   {% set dd = d.evidence.get("duration_deltas", []) %}
   {% if dd %}
   <h3>Duration deltas</h3>

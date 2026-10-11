@@ -241,38 +241,48 @@ def confirm(s: Session, now: datetime, m: Migration) -> int:
 
 
 def retry(s: Session, now: datetime, req: Request) -> str | None:
-    """Send a failed album through matching again, from its first VERIFY: it lands in review
-    (or imports) with fresh choices. Returns why it cannot, else None. Refused once any of its
-    files are in the library, so a retry never imports a file twice."""
-    if s.scalar(select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)):
-        return "some of its files were imported already"
+    """Send a failed or skipped album on again. With files already in the library, import that
+    same decision again (it skips what is in); else re-match from the first VERIFY, so it lands
+    in review (or imports) with fresh choices. Returns why it cannot, else None."""
+    batch = s.scalar(
+        select(Track.batch_id).where(Track.batch_id.like(f"request-{req.id}-decision-%")).limit(1)
+    )
     first = s.scalar(
         select(Job)
         .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
         .order_by(Job.id)
         .limit(1)
     )
-    if first is None:
+    if batch is None and first is None:
         return "it was never matched"
+    values = (
+        {"status": "importing", "last_error": None}
+        if batch
+        else {"status": "verifying", "release_mbid": "", "last_error": None}
+    )
     claimed = cast(
         CursorResult[Any],
         s.execute(
             update(Request)
-            .where(Request.id == req.id, Request.status == "failed")
-            .values(status="verifying", release_mbid="", last_error=None)
+            .where(Request.id == req.id, Request.status.in_(("failed", "skipped")))
+            .values(values)
         ),
     )
     s.expire(req)
     if claimed.rowcount != 1:  # not failed (any more): a double click retries once
         return "it has not failed"
-    enqueue_in(
-        s,
-        now,
-        JobKind.VERIFY,
-        {**first.payload, "release_mbid": None},
-        max_attempts=VERIFY_ATTEMPTS,
-        priority=MIGRATION_PRIORITY,
-    )
+    if batch:  # no idempotency key: the first import's job exists already
+        payload = {"request_id": req.id, "decision_id": int(batch.rpartition("-")[2])}
+        enqueue_in(s, now, JobKind.IMPORT, payload, priority=MIGRATION_PRIORITY)
+    elif first:
+        enqueue_in(
+            s,
+            now,
+            JobKind.VERIFY,
+            {**first.payload, "release_mbid": None},
+            max_attempts=VERIFY_ATTEMPTS,
+            priority=MIGRATION_PRIORITY,
+        )
     return None
 
 
