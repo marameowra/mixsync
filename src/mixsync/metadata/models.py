@@ -92,3 +92,13 @@ class AcoustIdHit(_Raw):
 class AcoustIdResponse(_Raw):
     status: str
     results: list[AcoustIdHit] = []
+
+
+class AcoustIdSubmission(_Raw):
+    id: int
+    status: str = ""
+
+
+class AcoustIdSubmitResponse(_Raw):
+    status: str
+    submissions: list[AcoustIdSubmission] = []

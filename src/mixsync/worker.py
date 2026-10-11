@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
 from mixsync.acquire.merge import Merger
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
@@ -159,7 +160,21 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         fileops,
         settings.path_template,
     )
-    handlers = HANDLERS | pipeline.handlers() | merger.handlers() | rechecker.handlers()
+    submitter = AcoustIdSubmitter(
+        sessions,
+        clock,
+        fileops,
+        fingerprint,
+        AcoustIdClient(polite_client("acoustid", settings, sessions), settings),
+        bool(settings.acoustid_app_key and settings.acoustid_user_key),
+    )
+    handlers = (
+        HANDLERS
+        | pipeline.handlers()
+        | merger.handlers()
+        | rechecker.handlers()
+        | submitter.handlers()
+    )
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, rechecker.start_chains
 
 

@@ -12,7 +12,7 @@ Close the loop for tracks MusicBrainz doesn't have. Help the user add them to MB
 |---|---|
 | `harmony.py` | `harmony_url(store_url) -> str` |
 | `mb_seed.py` | `build_seed(SeedRelease) -> list[tuple[str, str]]` (ordered field → value, repeated keys allowed); rendered by `web` as a form the user clicks, POSTing to `https://musicbrainz.org/release/add` in a new tab |
-| `promote.py` | After the user confirms: submit the fingerprint to AcoustID with the user's key |
+| `promote.py` | (not built here) fingerprint submission lives in `acquire/acoustid_submit.py`, with the deployment-wide key `MIXSYNC_ACOUSTID_USER_KEY` (decided 2026-10-10: one key in env, all submissions under that account; undo does not retract) |
 
 The re-check and the promotion live in `acquire` (`acquire/recheck.py`, run by the Merger as a `promote` plan), because `submit` may not import `acquire` and a promotion reuses the merge plan machinery. A confident match makes a draft plan whose preview shows the tag diff; the user confirms and can undo.
 

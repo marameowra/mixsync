@@ -11,7 +11,7 @@ Adapters for metadata and fingerprint services: **MusicBrainz** (WS/2 JSON), **A
 | File | Contents |
 |---|---|
 | `musicbrainz.py` | `MusicBrainzProvider`: `get_release`, `search_releases` (more lookups, browse and paging land with the watchlist) |
-| `acoustid.py` | `fingerprint(path)` (async `fpcalc -json` subprocess), `AcoustIdClient.lookup(fp)`; `submit` is not built yet |
+| `acoustid.py` | `fingerprint(path)` (async `fpcalc -json` subprocess), `AcoustIdClient.lookup(fp)`; `submit(items)`, `submission_status(ids)` |
 | `coverart.py` | Front-cover URL and download for a release, falling back to the release group |
 | `models.py` | pydantic models for the raw API JSON, mapped to `core` types at the edge |
 
@@ -39,7 +39,7 @@ browse_release_groups(artist_mbid) -> list[ReleaseGroupRef]                  # f
 
   Verify the range syntax against the live API when building the MusicBrainz client. The search index can lag the database slightly; the watchlist overlaps its `since` window by 7 days to cover that.
 - **No MusicBrainz API writes.** Edits go through release-editor seeding in the browser ([submit](../submit/README.md)).
-- AcoustID submissions use the **user's** key from `user_links`, never the app key.
+- AcoustID submissions use the deployment-wide `Settings.acoustid_user_key` (`MIXSYNC_ACOUSTID_USER_KEY`), not a per-user key; `AcoustIdClient.submit` / `submission_status` implement them.
 - Raw API JSON is validated with pydantic at the edge. Unknown fields are ignored, never trusted.
 - `Settings.acoustid_app_key` (`MIXSYNC_ACOUSTID_APP_KEY`) is required for lookups. An optional `Settings.mb_base_url` points at a local MusicBrainz mirror.
 

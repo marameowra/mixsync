@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.acoustid_submit import enqueue_submit
 from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
 from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock
@@ -182,6 +183,8 @@ class Merger:
         with self.sessions.begin() as s:
             s.get_one(Plan, plan_id).status = "done"
             enqueue_rescan(s, self.clock.now())
+            if promote:  # AcoustID learns the new recording links
+                enqueue_submit(s, self.clock.now(), plan_id)
 
     def _fail(self, plan_id: int, error: str) -> None:
         with self.sessions.begin() as s:

@@ -12,6 +12,8 @@ class JobKind(StrEnum):
     MERGE = "merge"
     UNDO_MERGE = "undo_merge"
     RECHECK = "recheck"
+    ACOUSTID_SUBMIT = "acoustid_submit"
+    ACOUSTID_STATUS = "acoustid_status"
 
 
 class JobState(StrEnum):
