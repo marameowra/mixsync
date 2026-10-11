@@ -250,6 +250,9 @@ class Pipeline:
         """AcoustID is always consulted: if it is unreachable the job retries, never imports.
         A migrated album has no release yet: `_identify` picks one."""
         p = job.payload
+        with self.sessions() as s:
+            if _stale(s, job, self._request(s, job)):  # before spending any rate-limited calls
+                return
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
         files: list[FileTrack] = []
@@ -291,7 +294,7 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status != "verifying":  # a re-run after this job already recorded its decision
+            if _stale(s, job, req):
                 return
             if migrating:
                 req.release_mbid = p["release_mbid"] or album.release_id or ""
@@ -507,6 +510,20 @@ class Pipeline:
 
     async def rescan(self, _job: JobRecord) -> None:
         await self.target.rescan()
+
+
+def _stale(s: Session, job: JobRecord, req: Request) -> bool:
+    """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
+    newer = s.scalar(
+        select(Job.id)
+        .where(
+            Job.kind == JobKind.VERIFY,
+            Job.id > job.id,
+            Job.payload["request_id"].as_integer() == req.id,
+        )
+        .limit(1)
+    )
+    return req.status != "verifying" or newer is not None
 
 
 def _aware(t: datetime, now: datetime) -> datetime:

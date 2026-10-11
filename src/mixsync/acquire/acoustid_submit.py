@@ -74,7 +74,10 @@ class AcoustIdSubmitter:
             return
         ids = await self.acoustid.submit(items)
         log.info("plan %s: submitted %s fingerprints to AcoustID", plan_id, len(items))
-        self._enqueue_poll(plan_id, ids, 0)
+        try:
+            self._enqueue_poll(plan_id, ids, 0)
+        except Exception:  # the poll only logs; a retry here would submit the batch twice
+            log.warning("plan %s: AcoustID status poll not scheduled", plan_id, exc_info=True)
 
     def _enqueue_poll(self, plan_id: int, ids: list[int], attempt: int) -> None:
         now = self.clock.now()
