@@ -78,7 +78,8 @@
 {% if d.status == "pending_review" %}
 <section>
   <h2>Actions</h2>
-  <form method="post" action="/review/{{ d.id }}/accept">{{ forms.csrf() }}<button type="submit">Accept</button></form>
+  {% if d.release_mbid %}<form method="post" action="/review/{{ d.id }}/accept">{{ forms.csrf() }}<button type="submit">Accept</button></form>
+  {% else %}<p>No MusicBrainz release was found: pick one or mark the album unverified.</p>{% endif %}
   <form method="post" action="/review/{{ d.id }}/reject">{{ forms.csrf() }}<button type="submit">Reject</button></form>
   <form method="post" action="/review/{{ d.id }}/repick">
     {{ forms.csrf() }}

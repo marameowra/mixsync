@@ -142,6 +142,16 @@ def discard(migration_id: int, user: Admin, db: Db) -> RedirectResponse:
     return RedirectResponse("/migration", status_code=303)
 
 
+@router.post("/{migration_id}/retry/{request_id}")
+def retry(migration_id: int, request_id: int, user: Admin, db: Db) -> RedirectResponse:
+    req = db.get(AlbumRequest, request_id)
+    if req is None or req.migration_id != _get(db, migration_id).id:
+        raise HTTPException(404, "no such album in this migration")
+    if why := mig.retry(db, datetime.now(UTC), req):
+        raise HTTPException(409, f"cannot retry: {why}")
+    return RedirectResponse("/migration", status_code=303)
+
+
 @router.post("/{migration_id}/check")
 def check(migration_id: int, user: Admin, db: Db) -> RedirectResponse:
     m = _get(db, migration_id)

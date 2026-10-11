@@ -23,6 +23,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band
 from mixsync.core.types import ReleaseRef
 from mixsync.db.auth import create_user
+from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -641,3 +642,57 @@ async def test_a_tag_that_is_not_a_uuid_goes_straight_to_search(rig: Rig) -> Non
     await rig.env.drain()
     assert rig.meta.searches == [("Alpha Band", "Alpha Album", 5)]
     assert "not-a-uuid" not in rig.meta.calls
+
+
+async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (d,) = decision_rows(rig.env, 2)
+    form = {"csrf_token": login(web, "root")}
+    page = web.get(f"/review/{d.id}").text
+    assert f'action="/review/{d.id}/accept"' not in page and "No MusicBrainz release" in page
+    assert web.post(f"/review/{d.id}/accept", data=form).status_code == 409
+    assert decision_rows(rig.env, 2)[0].status == "pending_review"  # still actionable
+
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:  # how the album got stuck before the guard
+        r = s.get(Request, req.id)
+        assert r
+        r.status, r.last_error = "failed", "no release was found"
+    assert "Retry" in web.get("/migration").text
+    url = f"/migration/{mid}/retry/{req.id}"
+    assert web.post(url, data=form).status_code == 303
+    assert web.post(url, data=form).status_code == 409  # not failed any more: once only
+    assert rig.requests()[0].status == "verifying"
+    assert len(rig.env.jobs(JobKind.VERIFY)) == 2
+    await rig.env.drain()  # matched again: a fresh review item to repick or mark unverified
+    assert rig.requests()[0].status == "review"
+    assert [x.status for x in decision_rows(rig.env, 2)] == ["pending_review", "pending_review"]
+    assert web.post(f"/migration/{mid}/retry/999", data=form).status_code == 404
+
+
+async def test_retry_refuses_an_album_with_files_in_the_library(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.confirm(await rig.preflight())
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:
+        r = s.get(Request, req.id)
+        assert r
+        r.status = "failed"
+        s.add(
+            Track(
+                path="x.mp3",
+                status="verified",
+                batch_id=f"request-{req.id}-decision-1",
+                imported_at=rig.env.clock.now(),
+            )
+        )
+    with rig.env.sessions.begin() as s:
+        r = s.get(Request, req.id)
+        assert r
+        assert mig.retry(s, rig.env.clock.now(), r) == "some of its files were imported already"
+    assert rig.requests()[0].status == "failed" and len(rig.env.jobs(JobKind.VERIFY)) == 1

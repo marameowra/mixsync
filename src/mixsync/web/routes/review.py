@@ -101,6 +101,8 @@ def _act(
 
 @router.post("/{decision_id}/accept")
 def accept(decision_id: int, user: User, db: Db) -> RedirectResponse:
+    if not decision_for(db, user, decision_id).release_mbid:  # nothing matched: nothing to import
+        raise HTTPException(409, "no release was found; pick one or mark unverified")
     return _act(db, user, decision_id, "accept")
 
 
