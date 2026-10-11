@@ -7,6 +7,7 @@ current job's id, so a handler re-run after a crash never forks the chain.
 
 import asyncio
 import logging
+import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
@@ -316,11 +317,11 @@ class Pipeline:
         the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
         like = likelies(paths)
         albums: list[AlbumInfo] = []
-        if like.release_id:
+        if tagged := _uuid(like.release_id):
             try:
-                albums = [await self.metadata.get_release(like.release_id)]
+                albums = [await self.metadata.get_release(tagged)]
             except PermanentError:  # a stale or unknown id: search instead (transient errors retry)
-                log.info("tagged release %s is not on MusicBrainz", like.release_id)
+                log.info("tagged release %s is not on MusicBrainz", tagged)
         title = like.album or Path(folder).name  # untagged files: the folder name is all we have
         if not albums and (like.artist or title):
             refs = await self.metadata.search_releases(
@@ -535,6 +536,13 @@ def file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTr
         recording_id=t.get("musicbrainz_trackid"),
         acoustid=acoustid,
     )
+
+
+def _uuid(v: str | None) -> str | None:
+    try:
+        return str(uuid.UUID(v)) if v else None
+    except ValueError:
+        return None  # not an id: a stray tag must not reach the API
 
 
 def _int(v: str | None) -> int | None:

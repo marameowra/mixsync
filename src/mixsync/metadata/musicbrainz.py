@@ -85,11 +85,14 @@ class MusicBrainzProvider:
         return _album(MbRelease.model_validate(data))
 
     async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
+        terms = [f"{k}:{_quote(v)}" for k, v in (("release", album), ("artist", artist)) if v]
+        if not terms:  # an empty query is no question
+            return []
         data = await get_json(
             self._client,
             f"{self._base}/release",
             {
-                "query": f"release:{_quote(album)} AND artist:{_quote(artist)}",
+                "query": " AND ".join(terms),
                 "limit": limit,
                 "fmt": "json",
             },

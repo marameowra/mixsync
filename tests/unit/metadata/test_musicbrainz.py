@@ -94,6 +94,17 @@ async def test_search(make_client: Make) -> None:
     assert (req.url.params["limit"], req.url.params["fmt"]) == ("3", "json")
 
 
+async def test_search_omits_empty_fields_and_skips_an_empty_query(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    body = (MB / "search_releases.json").read_text()
+    provider = MusicBrainzProvider(make_client("musicbrainz", serve(body, seen)))
+    await provider.search_releases("", "Kid A")
+    await provider.search_releases("Radiohead", "")
+    assert [r.url.params["query"] for r in seen] == ['release:"Kid A"', 'artist:"Radiohead"']
+    assert await provider.search_releases("", "") == []
+    assert len(seen) == 2  # no request for the empty one
+
+
 async def test_error_mapping(make_client: Make) -> None:
     def status(code: int) -> Callable[[httpx.Request], httpx.Response]:
         return lambda _r: httpx.Response(code)

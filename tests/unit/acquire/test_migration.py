@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -22,7 +23,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band
 from mixsync.core.types import ReleaseRef
 from mixsync.db.auth import create_user
-from mixsync.db.models.work import Migration, Request
+from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 
@@ -567,3 +568,68 @@ async def test_discard_frees_a_ready_preflight_but_not_a_running_migration(
     rig.confirm(new)
     assert web.post(f"/migration/{new}/discard", data=form).status_code == 409  # running
     assert rig.requests()
+
+
+async def test_discard_a_preflight_whose_job_failed(rig: Rig, web: TestClient) -> None:
+    form = {"csrf_token": login(web, "root")}
+    assert web.post("/migration/preflight", data=form).status_code == 303
+    (job,) = rig.env.jobs(JobKind.MIGRATE_PREFLIGHT)
+    with rig.env.sessions.begin() as s:
+        j = s.get(Job, job.id)
+        assert j
+        j.status = JobState.FAILED
+    mid = job.payload["migration_id"]
+    assert web.post(f"/migration/{mid}/discard", data=form).status_code == 303
+    assert rig.get(mid).status == "cancelled"
+    assert web.post("/migration/preflight", data=form).status_code == 303
+
+
+def test_scan_lists_what_it_cannot_follow_or_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "old"
+    put_album(root, "A/One")
+    (root / "A/One/link.mp3").symlink_to(root / "A/One/01 Song One.mp3")
+    (root / "linkdir").symlink_to(root / "A")
+    (root / "A/One/gone.mp3").write_text("x")
+    locked = root / "locked"
+    locked.mkdir()
+    (locked / "x.mp3").write_text("x")
+    locked.chmod(0)
+    real = os.lstat
+
+    def lstat(p: Any, **kw: Any) -> os.stat_result:
+        if Path(p).name == "gone.mp3":
+            raise FileNotFoundError(2, "No such file or directory")
+        return real(p, **kw)
+
+    monkeypatch.setattr(mig.os, "lstat", lstat)
+    try:
+        found = mig.scan(root, tmp_path / "out")
+    finally:
+        locked.chmod(0o755)
+    notes = sorted(found["unreadable"])
+    assert "A/One/link.mp3: symlink skipped" in notes
+    assert "linkdir: symlink skipped" in notes
+    assert "A/One/gone.mp3: No such file or directory" in notes
+    if os.geteuid() != 0:  # root reads any folder
+        assert "locked: cannot read folder" in notes
+    manifest = [
+        json.loads(x)["path"] for x in (tmp_path / "out/manifest.jsonl").read_text().splitlines()
+    ]
+    assert sorted(manifest) == [
+        "A/One/01 Song One.mp3",
+        "A/One/02 Song Two.mp3",
+    ]  # nothing followed
+    # the check does not crash on an entry that vanishes mid-walk
+    result = mig.compare(root, tmp_path / "out/manifest.jsonl")
+    assert result["changed"] == [] and result["missing"] == []
+
+
+async def test_a_tag_that_is_not_a_uuid_goes_straight_to_search(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", mbid="not-a-uuid")
+    rig.meta.refs = [ref(ALBUM)]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    assert rig.meta.searches == [("Alpha Band", "Alpha Album", 5)]
+    assert "not-a-uuid" not in rig.meta.calls

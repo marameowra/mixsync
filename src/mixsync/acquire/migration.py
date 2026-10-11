@@ -52,13 +52,31 @@ class Group:
     files: list[tuple[str, int]]  # path relative to the folder, size
 
 
-def _files(root: Path) -> Iterator[Path]:
-    """Every regular file, whatever its type: the byte-identical check covers the whole tree."""
-    for base, dirs, names in os.walk(root):
+def _files(root: Path, skipped: list[str]) -> Iterator[Path]:
+    """Every regular file, whatever its type: the byte-identical check covers the whole tree.
+    Symlinks are never followed; what cannot be read or is not a regular file goes in `skipped`
+    as "<relative path>: <why>"."""
+
+    def onerror(e: OSError) -> None:
+        skipped.append(f"{Path(e.filename or root).relative_to(root)}: cannot read folder")
+
+    for base, dirs, names in os.walk(root, onerror=onerror):
         dirs.sort()
+        for d in dirs:
+            if (p := Path(base) / d).is_symlink():
+                skipped.append(f"{p.relative_to(root)}: symlink skipped")
         for n in sorted(names):
-            if stat.S_ISREG(os.lstat(p := Path(base) / n).st_mode):
+            p = Path(base) / n
+            try:
+                mode = os.lstat(p).st_mode
+            except OSError as e:
+                skipped.append(f"{p.relative_to(root)}: {e.strerror or e}")
+                continue
+            if stat.S_ISREG(mode):
                 yield p
+            else:
+                why = "symlink skipped" if stat.S_ISLNK(mode) else "not a regular file, skipped"
+                skipped.append(f"{p.relative_to(root)}: {why}")
 
 
 def _hash(path: Path) -> tuple[int, str]:
@@ -82,7 +100,7 @@ def scan(root: Path, out: Path) -> dict[str, Any]:
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
     count = total = 0
     with (out / "manifest.jsonl").open("w") as manifest:
-        for path in _files(root):
+        for path in _files(root, unreadable):
             rel = path.relative_to(root)
             try:
                 size, digest = _hash(path)
@@ -136,7 +154,7 @@ def _manifest(path: Path) -> dict[str, tuple[int, str]]:
 def compare(root: Path, manifest: Path) -> dict[str, Any]:
     old, now = _manifest(manifest), set[str]()
     changed: list[str] = []
-    for path in _files(root):
+    for path in _files(root, []):  # what vanished or cannot be read shows as missing or changed
         rel = str(path.relative_to(root))
         now.add(rel)
         try:
