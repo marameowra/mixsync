@@ -15,8 +15,8 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0008_migrations"
+    assert _version(settings) == "0009_watchlist"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0008_migrations"
+    assert _version(settings) == "0009_watchlist"

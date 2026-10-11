@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Follow - MixSync{% endblock %}
+{% block content %}
+<h1>Follow a {{ kind }}</h1>
+{% if results %}
+<ul>
+  {% for r in results %}
+  <li>
+    <form method="post" action="/watchlist/follow">
+      {{ forms.csrf() }}
+      <input type="hidden" name="kind" value="{{ kind }}">
+      <input type="hidden" name="mbid" value="{{ r.mbid }}">
+      <input type="hidden" name="name" value="{{ r.name }}">
+      {{ r.name }}{% if r.disambiguation %} ({{ r.disambiguation }}){% endif %}
+      <button type="submit">Follow</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Nothing found for "{{ q }}".</p>
+{% endif %}
+<p><a href="/watchlist">Back</a></p>
+{% endblock %}
