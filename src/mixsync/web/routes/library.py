@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -81,6 +82,8 @@ Item = tuple[Track, dict[str, str]]
 
 
 def _read_unverified(request: Request, db: Session) -> list[Item]:
+    # shortcut: reads the tags of every unverified file per request; move the album fields
+    # into DB columns when unverified sets get large.
     rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
     root = Path(request.app.state.settings.data_dir) / "library"
     items: list[Item] = []
@@ -92,14 +95,19 @@ def _read_unverified(request: Request, db: Session) -> list[Item]:
     return items
 
 
-def _album_key(tg: dict[str, str]) -> tuple[str, str]:
-    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", "")
+def _year(tg: dict[str, str]) -> str:
+    y = tg.get("date", "")[:4]
+    return y if y.isascii() and y.isdigit() and y != "0000" else ""
+
+
+def _album_key(tg: dict[str, str]) -> tuple[str, str, str]:
+    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), _year(tg)
 
 
 @router.get("/unverified")
 def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
     items = _read_unverified(request, db)
-    albums: dict[tuple[str, str], list[Item]] = {}
+    albums: dict[tuple[str, str, str], list[Item]] = {}
     for it in items:  # grouped by tags, not import batch: a batch can mix albums
         albums.setdefault(_album_key(it[1]), []).append(it)
     ctx = {"user": user, "count": len(items), "albums": albums}
@@ -107,48 +115,67 @@ def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
 
 
 def _num(v: str | None, default: int) -> int:
-    return int(v) if v and v.isdigit() else default
+    return int(v) if v and v.isascii() and v.isdigit() else default
 
 
-def _seed_release(request: Request, items: list[Item], album: str, artist: str) -> SeedRelease:
+def _seed_release(
+    request: Request, items: list[Item], album: str, artist: str, year: str
+) -> SeedRelease:
     root = Path(request.app.state.settings.data_dir) / "library"
     discs: dict[int, list[Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
     mediums: list[SeedMedium] = []
     for d in sorted(discs):
+        disc = sorted(discs[d], key=lambda i: (_num(i[1].get("tracknumber"), 10**6), i[0].path))
+        nums = [_num(tg.get("tracknumber"), 0) for _, tg in disc]
+        nxt = max(nums)  # unnumbered tracks continue after the highest number (1.. if none)
         out: list[SeedTrack] = []
-        for pos, (t, tg) in enumerate(
-            sorted(discs[d], key=lambda i: _num(i[1].get("tracknumber"), 10**6)), 1
-        ):
+        for t, tg in disc:
             try:
                 ms = tags.length_ms(root / t.path)
             except Exception:  # unreadable audio: seed without a length
                 ms = None
+            if not tg.get("tracknumber"):
+                nxt += 1
             a = tg.get("artist", "")
             out.append(
                 SeedTrack(
-                    tg.get("tracknumber") or str(pos),
+                    tg.get("tracknumber") or str(nxt),
                     tg.get("title") or Path(t.path).stem,
                     ms,
                     [Credit(a)] if a and a != artist else [],
                 )
             )
         mediums.append(SeedMedium(out))
-    date = next((tg["date"] for _, tg in items if tg.get("date")), "")
-    year = int(date[:4]) if date[:4].isdigit() else None
-    return SeedRelease(album, [Credit(artist)] if artist else [], mediums, year=year)
+    return SeedRelease(
+        album, [Credit(artist)] if artist else [], mediums, year=int(year) if year else None
+    )
 
 
 @router.get("/unverified/submit")
 def unverified_submit(
-    request: Request, user: User, db: Db, album: str, albumartist: str = "", store_url: str = ""
+    request: Request,
+    user: User,
+    db: Db,
+    album: str,
+    albumartist: str = "",
+    year: str = "",
+    store_url: str = "",
 ) -> HTMLResponse:
     items = [
-        it for it in _read_unverified(request, db) if _album_key(it[1]) == (albumartist, album)
+        it
+        for it in _read_unverified(request, db)
+        if _album_key(it[1]) == (albumartist, album, year)
     ]
     if not items:
         raise HTTPException(404, "no unverified tracks for that album")
+    seen = Counter(
+        (_num(tg.get("discnumber"), 1), tg["tracknumber"])
+        for _, tg in items
+        if tg.get("tracknumber")
+    )
+    dupes = sorted(f"disc {d} track {n}" for (d, n), c in seen.items() if c > 1)
     harmony, error = None, None
     if store_url.strip():
         try:
@@ -159,11 +186,13 @@ def unverified_submit(
         "user": user,
         "album": album,
         "albumartist": albumartist,
+        "year": year,
+        "dupes": dupes,
         "store_url": store_url,
         "harmony": harmony,
         "error": error,
         "seed_url": SEED_URL,
-        "seed": build_seed(_seed_release(request, items, album, albumartist)),
+        "seed": build_seed(_seed_release(request, items, album, albumartist, year)),
     }
     return templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
 

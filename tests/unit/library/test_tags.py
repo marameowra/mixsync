@@ -144,3 +144,9 @@ def test_sk_q08_wrong_source_tags_do_not_survive_import(fmt: str, make_src: Make
 def test_length_ms(fmt: str, make_src: MakeSrc) -> None:
     ms = tags.length_ms(make_src(fmt))
     assert ms is not None and ms > 0
+
+
+def test_length_ms_unrecognised_file_is_none(tmp_path: Path) -> None:
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"not audio")
+    assert tags.length_ms(f) is None

@@ -32,6 +32,7 @@ def test_single_disc_full_snapshot():
     assert build_seed(r) == [
         ("name", "Album"),
         ("artist_credit.names.0.name", "Artist"),
+        ("artist_credit.names.0.artist.name", "Artist"),
         ("type", "Album"),
         ("status", "Official"),
         ("events.0.date.year", "2020"),
@@ -56,6 +57,7 @@ def test_minimal_omits_unknowns_and_missing_durations():
     assert out == [
         ("name", "A"),
         ("artist_credit.names.0.name", "Artist"),
+        ("artist_credit.names.0.artist.name", "Artist"),
         ("mediums.0.track.0.number", "1"),
         ("mediums.0.track.0.name", "T"),
         ("edit_note", "Seeded by MixSync from local files."),
@@ -67,8 +69,19 @@ def test_multi_disc_indexes():
     assert ("mediums.1.track.0.name", "b") in build_seed(SeedRelease("A", A, m))
 
 
+def test_empty_mediums_are_skipped_keeping_indexes_contiguous():
+    m = [SeedMedium([]), SeedMedium([SeedTrack("1", "b")], "CD"), SeedMedium([])]
+    out = build_seed(SeedRelease("A", A, m))
+    assert ("mediums.0.format", "CD") in out and ("mediums.0.track.0.name", "b") in out
+    assert not any(k.startswith("mediums.1") for k, _ in out)
+
+
 def test_unicode_passthrough():
-    out = dict(build_seed(SeedRelease("Ünï — 日本語", [Credit("Björk")], [SeedMedium([])])))
+    out = dict(
+        build_seed(
+            SeedRelease("Ünï — 日本語", [Credit("Björk")], [SeedMedium([SeedTrack("1", "t")])])
+        )
+    )
     assert out["name"] == "Ünï — 日本語"
     assert out["artist_credit.names.0.name"] == "Björk"
 
@@ -80,6 +93,7 @@ def test_various_artists_and_track_credits_with_join_phrase():
     assert ("mediums.0.track.0.artist_credit.names.0.name", "X") in out
     assert ("mediums.0.track.0.artist_credit.names.0.join_phrase", " feat. ") in out
     assert ("mediums.0.track.0.artist_credit.names.1.name", "Y") in out
+    assert ("mediums.0.track.0.artist_credit.names.1.artist.name", "Y") in out
     assert not any(k.startswith("mediums.0.track.1.artist_credit") for k, _ in out)
 
 

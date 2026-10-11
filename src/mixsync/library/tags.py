@@ -165,7 +165,7 @@ def read_fields(path: Path) -> dict[str, str]:
 
 def length_ms(path: Path) -> int | None:
     """Audio length in milliseconds, or None if the file reports none."""
-    length = getattr(_sniff(path).info, "length", 0)
+    length = getattr(getattr(_sniff(path), "info", None), "length", 0)
     return round(length * 1000) if length else None
 
 

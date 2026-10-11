@@ -2,10 +2,10 @@
 {% block title %}Unverified - MixSync{% endblock %}
 {% block content %}
 <h1>Unverified tracks ({{ count }})</h1>
-{% for (artist, album), items in albums.items() %}
-<h2>{{ artist or "(no artist)" }} - {{ album or "(no album tag)" }}</h2>
+{% for (artist, album, year), items in albums.items() %}
+<h2>{{ artist or "(no artist)" }} - {{ album or "(no album tag)" }}{% if year %} ({{ year }}){% endif %}</h2>
 {% if album %}
-<p><a href="/library/unverified/submit?{{ {'albumartist': artist, 'album': album}|urlencode }}">Submit to MusicBrainz</a></p>
+<p><a href="/library/unverified/submit?{{ {'albumartist': artist, 'album': album, 'year': year}|urlencode }}">Submit to MusicBrainz</a></p>
 {% endif %}
 <div class="scroll">
 <table>

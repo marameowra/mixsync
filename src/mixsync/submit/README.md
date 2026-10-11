@@ -11,7 +11,7 @@ Close the loop for tracks MusicBrainz doesn't have. Help the user add them to MB
 | File | Contents |
 |---|---|
 | `harmony.py` | `harmony_url(store_url) -> str` |
-| `mb_seed.py` | `build_seed(SeedRelease) -> list[tuple[str, str]]` (ordered field → value, repeated keys allowed); rendered by `web` as an auto-submitting form POSTing to `https://musicbrainz.org/release/add` in a new tab |
+| `mb_seed.py` | `build_seed(SeedRelease) -> list[tuple[str, str]]` (ordered field → value, repeated keys allowed); rendered by `web` as a form the user clicks, POSTing to `https://musicbrainz.org/release/add` in a new tab |
 | `recheck.py` | Job `submit.recheck(track_id)`: search MB + AcoustID; a confident match → a "Promote to verified" review item with a tag diff |
 | `promote.py` | After the user confirms: retag through `library`, set `status=verified`, then submit the fingerprint to AcoustID with the user's key |
 

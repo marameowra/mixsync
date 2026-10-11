@@ -51,7 +51,7 @@ def _credits(prefix: str, credits: Sequence[Credit]) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for i, c in enumerate(credits):
         p = f"{prefix}.names.{i}"
-        out.append((f"{p}.name", c.name))
+        out += [(f"{p}.name", c.name), (f"{p}.artist.name", c.name)]  # as MB's own example
         if c.join_phrase:
             out.append((f"{p}.join_phrase", c.join_phrase))
     return out
@@ -73,7 +73,7 @@ def build_seed(r: SeedRelease) -> list[tuple[str, str]]:
         f.append(("labels.0.catalog_number", r.catalog_number))
     if r.barcode:
         f.append(("barcode", r.barcode))
-    for m, medium in enumerate(r.mediums):
+    for m, medium in enumerate(x for x in r.mediums if x.tracks):  # indexes stay contiguous
         if medium.format:
             f.append((f"mediums.{m}.format", medium.format))
         for t, tr in enumerate(medium.tracks):
