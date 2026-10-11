@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mixsync.core.config import Settings
-from mixsync.db.engine import make_engine, make_session_factory
+from mixsync.db.engine import make_engine, make_session_factory, user_sessions
 from mixsync.web.csrf import check_csrf
 from mixsync.web.routes import auth, home, library, media, migration, requests, review, watchlist
 from mixsync.web.templating import templates
@@ -18,7 +18,9 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="mixsync", dependencies=[Depends(check_csrf)])
     app.state.settings = settings or Settings()
-    app.state.session_factory = session_factory or make_session_factory(make_engine())
+    app.state.session_factory = user_sessions(
+        session_factory or make_session_factory(make_engine())
+    )
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
 
     @app.exception_handler(StarletteHTTPException)

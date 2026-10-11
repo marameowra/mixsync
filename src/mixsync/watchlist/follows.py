@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job
-from mixsync.db.queue import enqueue_in
+from mixsync.db.queue import USER_PRIORITY, enqueue_in
 
 KINDS = ("artist", "label")
 RELEASE_TYPES = ("album", "ep", "single", "compilation", "live")
@@ -46,7 +46,7 @@ def _run_now(s: Session, now: datetime, e: WatchedEntity) -> None:
                 Job.status.in_((JobState.QUEUED, JobState.RETRY_WAIT)),
                 Job.payload["entity_id"].as_integer() == e.id,
             )
-            .values(run_after=now)
+            .values(run_after=now, priority=USER_PRIORITY if s.info.get("user") else Job.priority)
         ),
     )
     if moved.rowcount == 0:

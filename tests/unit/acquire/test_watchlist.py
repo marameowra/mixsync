@@ -14,9 +14,11 @@ from sqlalchemy import func, select
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.db.auth import create_user
+from mixsync.db.engine import user_sessions
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
+from mixsync.db.queue import enqueue_in
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.watchlist import follows
@@ -765,3 +767,21 @@ async def test_a_running_poll_elsewhere_does_not_stop_the_successor(env: Env) ->
         )
     await poll(env, FakeWatch(), eid)
     assert len([j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]) == 1
+
+
+async def test_check_now_runs_before_a_backlog_of_searches(env: Env) -> None:
+    fid = follow(env)
+    eid = entity_id(env, fid)
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job)):  # the follow's own check is days away
+            j.run_after = env.clock.now() + timedelta(days=3)
+        for _ in range(3):  # a catalogue pick queued these first
+            enqueue_in(s, env.clock.now(), JobKind.SEARCH, {})
+    with user_sessions(env.sessions).begin() as s:  # the button, from a web request
+        e = s.get(WatchedEntity, eid)
+        assert e and follows.check_now(s, env.clock.now(), e)
+        enqueue_in(s, env.clock.now(), JobKind.SEARCH, {"request_id": 1})  # a new request
+    first, second, third = (env.queue.claim("w") for _ in range(3))
+    assert first and first.kind == JobKind.WATCHLIST_POLL
+    assert second and second.payload == {"request_id": 1}
+    assert third and third.kind == JobKind.SEARCH and third.payload == {}

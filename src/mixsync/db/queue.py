@@ -241,6 +241,9 @@ class JobQueue:
         return status
 
 
+USER_PRIORITY = -10  # a job a UI click queued runs before any background work
+
+
 def enqueue_in(
     s: Session,
     now: datetime,
@@ -256,6 +259,8 @@ def enqueue_in(
     changes. With an existing idempotency_key, adds nothing."""
     if idempotency_key and s.scalar(select(Job.id).where(Job.idempotency_key == idempotency_key)):
         return
+    if s.info.get("user"):  # a web request's session, see db.engine.user_sessions
+        priority = min(priority, USER_PRIORITY)
     s.add(
         Job(
             kind=kind,
