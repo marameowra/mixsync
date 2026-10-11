@@ -153,6 +153,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
         fileops,
         settings.path_template,
     )
+    rechecker.start_chains()
     handlers = HANDLERS | pipeline.handlers() | merger.handlers() | rechecker.handlers()
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers
 

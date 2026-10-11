@@ -6,6 +6,7 @@ user confirms it and the Merger runs it, so nothing changes on disk without them
 confident match a background check schedules the next one, backing off (see requests.py).
 """
 
+import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.merge import live_job
 from mixsync.acquire.pipeline import Handler, acoustid_id, file_track, likelies
-from mixsync.acquire.requests import AlbumKey, enqueue_recheck, profile_for
+from mixsync.acquire.requests import AlbumKey, album_key, enqueue_recheck, profile_for
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, Band, FileTrack, Profile
@@ -30,6 +31,8 @@ from mixsync.library.fragmentation import row_dict
 from mixsync.library.importer import render_path, tagset_for
 from mixsync.match.profiles import BALANCED
 from mixsync.match.scorer import assign_tracks, score_files
+
+log = logging.getLogger(__name__)
 
 SEARCH_LIMIT, MAX_RELEASES = 5, 3
 
@@ -47,15 +50,6 @@ def read_unverified(db: Session, root: Path) -> list[Item]:
         except Exception:  # file moved or unreadable: the path alone still identifies it
             items.append((t, {}))
     return items
-
-
-def _year(tg: dict[str, str]) -> str:
-    y = tg.get("date", "")[:4]
-    return y if y.isascii() and y.isdigit() and y != "0000" else ""
-
-
-def album_key(tg: dict[str, str]) -> AlbumKey:
-    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), _year(tg)
 
 
 def group(items: list[Item]) -> dict[AlbumKey, list[Item]]:
@@ -124,59 +118,95 @@ class Rechecker:
         items = [i for i in items if self.fileops.has(i[0].path)]
         if not items or not key[1]:  # nothing unverified left: the chain ends
             return
-        found = await self._match(key, items, profile)
-        with self.sessions.begin() as s:
-            if found:
-                self._draft(s, items, *found)
-            elif uid is None:  # a user's check leaves the background schedule alone
-                chain = f"recheck:next:{job.id}"
-                now = self.clock.now()
-                enqueue_recheck(s, now, key, None, attempt=attempt + 1, chain_key=chain)
+
+        def next_check() -> None:
+            # A user's check leaves the background schedule alone. The key makes a retry of
+            # this job (or this call after a failure) add nothing.
+            if uid is None:
+                with self.sessions.begin() as s:
+                    chain = f"recheck:next:{job.id}"
+                    enqueue_recheck(
+                        s, self.clock.now(), key, None, attempt=attempt + 1, chain_key=chain
+                    )
+
+        try:
+            found = await self._match(key, items, profile)
+        except BaseException:  # a failing run must not end the background chain
+            next_check()
+            raise
+        done = False
+        if found:
+            with self.sessions.begin() as s:
+                done = self._draft(s, items, *found)
+        if not done:  # no match, or some files stay unverified: look again later
+            next_check()
 
     async def _match(
         self, key: AlbumKey, items: list[Item], profile: Profile
-    ) -> tuple[AlbumInfo, list[FileTrack]] | None:
-        """The best of the top releases, if it is confident enough to promote to."""
+    ) -> tuple[AlbumInfo, dict[int, FileTrack]] | None:
+        """The best of the top releases, if it is confident enough to promote to. A file that
+        cannot be fingerprinted or looked up is skipped; none left means no match."""
         refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT)
         albums = [await self.metadata.get_release(r.release_id) for r in refs[:MAX_RELEASES]]
         if not albums:
             return None
-        files: list[FileTrack] = []
+        files: dict[int, FileTrack] = {}  # by track id
         for t, _ in items:
             path = self.fileops.library / t.path
-            fp = await self.fingerprint(path)
-            files.append(file_track(path, fp.duration, tuple(await self.acoustid.lookup(fp))))
+            try:
+                fp = await self.fingerprint(path)
+                files[t.id] = file_track(path, fp.duration, tuple(await self.acoustid.lookup(fp)))
+            except Exception:
+                log.warning("re-check of %s skipped", t.path, exc_info=True)
+        if not files:
+            return None
         like = likelies([self.fileops.library / t.path for t, _ in items])
-        scored = [(score_files(files, like, a, profile), a) for a in albums]
+        scored = [(score_files(list(files.values()), like, a, profile), a) for a in albums]
         result, best = min(scored, key=lambda x: x[0].distance)
         return (best, files) if result.band is Band.AUTO_ACCEPT else None
 
     def _draft(
-        self, s: Session, items: list[Item], album: AlbumInfo, files: list[FileTrack]
-    ) -> None:
+        self, s: Session, items: list[Item], album: AlbumInfo, files: dict[int, FileTrack]
+    ) -> bool:
+        """Store the draft plan. True if it promotes every file; False if some stay unverified
+        (or no plan was made), so the caller keeps checking."""
         rows = [t for t, _ in items]
         ids = {t.id for t in rows}
         mine = [p for p in promote_plans(s, "draft", "running", "undoing") if _has(p, ids)]
         if any(p.status != "draft" or live_job(s, p.id) for p in mine):
-            return  # a plan for this album is confirmed or running: leave it be
-        pairs, _, _ = assign_tracks(files, album.tracks)
+            return False  # a plan for this album is confirmed or running: leave it be
+        pairs, _, _ = assign_tracks(list(files.values()), album.tracks)
         paired = {id(f): t for f, t in pairs}
         in_db, taken = set(s.scalars(select(Track.path))), set[str]()
-        ops: list[dict[str, Any]] = []
-        for row, f in zip(rows, files, strict=True):
-            op: dict[str, Any] = {"op": "keep"}  # not on the release: stays unverified
-            if id(f) in paired:
-                ts = tagset_for(paired[id(f)], album, acoustid_id(f), "verified")
-                new = paths.unique(
-                    render_path(self.template, ts, Path(row.path).suffix),
-                    # the track's own path frees up: its original is trashed first
-                    lambda r, own=row.path: (
-                        r in taken or (r != own and (r in in_db or self.fileops.has(r)))
-                    ),
+        owned = set(
+            s.scalars(
+                select(Track.recording_mbid).where(
+                    Track.status == "verified", Track.recording_mbid.is_not(None)
                 )
-                taken.add(new)
-                op = {"op": "move", "new_path": new, "tags": asdict(ts)}
+            )
+        )
+        ops: list[dict[str, Any]] = []
+        for row in rows:
+            f = files.get(row.id)
+            op: dict[str, Any] = {"op": "keep", "reason": "not on the release; stays unverified"}
+            if f is not None and id(f) in paired:
+                track = paired[id(f)]
+                if track.recording_id in owned:
+                    op["reason"] = "already owned as verified"
+                else:
+                    ts = tagset_for(track, album, acoustid_id(f), "verified")
+                    new = paths.unique(
+                        render_path(self.template, ts, Path(row.path).suffix),
+                        # the track's own path frees up: its original is trashed first
+                        lambda r, own=row.path: (
+                            r in taken or (r != own and (r in in_db or self.fileops.has(r)))
+                        ),
+                    )
+                    taken.add(new)
+                    op = {"op": "move", "new_path": new, "tags": asdict(ts)}
             ops.append({**op, "track_id": row.id, "old": row_dict(row), "done": False})
+        if not taken:  # nothing to promote
+            return False
         for p in mine:  # abandoned previews: never executed, so DB only
             p.status = "discarded"
         plan = Plan(
@@ -188,3 +218,11 @@ class Rechecker:
         s.add(plan)
         s.flush()
         plan.batch_id = f"promote-{plan.id}"
+        return all(o["op"] == "move" for o in ops)
+
+    def start_chains(self) -> None:
+        """On startup: every unverified album without a waiting background check gets one."""
+        with self.sessions.begin() as s:
+            for key in group(read_unverified(s, self.fileops.library)):
+                if key[1]:
+                    enqueue_recheck(s, self.clock.now(), key, None)

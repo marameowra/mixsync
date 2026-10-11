@@ -51,8 +51,8 @@ def _plan(db: Db, plan_id: int) -> Plan:
 def _allowed(db: Session, plan: Plan) -> set[str]:
     """The actions this plan's state allows. Resume and undo also need no live job on the plan,
     or a second worker would race the first."""
-    if plan.status == "draft":
-        return {"confirm"}
+    if plan.status == "draft":  # a confirmed draft (its job waits) can still be confirmed again
+        return {"confirm"} if live_job(db, plan.id) else {"confirm", "discard"}
     if live_job(db, plan.id):
         return set()
     if plan.status == "failed" and not (plan.error or "").startswith("undo:"):
@@ -238,6 +238,15 @@ def confirm(
     plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
     return _act(plan_id, "confirm", db, count, enqueue_merge)
+
+
+@router.post("/plans/{plan_id}/discard")
+def discard(plan_id: int, user: User, db: Db) -> RedirectResponse:
+    plan = _plan(db, plan_id)
+    if "discard" not in _allowed(db, plan):
+        raise HTTPException(409, f"plan is {plan.status}")
+    plan.status = "discarded"  # a preview that never ran: DB only
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
 @router.post("/plans/{plan_id}/resume")

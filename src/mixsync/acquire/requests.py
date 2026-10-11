@@ -107,6 +107,15 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them
 
 
+def year_of(tg: dict[str, str]) -> str:
+    y = tg.get("date", "")[:4]
+    return y if y.isascii() and y.isdigit() and y != "0000" else ""
+
+
+def album_key(tg: dict[str, str]) -> AlbumKey:
+    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), year_of(tg)
+
+
 def live_rechecks(s: Session, key: AlbumKey) -> list[Job]:
     return [
         j

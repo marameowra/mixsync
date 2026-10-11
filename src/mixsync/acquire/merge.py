@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.requests import enqueue_rescan
+from mixsync.acquire.requests import AlbumKey, album_key, enqueue_recheck, enqueue_rescan
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
 from mixsync.core.jobs import JobKind, JobState
@@ -26,7 +26,7 @@ from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import canonical, fragmentation
+from mixsync.library import canonical, fragmentation, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
@@ -247,9 +247,10 @@ class Merger:
             tg = op["tags"]
             row.path, row.release_mbid = new, tg["release_id"]
             row.artist_mbids = list(tg["artist_ids"])
-            # a promotion changes these (a merge keeps them)
-            row.recording_mbid, row.release_group_mbid = tg["recording_id"], tg["release_group_id"]
-            row.acoustid_id, row.status = tg["acoustid_id"], tg["status"]
+            if s.get_one(Plan, plan_id).kind == "promote":  # a merge keeps the rest of the row
+                row.recording_mbid = tg["recording_id"]
+                row.release_group_mbid = tg["release_group_id"]
+                row.acoustid_id, row.status = tg["acoustid_id"], tg["status"]
 
         self._commit_op(plan_id, i, op, apply, done=True)
 
@@ -308,7 +309,7 @@ class Merger:
             if plan.status not in ("done", "failed", "running", "undoing"):
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status = "undoing"
-            batch, ops = plan.batch_id, plan.ops
+            batch, ops, kind = plan.batch_id, plan.ops, plan.kind
         try:
             for i in reversed(range(len(ops))):
                 if ops[i]["op"] in ("move", "trash"):
@@ -316,6 +317,7 @@ class Merger:
         except Exception as e:  # a crash (BaseException) leaves "undoing": a retry resumes
             self._fail(plan_id, f"undo: {e or repr(e)}")
             raise
+        albums: set[AlbumKey] = self._unverified_albums(ops) if kind == "promote" else set()
         with self.sessions.begin() as s:
             plan = s.get_one(Plan, plan_id)
             group, new, prev = (
@@ -335,6 +337,17 @@ class Merger:
                     canonical_db.switch(s, group, new, prev)
             plan.status, plan.error, plan.canonical_set = "undone", None, False
             enqueue_rescan(s, self.clock.now())
+            for key in albums:  # unverified again: look for them on MusicBrainz later
+                enqueue_recheck(s, self.clock.now(), key, None)
+
+    def _unverified_albums(self, ops: list[dict[str, Any]]) -> set[AlbumKey]:
+        keys: set[AlbumKey] = set()
+        for op in ops:
+            try:
+                keys.add(album_key(tags.read_fields(self.fileops.library / op["old"]["path"])))
+            except Exception:  # unreadable: the startup scan picks the album up
+                pass
+        return {k for k in keys if k[1]}
 
     def _undo_op(self, plan_id: int, batch: str, ubatch: str, i: int, op: dict[str, Any]) -> None:
         fo, old = self.fileops, op["old"]
@@ -365,11 +378,10 @@ class Merger:
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
             row.artist_mbids = list(old["artist_mbids"])
-            row.recording_mbid, row.release_group_mbid = (
-                old["recording_mbid"],
-                old["release_group_mbid"],
-            )
-            row.acoustid_id, row.status = old["acoustid_id"], old["status"]
+            if s.get_one(Plan, plan_id).kind == "promote":
+                row.recording_mbid = old["recording_mbid"]
+                row.release_group_mbid = old["release_group_mbid"]
+                row.acoustid_id, row.status = old["acoustid_id"], old["status"]
 
         if row is None:  # a trash op deleted the row
             with self.sessions.begin() as s:

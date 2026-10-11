@@ -2,23 +2,28 @@
 
 import hashlib
 import shutil
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from mixsync.acquire.merge import Merger
+from mixsync.acquire.merge import Merger, PlanInProgress
 from mixsync.acquire.recheck import Rechecker
 from mixsync.acquire.requests import RECHECK_INTERVALS, enqueue_recheck
+from mixsync.core.errors import SafetyError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db.auth import create_user
 from mixsync.db.models.auth import MatchingProfile, User
 from mixsync.db.models.library import Plan, Track
+from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, tags
-from mixsync.library.importer import Importer
+from mixsync.library.importer import Importer, tagset_for
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, AUDIO, OTHER, RECORDINGS, FakeMetadata
@@ -32,9 +37,12 @@ class Meta(FakeMetadata):
         super().__init__()
         self.refs: list[ReleaseRef] = []
         self.searches: list[tuple[str, str, int]] = []
+        self.fail: Exception | None = None
 
     async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
         self.searches.append((artist, album, limit))
+        if self.fail:
+            raise self.fail
         return self.refs
 
 
@@ -47,8 +55,14 @@ class Lookup:
         return [AcoustIdResult("aid-" + fp.fingerprint, 0.97, (RECORDINGS[fp.fingerprint],))]
 
 
+BAD: set[str] = set()  # titles whose files cannot be fingerprinted
+
+
 async def _fingerprint(path: Path) -> Fingerprint:
-    return Fingerprint(1.0, tags.read_fields(path)["title"])
+    title = tags.read_fields(path)["title"]
+    if title in BAD:
+        raise RuntimeError("fpcalc failed")
+    return Fingerprint(1.0, title)
 
 
 def _refs(*albums: AlbumInfo) -> list[ReleaseRef]:
@@ -60,7 +74,8 @@ class Rig:
         self.env, self.meta, self.lookup = env, Meta(), Lookup()
         tpl = env.settings.path_template
         self.merger = Merger(env.sessions, env.clock, self.meta, env.ops, tpl)
-        rechecker = Rechecker(
+        BAD.clear()
+        self.rechecker = rechecker = Rechecker(
             env.sessions, env.clock, self.meta, _fingerprint, self.lookup, env.ops, tpl
         )
         env.handlers = env.pipeline.handlers() | rechecker.handlers() | self.merger.handlers()
@@ -278,3 +293,241 @@ def test_one_background_check_waits_per_album(env: Env) -> None:
     rig.schedule()
     rig.schedule()
     assert len(rig.queued()) == 1
+
+
+TWO = {"Song One", "Song Two"}
+
+
+async def test_a_file_that_cannot_be_fingerprinted_is_skipped(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    BAD.add("Song Two")
+    rig.schedule()
+    await env.step()
+    assert rig.lookup.calls == ["Song One"]  # the other file was still looked up and scored
+    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED  # no failure
+
+
+async def test_no_file_to_fingerprint_is_no_match_and_the_chain_goes_on(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    BAD.update(TWO)
+    rig.schedule()
+    await env.step()
+    assert rig.plans("draft") == [] and [a for a, _ in rig.queued()] == [1]
+
+
+async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.meta.fail = TransientError("musicbrainz is down")
+    rig.schedule()
+    await env.step()  # fails, retry_wait
+    assert [a for a, _ in rig.queued()] == [1]
+    await env.step()  # the retry fails the same way: still one continuation
+    nexts = [j for j in env.jobs(JobKind.RECHECK) if j.payload["attempt"] == 1]
+    assert len(nexts) == 1
+
+
+async def test_a_retried_job_adds_one_continuation(env: Env) -> None:
+    rig = _rig(env, match=False)
+    rig.seed()
+    rig.schedule()
+    env.clock.advance(timedelta(weeks=2))
+    env.queue.reap()
+    job = env.queue.claim("w", timedelta(minutes=5))
+    assert job
+    await rig.rechecker.recheck(job)
+    await rig.rechecker.recheck(job)
+    assert [a for a, _ in rig.queued()] == [1]
+
+
+def _verified(env: Env, path: str, recording: str, **kw: object) -> None:
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path=path,
+                recording_mbid=recording,
+                status="verified",
+                batch_id="b",
+                imported_at=env.clock.now(),
+                **kw,
+            )
+        )
+
+
+async def test_partial_match_keeps_files_and_the_chain_goes_on(env: Env) -> None:
+    rig = _rig(env)
+    old = rig.seed()
+    _verified(env, "v/one.mp3", RECORDINGS["Song One"])  # already in the library
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    assert [o["op"] for o in plan.ops] == ["keep", "move"]
+    assert plan.ops[0]["reason"] == "already owned as verified"
+    assert plan.ops[0]["old"]["path"] == old[0]
+    assert [a for a, _ in rig.queued()] == [1]  # one file is still unverified
+    # the next background check replaces the draft and queues the one after
+    await env.step()
+    (second,) = rig.plans()
+    assert second.id != plan.id and [a for a, _ in rig.queued()] == [2]
+
+
+async def test_nothing_to_promote_makes_no_plan(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    _verified(env, "v/one.mp3", RECORDINGS["Song One"])
+    _verified(env, "v/two.mp3", RECORDINGS["Song Two"])
+    rig.schedule()
+    await env.step()
+    assert rig.plans("draft") == [] and [a for a, _ in rig.queued()] == [1]
+
+
+async def test_merge_leaves_a_promote_draft_and_waits_for_a_confirmed_one(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (promote,) = rig.plans()
+    # a verified track of the same group, on another release
+    _verified(
+        env,
+        "v/b.mp3",
+        RECORDINGS["Song One"],
+        release_mbid=ALBUM_B.release_id,
+        release_group_mbid=ALBUM.release_group_id,
+    )
+    merge_id = await rig.merger.build(str(ALBUM.release_group_id))
+    assert [p.id for p in rig.plans()] == [promote.id, merge_id]  # both drafts stand
+    with env.sessions.begin() as s:
+        s.get_one(Plan, promote.id).status = "running"
+    with pytest.raises(PlanInProgress):
+        await rig.merger.build(str(ALBUM.release_group_id))
+
+
+async def test_merge_keeps_the_other_columns_of_a_row(env: Env) -> None:
+    rig = _rig(env)
+    _verified(
+        env,
+        "v/b.mp3",
+        RECORDINGS["Song One"],
+        release_mbid=ALBUM_B.release_id,
+        release_group_mbid="other-group",
+    )
+    path = env.data_dir / "library" / "v" / "b.mp3"
+    path.parent.mkdir()
+    shutil.copy(AUDIO / "cc0-tone-01.mp3", path)
+    with env.sessions.begin() as s:
+        t = s.scalars(select(Track)).one()
+        ts = tagset_for(ALBUM.tracks[0], ALBUM, None, "verified")  # another release group
+        plan = Plan(
+            kind="merge",
+            release_group_mbid="other-group",
+            canonical_release_mbid=str(ALBUM.release_id),
+            batch_id="merge-x",
+            ops=[
+                {
+                    "op": "move",
+                    "new_path": "v/c.mp3",
+                    "track_id": t.id,
+                    "old": fragmentation.row_dict(t),
+                    "done": False,
+                    "tags": asdict(ts),
+                }
+            ],
+        )
+        s.add(plan)
+        s.flush()
+        pid = plan.id
+    rig.merger.execute(pid)
+    with env.sessions() as s:
+        row = s.scalars(select(Track)).one()
+    assert row.path == "v/c.mp3" and row.release_mbid == ALBUM.release_id
+    assert row.release_group_mbid == "other-group"  # not ALBUM's group
+
+
+class Boom(BaseException):
+    pass
+
+
+async def test_promote_resumes_after_a_crash(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    real = Merger._commit_op  # pyright: ignore[reportPrivateUsage]
+    hits: list[int] = []
+
+    def crash(self: Merger, *a: Any, **k: Any) -> None:
+        hits.append(1)
+        if len(hits) == 1:
+            raise Boom
+        real(self, *a, **k)
+
+    monkeypatch.setattr(Merger, "_commit_op", crash)
+    with pytest.raises(Boom):
+        rig.merger.execute(plan.id)
+    assert rig.plans("running") != []
+    rig.merger.execute(plan.id)  # the retry resumes
+    assert rig.plans("done") != [] and {r["status"] for r in rig.rows()} == {"verified"}
+    assert len(rig.trash()) == 2
+
+
+async def test_promote_refuses_a_row_changed_since_the_preview(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    lib = rig.library()
+    with env.sessions.begin() as s:
+        s.scalars(select(Track)).first().acoustid_id = "edited"  # type: ignore[union-attr]
+    with pytest.raises(SafetyError):
+        rig.merger.execute(plan.id)
+    assert rig.plans("failed") != [] and rig.library() == lib
+
+
+async def test_undo_of_a_promotion_restarts_the_background_chain(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    rig.merger.execute(plan.id)
+    assert rig.queued() == []
+    rig.merger.undo_plan(plan.id)
+    assert [a for a, _ in rig.queued()] == [0]
+
+
+def test_start_chains_covers_every_unverified_album_once(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.rechecker.start_chains()
+    rig.rechecker.start_chains()
+    ((attempt, due),) = rig.queued()
+    assert attempt == 0 and _in_window(due, env.clock.now(), RECHECK_INTERVALS[0])
+
+
+async def test_discard_a_draft_plan(env: Env, web: TestClient) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    with env.sessions.begin() as s:
+        create_user(s, "root", "pw", admin=True)
+    tok = login(web, "root")
+    url = f"/library/plans/{plan.id}/discard"
+    assert "Discard plan" in web.get(f"/library/plans/{plan.id}").text
+    assert web.post(url).status_code == 403  # no CSRF token
+    confirm = f"/library/plans/{plan.id}/confirm"
+    assert web.post(confirm, data={"csrf_token": tok}).status_code == 303
+    assert web.post(url, data={"csrf_token": tok}).status_code == 409  # its job is waiting
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job).where(Job.kind == JobKind.MERGE)):
+            j.status = JobState.CANCELLED
+    assert web.post(url, data={"csrf_token": tok}).status_code == 303
+    assert rig.plans("discarded") != [] and rig.plans() == []
+    assert web.post(url, data={"csrf_token": tok}).status_code == 409
+    assert "ready to promote" not in web.get("/").text
