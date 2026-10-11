@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -83,8 +83,24 @@ def _preflight_live(db: Db, m: Migration) -> bool:
     )
 
 
+def _window(start: date | None, end: date | None) -> tuple[datetime | None, datetime]:
+    """Start is 00:00 UTC of its day; end is the last instant of its day (default: now)."""
+    if start and end and start > end:
+        raise HTTPException(400, "start is after end")
+    first = start and datetime.combine(start, time.min, UTC)
+    last = (
+        datetime.combine(end + timedelta(days=1), time.min, UTC) - timedelta.resolution
+        if end
+        else datetime.now(UTC)
+    )
+    return first, last
+
+
 @router.get("")
-def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
+def page(
+    request: Request, user: Admin, db: Db, start: date | None = None, end: date | None = None
+) -> HTMLResponse:
+    first, last = _window(start, end)
     latest = _latest(db)
     running = db.scalars(
         select(Migration).where(Migration.status == "running").order_by(Migration.id.desc())
@@ -92,10 +108,12 @@ def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
     shown = [latest, *running] if latest and latest.status != "running" else list(running)
     entries: list[dict[str, Any]] = []
     for m in shown:
-        rows = mig.report(db, m) if m.status == "running" else []
+        rows = mig.report(db, m, first, last) if m.status == "running" else []
         entries.append(
             {
                 "m": m,
+                "start": (first or m.created_at).date().isoformat(),
+                "end": last.date().isoformat(),
                 "totals": mig.totals(rows),
                 "failures": [r for r in rows if r["status"] in ("failed", "skipped")],
                 "checking": _checking(db, m),
@@ -183,11 +201,16 @@ def _safe(v: Any) -> Any:
 
 
 @router.get("/{migration_id}/report.csv")
-def report_csv(migration_id: int, user: Admin, db: Db) -> Response:
+def report_csv(
+    migration_id: int, user: Admin, db: Db, start: date | None = None, end: date | None = None
+) -> Response:
+    first, last = _window(start, end)
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(COLUMNS)
-    w.writerows([_safe(r[c]) for c in COLUMNS] for r in mig.report(db, _get(db, migration_id)))
+    w.writerows(
+        [_safe(r[c]) for c in COLUMNS] for r in mig.report(db, _get(db, migration_id), first, last)
+    )
     return Response(
         out.getvalue(),
         media_type="text/csv",

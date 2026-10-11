@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 from dataclasses import replace
+from datetime import UTC, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -892,6 +893,57 @@ async def test_the_latest_decision_decides_whether_an_import_is_partial(
     assert [(r["status"], r["reason"]) for r in migration_rows(rig)] == [
         ("partial", "2 of 13 tracks present")
     ]
+
+
+async def window_rows(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, **window: Any
+) -> tuple[Request, list[dict[str, Any]]]:
+    await migrate_partial(rig, monkeypatch)
+    await run_partial(rig)
+    with rig.env.sessions() as s:
+        m = s.scalars(select(Migration)).one()
+        return rig.requests()[0], mig.report(s, m, **window)
+
+
+async def test_the_report_window_bounds_rows_by_updated_at(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    req, rows = await window_rows(rig, monkeypatch)  # default window: unchanged
+    assert [r["status"] for r in rows] == ["partial"]
+    at = req.updated_at.replace(tzinfo=UTC)
+    day = timedelta(days=1)
+    with rig.env.sessions() as s:
+        m = s.scalars(select(Migration)).one()
+        assert len(mig.report(s, m, at, at)) == 1  # inclusive at both ends
+        assert mig.report(s, m, start=at + day) == []  # started after the album last changed
+        assert mig.report(s, m, end=at - day) == []  # ended before it
+
+
+async def test_a_decision_older_than_the_window_is_ignored(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    await run_partial(rig)
+    with rig.env.sessions.begin() as s:
+        m = s.scalars(select(Migration)).one()
+        at = s.scalars(select(Request)).one().updated_at.replace(tzinfo=UTC)
+        s.execute(update(Request).values(updated_at=at + timedelta(days=2)))
+        # the album is in the window but its only (partial) decision is not: no evidence of partial
+        assert [r["status"] for r in mig.report(s, m, start=at + timedelta(days=1))] == ["imported"]
+        assert [r["status"] for r in mig.report(s, m)] == ["partial"]
+
+
+async def test_unreadable_files_show_only_when_the_window_reaches_the_start(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    await run_partial(rig)
+    with rig.env.sessions.begin() as s:
+        m = s.scalars(select(Migration)).one()
+        m.summary = {**m.summary, "unreadable": [{"path": "a/b.mp3", "why": "bad"}]}
+        began = m.created_at.replace(tzinfo=UTC)
+        assert [r["status"] for r in mig.report(s, m)] == ["partial", "failed"]
+        assert [r["status"] for r in mig.report(s, m, start=began + timedelta(seconds=1))] == []
 
 
 async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
