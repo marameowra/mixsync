@@ -28,6 +28,8 @@ from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
+from mixsync.db.models.library import Track
+from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
@@ -239,6 +241,64 @@ def confirm(s: Session, now: datetime, m: Migration) -> int:
     return len(groups)
 
 
+def retry(s: Session, now: datetime, req: Request) -> str | None:
+    """Send a failed or skipped album on again. With files already in the library, import that
+    same decision again (it skips what is in); else re-match from the first VERIFY, so it lands
+    in review (or imports) with fresh choices. Returns why it cannot, else None."""
+    batch = s.scalar(
+        select(Track.batch_id).where(Track.batch_id.like(f"request-{req.id}-decision-%")).limit(1)
+    )
+    copied = s.scalar(
+        select(FileOp.id)
+        .where(
+            FileOp.batch_id.like(f"request-{req.id}-decision-%"),
+            FileOp.kind == "copy",
+            FileOp.status == "done",
+            FileOp.src != "(generated)",
+        )
+        .limit(1)
+    )
+    if batch is None and copied is not None:  # a re-match could copy back what a merge removed
+        return "its imported files were later merged or removed"
+    first = s.scalar(
+        select(Job)
+        .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
+        .order_by(Job.id)
+        .limit(1)
+    )
+    if batch is None and first is None:
+        return "it was never matched"
+    values = (
+        {"status": "importing", "last_error": None}
+        if batch
+        else {"status": "verifying", "release_mbid": "", "last_error": None}
+    )
+    claimed = cast(
+        CursorResult[Any],
+        s.execute(
+            update(Request)
+            .where(Request.id == req.id, Request.status.in_(("failed", "skipped")))
+            .values(values)
+        ),
+    )
+    s.expire(req)
+    if claimed.rowcount != 1:  # not failed (any more): a double click retries once
+        return "it has not failed"
+    if batch:  # no idempotency key: the first import's job exists already
+        payload = {"request_id": req.id, "decision_id": int(batch.rpartition("-")[2])}
+        enqueue_in(s, now, JobKind.IMPORT, payload, priority=MIGRATION_PRIORITY)
+    elif first:
+        enqueue_in(
+            s,
+            now,
+            JobKind.VERIFY,
+            {**first.payload, "release_mbid": None},
+            max_attempts=VERIFY_ATTEMPTS,
+            priority=MIGRATION_PRIORITY,
+        )
+    return None
+
+
 def report(s: Session, m: Migration) -> list[dict[str, Any]]:
     """One row per album folder, then one per file that could not be read."""
     reqs = list(s.scalars(select(Request).where(Request.migration_id == m.id).order_by(Request.id)))
@@ -256,6 +316,7 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
             "release_mbid": r.release_mbid,
             "files": len(first.get(r.id, {}).get("paths", [])),
             "reason": r.last_error or "",
+            "request_id": r.id,
         }
         for r in reqs
     ]
@@ -270,6 +331,7 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
                 "album": "",
                 "release_mbid": "",
                 "files": 1,
+                "request_id": None,
                 "reason": f"{Path(rel).name}: {why}",
             }
         )

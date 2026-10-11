@@ -63,6 +63,8 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     req = db.get(AlbumRequest, request_id)
     if req is None or req.user_id != user.id:
         raise HTTPException(403 if req else 404, "not your request")
+    if req.migration_id is not None:
+        raise HTTPException(409, "a migration album cannot be deleted")
     if not _deletable(db, req):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.

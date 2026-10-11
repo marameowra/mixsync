@@ -53,6 +53,7 @@ from mixsync.core.protocols import (
 )
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
@@ -255,6 +256,15 @@ class Pipeline:
                 return
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
+        album: AlbumInfo | None = None
+        if p["release_mbid"]:  # before any AcoustID call: a missing release costs none
+            try:
+                album = await self.metadata.get_release(p["release_mbid"])
+            except PermanentError:  # a repick named a release MusicBrainz does not have
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        self._reopen(s, job, p["release_mbid"])
+                return
         files: list[FileTrack] = []
         for path in paths:
             fp = await self.fingerprint(path)
@@ -263,14 +273,13 @@ class Pipeline:
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
-        if p["release_mbid"]:
-            album = await self.metadata.get_release(p["release_mbid"])
+        if album is not None:
             result = score_files(files, likelies(paths), album, profile)
         else:
             album, result = await self._identify(files, paths, profile, cand.folder)
         if migrating and result.band is Band.REJECT:  # nothing to search again: a human decides
             result = replace(result, band=Band.REVIEW)
-        pairs, _, _ = assign_tracks(files, album.tracks)
+        pairs, extra, _ = assign_tracks(files, album.tracks)
         index = {id(f): i for i, f in enumerate(files)}
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
         assignment = [
@@ -281,9 +290,13 @@ class Pipeline:
             }
             for f, t in pairs
         ]
+        unassigned = [str(paths[index[id(f)]]) for f in extra]  # import copies only the paired
+        if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
+            result = replace(result, band=Band.REVIEW)
         evidence = {
             "request_id": p["request_id"],
             "candidate": p["candidate"],
+            "unassigned": unassigned,
             "source": _source(cand, paths),
             "target": _target(album),
             "acoustid": [_best(f) for f in files],
@@ -314,6 +327,20 @@ class Pipeline:
                 req.status = "review"
             else:  # files stay in /downloads: reject never deletes
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
+
+    def _reopen(self, s: Session, job: JobRecord, mbid: str) -> None:
+        """Put the review item whose repick named `mbid` back, so the reviewer can choose again."""
+        req = self._request(s, job)
+        for d in s.scalars(
+            select(MatchDecision)
+            .where(MatchDecision.chosen_release_mbid == mbid, MatchDecision.status == "repick")
+            .order_by(MatchDecision.id.desc())
+        ):
+            if d.evidence.get("request_id") == req.id:
+                decisions.reopen(s, d.id)
+                req.status, req.last_error = "review", f"release {mbid} not found on MusicBrainz"
+                return
+        raise PermanentError(f"release {mbid} not found on MusicBrainz")
 
     async def _identify(
         self, files: list[FileTrack], paths: list[Path], profile: Profile, folder: str
@@ -355,6 +382,7 @@ class Pipeline:
             mbid = d.chosen_release_mbid or d.release_mbid
             assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
+            unassigned = tuple(d.evidence.get("unassigned", ()))
         if edits:
             return await self._import_unverified(job, cand, edits)
         if not mbid:
@@ -401,7 +429,7 @@ class Pipeline:
             self.importer.import_release, files, target, "verified", batch
         )
         await self._cover(target, results, batch)
-        await self._finish(job, cand, results, batch)
+        await self._finish(job, cand, results, batch, unassigned=unassigned)
 
     async def _import_unverified(
         self, job: JobRecord, cand: Candidate, edits: dict[str, Any]
@@ -433,6 +461,7 @@ class Pipeline:
         results: list[ImportResult],
         batch: str,
         recheck: AlbumKey | None = None,  # an unverified import: look for it on MusicBrainz later
+        unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
@@ -445,7 +474,11 @@ class Pipeline:
             req.status = "failed" if errors else "imported"
             if migrating and recheck and not errors:
                 req.status = "unverified"
-            req.last_error = "; ".join(errors) or None
+            notes = list(errors)
+            if unassigned:
+                names = ", ".join(Path(u).name for u in unassigned)
+                notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
+            req.last_error = "; ".join(notes) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if recheck:

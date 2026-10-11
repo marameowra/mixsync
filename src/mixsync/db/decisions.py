@@ -68,6 +68,16 @@ def get(s: Session, decision_id: int) -> MatchDecision | None:
     return s.get(MatchDecision, decision_id)
 
 
+def reopen(s: Session, decision_id: int) -> None:
+    """Undo a repick whose release turned out not to exist: the reviewer chooses again."""
+    s.execute(
+        update(MatchDecision)
+        .where(MatchDecision.id == decision_id, MatchDecision.status == "repick")
+        .values(status=PENDING, final_action=None, chosen_release_mbid=None)
+    )
+    s.expire_all()
+
+
 def act(
     s: Session,
     decision_id: int,
