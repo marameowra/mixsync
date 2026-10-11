@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
@@ -17,6 +18,7 @@ from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import AcoustIdSubmit, Fingerprinter
 from mixsync.core.types import Fingerprint
 from mixsync.db.models.library import Plan
+from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library.fileops import FileOps
 
@@ -54,6 +56,10 @@ class AcoustIdSubmitter:
         if status != "done":  # undone before this job ran: its files are in .trash
             log.info("plan %s is %s; not submitting fingerprints", plan_id, status)
             return
+        with self.sessions() as s:  # a re-run after a submit that went through: never send twice
+            key = f"acoustid-status:{plan_id}:0"
+            if s.scalar(select(Job.id).where(Job.idempotency_key == key)) is not None:
+                return
         items: list[tuple[Fingerprint, str]] = []
         for op in ops:
             if op["op"] != "move" or not op["tags"].get("recording_id"):

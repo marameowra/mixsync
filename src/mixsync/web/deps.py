@@ -25,7 +25,9 @@ def get_db(request: Request) -> Iterator[Session]:
         yield s
 
 
-Db = Annotated[Session, Depends(get_db)]
+# Commit before the response goes out: a streamed preview would otherwise hold the write lock
+# (every request writes last_seen_at) for the whole playback, locking out the worker.
+Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
 def get_merger(request: Request) -> Merger:

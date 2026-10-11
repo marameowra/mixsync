@@ -291,6 +291,8 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
+            if req.status != "verifying":  # a re-run after this job already recorded its decision
+                return
             if migrating:
                 req.release_mbid = p["release_mbid"] or album.release_id or ""
                 req.artist = album.artist[:255] or req.artist  # never blank a name from the tags

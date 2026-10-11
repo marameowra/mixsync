@@ -190,3 +190,13 @@ async def test_submission_status_repeats_id_and_skips_the_cache(
     await client.submission_status([5, 6])
     assert len(seen) == 2  # not cached
     assert seen[0].url.params.get_list("id") == ["5", "6"]
+
+
+async def test_a_rerun_submit_sends_nothing_more(env: Env) -> None:
+    rig = _rig(env)
+    fake, sub = _wire(env)
+    await _promote(env, rig)
+    await env.step()  # the submission
+    (job,) = env.jobs(JobKind.ACOUSTID_SUBMIT)
+    await sub.submit(env.queue.get(job.id))  # re-run after a lock hit complete()
+    assert len(fake.batches) == 1
