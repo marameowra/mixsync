@@ -253,6 +253,23 @@ def test_failed_undo_error_cannot_resume(client: TestClient, sf: sessionmaker[Se
     assert client.post(f"/library/plans/{pid}/undo", data={"csrf_token": tok}).status_code == 303
 
 
+def test_a_precondition_failure_offers_only_undo(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _plan(sf, "failed", [_op("move", 0)], error="blocked: x is gone")
+    _login(client, "root")
+    html = client.get(f"/library/plans/{pid}").text
+    assert "Resume merge" not in html and "Undo merge" in html and "x is gone" in html
+
+
+def test_fragments_always_lists_stuck_plans(client: TestClient, sf: sessionmaker[Session]) -> None:
+    old = _plan(sf, "failed", [_op("move", 0)], error="boom")
+    for _ in range(21):
+        _plan(sf, "done", [_op("move", 0)])
+    _login(client, "root")
+    assert f'/library/plans/{old}"' in client.get("/library/fragments").text
+
+
 @pytest.mark.parametrize("status", ["running", "undoing"])
 def test_undo_stuck_plan_only_without_live_job(
     client: TestClient, sf: sessionmaker[Session], status: str

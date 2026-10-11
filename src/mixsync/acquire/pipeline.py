@@ -30,7 +30,7 @@ from mixsync.acquire.requests import (
     retry_search,
 )
 from mixsync.core.clock import Clock
-from mixsync.core.errors import PermanentError
+from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -199,11 +199,18 @@ class Pipeline:
         p = job.payload
         cand = candidate_from_dict(p["candidate"])
         now = self.clock.now()
-        if "bytes" not in p:
-            await self.source.enqueue(cand)
-            self._monitor(job, now, 0, now)
+        try:
+            if "bytes" not in p:
+                await self.source.enqueue(cand)
+                self._monitor(job, now, 0, now)
+                return
+            info = await self.source.status(cand)
+        except AuthError:
+            raise
+        except PermanentError as e:  # this peer is out, not the request: try the next candidate
+            with self.sessions.begin() as s:
+                retry_search(s, now, self._request(s, job), cand.username, cand.folder, str(e))
             return
-        info = await self.source.status(cand)
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
             if info.bytes > p["bytes"]:

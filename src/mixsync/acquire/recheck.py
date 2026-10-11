@@ -48,7 +48,8 @@ SEARCH_LIMIT, MAX_RELEASES = 5, 3
 class Status:
     last: datetime | None  # the last finished check
     next: datetime | None  # the next background check
-    plan_id: int | None  # a draft promote plan waiting for the user
+    plan_id: int | None  # a draft promote plan waiting for the user, or a failed one
+    plan_failed: bool = False
 
 
 def promote_plans(s: Session, *states: str) -> list[Plan]:
@@ -61,7 +62,7 @@ def _has(plan: Plan, ids: set[int]) -> bool:
 
 def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, Status]:
     jobs = list(s.scalars(select(Job).where(Job.kind == JobKind.RECHECK)))
-    drafts = promote_plans(s, "draft")
+    drafts = promote_plans(s, "draft", "failed")  # a failed one still offers Resume / Undo
     out: dict[AlbumKey, Status] = {}
     for key, items in albums.items():
         mine = [j for j in jobs if tuple(j.payload["album"]) == key]
@@ -70,8 +71,13 @@ def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, S
             j.run_after for j in mine if j.status is JobState.QUEUED and not j.payload["user_id"]
         ]
         ids = {t.id for t, _ in items}
-        plan = [p.id for p in drafts if _has(p, ids)]
-        out[key] = Status(max(done, default=None), min(due, default=None), max(plan, default=None))
+        plan = max((p for p in drafts if _has(p, ids)), key=lambda p: p.id, default=None)
+        out[key] = Status(
+            max(done, default=None),
+            min(due, default=None),
+            plan and plan.id,
+            bool(plan and plan.status == "failed"),
+        )
     return out
 
 
@@ -150,7 +156,11 @@ class Rechecker:
         (or no plan was made), so the caller keeps checking."""
         rows = [t for t, _ in items]
         ids = {t.id for t in rows}
-        mine = [p for p in promote_plans(s, "draft", "running", "undoing") if _has(p, ids)]
+        mine = [
+            p
+            for p in promote_plans(s, "draft", "running", "undoing", "failed")
+            if _has(p, ids) and not (p.error or "").startswith("undo:")  # a stuck undo: new draft
+        ]
         if any(p.status != "draft" or live_job(s, p.id) for p in mine):
             return False  # a plan for this album is confirmed or running: leave it be
         pairs, _, _ = assign_tracks(list(files.values()), album.tracks)

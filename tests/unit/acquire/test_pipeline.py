@@ -217,6 +217,20 @@ async def test_failed_transfer_marks_tried_and_picks_next(env: Env) -> None:
     assert status(env, rid) == "imported" and len(library(env)) == 2
 
 
+async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.refuse.add("peer1")
+    rid = request(env)
+    await env.drain()
+
+    assert env.source.enqueued == ["peer2"]
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert status(env, rid) == "imported"
+
+
 @pytest.mark.parametrize("fault", ["wrong_size", "missing"])
 async def test_bad_download_is_never_imported(env: Env, fault: str) -> None:
     if fault == "wrong_size":

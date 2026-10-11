@@ -31,7 +31,7 @@
   <tr>
     <td><a href="/library/plans/{{ p.id }}">{{ p.id }}</a></td>
     <td>{{ p.release_group_mbid }}</td>
-    <td>{{ p.status }}</td>
+    <td>{{ p.status }}{% if p.error %}: {{ p.error }}{% endif %}</td>
     <td>{% if "undo" in allowed[p.id] %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
   </tr>
   {% endfor %}

@@ -13,8 +13,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.acquire.merge import Merger, PlanInProgress
-from mixsync.acquire.recheck import Rechecker
-from mixsync.acquire.requests import RECHECK_INTERVALS, enqueue_recheck
+from mixsync.acquire.recheck import Rechecker, statuses
+from mixsync.acquire.requests import (
+    RECHECK_INTERVALS,
+    enqueue_recheck,
+    group,
+    read_unverified,
+)
 from mixsync.core.errors import SafetyError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo
@@ -290,6 +295,35 @@ async def test_a_confirmed_plan_is_not_replaced(env: Env) -> None:
     rig.schedule(user_id=env.user_id)
     await env.step()
     assert [p.id for p in rig.plans("running")] == [plan.id] and rig.plans() == []
+
+
+async def test_a_failed_plan_blocks_a_new_draft_and_is_linked(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    with env.sessions.begin() as s:
+        s.get_one(Plan, plan.id).status = "failed"
+        st = statuses(s, group(read_unverified(s, env.ops.library)))
+    assert [(x.plan_id, x.plan_failed) for x in st.values()] == [(plan.id, True)]
+    rig.schedule(user_id=env.user_id)
+    await env.step()
+    assert [p.id for p in rig.plans("failed")] == [plan.id] and rig.plans() == []
+
+
+async def test_a_failed_undo_does_not_block_a_new_draft(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    with env.sessions.begin() as s:
+        p = s.get_one(Plan, plan.id)
+        p.status, p.error = "failed", "undo: row changed"
+    rig.schedule(user_id=env.user_id)
+    await env.step()
+    assert len(rig.plans()) == 1 and rig.plans("failed") != []
 
 
 def test_one_background_check_waits_per_album(env: Env) -> None:

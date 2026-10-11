@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.core.clock import Clock
-from mixsync.core.errors import TransientError
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.matching import (
     AlbumInfo,
     Candidate,
@@ -108,6 +108,7 @@ class FakeSource:
         self.state: dict[str, TransferStatus] = {}  # by peer; default DONE
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
+        self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
 
     def add(
         self,
@@ -157,6 +158,8 @@ class FakeSource:
         return [c for k, v in self.catalog.items() if k in query.lower() for c in v]
 
     async def enqueue(self, candidate: Candidate) -> None:
+        if candidate.username in self.refuse:
+            raise PermanentError("peer refused")
         self.enqueued.append(candidate.username)
         d = self._dir(candidate)
         d.mkdir(parents=True, exist_ok=True)
