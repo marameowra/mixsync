@@ -309,9 +309,9 @@ def report(
 ) -> list[dict[str, Any]]:
     """One row per album folder, then one per file that could not be read.
 
-    Albums changed (updated_at) within [start, end] and decisions made in that window count;
-    start defaults to when the migration began, end to no limit. Unreadable files have no
-    time, so they show only when the window reaches back to the migration's start."""
+    Albums changed (updated_at) within [start, end] are listed; start defaults to when the
+    migration began, end to no limit. Unreadable files have no time, so they show only when
+    the window reaches back to the migration's start."""
     began = _utc(m.created_at)
     start = start or began
     reqs = list(
@@ -328,10 +328,9 @@ def report(
         if j.payload["request_id"] in ids:
             first.setdefault(j.payload["request_id"], j.payload)
     partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
-    window = select(MatchDecision).where(MatchDecision.created_at >= start)
-    if end:
-        window = window.where(MatchDecision.created_at <= end)
-    for d in s.scalars(window.order_by(MatchDecision.id)):
+    # every decision since the migration began, not just the window: a row shows its current state
+    since = select(MatchDecision).where(MatchDecision.created_at >= began)
+    for d in s.scalars(since.order_by(MatchDecision.id)):
         if d.evidence.get("request_id") in ids:
             partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
     rows = [

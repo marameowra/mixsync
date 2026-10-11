@@ -919,7 +919,7 @@ async def test_the_report_window_bounds_rows_by_updated_at(
         assert mig.report(s, m, end=at - day) == []  # ended before it
 
 
-async def test_a_decision_older_than_the_window_is_ignored(
+async def test_a_decision_older_than_the_window_still_sets_the_status(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     await migrate_partial(rig, monkeypatch)
@@ -928,8 +928,8 @@ async def test_a_decision_older_than_the_window_is_ignored(
         m = s.scalars(select(Migration)).one()
         at = s.scalars(select(Request)).one().updated_at.replace(tzinfo=UTC)
         s.execute(update(Request).values(updated_at=at + timedelta(days=2)))
-        # the album is in the window but its only (partial) decision is not: no evidence of partial
-        assert [r["status"] for r in mig.report(s, m, start=at + timedelta(days=1))] == ["imported"]
+        # the album is in the window but its only (partial) decision is not: it is still partial
+        assert [r["status"] for r in mig.report(s, m, start=at + timedelta(days=1))] == ["partial"]
         assert [r["status"] for r in mig.report(s, m)] == ["partial"]
 
 
