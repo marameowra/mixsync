@@ -226,6 +226,8 @@ async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
     assert req.status == "imported" and req.release_mbid == ALBUM.release_id
     assert (req.artist, req.album) == ("Alpha Band", "Alpha Album")
     assert rig.meta.searches == [] and rig.env.source.cleared == []
+    with rig.env.sessions() as s:  # a complete import is not "partial"
+        assert [r["status"] for r in mig.report(s, s.get_one(Migration, mid))] == ["imported"]
     assert len(library(rig.env)) == 2
     assert rig.tree() == before  # byte-identical
     assert [d.band for d in decision_rows(rig.env, 2)] == ["auto_accept"]
@@ -850,6 +852,10 @@ async def test_a_confident_partial_album_imports_and_says_it_is_partial(
     dec = await run_partial(rig)
     assert dec.band == "auto_accept" and dec.evidence["partial"] == "1 of 13 tracks present"
     assert rig.requests()[0].status == "imported" and len(library(rig.env)) == 1
+    with rig.env.sessions() as s:
+        rows = mig.report(s, s.scalars(select(Migration)).one())
+    assert [(r["status"], r["reason"]) for r in rows] == [("partial", "1 of 13 tracks present")]
+    assert mig.totals(rows)["partial"] == 1 and mig.totals(rows)["imported"] == 0
 
 
 async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
