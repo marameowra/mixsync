@@ -86,7 +86,9 @@ def _preflight_live(db: Db, m: Migration) -> bool:
 def _day(v: str) -> date | None:
     """A browser sends a cleared date input as an empty string: that means no bound."""
     try:
-        return date.fromisoformat(v) if v else None
+        return (
+            datetime.strptime(v, "%Y-%m-%d").date() if v else None
+        )  # only what a date input sends
     except ValueError:
         raise HTTPException(422, f"not a date: {v!r}") from None
 

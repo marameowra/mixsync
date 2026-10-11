@@ -93,11 +93,19 @@ def test_csv_start_and_end_filter_the_rows(client: TestClient, migration_id: int
 
 
 @pytest.mark.parametrize(
-    "query", ["?start=nope", "?end=2026-13-01", "?start=2026-02-01&end=2026-01-01"]
+    ("query", "code"),
+    [
+        ("?start=nope", 422),
+        ("?end=2026-13-01", 422),
+        ("?start=20260101", 422),
+        ("?start=2026-02-01&end=2026-01-01", 400),
+    ],
 )
-def test_bad_dates_are_rejected(client: TestClient, migration_id: int, query: str) -> None:
-    assert client.get(f"/migration/{migration_id}/report.csv{query}").status_code in (400, 422)
-    assert client.get(f"/migration{query}").status_code in (400, 422)
+def test_bad_dates_are_rejected(
+    client: TestClient, migration_id: int, query: str, code: int
+) -> None:
+    assert client.get(f"/migration/{migration_id}/report.csv{query}").status_code == code
+    assert client.get(f"/migration{query}").status_code == code
 
 
 def test_cleared_date_inputs_mean_no_bound(client: TestClient, migration_id: int) -> None:
