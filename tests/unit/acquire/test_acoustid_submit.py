@@ -114,11 +114,20 @@ async def test_undo_and_a_retry_enqueue_nothing_more(env: Env) -> None:
     fake, sub = _wire(env)
     pid = await _promote(env, rig)
     rig.merger.execute(pid)  # already done: no second job
+    await env.step()
     rig.merger.undo_plan(pid)
     assert len(env.jobs(JobKind.ACOUSTID_SUBMIT)) == 1
-    await env.step()
     sub._enqueue_poll(pid, [10, 11], 0)  # a retried submit re-enqueues the same status job
     assert len(fake.batches) == 1 and len(env.jobs(JobKind.ACOUSTID_STATUS)) == 1
+
+
+async def test_undone_before_the_submit_sends_nothing(env: Env) -> None:
+    rig = _rig(env)
+    fake, _ = _wire(env)
+    pid = await _promote(env, rig)
+    rig.merger.undo_plan(pid)
+    await env.drain()  # the submit job, plus the re-check the undo queues
+    assert fake.batches == [] and env.jobs(JobKind.ACOUSTID_STATUS) == []
 
 
 def _client(settings: Settings, handler: Callable[[httpx.Request], httpx.Response], make: Make):

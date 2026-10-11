@@ -49,10 +49,14 @@ class AcoustIdSubmitter:
             log.info("plan %s: AcoustID keys are not set; not submitting fingerprints", plan_id)
             return
         with self.sessions() as s:
-            ops = s.get_one(Plan, plan_id).ops
+            plan = s.get_one(Plan, plan_id)
+            status, ops = plan.status, plan.ops
+        if status != "done":  # undone before this job ran: its files are in .trash
+            log.info("plan %s is %s; not submitting fingerprints", plan_id, status)
+            return
         items: list[tuple[Fingerprint, str]] = []
         for op in ops:
-            if op["op"] != "move":
+            if op["op"] != "move" or not op["tags"].get("recording_id"):
                 continue
             try:
                 fp = await self.fingerprint(self.fileops.library / op["new_path"])
