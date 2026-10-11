@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Migration - MixSync{% endblock %}
+{% block content %}
+{% set sm = m.summary if m else {} %}
+<h1>Migration from the old library</h1>
+<p>Copies the albums under the read-only import folder into the library through the matcher. The old tree is never modified.</p>
+{% if not busy %}
+<form method="post" action="/migration/preflight">{{ forms.csrf() }}<button type="submit">Start preflight</button></form>
+{% endif %}
+
+{% if m %}
+<h2>Migration {{ m.id }}: {{ m.status }}</h2>
+{% if m.status == "preflight" %}<p>Scanning and hashing the old library. Reload to see the result.</p>{% endif %}
+{% if sm.get("files") is not none and m.status != "preflight" %}
+<ul>
+  <li>{{ sm.get("files", 0) }} audio files, {{ sm.get("bytes", 0)|filesize }}, in {{ sm.get("albums", 0) }} albums ({{ sm.get("tagged_albums", 0) }} carry a MusicBrainz album id)</li>
+  <li>Free space on the library: {{ sm.get("free", 0)|filesize }}; needed: {{ sm.get("required", 0)|filesize }} (1.1 &times; the source)</li>
+  <li>Estimated duration: at least {{ sm.get("eta_seconds", 0)|duration }} (MusicBrainz requests at their rate limit, then one AcoustID lookup per track at 3 per second)</li>
+  <li>{{ sm.get("unreadable", [])|length }} unreadable file(s), left out of the import and listed as failed in the report</li>
+</ul>
+{% if sm.get("unreadable") %}<ul>{% for u in sm["unreadable"][:100] %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
+{% endif %}
+{% if sm.get("reason") %}<p class="band-reject">Preflight failed: {{ sm["reason"] }}</p>{% endif %}
+
+{% if m.status == "ready" %}
+<form method="post" action="/migration/{{ m.id }}/confirm">
+  {{ forms.csrf() }}
+  <p><label><input type="checkbox" name="paused" value="1" required> I paused other MusicBrainz clients (soulsync, Picard, beets, Lidarr)</label></p>
+  {% if typed_needed %}<p><label>Type {{ sm["albums"] }} to confirm <input name="count" type="text" required autocomplete="off"></label></p>{% endif %}
+  <button type="submit">Start migration</button>
+</form>
+{% endif %}
+
+{% if m.status == "running" %}
+<h3>Report</h3>
+<ul>
+  {% for key in ["imported", "owned", "review", "unverified", "skipped", "failed", "in progress"] %}
+  <li>{{ key }}: {{ totals.get(key, 0) }}</li>
+  {% endfor %}
+</ul>
+<p><a href="/review">Albums in review</a> &middot; <a href="/migration/{{ m.id }}/report.csv">Download report (CSV)</a></p>
+{% if failures %}<ul>{% for r in failures %}<li>{{ r.folder }}: {{ r.reason }}</li>{% endfor %}</ul>{% endif %}
+{% endif %}
+
+{% if m.manifest_path %}
+<h3>Old tree</h3>
+<form method="post" action="/migration/{{ m.id }}/check">{{ forms.csrf() }}<button type="submit">Check old tree</button></form>
+{% if checking %}<p>Checking...</p>{% endif %}
+{% if m.verify %}
+<p>Last check {{ m.verify["checked_at"] }}: <strong>{{ "byte-identical" if m.verify["identical"] else "CHANGED" }}</strong>
+({{ m.verify["counts"]["changed"] }} changed, {{ m.verify["counts"]["missing"] }} missing, {{ m.verify["counts"]["added"] }} added)</p>
+{% if not m.verify["identical"] %}<ul>{% for k in ["changed", "missing", "added"] %}{% for f in m.verify[k] %}<li>{{ k }}: {{ f }}</li>{% endfor %}{% endfor %}</ul>{% endif %}
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

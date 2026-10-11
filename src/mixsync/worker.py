@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
 from mixsync.acquire.merge import Merger
+from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
 from mixsync.core.clock import Clock, SystemClock
@@ -168,9 +169,18 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         AcoustIdClient(polite_client("acoustid", settings, sessions), settings),
         bool(settings.acoustid_app_key and settings.acoustid_user_key),
     )
+    migrator = Migrator(
+        sessions,
+        clock,
+        Path(settings.import_source_dir),
+        Path(settings.config_dir),
+        Path(settings.data_dir) / "library",
+        settings.mb_rate,
+    )
     handlers = (
         HANDLERS
         | pipeline.handlers()
+        | migrator.handlers()
         | merger.handlers()
         | rechecker.handlers()
         | submitter.handlers()
