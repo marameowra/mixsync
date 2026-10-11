@@ -42,8 +42,10 @@ def profile_for(s: Session, user_id: int) -> Profile:
     return Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
 
 
-def create_request(s: Session, now: datetime, user_id: int, release_mbid: str) -> Request:
-    req = Request(user_id=user_id, release_mbid=release_mbid)
+def create_request(
+    s: Session, now: datetime, user_id: int, release_mbid: str, source: str = "manual"
+) -> Request:
+    req = Request(user_id=user_id, release_mbid=release_mbid, source=source)
     s.add(req)
     s.flush()
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id})

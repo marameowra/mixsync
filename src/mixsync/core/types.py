@@ -26,3 +26,22 @@ class ReleaseRef:
     track_count: int | None = None
     formats: tuple[str, ...] = ()  # media formats, one per disc
     status: str | None = None
+
+
+@dataclass(frozen=True)
+class ReleaseGroupHit:
+    """A release group a watch search found; any of its `release_ids` can be requested."""
+
+    group_id: str
+    title: str
+    artist: str
+    type: str  # album / ep / single / compilation / live / other
+    date: str  # YYYY[-MM[-DD]]
+    release_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EntityRef:
+    mbid: str
+    name: str
+    disambiguation: str = ""

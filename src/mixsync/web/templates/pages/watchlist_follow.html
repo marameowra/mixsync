@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ f.name }} - MixSync{% endblock %}
+{% block content %}
+<h1>{{ f.name }}</h1>
+<p>{{ e.kind }} &middot; <a href="https://musicbrainz.org/{{ e.kind }}/{{ e.mbid }}">MusicBrainz</a>
+  &middot; last check {{ e.last_checked_at or "never" }}, next {{ e.next_check_at or "-" }}</p>
+<form method="post" action="/watchlist/{{ f.id }}/check">{{ forms.csrf() }}<button type="submit">Check now</button></form>
+
+<h2>Filters</h2>
+<form method="post" action="/watchlist/{{ f.id }}/filters">
+  {{ forms.csrf() }}
+  <p>{% for t in types %}<label><input type="checkbox" name="types" value="{{ t }}"{% if t in f.release_types %} checked{% endif %}> {{ t }}</label> {% endfor %}</p>
+  <p><label><input type="checkbox" name="only_after_follow" value="1"{% if f.only_after_follow %} checked{% endif %}> Only releases after I followed</label></p>
+  <p><label>Minimum date <input name="min_date" type="text" value="{{ f.min_date or '' }}" placeholder="YYYY-MM-DD"></label></p>
+  <p><label>Weekly cap (empty = unlimited) <input name="weekly_cap" type="text" inputmode="numeric" value="{{ f.weekly_cap if f.weekly_cap is not none else '' }}"></label></p>
+  <button type="submit">Save</button>
+</form>
+
+<h2>History</h2>
+{% if hits %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Release</th><th>Date</th><th>Result</th><th></th></tr></thead>
+  <tbody>
+  {% for h in hits %}
+  <tr>
+    <td>{{ h.artist }} - {{ h.title }}</td>
+    <td>{{ h.release_date }}</td>
+    <td>{{ h.status }}{% if h.request_id %} (<a href="/requests">request {{ h.request_id }}</a>){% endif %}</td>
+    <td>{% if h.status == "skipped_cap" %}<form method="post" action="/watchlist/{{ f.id }}/hits/{{ h.id }}/request">{{ forms.csrf() }}<button type="submit">Request</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>Nothing found yet.</p>
+{% endif %}
+
+<form method="post" action="/watchlist/{{ f.id }}/delete" onsubmit="return confirm('Stop following? The history is removed; requests are kept.')">{{ forms.csrf() }}<button type="submit">Unfollow</button></form>
+{% endblock %}

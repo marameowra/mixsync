@@ -54,8 +54,17 @@ class MbLabelInfo(_Raw):
     label: MbLabel | None = None
 
 
+class MbRgRelease(_Raw):
+    id: str
+
+
 class MbReleaseGroup(_Raw):
     id: str | None = None
+    title: str = ""
+    primary_type: str | None = Field(default=None, alias="primary-type")
+    secondary_types: list[str] = Field(default=[], alias="secondary-types")
+    artist_credit: list[MbCredit] = Field(default=[], alias="artist-credit")
+    releases: list[MbRgRelease] = []  # release-group search hits only
     first_release_date: str | None = Field(default=None, alias="first-release-date")
     genres: list[MbGenre] = []
 
@@ -77,6 +86,21 @@ class MbRelease(_Raw):
 
 class MbSearch(_Raw):
     releases: list[MbRelease] = []
+
+
+class MbRgSearch(_Raw):
+    release_groups: list[MbReleaseGroup] = Field(default=[], alias="release-groups")
+
+
+class MbEntity(_Raw):
+    id: str
+    name: str
+    disambiguation: str = ""
+
+
+class MbEntitySearch(_Raw):
+    artists: list[MbEntity] = []
+    labels: list[MbEntity] = []
 
 
 class AcoustIdRecording(_Raw):

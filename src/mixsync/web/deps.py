@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
 from mixsync.core.clock import SystemClock
+from mixsync.core.protocols import ReleaseWatch
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser, user_for_session
 from mixsync.db.journal import SqlJournal
@@ -53,6 +54,20 @@ def get_merger(request: Request) -> Merger:
 
 
 Merge = Annotated[Merger, Depends(get_merger)]
+
+
+def get_watch(request: Request) -> ReleaseWatch:
+    """MusicBrainz for follow search and lookup, on the same bucket and cache as the worker's."""
+    state = request.app.state
+    if getattr(state, "watch", None) is None:
+        state.watch = MusicBrainzProvider(
+            polite_client("musicbrainz", state.settings, state.session_factory)
+        )
+    watch: ReleaseWatch = state.watch
+    return watch
+
+
+Watch = Annotated[ReleaseWatch, Depends(get_watch)]
 
 
 def current_user(request: Request, db: Db) -> AuthUser:

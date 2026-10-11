@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Protocol
 
 from mixsync.core.matching import AlbumInfo, Candidate, TransferInfo
-from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
+from mixsync.core.types import (
+    AcoustIdResult,
+    EntityRef,
+    Fingerprint,
+    ReleaseGroupHit,
+    ReleaseRef,
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,16 @@ class MetadataProvider(Protocol):
         self, artist: str, album: str, limit: int = 10
     ) -> list[ReleaseRef]: ...
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]: ...
+
+
+class ReleaseWatch(Protocol):
+    """What the watchlist asks MusicBrainz; `kind` is "artist" or "label"."""
+
+    async def new_release_groups(
+        self, kind: str, mbid: str, since: str | None
+    ) -> list[ReleaseGroupHit]: ...
+    async def search_entities(self, kind: str, name: str) -> list[EntityRef]: ...
+    async def entity_name(self, kind: str, mbid: str) -> str: ...
 
 
 class DownloadSource(Protocol):

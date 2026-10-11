@@ -31,6 +31,7 @@ from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.sources.query import queries
 from mixsync.sources.slskd import SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget
+from mixsync.watchlist.poller import Watcher
 
 log = logging.getLogger(__name__)
 
@@ -188,6 +189,9 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         Path(settings.data_dir) / "library",
         settings.mb_rate,
     )
+    watcher = Watcher(
+        sessions, clock, MusicBrainzProvider(polite_client("musicbrainz", settings, sessions))
+    )
     handlers = (
         HANDLERS
         | pipeline.handlers()
@@ -195,6 +199,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | merger.handlers()
         | rechecker.handlers()
         | submitter.handlers()
+        | watcher.handlers()
     )
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, rechecker.start_chains
 
