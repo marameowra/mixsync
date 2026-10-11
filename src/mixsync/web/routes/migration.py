@@ -102,9 +102,9 @@ def _window(start_s: str, end_s: str, tz: tzinfo) -> tuple[datetime | None, date
         raise HTTPException(400, "start is after end")
     first = start and datetime.combine(start, time.min, tz).astimezone(UTC)
     last = (
-        (datetime.combine(end + timedelta(days=1), time.min, tz) - timedelta.resolution).astimezone(
-            UTC
-        )
+        # subtract in UTC: in wall time a midnight fall-back would lose its repeated hour
+        datetime.combine(end + timedelta(days=1), time.min, tz).astimezone(UTC)
+        - timedelta.resolution
         if end
         else datetime.now(UTC)
     )

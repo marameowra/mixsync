@@ -3,6 +3,7 @@ import io
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +19,7 @@ from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import User
 from mixsync.db.models.work import Migration
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.web.routes.migration import _window
 
 MBID = "22222222-2222-2222-2222-222222222222"
 
@@ -168,3 +170,16 @@ def test_prefill_uses_the_local_date(
     la = _la_client(sf, monkeypatch)
     assert 'name="start" value="2026-10-10"' in la.get("/migration").text
     assert 'name="start" value="2026-10-11"' in client.get("/migration").text
+
+
+def test_a_day_ends_where_the_next_begins_across_dst() -> None:
+    santiago = ZoneInfo("America/Santiago")
+    # 2026-04-04: clocks go back at local midnight, so the day has 25 hours
+    first, last = _window("2026-04-04", "2026-04-04", santiago)
+    nxt, _ = _window("2026-04-05", "2026-04-05", santiago)
+    assert first == datetime(2026, 4, 4, 3, tzinfo=UTC)
+    assert nxt == datetime(2026, 4, 5, 4, tzinfo=UTC)
+    assert last == nxt - timedelta.resolution
+    # 2026-09-06: local midnight does not exist; the day starts at the jump
+    first, _ = _window("2026-09-06", "2026-09-06", santiago)
+    assert first == datetime(2026, 9, 6, 4, tzinfo=UTC)
