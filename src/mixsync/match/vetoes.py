@@ -32,3 +32,13 @@ def find_vetoes(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> tuple[str, ...]
                 f"{track.title!r} ({track.recording_id})"
             )
     return tuple(out)
+
+
+def all_confident(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> bool:
+    """At least one pair, and AcoustID's best result names each file's paired recording."""
+    return bool(pairs) and all(
+        (best := max(f.acoustid, key=lambda r: r.score, default=None))
+        and best.score >= ACOUSTID_VETO_SCORE
+        and t.recording_id in best.recording_ids
+        for f, t in pairs
+    )

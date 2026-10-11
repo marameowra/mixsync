@@ -59,7 +59,8 @@ from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
-from mixsync.match.scorer import SCORER_VERSION, assign_tracks, score_files
+from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
+from mixsync.match.vetoes import all_confident
 
 log = logging.getLogger(__name__)
 
@@ -302,10 +303,23 @@ class Pipeline:
         unassigned = [str(paths[index[id(f)]]) for f in extra]  # import copies only the paired
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
+        partial = ""
+        if (  # deliberately partial: missing tracks cost nothing when every file is sure
+            migrating
+            and result.band is Band.REVIEW
+            and len(pairs) < len(album.tracks)
+            and all_confident(pairs)
+        ):
+            free = score_files(
+                files, likelies(paths), album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
+            )
+            if free.band is Band.AUTO_ACCEPT:
+                result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
         evidence = {
             "request_id": p["request_id"],
             "candidate": p["candidate"],
             "unassigned": unassigned,
+            "partial": partial,
             "source": _source(cand, paths),
             "target": _target(album),
             "acoustid": [_best(f) for f in files],
