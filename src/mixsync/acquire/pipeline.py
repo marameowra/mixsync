@@ -256,6 +256,15 @@ class Pipeline:
                 return
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
+        album: AlbumInfo | None = None
+        if p["release_mbid"]:  # before any AcoustID call: a missing release costs none
+            try:
+                album = await self.metadata.get_release(p["release_mbid"])
+            except PermanentError:  # a repick named a release MusicBrainz does not have
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        self._reopen(s, job, p["release_mbid"])
+                return
         files: list[FileTrack] = []
         for path in paths:
             fp = await self.fingerprint(path)
@@ -264,14 +273,7 @@ class Pipeline:
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
-        if p["release_mbid"]:
-            try:
-                album = await self.metadata.get_release(p["release_mbid"])
-            except PermanentError:  # a repick named a release MusicBrainz does not have
-                with self.sessions.begin() as s:
-                    if not _stale(s, job, self._request(s, job)):
-                        self._reopen(s, job, p["release_mbid"])
-                return
+        if album is not None:
             result = score_files(files, likelies(paths), album, profile)
         else:
             album, result = await self._identify(files, paths, profile, cand.folder)

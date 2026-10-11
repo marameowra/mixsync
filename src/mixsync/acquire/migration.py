@@ -29,6 +29,7 @@ from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.library import Track
+from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
@@ -247,6 +248,18 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     batch = s.scalar(
         select(Track.batch_id).where(Track.batch_id.like(f"request-{req.id}-decision-%")).limit(1)
     )
+    copied = s.scalar(
+        select(FileOp.id)
+        .where(
+            FileOp.batch_id.like(f"request-{req.id}-decision-%"),
+            FileOp.kind == "copy",
+            FileOp.status == "done",
+            FileOp.src != "(generated)",
+        )
+        .limit(1)
+    )
+    if batch is None and copied is not None:  # a re-match could copy back what a merge removed
+        return "its imported files were later merged or removed"
     first = s.scalar(
         select(Job)
         .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)

@@ -759,7 +759,16 @@ async def test_a_repick_of_a_nonexistent_release_reopens_the_review(
         raise PermanentError("returned 404")
 
     env.pipeline.metadata.get_release = missing  # type: ignore[method-assign]
+    real = env.acoustid.lookup
+    lookups: list[Any] = []
+
+    async def counted(fp: Any) -> Any:
+        lookups.append(fp)
+        return await real(fp)
+
+    env.acoustid.lookup = counted  # type: ignore[method-assign]
     await env.drain()
+    assert lookups == []  # the missing release is found before any AcoustID call
     (d,) = decision_rows(env, 2)
     assert (d.status, d.final_action, d.chosen_release_mbid) == ("pending_review", None, None)
     with env.sessions() as s:

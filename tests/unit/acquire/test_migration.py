@@ -23,6 +23,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band
 from mixsync.core.types import AcoustIdResult, ReleaseRef
 from mixsync.db.auth import create_user
+from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -788,3 +789,28 @@ async def test_a_migration_album_cannot_be_deleted(rig: Rig, web: TestClient) ->
     form = {"csrf_token": login(web, "root")}
     assert web.post(f"/requests/{req.id}/delete", data=form).status_code == 409
     assert len(rig.requests()) == 1
+
+
+async def test_retry_refuses_when_a_merge_removed_every_imported_file(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
+    real = rig.env.ops.import_file
+
+    def flaky(src: Path, rel: str, write_tags: Any, batch: str) -> str:
+        if "Two" in src.name:
+            raise OSError("disk full")
+        return real(src, rel, write_tags, batch)
+
+    monkeypatch.setattr(rig.env.ops, "import_file", flaky)
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:  # what a merge plan leaves: copies journaled, Tracks gone
+        for t in s.scalars(select(Track)):
+            s.delete(t)
+    form = {"csrf_token": login(web, "root")}
+    r = web.post(f"/migration/{mid}/retry/{req.id}", data=form)
+    assert r.status_code == 409 and "merged or removed" in r.text
+    assert rig.requests()[0].status == "failed" and len(rig.env.jobs(JobKind.VERIFY)) == 1
