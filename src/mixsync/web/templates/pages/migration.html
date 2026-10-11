@@ -40,7 +40,12 @@
   <li>{{ key }}: {{ e.totals.get(key, 0) }}</li>
   {% endfor %}
 </ul>
-<p><a href="/review">Albums in review</a> &middot; <a href="/migration/{{ m.id }}/report.csv">Download report (CSV)</a></p>
+<form method="get" action="/migration">
+  <label>Start <input type="date" name="start" value="{{ e.start }}"></label>
+  <label>End <input type="date" name="end" value="{{ e.end }}"></label>
+  <button type="submit">Show</button>
+</form>
+<p><a href="/review">Albums in review</a> &middot; <a href="/migration/{{ m.id }}/report.csv?start={{ e.start }}{% if e.csv_end %}&amp;end={{ e.csv_end }}{% endif %}">Download report (CSV)</a></p>
 {% if e.failures %}<ul>{% for r in e.failures %}<li>{{ r.folder }}: {{ r.reason }}
   {% if r.request_id %}<form method="post" action="/migration/{{ m.id }}/retry/{{ r.request_id }}">{{ forms.csrf() }}<button type="submit">Retry</button></form>{% endif %}
 </li>{% endfor %}</ul>{% endif %}

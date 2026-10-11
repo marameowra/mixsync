@@ -16,7 +16,7 @@ import stat
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -300,16 +300,37 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     return None
 
 
-def report(s: Session, m: Migration) -> list[dict[str, Any]]:
-    """One row per album folder, then one per file that could not be read."""
-    reqs = list(s.scalars(select(Request).where(Request.migration_id == m.id).order_by(Request.id)))
+def _utc(d: datetime) -> datetime:
+    return d if d.tzinfo else d.replace(tzinfo=UTC)  # SQLite hands back naive UTC
+
+
+def report(
+    s: Session, m: Migration, start: datetime | None = None, end: datetime | None = None
+) -> list[dict[str, Any]]:
+    """One row per album folder, then one per file that could not be read.
+
+    Albums changed (updated_at) within [start, end] are listed; start defaults to when the
+    migration began, end to no limit. Unreadable files have no time, so they show only when
+    the window reaches back to the migration's start."""
+    began = _utc(m.created_at)
+    start = start or began
+    reqs = list(
+        s.scalars(
+            select(Request)
+            .where(Request.migration_id == m.id, Request.updated_at >= start)
+            .where(*([Request.updated_at <= end] if end else []))
+            .order_by(Request.id)
+        )
+    )
     ids = {r.id for r in reqs}
     first: dict[int, dict[str, Any]] = {}  # the VERIFY job each request started with
     for j in s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)):
         if j.payload["request_id"] in ids:
             first.setdefault(j.payload["request_id"], j.payload)
     partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
-    for d in s.scalars(select(MatchDecision).order_by(MatchDecision.id)):
+    # every decision since the migration began, not just the window: a row shows its current state
+    since = select(MatchDecision).where(MatchDecision.created_at >= began)
+    for d in s.scalars(since.order_by(MatchDecision.id)):
         if d.evidence.get("request_id") in ids:
             partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
     rows = [
@@ -326,7 +347,8 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
         for r in reqs
     ]
     root = m.summary.get("source", "")
-    for u in m.summary.get("unreadable", []):
+    unreadable: list[dict[str, str]] = m.summary.get("unreadable", []) if start <= began else []
+    for u in unreadable:
         rel, why = u["path"], u["why"]
         rows.append(
             {
