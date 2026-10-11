@@ -446,3 +446,105 @@ def test_page_is_admin_only_and_confirm_is_guarded(rig: Rig, web: TestClient) ->
     assert "in progress: 51" in web.get("/migration").text
     assert "Check old tree" in web.get("/migration").text
     assert "No requests yet" in web.get("/requests").text  # migration requests are not listed
+
+
+async def test_retried_preflight_after_confirm_changes_nothing(rig: Rig) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    (job,) = rig.env.jobs(JobKind.MIGRATE_PREFLIGHT)
+    groups = Path(rig.get(mid).manifest_path).with_name("groups.json")
+    stamp = groups.stat().st_mtime_ns
+    await rig.migrator.preflight(rig.env.queue.get(job.id))
+    assert rig.get(mid).status == "running" and len(rig.requests()) == 1
+    assert groups.stat().st_mtime_ns == stamp
+    assert rig.confirm(mid) == 0 and len(rig.requests()) == 1
+
+
+async def test_a_racing_second_confirm_claims_nothing(rig: Rig) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    with rig.env.sessions() as a, rig.env.sessions() as b:
+        ma, mb = a.get(Migration, mid), b.get(Migration, mid)
+        assert ma and mb and ma.status == mb.status == "ready"  # both read "ready"
+        assert mig.confirm(a, rig.env.clock.now(), ma) == 1
+        a.commit()
+        assert mig.confirm(b, rig.env.clock.now(), mb) == 0
+        b.commit()
+    assert len(rig.requests()) == 1 and len(rig.env.jobs(JobKind.VERIFY)) == 1
+
+
+async def test_csv_cells_cannot_be_formulas(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    with rig.env.sessions.begin() as s:
+        req = s.scalars(select(Request)).one()
+        req.artist, req.album, req.last_error = "=HYPERLINK(1)", "+1", "@x"
+    login(web, "root")
+    rows = list(csv.reader(io.StringIO(web.get(f"/migration/{mid}/report.csv").text)))
+    assert rows[1][2:4] == ["'=HYPERLINK(1)", "'+1"] and rows[1][6] == "'@x"
+
+
+async def test_failed_scan_leaves_no_manifest_and_no_check(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    put_album(rig.root, "A/One")
+
+    def boom(*_a: Any) -> None:
+        raise OSError("disk went away")
+
+    monkeypatch.setattr(mig, "scan", boom)
+    mid = await rig.preflight()
+    m = rig.get(mid)
+    assert m.status == "failed" and m.manifest_path == ""
+    tok = login(web, "root")
+    assert "Check old tree" not in web.get("/migration").text
+    assert web.post(f"/migration/{mid}/check", data={"csrf_token": tok}).status_code == 409
+    assert rig.env.jobs(JobKind.MIGRATE_CHECK) == []
+
+
+async def test_only_one_check_runs_at_a_time(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    tok = login(web, "root")
+    url = f"/migration/{mid}/check"
+    assert web.post(url, data={"csrf_token": tok}).status_code == 303
+    assert web.post(url, data={"csrf_token": tok}).status_code == 409
+    assert len(rig.env.jobs(JobKind.MIGRATE_CHECK)) == 1
+
+
+async def test_no_new_preflight_while_unsettled_and_only_the_latest_confirms(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    tok = login(web, "root")
+    form = {"csrf_token": tok}
+    assert web.post("/migration/preflight", data=form).status_code == 409  # ready
+    rig.confirm(mid)
+    assert web.post("/migration/preflight", data=form).status_code == 409
+    await rig.env.drain()  # nothing is found on MusicBrainz: the album waits in review
+    assert rig.requests()[0].status == "review"
+    assert web.post("/migration/preflight", data=form).status_code == 409
+    with rig.env.sessions.begin() as s:
+        s.scalars(select(Request)).one().status = "skipped"
+    assert web.post("/migration/preflight", data=form).status_code == 303
+
+    with rig.env.sessions.begin() as s:  # the older migration cannot be confirmed any more
+        old = s.get(Migration, mid)
+        assert old
+        old.status = "ready"
+    r = web.post(f"/migration/{mid}/confirm", data=form | {"paused": "1"})
+    assert r.status_code == 409
+
+
+async def test_untagged_files_search_by_folder_name_and_keep_the_name(rig: Rig) -> None:
+    d = put_album(rig.root, "Some Folder")
+    for p in d.glob("*.mp3"):
+        tags.write(p, tags.TagSet("", "", "", "", 1, 1))
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    assert rig.meta.searches == [("", "Some Folder", 5)]
+    (req,) = rig.requests()
+    assert (req.status, req.album) == ("review", "Some Folder")

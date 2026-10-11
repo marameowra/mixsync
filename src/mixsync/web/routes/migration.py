@@ -1,7 +1,7 @@
 import csv
 import io
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -32,29 +32,30 @@ def _get(db: Db, migration_id: int) -> Migration:
     return m
 
 
+def _latest(db: Db) -> Migration | None:
+    return db.scalar(select(Migration).order_by(Migration.id.desc()).limit(1))
+
+
 def _busy(db: Db, m: Migration | None) -> bool:
-    """Preflighting, or running with albums still in progress."""
+    """Preflighting, waiting for confirmation, or running with albums not yet settled."""
     if m is None:
         return False
-    if m.status == "preflight":
+    if m.status in ("preflight", "ready"):
         return True
     pending = db.scalar(
         select(AlbumRequest.id)
         .where(
-            AlbumRequest.migration_id == m.id, AlbumRequest.status.in_(("verifying", "importing"))
+            AlbumRequest.migration_id == m.id,
+            AlbumRequest.status.in_(("verifying", "importing", "review")),
         )
         .limit(1)
     )
     return m.status == "running" and pending is not None
 
 
-@router.get("")
-def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
-    m = db.scalar(select(Migration).order_by(Migration.id.desc()).limit(1))
-    rows = mig.report(db, m) if m and m.status == "running" else []
-    checking = (
-        m is not None
-        and db.scalar(
+def _checking(db: Db, m: Migration) -> bool:
+    return (
+        db.scalar(
             select(Job.id)
             .where(
                 Job.kind == JobKind.MIGRATE_CHECK,
@@ -65,13 +66,19 @@ def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
         )
         is not None
     )
+
+
+@router.get("")
+def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
+    m = _latest(db)
+    rows = mig.report(db, m) if m and m.status == "running" else []
     ctx = {
         "user": user,
         "m": m,
         "busy": _busy(db, m),
         "totals": mig.totals(rows),
         "failures": [r for r in rows if r["status"] == "failed"][:100],
-        "checking": checking,
+        "checking": m is not None and _checking(db, m),
         "typed_needed": bool(m and m.summary.get("albums", 0) > TYPED_ABOVE),
     }
     return templates.TemplateResponse(request, "pages/migration.html", ctx)
@@ -79,7 +86,7 @@ def page(request: Request, user: Admin, db: Db) -> HTMLResponse:
 
 @router.post("/preflight")
 def preflight(user: Admin, db: Db) -> RedirectResponse:
-    latest = db.scalar(select(Migration).order_by(Migration.id.desc()).limit(1))
+    latest = _latest(db)
     if _busy(db, latest):
         raise HTTPException(409, "a migration is already in progress")
     mig.start_preflight(db, datetime.now(UTC), user.id)
@@ -97,7 +104,7 @@ def confirm(
     m = _get(db, migration_id)
     if m.status == "running":  # a second confirm does nothing
         return RedirectResponse("/migration", status_code=303)
-    if m.status != "ready":
+    if m.status != "ready" or _latest(db) is not m:
         raise HTTPException(409, f"migration is {m.status}")
     if not paused:
         raise HTTPException(400, "confirm that other MusicBrainz clients are paused")
@@ -113,8 +120,15 @@ def check(migration_id: int, user: Admin, db: Db) -> RedirectResponse:
     m = _get(db, migration_id)
     if not m.manifest_path:
         raise HTTPException(409, "there is no manifest yet")
+    if _checking(db, m):
+        raise HTTPException(409, "a check is already running")
     enqueue_in(db, datetime.now(UTC), JobKind.MIGRATE_CHECK, {"migration_id": m.id})
     return RedirectResponse("/migration", status_code=303)
+
+
+def _safe(v: Any) -> Any:
+    """A spreadsheet runs a cell that starts like a formula; tags and file names are untrusted."""
+    return "'" + v if isinstance(v, str) and v.startswith(("=", "+", "-", "@", "\t", "\r")) else v
 
 
 @router.get("/{migration_id}/report.csv")
@@ -122,7 +136,7 @@ def report_csv(migration_id: int, user: Admin, db: Db) -> Response:
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(COLUMNS)
-    w.writerows([r[c] for c in COLUMNS] for r in mig.report(db, _get(db, migration_id)))
+    w.writerows([_safe(r[c]) for c in COLUMNS] for r in mig.report(db, _get(db, migration_id)))
     return Response(
         out.getvalue(),
         media_type="text/csv",

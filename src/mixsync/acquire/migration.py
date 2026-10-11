@@ -18,9 +18,9 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
@@ -174,9 +174,17 @@ def groups_of(m: Migration) -> list[Group]:
 def confirm(s: Session, now: datetime, m: Migration) -> int:
     """One request and one VERIFY job per album. Does nothing unless the preflight passed, so a
     second confirm adds nothing."""
-    if m.status != "ready":
+    claimed = cast(
+        CursorResult[Any],
+        s.execute(
+            update(Migration)
+            .where(Migration.id == m.id, Migration.status == "ready")
+            .values(status="running")
+        ),
+    )
+    s.expire(m)
+    if claimed.rowcount != 1:  # lost a race to another confirm, or not ready
         return 0
-    m.status = "running"
     groups = groups_of(m)
     for i, g in enumerate(groups):
         req = Request(
@@ -268,10 +276,16 @@ class Migrator:
         mid = job.payload["migration_id"]
         out = self.config_dir / "migrations" / str(mid)
         summary: dict[str, Any] = {"source": str(self.source)}
+        with self.sessions() as s:
+            m = s.get(Migration, mid)
+            if m is None or m.status != "preflight":
+                return  # a retry of a finished job must not rescan or reset anything
+        scanned = False
         try:
             if not self.source.is_dir():
                 raise ValueError(f"{self.source} is not a folder")
             found = await asyncio.to_thread(scan, self.source, out)  # the heartbeat keeps running
+            scanned = True
             groups: list[Group] = found["groups"]
             free = shutil.disk_usage(self.library if self.library.exists() else self.library.parent)
             need = int(found["bytes"] * SPACE_FACTOR)
@@ -294,9 +308,11 @@ class Migrator:
             summary["reason"] = str(e)
         with self.sessions.begin() as s:
             m = s.get(Migration, mid)
-            if m is None:
-                raise LookupError(f"migration {mid} does not exist")
-            m.summary, m.manifest_path = summary, str(out / "manifest.jsonl")
+            if m is None or m.status != "preflight":
+                return
+            m.summary = summary
+            if scanned:  # a partial manifest would make the check lie
+                m.manifest_path = str(out / "manifest.jsonl")
             m.status = "failed" if "reason" in summary else "ready"
 
     async def check(self, job: JobRecord) -> None:

@@ -263,7 +263,7 @@ class Pipeline:
             album = await self.metadata.get_release(p["release_mbid"])
             result = score_files(files, likelies(paths), album, profile)
         else:
-            album, result = await self._identify(files, paths, profile)
+            album, result = await self._identify(files, paths, profile, cand.folder)
         if migrating and result.band is Band.REJECT:  # nothing to search again: a human decides
             result = replace(result, band=Band.REVIEW)
         pairs, _, _ = assign_tracks(files, album.tracks)
@@ -292,7 +292,8 @@ class Pipeline:
             req = self._request(s, job)
             if migrating:
                 req.release_mbid = p["release_mbid"] or album.release_id or ""
-                req.artist, req.album = album.artist[:255], album.album[:255]
+                req.artist = album.artist[:255] or req.artist  # never blank a name from the tags
+                req.album = album.album[:255] or req.album
             d = decisions.record(
                 s,
                 result,
@@ -309,7 +310,7 @@ class Pipeline:
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
 
     async def _identify(
-        self, files: list[FileTrack], paths: list[Path], profile: Profile
+        self, files: list[FileTrack], paths: list[Path], profile: Profile, folder: str
     ) -> tuple[AlbumInfo, MatchResult]:
         """The best-scoring release for files of unknown release: the one their tags name, else
         the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
@@ -320,9 +321,10 @@ class Pipeline:
                 albums = [await self.metadata.get_release(like.release_id)]
             except PermanentError:  # a stale or unknown id: search instead (transient errors retry)
                 log.info("tagged release %s is not on MusicBrainz", like.release_id)
-        if not albums:
+        title = like.album or Path(folder).name  # untagged files: the folder name is all we have
+        if not albums and (like.artist or title):
             refs = await self.metadata.search_releases(
-                like.artist or "", like.album or "", limit=IDENTIFY_SEARCH
+                like.artist or "", title, limit=IDENTIFY_SEARCH
             )
             albums = [
                 await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
