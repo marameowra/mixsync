@@ -320,7 +320,7 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
             "album": r.album,
             "release_mbid": r.release_mbid,
             "files": len(first.get(r.id, {}).get("paths", [])),
-            "reason": (r.last_error or "") if r.status != "imported" else partial.get(r.id, ""),
+            "reason": (r.status == "imported" and partial.get(r.id)) or r.last_error or "",
             "request_id": r.id,
         }
         for r in reqs
