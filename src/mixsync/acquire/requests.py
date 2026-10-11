@@ -103,6 +103,8 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
             },
             max_attempts=VERIFY_ATTEMPTS,
         )
+    elif req.migration_id is not None:  # no other candidate to look for: the album stays out
+        req.status, req.last_error = "skipped", "rejected in review"
     else:
         retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
 
