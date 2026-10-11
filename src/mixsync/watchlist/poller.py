@@ -4,11 +4,11 @@ import random
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import create_request
+from mixsync.acquire.requests import LIVE, create_request
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import ReleaseWatch
@@ -61,7 +61,8 @@ def is_owned(s: Session, group_id: str) -> bool:
 
 def is_requested(s: Session, user_id: int, group_id: str, release_ids: tuple[str, ...]) -> bool:
     manual = select(Request.id).where(
-        Request.user_id == user_id, Request.release_mbid.in_(release_ids)
+        Request.user_id == user_id,
+        or_(Request.release_mbid.in_(release_ids), Request.release_group_mbid == group_id),
     )
     other = (
         select(FollowHit.id)
@@ -89,7 +90,14 @@ def _over_cap(s: Session, f: Follow, now: datetime) -> bool:
 
 
 def request_hit(s: Session, now: datetime, f: Follow, hit: FollowHit) -> None:
-    req = create_request(s, now, f.user_id, hit.release_mbid, source="watchlist")
+    req = create_request(
+        s,
+        now,
+        f.user_id,
+        hit.release_mbid,
+        source="watchlist",
+        release_group_mbid=hit.release_group_mbid,
+    )
     hit.status, hit.request_id = "requested", req.id
 
 
@@ -130,10 +138,19 @@ def queue_picks(s: Session, now: datetime, f: Follow, picks: list[ReleaseGroupHi
             )
         )
         if row is None:
-            row = FollowHit(follow_id=f.id, release_group_mbid=h.group_id, created_at=now)
+            row = FollowHit(
+                follow_id=f.id,
+                release_group_mbid=h.group_id,
+                release_mbid="",
+                release_date=h.date,
+                artist=f.name[:255],
+                title=h.title[:255],
+                created_at=now,
+            )
             s.add(row)
-        row.release_mbid, row.release_date, row.status = "", h.date, "picked"
-        row.artist, row.title = f.name[:255], h.title[:255]
+        else:  # keep the old row's details, and what it was, in case the pick finds nothing
+            row.prev_status = row.status
+        row.status = "picked"
     if picks:
         s.flush()
         enqueue_in(s, now, JobKind.WATCHLIST_PICK, {"follow_id": f.id})
@@ -165,6 +182,20 @@ class Watcher:
                 )
             ):
                 ensure_poll(s, now, e)
+            # A pick job that failed for good leaves its rows "picked"; give each follow a new one.
+            stuck = select(FollowHit.follow_id).where(FollowHit.status == "picked").distinct()
+            for fid in s.scalars(stuck).all():
+                live = s.scalar(
+                    select(Job.id)
+                    .where(
+                        Job.kind == JobKind.WATCHLIST_PICK,
+                        Job.status.in_(LIVE),
+                        Job.payload["follow_id"].as_integer() == fid,
+                    )
+                    .limit(1)
+                )
+                if live is None:
+                    enqueue_in(s, now, JobKind.WATCHLIST_PICK, {"follow_id": fid})
 
     def _schedule_next(self, s: Session, now: datetime, e: WatchedEntity, job_id: int) -> None:
         """Queue the next check, keyed on this job so a re-run adds none, unless another check
@@ -207,7 +238,10 @@ class Watcher:
                 if not releases:  # nothing to request: let it be picked again
                     with self.sessions.begin() as s:
                         if (hit := s.get(FollowHit, hid)) and hit.status == "picked":
-                            s.delete(hit)
+                            if hit.prev_status:  # an earlier row: give it back as it was
+                                hit.status, hit.prev_status = hit.prev_status, None
+                            else:
+                                s.delete(hit)
                     continue
                 release = canonical.choose(releases, self.media, self.countries)
                 known = tuple(r.release_id for r in releases)

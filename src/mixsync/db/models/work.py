@@ -54,6 +54,7 @@ class Request(TimestampMixin, Base):
         ForeignKey("migrations.id")
     )  # old-library import
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual / watchlist
+    release_group_mbid: Mapped[str | None] = mapped_column(String(36))  # when the creator knew it
 
 
 class Migration(TimestampMixin, Base):

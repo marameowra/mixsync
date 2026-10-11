@@ -43,9 +43,19 @@ def profile_for(s: Session, user_id: int) -> Profile:
 
 
 def create_request(
-    s: Session, now: datetime, user_id: int, release_mbid: str, source: str = "manual"
+    s: Session,
+    now: datetime,
+    user_id: int,
+    release_mbid: str,
+    source: str = "manual",
+    release_group_mbid: str | None = None,
 ) -> Request:
-    req = Request(user_id=user_id, release_mbid=release_mbid, source=source)
+    req = Request(
+        user_id=user_id,
+        release_mbid=release_mbid,
+        source=source,
+        release_group_mbid=release_group_mbid,
+    )
     s.add(req)
     s.flush()
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id})

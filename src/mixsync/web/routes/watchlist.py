@@ -95,14 +95,21 @@ async def follow(
 
 @router.get("/{follow_id}")
 def follow_page(
-    request: Request, follow_id: int, user: User, db: Db, msg: str = ""
+    request: Request, follow_id: int, user: User, db: Db, done: str = "", n: int = 0
 ) -> HTMLResponse:
     f = _own(db, user, follow_id)
     e = db.get(WatchedEntity, f.entity_id)
     hits = db.scalars(
         select(FollowHit).where(FollowHit.follow_id == f.id).order_by(FollowHit.id.desc())
     ).all()
-    ctx = {"user": user, "f": f, "e": e, "hits": hits, "types": follows.RELEASE_TYPES, "msg": msg}
+    ctx = {
+        "user": user,
+        "f": f,
+        "e": e,
+        "hits": hits,
+        "types": follows.RELEASE_TYPES,
+        "msg": _DONE.get(done, "").format(n=n),
+    }
     return templates.TemplateResponse(request, "pages/watchlist_follow.html", ctx)
 
 
@@ -153,13 +160,12 @@ def request_skipped(follow_id: int, hit_id: int, user: User, db: Db) -> Redirect
     if is_owned(db, hit.release_group_mbid) or is_requested(
         db, f.user_id, hit.release_group_mbid, (hit.release_mbid,)
     ):
-        return RedirectResponse(
-            f"/watchlist/{f.id}?msg=Already+owned+or+requested", status_code=303
-        )
+        return RedirectResponse(f"/watchlist/{f.id}?done=refused", status_code=303)
     request_hit(db, datetime.now(UTC), f, hit)
     return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
 
 
+_DONE = {"queued": "Queued {n} for request.", "refused": "Already owned or requested."}
 _TYPES = ("album", "ep", "single")  # then the rest, as "other"
 
 
@@ -223,6 +229,4 @@ async def catalog_submit(
         picks = [h for h in found if h.group_id in wanted and not _disabled(s, user.id, h)]
         if (fresh := s.get(Follow, fid)) is not None:
             queue_picks(s, datetime.now(UTC), fresh, picks)
-    return RedirectResponse(
-        f"/watchlist/{fid}?msg=Queued+{len(picks)}+for+request", status_code=303
-    )
+    return RedirectResponse(f"/watchlist/{fid}?done=queued&n={len(picks)}", status_code=303)

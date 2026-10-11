@@ -48,4 +48,5 @@ class FollowHit(TimestampMixin, Base):
     release_date: Mapped[str] = mapped_column(String(10), default="")
     # requested / skipped_owned / skipped_requested / skipped_filter / skipped_cap
     status: Mapped[str] = mapped_column(String(20))
+    prev_status: Mapped[str | None] = mapped_column(String(20))  # before a pick took the row
     request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"))

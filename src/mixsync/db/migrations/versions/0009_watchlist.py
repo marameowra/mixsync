@@ -62,6 +62,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(255), nullable=False),
         sa.Column("release_date", sa.String(10), nullable=False),
         sa.Column("status", sa.String(20), nullable=False),
+        sa.Column("prev_status", sa.String(20), nullable=True),
         sa.Column("request_id", sa.Integer(), nullable=True),
         *_stamps(),
         sa.PrimaryKeyConstraint("id", name="pk_follow_hits"),
@@ -75,10 +76,12 @@ def upgrade() -> None:
     )
     with op.batch_alter_table("requests") as b:
         b.add_column(sa.Column("source", sa.String(16), nullable=False, server_default="manual"))
+        b.add_column(sa.Column("release_group_mbid", sa.String(36), nullable=True))
 
 
 def downgrade() -> None:
     with op.batch_alter_table("requests") as b:
+        b.drop_column("release_group_mbid")
         b.drop_column("source")
     op.drop_table("follow_hits")
     op.drop_table("follows")

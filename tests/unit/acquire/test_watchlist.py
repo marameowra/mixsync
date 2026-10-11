@@ -39,6 +39,7 @@ class FakeWatch:
         self.found: list[EntityRef] = []
         self.truncated = False
         self.browsed: list[str] = []
+        self.no_releases = False
 
     async def new_release_groups(
         self, kind: str, mbid: str, since: str | None
@@ -57,6 +58,8 @@ class FakeWatch:
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
         self.browsed.append(release_group_mbid)
+        if self.no_releases:
+            return []
         n = int(release_group_mbid[-12:])
         return [ReleaseRef(rid(2000 + n), "x", "y", "2020", status="Official")]
 
@@ -525,7 +528,7 @@ def test_picker_queues_and_the_job_requests(env: Env, web: TestClient) -> None:
     watch, tok, fid = _catalog_world(env, web)
     picked = [rid(1), rid(3), rid(4), rid(99)]  # owned, requested and unknown are refused
     r = web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": picked})
-    assert r.status_code == 303 and "Queued+1" in r.headers["location"]
+    assert r.status_code == 303 and "done=queued&n=1" in r.headers["location"]
     assert watch.browsed == []  # the web request did no release browse
     with env.sessions() as s:
         assert s.scalar(select(func.count()).select_from(Request)) == 0
@@ -584,7 +587,7 @@ def test_request_button_refuses_an_owned_album(env: Env, web: TestClient) -> Non
         s.flush()
         hid = h.id
     r = web.post(f"/watchlist/{fid}/hits/{hid}/request", data={"csrf_token": tok})
-    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    assert r.status_code == 303 and "done=refused" in r.headers["location"]
     with env.sessions() as s:
         assert s.scalar(select(func.count()).select_from(Request)) == 0
 
@@ -662,3 +665,103 @@ async def test_short_discography_is_one_page(make_client: Make) -> None:
     mb = MusicBrainzProvider(make_client("musicbrainz", lambda r: httpx.Response(200, json=body)))
     found, truncated = await mb.artist_discography(ARTIST)
     assert len(found) == 1 and not truncated
+
+
+def test_start_chains_requeues_a_pick_whose_job_failed(env: Env, web: TestClient) -> None:
+    watch, tok, fid = _catalog_world(env, web)
+    web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": [rid(1)]})
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job).where(Job.kind == JobKind.WATCHLIST_PICK)):
+            j.status = JobState.FAILED
+    Watcher(env.sessions, env.clock, watch).start_chains()
+    Watcher(env.sessions, env.clock, watch).start_chains()  # one live job is enough
+    assert [j.status for j in env.jobs(JobKind.WATCHLIST_PICK)] == ["failed", "queued"]
+
+
+def test_pick_dedupes_a_manual_request_for_another_release_of_the_group(
+    env: Env, web: TestClient
+) -> None:
+    watch, tok, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:  # release X of group 1; the pick will resolve to rid(2001)
+        s.add(Request(user_id=env.user_id, release_mbid=rid(5000), release_group_mbid=rid(1)))
+    web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": [rid(1)]})
+    _run_pick(env, watch)
+    with env.sessions() as s:
+        assert s.scalar(select(func.count()).select_from(Request)) == 1
+        hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
+        assert hit.status == "skipped_requested"
+
+
+def test_request_button_refuses_a_group_requested_as_another_release(
+    env: Env, web: TestClient
+) -> None:
+    _, tok, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        s.add(Request(user_id=env.user_id, release_mbid=rid(5000), release_group_mbid=rid(1)))
+        h = FollowHit(
+            follow_id=fid, release_group_mbid=rid(1), release_mbid=rid(7), status="skipped_cap"
+        )
+        s.add(h)
+        s.flush()
+        hid = h.id
+    r = web.post(f"/watchlist/{fid}/hits/{hid}/request", data={"csrf_token": tok})
+    assert "done=refused" in r.headers["location"]
+    with env.sessions() as s:
+        assert s.scalar(select(func.count()).select_from(Request)) == 1
+
+
+def test_a_pick_that_finds_no_release_restores_or_removes_its_row(
+    env: Env, web: TestClient
+) -> None:
+    watch, tok, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:  # an earlier row for group 2, which the pick will take over
+        s.add(
+            FollowHit(
+                follow_id=fid,
+                release_group_mbid=rid(2),
+                release_mbid=rid(8),
+                title="New LP",
+                status="skipped_cap",
+            )
+        )
+    watch.no_releases = True
+    web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": [rid(1), rid(2)]})
+    _run_pick(env, watch)
+    with env.sessions() as s:
+        rows = {h.release_group_mbid: h for h in s.scalars(select(FollowHit))}
+        assert rows[rid(2)].status == "skipped_cap" and rows[rid(2)].release_mbid == rid(8)
+        assert rid(1) not in rows  # the pick created that row, so it goes
+
+
+def test_follow_page_message_is_a_fixed_text(env: Env, web: TestClient) -> None:
+    _, _, fid = _catalog_world(env, web)
+    assert "Queued 3 for request" in web.get(f"/watchlist/{fid}?done=queued&n=3").text
+    page = web.get(f"/watchlist/{fid}?msg=<b>hi</b>&done=nope").text
+    assert "<b>hi</b>" not in page and "&lt;b&gt;" not in page
+
+
+async def test_refollow_does_not_move_the_queued_check(env: Env) -> None:
+    follow(env)
+    far = env.clock.now() + timedelta(days=10)
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job)):
+            j.run_after = far
+    follow(env)  # the same user again
+    (job,) = env.jobs(JobKind.WATCHLIST_POLL)
+    assert job.run_after.replace(tzinfo=UTC) == far
+
+
+async def test_a_running_poll_elsewhere_does_not_stop_the_successor(env: Env) -> None:
+    fid = follow(env)
+    eid = entity_id(env, fid)
+    with env.sessions.begin() as s:
+        s.add(
+            Job(
+                kind=JobKind.WATCHLIST_POLL,
+                payload={"entity_id": eid},
+                status=JobState.RUNNING,
+                run_after=env.clock.now(),
+            )
+        )
+    await poll(env, FakeWatch(), eid)
+    assert len([j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]) == 1
