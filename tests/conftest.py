@@ -23,10 +23,19 @@ def _postgres_url(config: pytest.Config) -> str | None:
     url = os.environ.get(_ENV)
     if not url:
         raise pytest.UsageError(f"--db=postgres needs {_ENV}, e.g. postgresql+psycopg://...")
-    name = make_url(url).database or ""
-    if "test" not in name:  # tests drop schemas: never touch a real database
-        raise pytest.UsageError(f"{_ENV} database {name!r} must contain 'test'")
+    check_test_db_url(url)
     return url
+
+
+def check_test_db_url(url: str) -> None:
+    """Tests create and drop schemas: refuse anything that might be a real database."""
+    u = make_url(url)
+    if overrides := {"dbname", "service", "options"} & set(u.query):
+        # libpq takes these over the URL path, so the name check below would be bypassed
+        raise pytest.UsageError(f"{_ENV} must not set {', '.join(sorted(overrides))}")
+    name = u.database or ""
+    if not (name.startswith("test_") or name.endswith("_test")):
+        raise pytest.UsageError(f"{_ENV} database {name!r} must start test_ or end _test")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -34,23 +43,12 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _block_sockets(  # pyright: ignore[reportUnusedFunction]
-    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
-) -> None:
-    pg = _postgres_url(request.config)
-    pg_port = make_url(pg).port if pg else None
-    real_connect = socket.socket.connect
-
+def _block_sockets(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
     def blocked(*_a: object, **_k: object) -> None:
         raise RuntimeError("network access is blocked in unit tests")
 
-    def connect(self: socket.socket, address: object) -> None:
-        # the Postgres test server is the only network peer allowed
-        if pg_port and isinstance(address, tuple) and address[1] == pg_port:  # pyright: ignore[reportUnknownMemberType]
-            return real_connect(self, address)
-        blocked()
-
-    monkeypatch.setattr(socket.socket, "connect", connect)
+    # psycopg connects through libpq in C, so Postgres needs no exception here
+    monkeypatch.setattr(socket.socket, "connect", blocked)
     monkeypatch.setattr(socket, "create_connection", blocked)
 
 

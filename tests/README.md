@@ -19,7 +19,7 @@ uv run pytest --db=postgres        # run against Postgres instead of SQLite (see
 ```
 
 ## Running on Postgres
-`--db=postgres` needs `MIXSYNC_TEST_DATABASE_URL` and refuses to run unless the database name contains `test`. Each test gets its own schema (created and dropped around it), so `-n auto` is safe.
+`--db=postgres` needs `MIXSYNC_TEST_DATABASE_URL` and refuses to run unless the database name starts with `test_` or ends with `_test`, and refuses URLs whose query sets `dbname`, `service` or `options` (they would override the name). Each test gets its own schema (created and dropped around it), so `-n auto` is safe.
 ```
 docker run -d --rm --name mixsync-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=mixsync_test -p 55432:5432 postgres:16
 export MIXSYNC_TEST_DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/mixsync_test
