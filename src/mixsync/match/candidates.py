@@ -53,7 +53,7 @@ NO_TITLE_PENALTY = 0.5
 
 _NUMBERED = re.compile(r"^(?:(\d{1,2})-)?(\d{1,3})(?:\s*[-._)]+\s*|\s+|$)(.*)$")
 _TRACK_WORD = re.compile(r"^track\s*(\d+)$", re.IGNORECASE)
-_DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*(\d+)", re.IGNORECASE)
+DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*(\d+)", re.IGNORECASE)
 
 
 def parse_name(stem: str) -> tuple[int | None, int | None, str]:
@@ -78,7 +78,7 @@ class _Parsed:
 def _parse(f: CandidateFile) -> _Parsed:
     folder, _, name = f.path.rpartition("\\")
     disc, track, title = parse_name(name.rpartition(".")[0] or name)
-    if (m := _DISC_DIR.match(folder.rpartition("\\")[2])) and disc is None:
+    if (m := DISC_DIR.match(folder.rpartition("\\")[2])) and disc is None:
         disc = int(m[1])
     return _Parsed(f, name, disc, track, title)
 

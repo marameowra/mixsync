@@ -7,9 +7,10 @@ current job's id, so a handler re-run after a crash never forks the chain.
 
 import asyncio
 import logging
+import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ from mixsync.acquire.requests import (
     retry_search,
 )
 from mixsync.core.clock import Clock
+from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -36,6 +38,8 @@ from mixsync.core.matching import (
     Candidate,
     FileTrack,
     Likelies,
+    MatchResult,
+    Profile,
     TrackInfo,
     TransferStatus,
 )
@@ -54,7 +58,7 @@ from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
-from mixsync.match.scorer import assign_tracks, score_files
+from mixsync.match.scorer import SCORER_VERSION, assign_tracks, score_files
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +72,7 @@ NO_RESULTS_BACKOFF = (
     timedelta(weeks=1),
 )
 MAX_SEARCHES = 2
+IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
 MONITOR_EVERY = timedelta(seconds=30)
 DOWNLOAD_STALL = timedelta(hours=2)  # no new bytes for this long -> the peer has failed us
@@ -108,7 +113,7 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status not in ("searching", "no_results"):
+            if req.status not in ("searching", "no_results") or req.migration_id is not None:
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and _aware(req.next_search_at, now)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -242,19 +247,26 @@ class Pipeline:
             )
 
     async def verify(self, job: JobRecord) -> None:
-        """AcoustID is always consulted: if it is unreachable the job retries, never imports."""
+        """AcoustID is always consulted: if it is unreachable the job retries, never imports.
+        A migrated album has no release yet: `_identify` picks one."""
         p = job.payload
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
-        album = await self.metadata.get_release(p["release_mbid"])
         files: list[FileTrack] = []
         for path in paths:
             fp = await self.fingerprint(path)
             results = await self.acoustid.lookup(fp)
             files.append(file_track(path, fp.duration, tuple(results)))
         with self.sessions() as s:
-            profile = profile_for(s, self._request(s, job).user_id)
-        result = score_files(files, likelies(paths), album, profile)
+            req = self._request(s, job)
+            profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
+        if p["release_mbid"]:
+            album = await self.metadata.get_release(p["release_mbid"])
+            result = score_files(files, likelies(paths), album, profile)
+        else:
+            album, result = await self._identify(files, paths, profile, cand.folder)
+        if migrating and result.band is Band.REJECT:  # nothing to search again: a human decides
+            result = replace(result, band=Band.REVIEW)
         pairs, _, _ = assign_tracks(files, album.tracks)
         index = {id(f): i for i, f in enumerate(files)}
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
@@ -279,13 +291,17 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
+            if migrating:
+                req.release_mbid = p["release_mbid"] or album.release_id or ""
+                req.artist = album.artist[:255] or req.artist  # never blank a name from the tags
+                req.album = album.album[:255] or req.album
             d = decisions.record(
                 s,
                 result,
                 evidence=evidence,
                 user_id=req.user_id,
                 stage=2,
-                release_mbid=p["release_mbid"],
+                release_mbid=p["release_mbid"] or album.release_id or "",
             )
             if result.band is Band.AUTO_ACCEPT:
                 enqueue_import(s, now, req, d.id)
@@ -293,6 +309,35 @@ class Pipeline:
                 req.status = "review"
             else:  # files stay in /downloads: reject never deletes
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
+
+    async def _identify(
+        self, files: list[FileTrack], paths: list[Path], profile: Profile, folder: str
+    ) -> tuple[AlbumInfo, MatchResult]:
+        """The best-scoring release for files of unknown release: the one their tags name, else
+        the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
+        like = likelies(paths)
+        albums: list[AlbumInfo] = []
+        if tagged := _uuid(like.release_id):
+            try:
+                albums = [await self.metadata.get_release(tagged)]
+            except PermanentError:  # a stale or unknown id: search instead (transient errors retry)
+                log.info("tagged release %s is not on MusicBrainz", tagged)
+        title = like.album or Path(folder).name  # untagged files: the folder name is all we have
+        if not albums and (like.artist or title):
+            refs = await self.metadata.search_releases(
+                like.artist or "", title, limit=IDENTIFY_SEARCH
+            )
+            albums = [
+                await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
+            ]
+        scored = [(score_files(files, like, a, profile), a) for a in albums]
+        if not scored:
+            none = MatchResult(
+                1.0, Band.REVIEW, (), ("no release found on MusicBrainz",), SCORER_VERSION
+            )
+            return AlbumInfo(like.artist or "", like.album or "", ()), none
+        result, best = min(scored, key=lambda x: x[0].distance)
+        return best, result
 
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
@@ -307,6 +352,10 @@ class Pipeline:
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
         if edits:
             return await self._import_unverified(job, cand, edits)
+        if not mbid:
+            raise PermanentError(
+                "no release was found for these files; pick one or mark unverified"
+            )
         album = await self.metadata.get_release(mbid)
         files: list[tuple[Path, TrackInfo, str | None]] = [
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
@@ -381,12 +430,16 @@ class Pipeline:
         recheck: AlbumKey | None = None,  # an unverified import: look for it on MusicBrainz later
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
-        if results and not errors:
+        with self.sessions() as s:
+            migrating = self._request(s, job).migration_id is not None
+        if results and not errors and not migrating:  # the old library is never touched
             await self._release(cand, [r.src for r in results], batch)
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
             req.status = "failed" if errors else "imported"
+            if migrating and recheck and not errors:
+                req.status = "unverified"
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
@@ -483,6 +536,13 @@ def file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTr
         recording_id=t.get("musicbrainz_trackid"),
         acoustid=acoustid,
     )
+
+
+def _uuid(v: str | None) -> str | None:
+    try:
+        return str(uuid.UUID(v)) if v else None
+    except ValueError:
+        return None  # not an id: a stray tag must not reach the API
 
 
 def _int(v: str | None) -> int | None:

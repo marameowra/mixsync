@@ -14,6 +14,8 @@ class JobKind(StrEnum):
     RECHECK = "recheck"
     ACOUSTID_SUBMIT = "acoustid_submit"
     ACOUSTID_STATUS = "acoustid_status"
+    MIGRATE_PREFLIGHT = "migrate_preflight"
+    MIGRATE_CHECK = "migrate_check"
 
 
 class JobState(StrEnum):

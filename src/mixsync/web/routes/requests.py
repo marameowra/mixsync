@@ -41,7 +41,9 @@ def _deletable(db: Session, req: AlbumRequest) -> bool:
 @router.get("")
 def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
     items = db.scalars(
-        select(AlbumRequest).where(AlbumRequest.user_id == user.id).order_by(AlbumRequest.id.desc())
+        select(AlbumRequest)
+        .where(AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None))
+        .order_by(AlbumRequest.id.desc())
     ).all()
     deletable = {r.id for r in items if _deletable(db, r)}
     return templates.TemplateResponse(

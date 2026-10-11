@@ -33,8 +33,8 @@ from mixsync.web.templating import templates
 router = APIRouter(prefix="/library")
 User = Annotated[AuthUser, Depends(require(Capability.library_edit))]
 
-_TYPED_ABOVE = 50  # data-safety rule 5: more file changes than this need the count typed
-templates.env.globals["typed_above"] = _TYPED_ABOVE  # pyright: ignore[reportUnknownMemberType]
+TYPED_ABOVE = 50  # data-safety rule 5: more file changes than this need the count typed
+templates.env.globals["typed_above"] = TYPED_ABOVE  # pyright: ignore[reportUnknownMemberType]
 
 
 def _changes(plan: Plan) -> int:
@@ -61,7 +61,7 @@ def _allowed(db: Session, plan: Plan) -> set[str]:
 
 
 def _check_count(plan: Plan, count: str) -> None:
-    if _changes(plan) > _TYPED_ABOVE and count.strip() != str(_changes(plan)):
+    if _changes(plan) > TYPED_ABOVE and count.strip() != str(_changes(plan)):
         raise HTTPException(400, f"type {_changes(plan)} to confirm")
 
 

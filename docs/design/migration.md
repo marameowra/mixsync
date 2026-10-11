@@ -24,6 +24,13 @@
 - MusicBrainz's 1 req/s limit is **per IP**, so **pause other MusicBrainz clients on the network** (soulsync, Picard, beets, Lidarr) during migration. Otherwise both tools get refused. Preflight shows this as a checklist item.
 - For large libraries, consider pointing MusicBrainz at a local mirror for the duration of the migration.
 
+## As built
+- Admin page `/migration`. Preflight hashes every regular file into `<config>/migrations/<id>/manifest.jsonl` and groups the audio files (mp3, flac, ogg, m4a) into albums (a disc subfolder joins its album folder; loose files split by album tag). Unreadable files are listed, left out, and appear as failed in the report.
+- The ETA is the sum of the MusicBrainz requests (1 per album with a `musicbrainz_albumid` tag, 4 without) and the AcoustID lookups, and is a lower bound.
+- Confirming needs the "other MusicBrainz clients paused" box and, above 50 albums, the album count typed in. Album jobs run at lower priority than normal requests.
+- An album with the tag is scored against that release (a tag MusicBrainz does not know falls back to the search); otherwise against the top 3 search hits. A reject band, or no candidate, goes to review (Mark unverified, pick another release, or reject, which skips the album). The source files are never released, moved or written.
+- "Check old tree" re-hashes the source against the manifest.
+
 ## Report
 - Totals: imported, in review, unverified, failed (with reasons).
 - Downloadable as CSV.

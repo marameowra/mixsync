@@ -249,6 +249,7 @@ def enqueue_in(
     *,
     run_after: datetime | None = None,
     max_attempts: int = 5,
+    priority: int = 0,  # lower runs first
     idempotency_key: str | None = None,
 ) -> None:
     """Add a job inside the caller's transaction, so it commits (or not) with the caller's own
@@ -260,6 +261,7 @@ def enqueue_in(
             kind=kind,
             payload=payload,
             status=JobState.QUEUED,
+            priority=priority,
             attempts=0,
             max_attempts=max_attempts,
             run_after=run_after or now,
