@@ -15,7 +15,9 @@ router = APIRouter()
 def home(request: Request, user: CurrentUser, db: Db) -> HTMLResponse:
     owner = None if Capability.approve in user.capabilities else user.id
     pending = len(decisions.pending_for(db, owner))
-    unverified = db.scalar(select(func.count(Track.id)).where(Track.status == "unverified"))
+    unverified = None  # only for those who may open the list
+    if Capability.library_edit in user.capabilities:
+        unverified = db.scalar(select(func.count(Track.id)).where(Track.status == "unverified"))
     return templates.TemplateResponse(
         request, "pages/home.html", {"user": user, "pending": pending, "unverified": unverified}
     )

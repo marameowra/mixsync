@@ -1,5 +1,6 @@
 import re
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -116,19 +117,20 @@ def repick(
 
 def _int(text: str, what: str, minimum: int = 1) -> int:
     if not text.strip().isdecimal() or not minimum <= int(text) <= 9999:
-        raise HTTPException(400, f"{what} must be a whole number from {minimum} to 9999")
+        raise ValueError(f"{what} must be a whole number from {minimum} to 9999")
     return int(text)
 
 
 def _text(text: str, what: str, required: bool = True) -> str:
     text = text.strip()
     if (required and not text) or len(text) > _TEXT_MAX:
-        raise HTTPException(400, f"{what} is required and at most {_TEXT_MAX} characters")
+        raise ValueError(f"{what} is required and at most {_TEXT_MAX} characters")
     return text
 
 
-@router.post("/{decision_id}/unverified")
+@router.post("/{decision_id}/unverified", response_model=None)
 def unverified(
+    request: Request,
     decision_id: int,
     user: User,
     db: Db,
@@ -139,28 +141,48 @@ def unverified(
     disc: Annotated[list[str], Form()],
     track: Annotated[list[str], Form()],
     year: Annotated[str, Form()] = "",
-) -> RedirectResponse:
+) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
     files = d.evidence.get("source", {}).get("files", [])
     if not files or any(not f.get("local_path") for f in files):
         raise HTTPException(409, "the downloaded files are not known")
+    errors: list[str] = []
+
+    def ok(fn: Callable[..., Any], *args: Any, **kw: Any) -> Any:
+        try:
+            return fn(*args, **kw)
+        except ValueError as e:
+            errors.append(str(e))
+
     if not len(files) == len(title) == len(artist) == len(disc) == len(track):
-        raise HTTPException(400, "one set of fields per file is needed")
+        errors.append("one set of fields per file is needed")
     edits = {
-        "albumartist": _text(albumartist, "album artist"),
-        "album": _text(album, "album"),
-        "year": _int(year, "year") if year.strip() else None,
+        "albumartist": ok(_text, albumartist, "album artist"),
+        "album": ok(_text, album, "album"),
+        "year": ok(_int, year, "year") if year.strip() else None,
         "tracks": [
             {
                 "local_path": f["local_path"],
-                "title": _text(ti, "title"),
-                "artist": _text(ar, "artist", required=False),
-                "disc": _int(di, "disc"),
-                "track": _int(tr, "track"),
+                "title": ok(_text, ti, f"{f.get('name', '')}: title"),
+                "artist": ok(_text, ar, f"{f.get('name', '')}: artist", required=False),
+                "disc": ok(_int, di, f"{f.get('name', '')}: disc"),
+                "track": ok(_int, tr, f"{f.get('name', '')}: track"),
             }
-            for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=True)
+            for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=False)
         ],
     }
+    if errors:  # show the form again with what was typed
+        sent = {
+            "albumartist": albumartist,
+            "album": album,
+            "year": year,
+            "rows": [
+                {"name": f.get("name", ""), "title": ti, "artist": ar, "disc": di, "track": tr}
+                for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=False)
+            ],
+        }
+        ctx = {"user": user, "d": d, "prefill": sent, "errors": errors}
+        return templates.TemplateResponse(request, "pages/review_detail.html", ctx, status_code=400)
     try:
         decisions.act(db, decision_id, user.id, "unverified")
     except decisions.DecisionStateError as e:

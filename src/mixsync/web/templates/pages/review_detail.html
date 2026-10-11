@@ -88,6 +88,7 @@
   <form method="post" action="/review/{{ d.id }}/unverified">
     {{ forms.csrf() }}
     <h3>Mark unverified</h3>
+    {% if errors %}<ul role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
     <p>Imports the files with the tags below and no MusicBrainz ids.</p>
     <p>
       <label>Album artist <input name="albumartist" type="text" maxlength="255" required value="{{ prefill.albumartist }}"></label>

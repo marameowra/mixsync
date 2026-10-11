@@ -451,10 +451,30 @@ def test_unverified_rejects_bad_input(
     i = _make_decision(sf, "alice", "/x")
     tok = _login(client, "alice")
     r = client.post(f"/review/{i}/unverified", data={**GOOD, **bad, "csrf_token": tok})
-    assert r.status_code == 400
+    assert r.status_code == 400 and "text/html" in r.headers["content-type"]
+    assert 'role="alert"' in r.text
     with sf() as s:
         d = decisions.get(s, i)
         assert d and d.status == "pending_review" and "unverified" not in d.evidence
+
+
+def test_unverified_error_keeps_submitted_values(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    data = {**GOOD, "csrf_token": tok, "albumartist": "Kept Band", "title": ["Kept Title"]}
+    r = client.post(f"/review/{i}/unverified", data={**data, "track": ["0"]})
+    assert r.status_code == 400
+    assert 'value="Kept Band"' in r.text and 'value="Kept Title"' in r.text
+    assert "a.mp3: track must be a whole number" in r.text
+
+
+def test_unverified_link_only_for_library_editors(client: TestClient) -> None:
+    _login(client, "alice")  # plain user: no library.edit
+    assert "/library/unverified" not in client.get("/").text
+    _login(client, "root")
+    assert "/library/unverified" in client.get("/").text
 
 
 def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[Session]) -> None:
