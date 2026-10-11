@@ -580,3 +580,22 @@ async def test_startup_runs_in_the_worker_task_before_the_first_claim() -> None:
     stop = asyncio.Event()
     await run_worker(Queue(), "w", stop, {}, startup=lambda: order.append("startup"))  # type: ignore[arg-type]
     assert order == ["startup", "reap"]
+
+
+async def test_a_failed_startup_scan_does_not_stop_the_worker() -> None:
+    claimed: list[bool] = []
+
+    class Queue:
+        def reap(self) -> None:
+            pass
+
+        def claim(self, *_a: object) -> None:
+            claimed.append(True)
+            stop.set()
+
+    def boom() -> None:
+        raise RuntimeError("database is locked")
+
+    stop = asyncio.Event()
+    await run_worker(Queue(), "w", stop, {}, startup=boom)  # type: ignore[arg-type]
+    assert claimed == [True]

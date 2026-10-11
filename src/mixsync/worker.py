@@ -81,7 +81,10 @@ async def run_worker(
     startup: Callable[[], None] | None = None,
 ) -> None:
     if startup:  # once the worker is up, off the event loop and the web start
-        await asyncio.to_thread(startup)
+        try:
+            await asyncio.to_thread(startup)
+        except Exception:  # a failed scan must never stop the worker
+            log.exception("startup scan failed; the worker runs without it")
     # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
         queue.reap()
