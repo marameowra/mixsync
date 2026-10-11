@@ -15,8 +15,18 @@ Strategy lives in [docs/testing.md](../docs/testing.md). This folder is where th
 uv run pytest                      # unit + regression suite
 uv run pytest -m integration       # needs docker compose
 uv run pytest -m crash             # SIGKILL crash-safety tests
-uv run pytest --db=postgres        # run against Postgres instead of SQLite
+uv run pytest --db=postgres        # run against Postgres instead of SQLite (see below)
 ```
+
+## Running on Postgres
+`--db=postgres` needs `MIXSYNC_TEST_DATABASE_URL` and refuses to run unless the database name contains `test`. Each test gets its own schema (created and dropped around it), so `-n auto` is safe.
+```
+docker run -d --rm --name mixsync-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=mixsync_test -p 55432:5432 postgres:16
+export MIXSYNC_TEST_DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/mixsync_test
+uv run pytest -n auto --db=postgres
+docker stop mixsync-pg-test
+```
+CI runs the same thing in the `postgres` job. SQLite-only tests (pragmas, single-writer lock) skip themselves.
 
 ## Rules
 - Unit tests never touch the network. A pytest fixture blocks sockets; cassettes or fakes only.

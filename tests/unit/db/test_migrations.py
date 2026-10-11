@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from mixsync.core.config import Settings
 from mixsync.db.engine import make_engine
@@ -7,8 +7,7 @@ from mixsync.db.migrate import downgrade, upgrade
 
 def _version(settings: Settings) -> str | None:
     with make_engine(settings).connect() as c:
-        has_table = c.execute(text("SELECT 1 FROM sqlite_master WHERE name='alembic_version'"))
-        if has_table.first() is None:
+        if not inspect(c).has_table("alembic_version"):
             return None
         return c.execute(text("SELECT version_num FROM alembic_version")).scalar()
 

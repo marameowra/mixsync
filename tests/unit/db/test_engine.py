@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import text
 
 from mixsync.core.config import Settings
@@ -5,6 +6,8 @@ from mixsync.db.engine import make_engine
 
 
 def test_pragmas_applied(settings: Settings) -> None:
+    if not settings.database_url.startswith("sqlite"):
+        pytest.skip("SQLite pragmas")
     with make_engine(settings).connect() as c:
 
         def pragma(name: str) -> object:
