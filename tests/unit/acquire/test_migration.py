@@ -17,6 +17,7 @@ from sqlalchemy import select
 from mixsync.acquire import migration as mig
 from mixsync.acquire import pipeline
 from mixsync.acquire.migration import Migrator
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band
 from mixsync.core.types import ReleaseRef
@@ -129,6 +130,7 @@ async def test_preflight_groups_manifest_and_eta(rig: Rig, monkeypatch: pytest.M
     put_album(rig.root, "loose", ALBUM)  # two albums in one folder
     put_album(rig.root, "loose", OTHER)
     (rig.root / "Alpha Band/Alpha Album/cover.jpg").write_bytes(b"jpg")
+    (rig.root / "odd\tname\n.cue").write_text("cue")
     (rig.root / "junk.mp3").write_text("not audio")
     locked = put_album(rig.root, "locked", ALBUM) / "01 Song One.mp3"
     real = mig._hash  # pyright: ignore[reportPrivateUsage]
@@ -143,7 +145,7 @@ async def test_preflight_groups_manifest_and_eta(rig: Rig, monkeypatch: pytest.M
     m = rig.get(await rig.preflight())
     sm = m.summary
     assert m.status == "ready", sm
-    assert sm["files"] == 10 and sm["albums"] == 5 and sm["tagged_albums"] == 1
+    assert sm["files"] == 12 and sm["albums"] == 5 and sm["tagged_albums"] == 1
     assert sorted(u.partition(":")[0] for u in sm["unreadable"]) == [
         "junk.mp3",
         "locked/01 Song One.mp3",
@@ -157,13 +159,15 @@ async def test_preflight_groups_manifest_and_eta(rig: Rig, monkeypatch: pytest.M
         "Alpha Album",
         "Beta Album",
     ]
-    manifest = {line.split("\t")[0]: line.split("\t")[1:] for line in manifest_lines(m)}
+    manifest = {e["path"]: e for e in map(json.loads, manifest_lines(m))}
     one = rig.root / "Alpha Band/Alpha Album/01 Song One.mp3"
-    assert manifest["Alpha Band/Alpha Album/01 Song One.mp3"] == [
-        str(one.stat().st_size),
-        hashlib.sha256(one.read_bytes()).hexdigest(),
-    ]
+    assert manifest["Alpha Band/Alpha Album/01 Song One.mp3"] == {
+        "path": "Alpha Band/Alpha Album/01 Song One.mp3",
+        "size": one.stat().st_size,
+        "sha256": hashlib.sha256(one.read_bytes()).hexdigest(),
+    }
     assert "locked/01 Song One.mp3" not in manifest and "junk.mp3" in manifest
+    assert "Alpha Band/Alpha Album/cover.jpg" in manifest and "odd\tname\n.cue" in manifest
     # 1 tagged album at 1 request, 4 untagged at 4, one MB request per second; 9 tracks at 3/s
     assert sm["eta_seconds"] == pytest.approx(17 + 9 / 3)
 
@@ -224,6 +228,37 @@ async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
     assert rig.tree() == before  # byte-identical
     assert [d.band for d in decision_rows(rig.env, 2)] == ["auto_accept"]
     assert rig.env.jobs(JobKind.SEARCH) == []
+
+
+async def test_stale_tagged_id_falls_back_to_search(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", mbid="99999999-9999-9999-9999-999999999999")
+    rig.meta.refs = [ref(ALBUM)]
+    real = rig.meta.get_release
+
+    async def get_release(mbid: str) -> Any:
+        if mbid.startswith("9999"):
+            raise PermanentError("returned 404")
+        return await real(mbid)
+
+    rig.meta.get_release = get_release  # type: ignore[method-assign]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    assert rig.meta.searches == [("Alpha Band", "Alpha Album", 5)]
+    # the stale tag still disagrees with the release found, so a human looks at it
+    assert [(r.status, r.release_mbid) for r in rig.requests()] == [("review", ALBUM.release_id)]
+
+
+async def test_transient_error_on_tagged_id_does_not_search(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
+
+    async def down(_mbid: str) -> Any:
+        raise TransientError("musicbrainz is down")
+
+    rig.meta.get_release = down  # type: ignore[method-assign]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain(until=lambda: bool(rig.env.jobs(JobKind.VERIFY)[0].attempts))
+    assert rig.env.jobs(JobKind.VERIFY)[0].status is JobState.RETRY_WAIT
+    assert rig.meta.searches == []
 
 
 async def test_untagged_album_picks_the_best_of_the_top_three(rig: Rig) -> None:
@@ -336,6 +371,7 @@ async def check(rig: Rig, mid: int) -> dict[str, Any]:
 async def test_check_job_detects_changes(rig: Rig) -> None:
     put_album(rig.root, "A/One")
     put_album(rig.root, "B/Two", OTHER)
+    (rig.root / "A/One/cover.jpg").write_bytes(b"jpg")
     mid = await rig.preflight()
     assert (await check(rig, mid))["identical"] is True
 
@@ -343,12 +379,13 @@ async def test_check_job_detects_changes(rig: Rig) -> None:
         f.write(b"x")
     (rig.root / "B/Two/01 Tune One.mp3").unlink()
     shutil.copy(AUDIO / "cc0-tone-01.mp3", rig.root / "B/Two/03 New.mp3")
+    (rig.root / "A/One/cover.jpg").write_bytes(b"jpg2")  # not audio, still counted
     result = await check(rig, mid)
     assert result["identical"] is False
-    assert result["changed"] == ["A/One/01 Song One.mp3"]
+    assert result["changed"] == ["A/One/01 Song One.mp3", "A/One/cover.jpg"]
     assert result["missing"] == ["B/Two/01 Tune One.mp3"]
     assert result["added"] == ["B/Two/03 New.mp3"]
-    assert result["counts"] == {"changed": 1, "missing": 1, "added": 1}
+    assert result["counts"] == {"changed": 2, "missing": 1, "added": 1}
 
 
 def test_page_is_admin_only_and_confirm_is_guarded(rig: Rig, web: TestClient) -> None:
@@ -379,7 +416,7 @@ def test_page_is_admin_only_and_confirm_is_guarded(rig: Rig, web: TestClient) ->
     with rig.env.sessions.begin() as s:
         m = s.get(Migration, job.payload["migration_id"])
         assert m
-        m.manifest_path = str(out / "manifest.tsv")
+        m.manifest_path = str(out / "manifest.jsonl")
         m.summary = {"albums": 51, "files": 51, "bytes": 1, "source": "/old", "unreadable": ["/x"]}
 
     def post(**data: str) -> int:

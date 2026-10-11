@@ -1,6 +1,6 @@
 """Re-importing the old library (docs/design/migration.md).
 
-Preflight walks the read-only source once: hashes every audio file into a manifest and groups the
+Preflight walks the read-only source once: hashes every file into a manifest and groups the
 files into albums. Confirming turns each group into a request with one low-priority VERIFY job,
 so the normal pipeline identifies, imports or sends it to review. The check job re-hashes the
 source later to prove it is byte-identical. The source is only ever opened for reading.
@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
@@ -51,12 +52,13 @@ class Group:
     files: list[tuple[str, int]]  # path relative to the folder, size
 
 
-def _audio(root: Path) -> Iterator[Path]:
+def _files(root: Path) -> Iterator[Path]:
+    """Every regular file, whatever its type: the byte-identical check covers the whole tree."""
     for base, dirs, names in os.walk(root):
         dirs.sort()
         for n in sorted(names):
-            if Path(n).suffix.lower() in AUDIO:
-                yield Path(base) / n
+            if stat.S_ISREG(os.lstat(p := Path(base) / n).st_mode):
+                yield p
 
 
 def _hash(path: Path) -> tuple[int, str]:
@@ -74,22 +76,23 @@ def _album_dir(path: Path) -> Path:
 
 
 def scan(root: Path, out: Path) -> dict[str, Any]:
-    """Hash and group the source. Writes `manifest.tsv` and `groups.json` in `out`."""
+    """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
     out.mkdir(parents=True, exist_ok=True)
     unreadable: list[str] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
     count = total = 0
-    # shortcut: a tab or newline in a file name breaks the manifest line; upgrade to JSON lines.
-    with (out / "manifest.tsv").open("w") as manifest:
-        for path in _audio(root):
+    with (out / "manifest.jsonl").open("w") as manifest:
+        for path in _files(root):
             rel = path.relative_to(root)
             try:
                 size, digest = _hash(path)
             except OSError as e:
                 unreadable.append(f"{rel}: {e.strerror or e}")
                 continue
-            manifest.write(f"{rel}\t{size}\t{digest}\n")
+            manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
+            if path.suffix.lower() not in AUDIO:
+                continue
             try:
                 tg = tags.read_fields(path)
             except Exception as e:  # corrupt or unsupported: it could not be imported either
@@ -125,15 +128,15 @@ def eta_seconds(groups: list[Group], mb_rate: float) -> float:
 def _manifest(path: Path) -> dict[str, tuple[int, str]]:
     out: dict[str, tuple[int, str]] = {}
     for line in path.read_text().splitlines():
-        rel, size, digest = line.rsplit("\t", 2)
-        out[rel] = (int(size), digest)
+        e = json.loads(line)
+        out[e["path"]] = (e["size"], e["sha256"])
     return out
 
 
 def compare(root: Path, manifest: Path) -> dict[str, Any]:
     old, now = _manifest(manifest), set[str]()
     changed: list[str] = []
-    for path in _audio(root):
+    for path in _files(root):
         rel = str(path.relative_to(root))
         now.add(rel)
         try:
@@ -293,7 +296,7 @@ class Migrator:
             m = s.get(Migration, mid)
             if m is None:
                 raise LookupError(f"migration {mid} does not exist")
-            m.summary, m.manifest_path = summary, str(out / "manifest.tsv")
+            m.summary, m.manifest_path = summary, str(out / "manifest.jsonl")
             m.status = "failed" if "reason" in summary else "ready"
 
     async def check(self, job: JobRecord) -> None:

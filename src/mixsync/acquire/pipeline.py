@@ -314,14 +314,19 @@ class Pipeline:
         """The best-scoring release for files of unknown release: the one their tags name, else
         the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
         like = likelies(paths)
+        albums: list[AlbumInfo] = []
         if like.release_id:
-            ids = [like.release_id]
-        else:
+            try:
+                albums = [await self.metadata.get_release(like.release_id)]
+            except PermanentError:  # a stale or unknown id: search instead (transient errors retry)
+                log.info("tagged release %s is not on MusicBrainz", like.release_id)
+        if not albums:
             refs = await self.metadata.search_releases(
                 like.artist or "", like.album or "", limit=IDENTIFY_SEARCH
             )
-            ids = [r.release_id for r in refs[:IDENTIFY_RELEASES]]
-        albums = [await self.metadata.get_release(i) for i in ids]
+            albums = [
+                await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
+            ]
         scored = [(score_files(files, like, a, profile), a) for a in albums]
         if not scored:
             none = MatchResult(
