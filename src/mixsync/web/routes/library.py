@@ -104,13 +104,23 @@ def _album_key(tg: dict[str, str]) -> tuple[str, str, str]:
     return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), _year(tg)
 
 
+def _group(items: list[Item]) -> dict[tuple[str, str, str], list[Item]]:
+    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
+    dated group with the same artist and album, if there is exactly one."""
+    albums: dict[tuple[str, str, str], list[Item]] = {}
+    for it in items:
+        albums.setdefault(_album_key(it[1]), []).append(it)
+    for key in [k for k in albums if not k[2]]:
+        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
+        if len(dated) == 1:
+            albums[dated[0]] += albums.pop(key)
+    return albums
+
+
 @router.get("/unverified")
 def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
     items = _read_unverified(request, db)
-    albums: dict[tuple[str, str, str], list[Item]] = {}
-    for it in items:  # grouped by tags, not import batch: a batch can mix albums
-        albums.setdefault(_album_key(it[1]), []).append(it)
-    ctx = {"user": user, "count": len(items), "albums": albums}
+    ctx = {"user": user, "count": len(items), "albums": _group(items)}
     return templates.TemplateResponse(request, "pages/unverified.html", ctx)
 
 
@@ -163,15 +173,11 @@ def unverified_submit(
     year: str = "",
     store_url: str = "",
 ) -> HTMLResponse:
-    items = [
-        it
-        for it in _read_unverified(request, db)
-        if _album_key(it[1]) == (albumartist, album, year)
-    ]
+    items = _group(_read_unverified(request, db)).get((albumartist, album, year), [])
     if not items:
         raise HTTPException(404, "no unverified tracks for that album")
     seen = Counter(
-        (_num(tg.get("discnumber"), 1), tg["tracknumber"])
+        (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0))
         for _, tg in items
         if tg.get("tracknumber")
     )
@@ -194,7 +200,9 @@ def unverified_submit(
         "seed_url": SEED_URL,
         "seed": build_seed(_seed_release(request, items, album, albumartist, year)),
     }
-    return templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
+    resp = templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
+    resp.headers["Referrer-Policy"] = "no-referrer"  # Chromium ignores rel=noreferrer on forms
+    return resp
 
 
 @router.post("/fragments/plan")

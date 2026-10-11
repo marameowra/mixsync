@@ -21,6 +21,10 @@ TAGS: dict[str, dict[str, str]] = {
                  "tracknumber": "1", "discnumber": "2", "date": "2020"},
     "b/1.flac": {"albumartist": "Other", "album": "EP", "title": "Solo", "tracknumber": "1"},
     "d/1.flac": {"albumartist": "Band", "album": "LP", "title": "Old", "date": "1999"},
+    "g/1.flac": {"albumartist": "Band", "album": "LP", "title": "U"},
+    "f/1.flac": {"albumartist": "Solo", "album": "S", "title": "Dated", "date": "2001",
+                 "tracknumber": "01"},
+    "f/2.flac": {"albumartist": "Solo", "album": "S", "title": "Undated", "tracknumber": "1"},
     "e/1.flac": {"albumartist": "Odd", "album": "Odd", "title": "Three", "tracknumber": "3"},
     "e/2.flac": {"albumartist": "Odd", "album": "Odd", "title": "One", "tracknumber": "1"},
     "e/3.flac": {"albumartist": "Odd", "album": "Odd"},
@@ -59,9 +63,9 @@ def _hidden(html: str) -> list[tuple[str, str]]:
 def test_grouped_by_album_with_links(client: TestClient) -> None:
     _login(client, "root")
     html = client.get("/library/unverified").text
-    assert "Unverified tracks (9)" in html
+    assert "Unverified tracks (12)" in html
     assert "Band - LP" in html and "Other - EP" in html and "(no album tag)" in html
-    assert html.count("Submit to MusicBrainz") == 4  # none for the untagged group
+    assert html.count("Submit to MusicBrainz") == 6  # none for the untagged group
     assert "Band - LP (2020)" in html and "Band - LP (1999)" in html  # same name, two groups
     assert "year=1999" in html and "year=2020" in html
 
@@ -109,6 +113,20 @@ def test_order_fallbacks_and_non_ascii_digits(client: TestClient) -> None:
     assert "disc 1 track 1" in r.text  # duplicate warning
 
 
+def test_undated_group_merges_into_single_dated_match(client: TestClient) -> None:
+    _login(client, "root")
+    html = client.get("/library/unverified").text
+    assert "Solo - S (2001)" in html and "Solo - S</h2>" not in html
+    # Band/LP has two dated groups, so its undated track stays separate
+    assert "Band - LP</h2>" in html
+
+
+def test_duplicate_warning_compares_parsed_numbers(client: TestClient) -> None:
+    _login(client, "root")
+    page = client.get(SUBMIT, params={"albumartist": "Solo", "album": "S", "year": "2001"}).text
+    assert "disc 1 track 1" in page  # "01" and "1"
+
+
 def test_no_duplicate_warning_for_clean_album(client: TestClient) -> None:
     _login(client, "root")
     assert "same number" not in client.get(SUBMIT, params=Q).text
@@ -128,9 +146,10 @@ def test_harmony_link_and_error(client: TestClient) -> None:
     assert 'role="alert"' in bad and "Open in Harmony" not in bad
 
 
-def test_seed_form_has_noreferrer(client: TestClient) -> None:
+def test_seed_page_sets_no_referrer(client: TestClient) -> None:
     _login(client, "root")
-    assert 'rel="noreferrer"' in client.get(SUBMIT, params=Q).text
+    r = client.get(SUBMIT, params=Q)
+    assert 'rel="noreferrer"' in r.text and r.headers["referrer-policy"] == "no-referrer"
 
 
 def test_unknown_album_404(client: TestClient) -> None:
