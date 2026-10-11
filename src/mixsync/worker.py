@@ -89,8 +89,12 @@ async def run_worker(
             log.exception("startup scan failed; the worker runs without it")
     # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
-        queue.reap()
-        job = queue.claim(worker, lease)
+        try:
+            queue.reap()
+            job = queue.claim(worker, lease)
+        except Exception:  # e.g. "database is locked": a dead loop leaves every job queued
+            log.exception("polling the job queue failed; trying again")
+            job = None
         if job is None:
             try:
                 await asyncio.wait_for(stop.wait(), poll)

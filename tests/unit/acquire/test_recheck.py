@@ -599,3 +599,21 @@ async def test_a_failed_startup_scan_does_not_stop_the_worker() -> None:
     stop = asyncio.Event()
     await run_worker(Queue(), "w", stop, {}, startup=boom)  # type: ignore[arg-type]
     assert claimed == [True]
+
+
+async def test_a_locked_database_while_polling_does_not_stop_the_worker() -> None:
+    calls: list[str] = []
+
+    class Queue:
+        def reap(self) -> None:
+            calls.append("reap")
+            if len(calls) == 1:
+                raise RuntimeError("database is locked")
+
+        def claim(self, *_a: object) -> None:
+            calls.append("claim")
+            stop.set()
+
+    stop = asyncio.Event()
+    await run_worker(Queue(), "w", stop, {}, poll=0)  # type: ignore[arg-type]
+    assert calls == ["reap", "reap", "claim"]
