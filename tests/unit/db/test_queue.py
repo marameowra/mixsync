@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from mixsync.core.config import Settings
@@ -14,7 +15,7 @@ from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import User
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
-from mixsync.worker import HANDLERS, Handler, run_job
+from mixsync.worker import HANDLERS, Handler, _heartbeat, run_job  # pyright: ignore[reportPrivateUsage]
 
 LEASE = timedelta(seconds=30)
 
@@ -259,3 +260,44 @@ def test_newest_job_failing_fails_despite_an_older_one(
     q.enqueue(JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("boom"))  # claims the newer, runnable job
     assert _status(engine, rid)[0] == "failed"
+
+
+def _locked() -> OperationalError:
+    return OperationalError("UPDATE jobs", {}, Exception("database is locked"))
+
+
+def test_a_locked_database_in_a_handler_retries_instead_of_failing(q: JobQueue) -> None:
+    q.enqueue(JobKind.NOOP)
+    assert _run(q, _locked()).status is JobState.RETRY_WAIT
+
+
+def test_a_locked_database_while_recording_the_outcome_leaves_the_job_for_reap(
+    q: JobQueue, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    j = q.enqueue(JobKind.NOOP)
+    job = q.claim("w", LEASE)
+    assert job is not None
+
+    def locked(*_a: object, **_k: object) -> None:
+        raise _locked()
+
+    for name in ("complete", "retry", "fail"):
+        monkeypatch.setattr(q, name, locked)
+    asyncio.run(run_job(q, job, "w", HANDLERS, LEASE))  # must not raise into the worker loop
+    assert q.get(j.id).status is JobState.RUNNING
+    clock.advance(LEASE + timedelta(seconds=1))
+    assert q.reap() == 1 and q.get(j.id).status is JobState.QUEUED
+
+
+def test_a_failed_heartbeat_keeps_beating() -> None:
+    beats: list[int] = []
+
+    class Queue:
+        def heartbeat(self, *_a: object) -> bool:
+            beats.append(1)
+            if len(beats) == 1:
+                raise _locked()
+            return len(beats) < 3
+
+    asyncio.run(_heartbeat(Queue(), 1, "w", timedelta(seconds=0)))  # type: ignore[arg-type]
+    assert len(beats) == 3
