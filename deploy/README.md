@@ -39,6 +39,7 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_MB_CONTACT` | contact for the MusicBrainz User-Agent. Optional; defaults to the project's GitHub URL |
 | `MIXSYNC_MB_BASE_URL` | optional local MusicBrainz mirror |
 | `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
+| `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID user key (from your acoustid.org account). Optional: without it fingerprints are not submitted after a promotion. All submissions go under this one account. |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
 | `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |

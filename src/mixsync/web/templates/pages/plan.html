@@ -3,7 +3,7 @@
 {% block content %}
 {% set promote = plan.kind == "promote" %}
 <h1>{{ "Promote" if promote else "Merge" }} plan {{ plan.id }}</h1>
-{% if promote %}<p>Found on MusicBrainz as release {{ plan.canonical_release_mbid }}. Confirming retags the files with its data and marks them verified. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
+{% if promote %}<p>Found on MusicBrainz as release {{ plan.canonical_release_mbid }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
 {% else %}<p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>{% endif %}
 {% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
 <p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>

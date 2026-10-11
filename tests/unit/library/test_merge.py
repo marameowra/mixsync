@@ -197,6 +197,8 @@ def test_execute_moves_retags_and_trashes(world: World) -> None:
     world.merger.execute(pid)
 
     assert world.plan(pid).status == "done" and world.canonical() == CANON
+    with world.sessions() as s:  # a merge teaches AcoustID nothing
+        assert s.scalar(select(Job.id).where(Job.kind == JobKind.ACOUSTID_SUBMIT)) is None
     now = world.tracks()
     canon_dir = "Band/Album (1999)/"
     assert now["r1"] == (canon_dir + "01-01 Song r1.flac", CANON)

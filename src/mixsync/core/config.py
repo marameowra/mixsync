@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     mb_rate: float = Field(default=1.0, gt=0, le=1)  # MusicBrainz allows 1 req/s per IP
     mb_base_url: str = "https://musicbrainz.org"  # optional local mirror
     acoustid_app_key: str = ""
+    acoustid_user_key: str = ""  # one key for the deployment; all submissions go under it
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
     navidrome_url: str = "http://navidrome:4533"

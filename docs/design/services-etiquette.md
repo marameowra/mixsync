@@ -13,7 +13,7 @@ MixSync uses free, mostly community-run services. It must use them as intended a
 |---|---|---|---|---|
 | MusicBrainz | ~1 req/s avg **per IP** | 1 req/s (≤ 1, configurable) | UA required | core |
 | Cover Art Archive | none in place | 1 req/s (self-imposed) | UA (courtesy) | core |
-| AcoustID | ≤ 3 req/s | 3 req/s | app key + per-user key | core |
+| AcoustID | ≤ 3 req/s | 3 req/s | app key + deployment user key | core |
 | ListenBrainz | ≤ 1 req/s, plus `X-RateLimit-*` headers | 1 req/s + headers | UA required + user token | core (discovery) |
 | Last.fm | no number; "several calls per second" continuously risks suspension | 1 req/s (self-imposed) | identifiable UA + API key | **deferred, not in v1** |
 | Discogs | 60/min authenticated, 25/min unauthenticated, per IP, rolling 60 s | 50/min | unique UA + user token | off by default (fallback) |
@@ -53,7 +53,7 @@ Source: [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/AP
 |---|---|---|
 | Rate | "Do not make more than 3 requests per second" | 3 req/s bucket |
 | App key | Register the application; the key goes in `client` | One MixSync app key per install (`MIXSYNC_ACOUSTID_APP_KEY`). The public example key expires, so don't ship it. |
-| User key | Needed for submissions; never store a key in app code, each user provides their own | Per-user key in `user_links` (encrypted) |
+| User key | Needed for submissions; never store a key in app code | One deployment-wide key in `MIXSYNC_ACOUSTID_USER_KEY` (decided 2026-10-10): all submissions go under that account; no per-user storage. Without it (or the app key) submissions are skipped. |
 | Submissions | Batch with indexed params (`fingerprint.0`, …); gzip-compressed POST preferred; processed asynchronously | Batch per album; gzip POST; poll the submission status a few times with backoff; always include `mbid` |
 | Heavy traffic | Tell the operators in advance if your app will generate significant traffic | Migration preflight shows the total AcoustID lookups. For very large libraries the preflight suggests contacting AcoustID first. |
 | Use | Free for non-commercial use; must not be used with illegal products or services | Non-commercial |

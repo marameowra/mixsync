@@ -18,7 +18,11 @@ _SKIP_HEADERS = {"content-encoding", "content-length", "transfer-encoding"}
 
 
 def cacheable(request: httpx.Request) -> bool:
-    return request.method == "GET" and "authorization" not in request.headers
+    return (
+        request.method == "GET"
+        and "authorization" not in request.headers
+        and request.headers.get("cache-control") != "no-cache"  # a poll wants a fresh answer
+    )
 
 
 def _key(request: httpx.Request) -> str:
