@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.merge import Merger
 from mixsync.acquire.pipeline import Pipeline
+from mixsync.acquire.recheck import Rechecker
 from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
@@ -142,9 +143,17 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
     )
-    handlers = (
-        HANDLERS | _pipeline(settings, fileops, sessions, clock).handlers() | merger.handlers()
+    pipeline = _pipeline(settings, fileops, sessions, clock)
+    rechecker = Rechecker(
+        sessions,
+        clock,
+        pipeline.metadata,
+        pipeline.fingerprint,
+        pipeline.acoustid,
+        fileops,
+        settings.path_template,
     )
+    handlers = HANDLERS | pipeline.handlers() | merger.handlers() | rechecker.handlers()
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers
 
 

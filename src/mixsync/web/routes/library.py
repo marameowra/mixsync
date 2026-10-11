@@ -10,11 +10,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import recheck
 from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
+from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Plan, Track
+from mixsync.db.models.library import Plan
 from mixsync.library import fragmentation, tags
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -78,50 +80,37 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
     )
 
 
-Item = tuple[Track, dict[str, str]]
-
-
-def _read_unverified(request: Request, db: Session) -> list[Item]:
-    # shortcut: reads the tags of every unverified file per request; move the album fields
-    # into DB columns when unverified sets get large.
-    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
-    root = Path(request.app.state.settings.data_dir) / "library"
-    items: list[Item] = []
-    for t in rows:
-        try:
-            items.append((t, tags.read_fields(root / t.path)))
-        except Exception:  # file moved or unreadable: the path alone still identifies it
-            items.append((t, {}))
-    return items
-
-
-def _year(tg: dict[str, str]) -> str:
-    y = tg.get("date", "")[:4]
-    return y if y.isascii() and y.isdigit() and y != "0000" else ""
-
-
-def _album_key(tg: dict[str, str]) -> tuple[str, str, str]:
-    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), _year(tg)
-
-
-def _group(items: list[Item]) -> dict[tuple[str, str, str], list[Item]]:
-    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
-    dated group with the same artist and album, if there is exactly one."""
-    albums: dict[tuple[str, str, str], list[Item]] = {}
-    for it in items:
-        albums.setdefault(_album_key(it[1]), []).append(it)
-    for key in [k for k in albums if not k[2]]:
-        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
-        if len(dated) == 1:
-            albums[dated[0]] += albums.pop(key)
-    return albums
+def _read_unverified(request: Request, db: Session) -> list[recheck.Item]:
+    return recheck.read_unverified(db, Path(request.app.state.settings.data_dir) / "library")
 
 
 @router.get("/unverified")
 def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
     items = _read_unverified(request, db)
-    ctx = {"user": user, "count": len(items), "albums": _group(items)}
+    albums = recheck.group(items)
+    ctx = {
+        "user": user,
+        "count": len(items),
+        "albums": albums,
+        "status": recheck.statuses(db, albums),
+    }
     return templates.TemplateResponse(request, "pages/unverified.html", ctx)
+
+
+@router.post("/unverified/check")
+def check_now(
+    request: Request,
+    user: User,
+    db: Db,
+    album: Annotated[str, Form()],
+    albumartist: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    key = (albumartist, album, year)
+    if key not in recheck.group(_read_unverified(request, db)):
+        raise HTTPException(404, "no unverified tracks for that album")
+    enqueue_recheck(db, datetime.now(UTC), key, user.id)
+    return RedirectResponse("/library/unverified", status_code=303)
 
 
 def _num(v: str | None, default: int) -> int:
@@ -129,10 +118,10 @@ def _num(v: str | None, default: int) -> int:
 
 
 def _seed_release(
-    request: Request, items: list[Item], album: str, artist: str, year: str
+    request: Request, items: list[recheck.Item], album: str, artist: str, year: str
 ) -> SeedRelease:
     root = Path(request.app.state.settings.data_dir) / "library"
-    discs: dict[int, list[Item]] = {}
+    discs: dict[int, list[recheck.Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
     mediums: list[SeedMedium] = []
@@ -173,7 +162,7 @@ def unverified_submit(
     year: str = "",
     store_url: str = "",
 ) -> HTMLResponse:
-    items = _group(_read_unverified(request, db)).get((albumartist, album, year), [])
+    items = recheck.group(_read_unverified(request, db)).get((albumartist, album, year), [])
     if not items:
         raise HTTPException(404, "no unverified tracks for that album")
     seen = Counter(

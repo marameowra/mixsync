@@ -2,7 +2,7 @@
 rules around them (backoff, debounce, retries, review)."""
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -641,6 +641,12 @@ async def test_mark_unverified_imports_the_edited_tags_without_ids(
     assert list(env.downloads.iterdir()) == [] and env.source.cleared == ["peer1"]
     assert env.target.rescans == 1 and len(calls) == 2
     assert not (env.data_dir / "library" / one).with_name("cover.jpg").exists()
+    (check,) = env.jobs(JobKind.RECHECK)  # the first background check, in a week or so
+    assert check.payload == {"album": ["Edited Band", "Edited Album", "1999"], "user_id": None,
+                             "attempt": 0}  # fmt: skip
+    assert check.run_after.replace(tzinfo=UTC) - check.created_at.replace(tzinfo=UTC) > timedelta(
+        days=3
+    )
 
     with env.sessions.begin() as s:
         create_user(s, "root", "pw", admin=True)

@@ -1,6 +1,7 @@
 """Request state shared by the pipeline handlers and the web layer: creating a request,
 marking candidates tried, coalescing rescans and applying a reviewer's decision."""
 
+import random
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any
@@ -17,6 +18,8 @@ from mixsync.db.queue import enqueue_in
 from mixsync.match.profiles import BALANCED
 
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
+RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
+LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
 
 
@@ -99,3 +102,43 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
         )
     else:
         retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
+
+
+AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them
+
+
+def live_rechecks(s: Session, key: AlbumKey) -> list[Job]:
+    return [
+        j
+        for j in s.scalars(select(Job).where(Job.kind == JobKind.RECHECK, Job.status.in_(LIVE)))
+        if tuple(j.payload["album"]) == key
+    ]
+
+
+def enqueue_recheck(
+    s: Session,
+    now: datetime,
+    key: AlbumKey,
+    user_id: int | None,
+    *,
+    attempt: int = 0,
+    chain_key: str | None = None,
+) -> None:
+    """A background check (no user) waits a random point in the second half of its interval, so
+    never under half of it and never at a fixed time; a user's runs now. Without a `chain_key`
+    (the continuation of a check), nothing is added while a check of the same kind is waiting
+    or running for the album."""
+    background = user_id is None
+    if not chain_key and any(
+        (j.payload["user_id"] is None) == background for j in live_rechecks(s, key)
+    ):
+        return
+    delay = RECHECK_INTERVALS[min(attempt, len(RECHECK_INTERVALS) - 1)]
+    enqueue_in(
+        s,
+        now,
+        JobKind.RECHECK,
+        {"album": list(key), "user_id": user_id, "attempt": attempt},
+        run_after=now + delay * random.uniform(0.5, 1.0) if background else now,
+        idempotency_key=chain_key,
+    )
