@@ -20,10 +20,12 @@ from mixsync.acquire import pipeline
 from mixsync.acquire.migration import Migrator
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import Band
+from mixsync.core.matching import Band, MatchResult
 from mixsync.core.types import AcoustIdResult, ReleaseRef
+from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -856,6 +858,40 @@ async def test_a_confident_partial_album_imports_and_says_it_is_partial(
         rows = mig.report(s, s.scalars(select(Migration)).one())
     assert [(r["status"], r["reason"]) for r in rows] == [("partial", "1 of 13 tracks present")]
     assert mig.totals(rows)["partial"] == 1 and mig.totals(rows)["imported"] == 0
+
+
+def newer_decision(rig: Rig, partial: str | None) -> None:
+    """Record a later decision for the migration's request, as a re-verify would."""
+    with rig.env.sessions() as s, s.begin():
+        old = s.scalars(select(MatchDecision).order_by(MatchDecision.id.desc())).first()
+        assert old
+        ev = {k: v for k, v in old.evidence.items() if k != "partial"}
+        if partial:
+            ev["partial"] = partial
+        res = MatchResult(0.0, Band.AUTO_ACCEPT, (), (), 1)
+        decisions.record(
+            s, res, evidence=ev, user_id=old.user_id, stage=2, release_mbid=old.release_mbid
+        )
+
+
+def migration_rows(rig: Rig) -> list[dict[str, Any]]:
+    with rig.env.sessions() as s:
+        return mig.report(s, s.scalars(select(Migration)).one())
+
+
+async def test_the_latest_decision_decides_whether_an_import_is_partial(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    await run_partial(rig)
+    newer_decision(rig, None)  # a later, complete decision
+    rows = migration_rows(rig)
+    assert [(r["status"], r["reason"]) for r in rows] == [("imported", "")]
+    assert mig.totals(rows)["imported"] == 1 and mig.totals(rows)["partial"] == 0
+    newer_decision(rig, "2 of 13 tracks present")  # and a later partial one wins again
+    assert [(r["status"], r["reason"]) for r in migration_rows(rig)] == [
+        ("partial", "2 of 13 tracks present")
+    ]
 
 
 async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
