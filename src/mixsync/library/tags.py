@@ -163,6 +163,12 @@ def read_fields(path: Path) -> dict[str, str]:
     return out
 
 
+def length_ms(path: Path) -> int | None:
+    """Audio length in milliseconds, or None if the file reports none."""
+    length = getattr(_sniff(path).info, "length", 0)
+    return round(length * 1000) if length else None
+
+
 def _set(fmt: str, f: Any, native: str, values: list[str]) -> None:
     if fmt in ("flac", "ogg"):
         f.tags[native] = values

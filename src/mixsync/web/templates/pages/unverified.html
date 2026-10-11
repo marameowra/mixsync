@@ -1,18 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Unverified - MixSync{% endblock %}
 {% block content %}
-<h1>Unverified tracks ({{ items|length }})</h1>
-{% if items %}
+<h1>Unverified tracks ({{ count }})</h1>
+{% for (artist, album), items in albums.items() %}
+<h2>{{ artist or "(no artist)" }} - {{ album or "(no album tag)" }}</h2>
+{% if album %}
+<p><a href="/library/unverified/submit?{{ {'albumartist': artist, 'album': album}|urlencode }}">Submit to MusicBrainz</a></p>
+{% endif %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Path</th><th>Title</th><th>Album</th><th></th></tr></thead>
+  <thead><tr><th>Path</th><th>Title</th></tr></thead>
   <tbody>
   {% for t, tg in items %}
   <tr>
     <td>{{ t.path }}</td>
     <td>{{ tg.get("title", "") }}</td>
-    <td>{{ tg.get("album", "") }}</td>
-    <td>{# Submit to MusicBrainz and Check MusicBrainz now go here (later slices) #}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -20,5 +22,5 @@
 </div>
 {% else %}
 <p>Nothing unverified.</p>
-{% endif %}
+{% endfor %}
 {% endblock %}

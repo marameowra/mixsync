@@ -138,3 +138,9 @@ def test_sk_q08_wrong_source_tags_do_not_survive_import(fmt: str, make_src: Make
     assert got[NATIVE[fmt][1]] == [RELEASE] and got[TITLE[fmt]] == ["T"]
     tags.restore(f, original)
     assert tags.read_all(f) == original
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_length_ms(fmt: str, make_src: MakeSrc) -> None:
+    ms = tags.length_ms(make_src(fmt))
+    assert ms is not None and ms > 0

@@ -15,6 +15,15 @@ from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.library import fragmentation, tags
+from mixsync.submit.harmony import harmony_url
+from mixsync.submit.mb_seed import (
+    SEED_URL,
+    Credit,
+    SeedMedium,
+    SeedRelease,
+    SeedTrack,
+    build_seed,
+)
 from mixsync.web.deps import Db, Merge, require
 from mixsync.web.templating import templates
 
@@ -68,19 +77,95 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
     )
 
 
-@router.get("/unverified")
-def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
+Item = tuple[Track, dict[str, str]]
+
+
+def _read_unverified(request: Request, db: Session) -> list[Item]:
     rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
     root = Path(request.app.state.settings.data_dir) / "library"
-    items: list[tuple[Track, dict[str, str]]] = []
+    items: list[Item] = []
     for t in rows:
         try:
             items.append((t, tags.read_fields(root / t.path)))
         except Exception:  # file moved or unreadable: the path alone still identifies it
             items.append((t, {}))
-    return templates.TemplateResponse(
-        request, "pages/unverified.html", {"user": user, "items": items}
-    )
+    return items
+
+
+def _album_key(tg: dict[str, str]) -> tuple[str, str]:
+    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", "")
+
+
+@router.get("/unverified")
+def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
+    items = _read_unverified(request, db)
+    albums: dict[tuple[str, str], list[Item]] = {}
+    for it in items:  # grouped by tags, not import batch: a batch can mix albums
+        albums.setdefault(_album_key(it[1]), []).append(it)
+    ctx = {"user": user, "count": len(items), "albums": albums}
+    return templates.TemplateResponse(request, "pages/unverified.html", ctx)
+
+
+def _num(v: str | None, default: int) -> int:
+    return int(v) if v and v.isdigit() else default
+
+
+def _seed_release(request: Request, items: list[Item], album: str, artist: str) -> SeedRelease:
+    root = Path(request.app.state.settings.data_dir) / "library"
+    discs: dict[int, list[Item]] = {}
+    for it in items:
+        discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
+    mediums: list[SeedMedium] = []
+    for d in sorted(discs):
+        out: list[SeedTrack] = []
+        for pos, (t, tg) in enumerate(
+            sorted(discs[d], key=lambda i: _num(i[1].get("tracknumber"), 10**6)), 1
+        ):
+            try:
+                ms = tags.length_ms(root / t.path)
+            except Exception:  # unreadable audio: seed without a length
+                ms = None
+            a = tg.get("artist", "")
+            out.append(
+                SeedTrack(
+                    tg.get("tracknumber") or str(pos),
+                    tg.get("title") or Path(t.path).stem,
+                    ms,
+                    [Credit(a)] if a and a != artist else [],
+                )
+            )
+        mediums.append(SeedMedium(out))
+    date = next((tg["date"] for _, tg in items if tg.get("date")), "")
+    year = int(date[:4]) if date[:4].isdigit() else None
+    return SeedRelease(album, [Credit(artist)] if artist else [], mediums, year=year)
+
+
+@router.get("/unverified/submit")
+def unverified_submit(
+    request: Request, user: User, db: Db, album: str, albumartist: str = "", store_url: str = ""
+) -> HTMLResponse:
+    items = [
+        it for it in _read_unverified(request, db) if _album_key(it[1]) == (albumartist, album)
+    ]
+    if not items:
+        raise HTTPException(404, "no unverified tracks for that album")
+    harmony, error = None, None
+    if store_url.strip():
+        try:
+            harmony = harmony_url(store_url)
+        except ValueError as e:
+            error = str(e)
+    ctx = {
+        "user": user,
+        "album": album,
+        "albumartist": albumartist,
+        "store_url": store_url,
+        "harmony": harmony,
+        "error": error,
+        "seed_url": SEED_URL,
+        "seed": build_seed(_seed_release(request, items, album, albumartist)),
+    }
+    return templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
 
 
 @router.post("/fragments/plan")
