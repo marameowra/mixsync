@@ -11,6 +11,7 @@ class JobKind(StrEnum):
     RESCAN = "rescan"
     MERGE = "merge"
     UNDO_MERGE = "undo_merge"
+    RECHECK = "recheck"
 
 
 class JobState(StrEnum):

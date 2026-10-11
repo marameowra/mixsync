@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Plan {{ plan.id }} - MixSync{% endblock %}
 {% block content %}
-<h1>Merge plan {{ plan.id }}</h1>
-<p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>
+{% set promote = plan.kind == "promote" %}
+<h1>{{ "Promote" if promote else "Merge" }} plan {{ plan.id }}</h1>
+{% if promote %}<p>Found on MusicBrainz as release {{ plan.canonical_release_mbid }}. Confirming retags the files with its data and marks them verified. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
+{% else %}<p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>{% endif %}
 {% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
 <p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>
-{% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm merge") }}{% endif %}
-{% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume merge") }}{% endif %}
-{% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo merge") }}{% endif %}
+{% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm promotion" if promote else "Confirm merge") }}{% endif %}
+{% if "discard" in allowed %}<form method="post" action="/library/plans/{{ plan.id }}/discard">{{ forms.csrf() }}<button type="submit">Discard plan</button></form>{% endif %}
+{% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume promotion" if promote else "Resume merge") }}{% endif %}
+{% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo promotion" if promote else "Undo merge") }}{% endif %}
 <div class="scroll">
 <table>
   <thead><tr><th>Op</th><th>File</th><th>Detail</th></tr></thead>
@@ -17,18 +20,18 @@
     <td>{{ op.op }}{% if op.done %} (done){% endif %}</td>
     {% if op.op == "move" %}
     <td>{{ op.old.path }} &rarr; {{ op.new_path }}</td>
-    <td>release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}</td>
+    <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; recording {{ op.tags.recording_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}</td>
     {% elif op.op == "trash" %}
     <td>{{ op.old.path }}</td>
     <td>duplicate; keeping {{ op.keeper }}</td>
     {% else %}
     <td>{{ op.old.path }}</td>
-    <td>not on the canonical release</td>
+    <td>{{ op.reason or "not on the canonical release" }}</td>
     {% endif %}
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
-<p><a href="/library/fragments">Back</a></p>
+<p><a href="{{ "/library/unverified" if promote else "/library/fragments" }}">Back</a></p>
 {% endblock %}

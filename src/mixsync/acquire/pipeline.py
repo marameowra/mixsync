@@ -19,9 +19,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.requests import (
     VERIFY_ATTEMPTS,
+    AlbumKey,
     candidate_dict,
     candidate_from_dict,
     enqueue_import,
+    enqueue_recheck,
     enqueue_rescan,
     profile_for,
     retry_search,
@@ -249,10 +251,10 @@ class Pipeline:
         for path in paths:
             fp = await self.fingerprint(path)
             results = await self.acoustid.lookup(fp)
-            files.append(_file_track(path, fp.duration, tuple(results)))
+            files.append(file_track(path, fp.duration, tuple(results)))
         with self.sessions() as s:
             profile = profile_for(s, self._request(s, job).user_id)
-        result = score_files(files, _likelies(paths), album, profile)
+        result = score_files(files, likelies(paths), album, profile)
         pairs, _, _ = assign_tracks(files, album.tracks)
         index = {id(f): i for i, f in enumerate(files)}
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
@@ -260,7 +262,7 @@ class Pipeline:
             {
                 "local_path": str(paths[index[id(f)]]),
                 "track": track_no[id(t)],
-                "acoustid_id": _acoustid_id(f),
+                "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
         ]
@@ -367,10 +369,16 @@ class Pipeline:
         results = await asyncio.to_thread(
             self.importer.import_release, files, album, "unverified", batch
         )
-        await self._finish(job, cand, results, batch)
+        year = str(edits["year"]) if edits["year"] else ""
+        await self._finish(job, cand, results, batch, (album.artist, album.album, year))
 
     async def _finish(
-        self, job: JobRecord, cand: Candidate, results: list[ImportResult], batch: str
+        self,
+        job: JobRecord,
+        cand: Candidate,
+        results: list[ImportResult],
+        batch: str,
+        recheck: AlbumKey | None = None,  # an unverified import: look for it on MusicBrainz later
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         if results and not errors:
@@ -382,6 +390,8 @@ class Pipeline:
             req.last_error = "; ".join(errors) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+                if recheck:
+                    enqueue_recheck(s, now, recheck, None)
 
     async def _unowned(
         self, album: AlbumInfo, files: list[canonical.File], batch: str
@@ -461,7 +471,7 @@ def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
     return None
 
 
-def _file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTrack:
+def file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTrack:
     t = tags.read_fields(path)
     disc, track, title = parse_name(path.stem)
     return FileTrack(
@@ -479,7 +489,7 @@ def _int(v: str | None) -> int | None:
     return int(v) if v and v.isdigit() else None
 
 
-def _likelies(paths: list[Path]) -> Likelies:
+def likelies(paths: list[Path]) -> Likelies:
     """The most common album-level tag across the files."""
     seen = [tags.read_fields(p) for p in paths]
 
@@ -501,7 +511,7 @@ def _best(f: FileTrack) -> dict[str, Any]:
     return {"score": best.score, "recording_ids": list(best.recording_ids)} if best else {}
 
 
-def _acoustid_id(f: FileTrack) -> str | None:
+def acoustid_id(f: FileTrack) -> str | None:
     best = max(f.acoustid, key=lambda r: r.score, default=None)
     return best.id if best and best.score >= ACOUSTID_ID_SCORE else None
 

@@ -37,8 +37,9 @@ class Plan(TimestampMixin, Base):
     __tablename__ = "plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))  # merge
+    kind: Mapped[str] = mapped_column(String(16))  # merge | promote
     release_group_mbid: Mapped[str] = mapped_column(String(36))
+    # for a promote plan: the matched release; the canonical choice is never touched
     canonical_release_mbid: Mapped[str] = mapped_column(String(36))
     previous_canonical_mbid: Mapped[str | None] = mapped_column(String(36))  # None: none stored
     canonical_set: Mapped[bool] = mapped_column(default=False)  # this plan stored/switched it

@@ -16,7 +16,8 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.requests import enqueue_rescan
+from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
+from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
 from mixsync.core.jobs import JobKind, JobState
@@ -118,7 +119,9 @@ class Merger:
                 raise PlanInProgress(busy)
             s.execute(  # abandoned previews: never executed, so DB only
                 update(Plan)
-                .where(Plan.release_group_mbid == group, Plan.status == "draft")
+                .where(
+                    Plan.kind == "merge", Plan.release_group_mbid == group, Plan.status == "draft"
+                )
                 .values(status="discarded")
             )
             plan = Plan(
@@ -159,9 +162,10 @@ class Merger:
             if plan.status not in ("draft", "running", "failed") or undo_failed:
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status, plan.error = "running", None
+            promote = plan.kind == "promote"  # files move onto a release; canonical is left alone
             before = canonical_db.get(s, plan.release_group_mbid)
-            ok = self._set_canonical(s, plan)
-            if ok and before != plan.canonical_release_mbid:
+            ok = promote or self._set_canonical(s, plan)
+            if ok and not promote and before != plan.canonical_release_mbid:
                 plan.canonical_set = True
             batch, ops = plan.batch_id, plan.ops
         try:
@@ -169,7 +173,8 @@ class Merger:
                 raise SafetyError("the canonical release changed since the plan was built")
             for i, op in enumerate(ops):
                 if op["op"] in ("move", "trash") and not op["done"]:
-                    self._canonical_unchanged(plan_id)
+                    if not promote:
+                        self._canonical_unchanged(plan_id)
                     (self._move if op["op"] == "move" else self._trash)(plan_id, batch, i, op)
         except Exception as e:  # a crash (BaseException) leaves "running": a retry resumes
             self._fail(plan_id, str(e) or repr(e))
@@ -240,8 +245,13 @@ class Merger:
             )
 
         def apply(s: Session, row: Track) -> None:
-            row.path, row.release_mbid = new, op["tags"]["release_id"]
-            row.artist_mbids = list(op["tags"]["artist_ids"])
+            tg = op["tags"]
+            row.path, row.release_mbid = new, tg["release_id"]
+            row.artist_mbids = list(tg["artist_ids"])
+            if s.get_one(Plan, plan_id).kind == "promote":  # a merge keeps the rest of the row
+                row.recording_mbid = tg["recording_id"]
+                row.release_group_mbid = tg["release_group_id"]
+                row.acoustid_id, row.status = tg["acoustid_id"], tg["status"]
 
         self._commit_op(plan_id, i, op, apply, done=True)
 
@@ -300,7 +310,7 @@ class Merger:
             if plan.status not in ("done", "failed", "running", "undoing"):
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status = "undoing"
-            batch, ops = plan.batch_id, plan.ops
+            batch, ops, kind = plan.batch_id, plan.ops, plan.kind
         try:
             for i in reversed(range(len(ops))):
                 if ops[i]["op"] in ("move", "trash"):
@@ -327,6 +337,11 @@ class Merger:
                     canonical_db.switch(s, group, new, prev)
             plan.status, plan.error, plan.canonical_set = "undone", None, False
             enqueue_rescan(s, self.clock.now())
+            if kind == "promote":  # unverified again: look for them on MusicBrainz later
+                ids = {op["track_id"] for op in ops}
+                for key, items in by_album(read_unverified(s, self.fileops.library)).items():
+                    if key[1] and ids & {t.id for t, _ in items}:
+                        enqueue_recheck(s, self.clock.now(), key, None)
 
     def _undo_op(self, plan_id: int, batch: str, ubatch: str, i: int, op: dict[str, Any]) -> None:
         fo, old = self.fileops, op["old"]
@@ -357,6 +372,10 @@ class Merger:
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
             row.artist_mbids = list(old["artist_mbids"])
+            if s.get_one(Plan, plan_id).kind == "promote":
+                row.recording_mbid = old["recording_mbid"]
+                row.release_group_mbid = old["release_group_mbid"]
+                row.acoustid_id, row.status = old["acoustid_id"], old["status"]
 
         if row is None:  # a trash op deleted the row
             with self.sessions.begin() as s:

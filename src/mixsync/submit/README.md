@@ -12,8 +12,9 @@ Close the loop for tracks MusicBrainz doesn't have. Help the user add them to MB
 |---|---|
 | `harmony.py` | `harmony_url(store_url) -> str` |
 | `mb_seed.py` | `build_seed(SeedRelease) -> list[tuple[str, str]]` (ordered field → value, repeated keys allowed); rendered by `web` as a form the user clicks, POSTing to `https://musicbrainz.org/release/add` in a new tab |
-| `recheck.py` | Job `submit.recheck(track_id)`: search MB + AcoustID; a confident match → a "Promote to verified" review item with a tag diff |
-| `promote.py` | After the user confirms: retag through `library`, set `status=verified`, then submit the fingerprint to AcoustID with the user's key |
+| `promote.py` | After the user confirms: submit the fingerprint to AcoustID with the user's key |
+
+The re-check and the promotion live in `acquire` (`acquire/recheck.py`, run by the Merger as a `promote` plan), because `submit` may not import `acquire` and a promotion reuses the merge plan machinery. A confident match makes a draft plan whose preview shows the tag diff; the user confirms and can undo.
 
 ## Rules
 - The seed includes an edit note: "Seeded by MixSync from local files."
