@@ -14,7 +14,12 @@ _STATUS_BY_BAND = {
     Band.REVIEW: PENDING,
     Band.REJECT: "rejected_auto",
 }
-_STATUS_BY_ACTION = {"accept": "accepted", "reject": "rejected", "repick": "repick"}
+_STATUS_BY_ACTION = {
+    "accept": "accepted",
+    "reject": "rejected",
+    "repick": "repick",
+    "unverified": "unverified",
+}
 
 
 class DecisionStateError(Exception):

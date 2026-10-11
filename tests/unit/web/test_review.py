@@ -410,3 +410,136 @@ def test_delete_request_409_rolls_back_decision_rejects(
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
         assert [decisions.get(s, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
+
+
+GOOD = {
+    "albumartist": "Band",
+    "album": "Album",
+    "year": "2001",
+    "title": ["T"],
+    "artist": [""],
+    "disc": ["1"],
+    "track": ["1"],
+}
+
+
+def test_unverified_form_falls_back_to_file_name(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/missing.mp3")
+    _login(client, "alice")
+    html = client.get(f"/review/{i}").text
+    assert f'action="/review/{i}/unverified"' in html and 'value="a"' in html  # title from a.mp3
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"albumartist": " "},
+        {"album": "x" * 256},
+        {"year": "0"},
+        {"year": "abc"},
+        {"title": [" "]},
+        {"disc": ["0"]},
+        {"track": ["-1"]},
+        {"track": ["1", "2"]},
+        {"title": ["a\x00b"]},
+        {"album": "a\nb"},
+        {"artist": ["a\tb"]},
+    ],
+)
+def test_unverified_rejects_bad_input(
+    client: TestClient, sf: sessionmaker[Session], bad: dict[str, object]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, **bad, "csrf_token": tok})
+    assert r.status_code == 400 and "text/html" in r.headers["content-type"]
+    assert 'role="alert"' in r.text
+    with sf() as s:
+        d = decisions.get(s, i)
+        assert d and d.status == "pending_review" and "unverified" not in d.evidence
+
+
+def test_unverified_error_keeps_submitted_values(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    data = {**GOOD, "csrf_token": tok, "albumartist": "Kept Band", "title": ["Kept Title"]}
+    r = client.post(f"/review/{i}/unverified", data={**data, "track": ["0"]})
+    assert r.status_code == 400
+    assert 'value="Kept Band"' in r.text and 'value="Kept Title"' in r.text
+    assert "a.mp3: track must be a whole number" in r.text
+
+
+def test_unverified_link_only_for_library_editors(client: TestClient) -> None:
+    _login(client, "alice")  # plain user: no library.edit
+    assert "/library/unverified" not in client.get("/").text
+    _login(client, "root")
+    assert "/library/unverified" in client.get("/").text
+
+
+def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    url = f"/review/{i}/unverified"
+    for who in ("nocap", "bob"):
+        assert client.post(url, data={**GOOD, "csrf_token": _login(client, who)}).status_code == 403
+    tok = _login(client, "alice")
+    assert client.post(url, data=GOOD).status_code == 403  # no CSRF token
+    assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 303
+    with sf() as s:
+        d = decisions.get(s, i)
+        assert (
+            d
+            and d.status == "unverified"
+            and d.evidence["unverified"]["tracks"][0]
+            == {
+                "local_path": "/x",
+                "title": "T",
+                "artist": "",
+                "disc": 1,
+                "track": 1,
+            }
+        )
+    assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 409
+
+
+def test_unverified_control_character_message(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, "artist": ["a\tb"], "csrf_token": tok})
+    assert "artist must not contain control characters" in r.text
+    assert "artist is required" not in r.text
+
+
+def test_unverified_error_page_escapes_submitted_values(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    evil = {"albumartist": '"><script>alert(1)</script>', "title": ['x" onfocus="y'], "year": "0"}
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, **evil, "csrf_token": tok})
+    assert r.status_code == 400
+    assert "<script>alert(1)</script>" not in r.text and 'onfocus="y' not in r.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text and "&#34;" in r.text
+
+
+def test_unverified_409_for_stage_one_and_missing_paths(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    stage1 = _make_decision(sf, "alice", "/x")
+    nopath = _make_decision(sf, "alice", "")
+    with sf() as s, s.begin():
+        d = decisions.get(s, stage1)
+        assert d
+        d.stage = 1
+        d = decisions.get(s, nopath)
+        assert d
+        d.evidence = {**d.evidence, "source": {"files": [{"name": "a.mp3"}]}}
+    tok = _login(client, "alice")
+    for i in (stage1, nopath):
+        r = client.post(f"/review/{i}/unverified", data={**GOOD, "csrf_token": tok})
+        assert r.status_code == 409

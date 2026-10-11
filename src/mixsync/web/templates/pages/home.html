@@ -3,4 +3,5 @@
 <h1>MixSync</h1>
 <p>Signed in as {{ user.username }}</p>
 <p><a href="/review">{{ pending }} item{{ "" if pending == 1 else "s" }} awaiting review</a></p>
+{% if unverified is not none %}<p><a href="/library/unverified">{{ unverified }} unverified track{{ "" if unverified == 1 else "s" }}</a></p>{% endif %}
 {% endblock %}

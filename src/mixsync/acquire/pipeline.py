@@ -298,9 +298,13 @@ class Pipeline:
             d = decisions.get(s, did)
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
-            mbid, assignment = d.chosen_release_mbid or d.release_mbid, d.evidence["assignment"]
             cand = candidate_from_dict(d.evidence["candidate"])
+            edits = d.evidence.get("unverified")
+            mbid = d.chosen_release_mbid or d.release_mbid
+            assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
+        if edits:
+            return await self._import_unverified(job, cand, edits)
         album = await self.metadata.get_release(mbid)
         files: list[tuple[Path, TrackInfo, str | None]] = [
             (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
@@ -341,6 +345,33 @@ class Pipeline:
             self.importer.import_release, files, target, "verified", batch
         )
         await self._cover(target, results, batch)
+        await self._finish(job, cand, results, batch)
+
+    async def _import_unverified(
+        self, job: JobRecord, cand: Candidate, edits: dict[str, Any]
+    ) -> None:
+        """The reviewer's tags and no MusicBrainz or AcoustID ids (nothing vouches for the
+        files). No canonical logic, duplicate check or cover art: all of those need ids."""
+        album = AlbumInfo(edits["albumartist"], edits["album"], (), year=edits["year"])
+        files: list[tuple[Path, TrackInfo, str | None]] = [
+            (
+                Path(t["local_path"]),
+                TrackInfo(
+                    t["title"], t["artist"] or None, medium_index=t["track"], medium=t["disc"]
+                ),
+                None,
+            )
+            for t in edits["tracks"]
+        ]
+        batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
+        results = await asyncio.to_thread(
+            self.importer.import_release, files, album, "unverified", batch
+        )
+        await self._finish(job, cand, results, batch)
+
+    async def _finish(
+        self, job: JobRecord, cand: Candidate, results: list[ImportResult], batch: str
+    ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         if results and not errors:
             await self._release(cand, [r.src for r in results], batch)
