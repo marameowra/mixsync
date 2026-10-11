@@ -30,6 +30,8 @@ TAGS: dict[str, dict[str, str]] = {
     "e/3.flac": {"albumartist": "Odd", "album": "Odd"},
     "e/4.flac": {"albumartist": "Odd", "album": "Odd", "title": "Sq", "tracknumber": "1",
                  "discnumber": "\u00b2", "date": "\u00b2020"},
+    "h/1.flac": {"albumartist": "Vinyl", "album": "V", "title": "Side A", "tracknumber": "A1"},
+    "h/2.flac": {"albumartist": "Vinyl", "album": "V", "title": "Side B", "tracknumber": "B1"},
 }  # fmt: skip
 SUBMIT = "/library/unverified/submit"
 Q = {"albumartist": "Band", "album": "LP", "year": "2020"}
@@ -63,9 +65,9 @@ def _hidden(html: str) -> list[tuple[str, str]]:
 def test_grouped_by_album_with_links(client: TestClient) -> None:
     _login(client, "root")
     html = client.get("/library/unverified").text
-    assert "Unverified tracks (12)" in html
+    assert "Unverified tracks (14)" in html
     assert "Band - LP" in html and "Other - EP" in html and "(no album tag)" in html
-    assert html.count("Submit to MusicBrainz") == 6  # none for the untagged group
+    assert html.count("Submit to MusicBrainz") == 7  # none for the untagged group
     assert "Band - LP (2020)" in html and "Band - LP (1999)" in html  # same name, two groups
     assert "year=1999" in html and "year=2020" in html
 
@@ -130,6 +132,8 @@ def test_duplicate_warning_compares_parsed_numbers(client: TestClient) -> None:
 def test_no_duplicate_warning_for_clean_album(client: TestClient) -> None:
     _login(client, "root")
     assert "same number" not in client.get(SUBMIT, params=Q).text
+    vinyl = client.get(SUBMIT, params={"albumartist": "Vinyl", "album": "V"}).text
+    assert "same number" not in vinyl  # "A1" and "B1" don't both count as track 0
 
 
 def test_hidden_values_are_escaped(client: TestClient) -> None:

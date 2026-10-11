@@ -177,7 +177,7 @@ def unverified_submit(
     if not items:
         raise HTTPException(404, "no unverified tracks for that album")
     seen = Counter(
-        (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0))
+        (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0) or tg["tracknumber"])
         for _, tg in items
         if tg.get("tracknumber")
     )
