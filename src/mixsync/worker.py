@@ -78,7 +78,10 @@ async def run_worker(
     handlers: dict[JobKind, Handler] = HANDLERS,
     lease: timedelta = DEFAULT_LEASE,
     poll: float = 1.0,
+    startup: Callable[[], None] | None = None,
 ) -> None:
+    if startup:  # once the worker is up, off the event loop and the web start
+        await asyncio.to_thread(startup)
     # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
         queue.reap()
@@ -124,7 +127,7 @@ def _pipeline(
     )
 
 
-def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
+def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], None]]:
     settings = Settings()
     engine = make_engine(settings)
     clock = SystemClock()
@@ -153,29 +156,28 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler]]:
         fileops,
         settings.path_template,
     )
-    rechecker.start_chains()
     handlers = HANDLERS | pipeline.handlers() | merger.handlers() | rechecker.handlers()
-    return queue, f"{socket.gethostname()}:{os.getpid()}", handlers
+    return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, rechecker.start_chains
 
 
 async def serve_worker() -> None:
-    queue, worker, handlers = _new_queue()
+    queue, worker, handlers, startup = _new_queue()
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
-    await run_worker(queue, worker, stop, handlers)
+    await run_worker(queue, worker, stop, handlers, startup=startup)
 
 
 async def serve_all() -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    queue, worker, handlers = _new_queue()
+    queue, worker, handlers, startup = _new_queue()
     stop = asyncio.Event()
     server = uvicorn.Server(
         uvicorn.Config("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
     )
-    task = asyncio.create_task(run_worker(queue, worker, stop, handlers))
+    task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))
     try:
         await server.serve()
     finally:

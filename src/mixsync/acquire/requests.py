@@ -4,6 +4,7 @@ marking candidates tried, coalescing rescans and applying a reviewer's decision.
 import random
 from dataclasses import asdict
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -13,8 +14,10 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db import decisions
 from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
+from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
@@ -151,3 +154,32 @@ def enqueue_recheck(
         run_after=now + delay * random.uniform(0.5, 1.0) if background else now,
         idempotency_key=chain_key,
     )
+
+
+Item = tuple[Track, dict[str, str]]
+
+
+def read_unverified(db: Session, root: Path) -> list[Item]:
+    # shortcut: reads the tags of every unverified file per call; move the album fields
+    # into DB columns when unverified sets get large.
+    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
+    items: list[Item] = []
+    for t in rows:
+        try:
+            items.append((t, tags.read_fields(root / t.path)))
+        except Exception:  # file moved or unreadable: the path alone still identifies it
+            items.append((t, {}))
+    return items
+
+
+def group(items: list[Item]) -> dict[AlbumKey, list[Item]]:
+    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
+    dated group with the same artist and album, if there is exactly one."""
+    albums: dict[AlbumKey, list[Item]] = {}
+    for it in items:
+        albums.setdefault(album_key(it[1]), []).append(it)
+    for key in [k for k in albums if not k[2]]:
+        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
+        if len(dated) == 1:
+            albums[dated[0]] += albums.pop(key)
+    return albums

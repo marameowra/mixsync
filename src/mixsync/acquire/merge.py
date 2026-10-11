@@ -16,7 +16,8 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.requests import AlbumKey, album_key, enqueue_recheck, enqueue_rescan
+from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
+from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
 from mixsync.core.jobs import JobKind, JobState
@@ -26,7 +27,7 @@ from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import canonical, fragmentation, tags
+from mixsync.library import canonical, fragmentation
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
@@ -317,7 +318,6 @@ class Merger:
         except Exception as e:  # a crash (BaseException) leaves "undoing": a retry resumes
             self._fail(plan_id, f"undo: {e or repr(e)}")
             raise
-        albums: set[AlbumKey] = self._unverified_albums(ops) if kind == "promote" else set()
         with self.sessions.begin() as s:
             plan = s.get_one(Plan, plan_id)
             group, new, prev = (
@@ -337,17 +337,11 @@ class Merger:
                     canonical_db.switch(s, group, new, prev)
             plan.status, plan.error, plan.canonical_set = "undone", None, False
             enqueue_rescan(s, self.clock.now())
-            for key in albums:  # unverified again: look for them on MusicBrainz later
-                enqueue_recheck(s, self.clock.now(), key, None)
-
-    def _unverified_albums(self, ops: list[dict[str, Any]]) -> set[AlbumKey]:
-        keys: set[AlbumKey] = set()
-        for op in ops:
-            try:
-                keys.add(album_key(tags.read_fields(self.fileops.library / op["old"]["path"])))
-            except Exception:  # unreadable: the startup scan picks the album up
-                pass
-        return {k for k in keys if k[1]}
+            if kind == "promote":  # unverified again: look for them on MusicBrainz later
+                ids = {op["track_id"] for op in ops}
+                for key, items in by_album(read_unverified(s, self.fileops.library)).items():
+                    if key[1] and ids & {t.id for t, _ in items}:
+                        enqueue_recheck(s, self.clock.now(), key, None)
 
     def _undo_op(self, plan_id: int, batch: str, ubatch: str, i: int, op: dict[str, Any]) -> None:
         fo, old = self.fileops, op["old"]

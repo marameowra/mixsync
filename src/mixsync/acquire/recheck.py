@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.merge import live_job
 from mixsync.acquire.pipeline import Handler, acoustid_id, file_track, likelies
-from mixsync.acquire.requests import AlbumKey, album_key, enqueue_recheck, profile_for
+from mixsync.acquire.requests import (
+    AlbumKey,
+    Item,
+    enqueue_recheck,
+    group,
+    profile_for,
+    read_unverified,
+)
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, Band, FileTrack, Profile
@@ -25,7 +32,7 @@ from mixsync.core.protocols import AcoustIdLookup, Fingerprinter, MetadataProvid
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
-from mixsync.library import paths, tags
+from mixsync.library import paths
 from mixsync.library.fileops import FileOps
 from mixsync.library.fragmentation import row_dict
 from mixsync.library.importer import render_path, tagset_for
@@ -35,34 +42,6 @@ from mixsync.match.scorer import assign_tracks, score_files
 log = logging.getLogger(__name__)
 
 SEARCH_LIMIT, MAX_RELEASES = 5, 3
-
-Item = tuple[Track, dict[str, str]]
-
-
-def read_unverified(db: Session, root: Path) -> list[Item]:
-    # shortcut: reads the tags of every unverified file per call; move the album fields
-    # into DB columns when unverified sets get large.
-    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
-    items: list[Item] = []
-    for t in rows:
-        try:
-            items.append((t, tags.read_fields(root / t.path)))
-        except Exception:  # file moved or unreadable: the path alone still identifies it
-            items.append((t, {}))
-    return items
-
-
-def group(items: list[Item]) -> dict[AlbumKey, list[Item]]:
-    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
-    dated group with the same artist and album, if there is exactly one."""
-    albums: dict[AlbumKey, list[Item]] = {}
-    for it in items:
-        albums.setdefault(album_key(it[1]), []).append(it)
-    for key in [k for k in albums if not k[2]]:
-        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
-        if len(dated) == 1:
-            albums[dated[0]] += albums.pop(key)
-    return albums
 
 
 @dataclass(frozen=True)
@@ -112,12 +91,6 @@ class Rechecker:
     async def recheck(self, job: JobRecord) -> None:
         key: AlbumKey = (*job.payload["album"],)  # pyright: ignore[reportAssignmentType]
         uid, attempt = job.payload["user_id"], job.payload["attempt"]
-        with self.sessions() as s:
-            items = group(read_unverified(s, self.fileops.library)).get(key, [])
-            profile = profile_for(s, uid) if uid else BALANCED
-        items = [i for i in items if self.fileops.has(i[0].path)]
-        if not items or not key[1]:  # nothing unverified left: the chain ends
-            return
 
         def next_check() -> None:
             # A user's check leaves the background schedule alone. The key makes a retry of
@@ -125,19 +98,24 @@ class Rechecker:
             if uid is None:
                 with self.sessions.begin() as s:
                     chain = f"recheck:next:{job.id}"
-                    enqueue_recheck(
-                        s, self.clock.now(), key, None, attempt=attempt + 1, chain_key=chain
-                    )
+                    now = self.clock.now()
+                    enqueue_recheck(s, now, key, None, attempt=attempt + 1, chain_key=chain)
 
         try:
+            with self.sessions() as s:
+                items = group(read_unverified(s, self.fileops.library)).get(key, [])
+                profile = profile_for(s, uid) if uid else BALANCED
+            items = [i for i in items if self.fileops.has(i[0].path)]
+            if not items or not key[1]:  # nothing unverified left: the chain ends
+                return
             found = await self._match(key, items, profile)
+            done = False
+            if found:
+                with self.sessions.begin() as s:
+                    done = self._draft(s, items, *found)
         except BaseException:  # a failing run must not end the background chain
             next_check()
             raise
-        done = False
-        if found:
-            with self.sessions.begin() as s:
-                done = self._draft(s, items, *found)
         if not done:  # no match, or some files stay unverified: look again later
             next_check()
 

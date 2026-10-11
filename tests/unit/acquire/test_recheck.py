@@ -1,5 +1,6 @@
 """Re-checking unverified albums: the job, its schedule, the promote plan and the UI."""
 
+import asyncio
 import hashlib
 import shutil
 from dataclasses import asdict
@@ -24,6 +25,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, tags
 from mixsync.library.importer import Importer, tagset_for
+from mixsync.worker import run_worker
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, AUDIO, OTHER, RECORDINGS, FakeMetadata
@@ -80,17 +82,19 @@ class Rig:
         )
         env.handlers = env.pipeline.handlers() | rechecker.handlers() | self.merger.handlers()
 
-    def seed(self) -> list[str]:
+    def seed(self, year: int | None = 2020) -> list[str]:
         """Two unverified files under the usual template, as an unverified import leaves them."""
         env = self.env
         files: list[tuple[Path, TrackInfo, str | None]] = []
         for i, t in enumerate(ALBUM.tracks, 1):
-            src = env.downloads / f"{i}.mp3"
+            src = env.downloads / f"{year}-{i}.mp3"
             shutil.copy(AUDIO / "cc0-tone-01.mp3", src)
             files.append((src, TrackInfo(t.title, medium_index=i, medium=1), None))
-        album = AlbumInfo("Alpha Band", "Alpha Album", (), year=2020)
+        album = AlbumInfo("Alpha Band", "Alpha Album", (), year=year)
         results = Importer(env.ops, env.sessions, env.clock, env.settings.path_template)
-        return [r.rel or "" for r in results.import_release(files, album, "unverified", "seed")]
+        return [
+            r.rel or "" for r in results.import_release(files, album, "unverified", f"seed-{year}")
+        ]
 
     def schedule(self, user_id: int | None = None) -> None:
         with self.env.sessions.begin() as s:
@@ -531,3 +535,48 @@ async def test_discard_a_draft_plan(env: Env, web: TestClient) -> None:
     assert rig.plans("discarded") != [] and rig.plans() == []
     assert web.post(url, data={"csrf_token": tok}).status_code == 409
     assert "ready to promote" not in web.get("/").text
+
+
+async def test_undo_queues_the_check_under_the_grouped_key(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed(None)  # undated
+    with env.sessions.begin() as s:  # the undated key, as the import scheduled it
+        enqueue_recheck(s, env.clock.now(), ("Alpha Band", "Alpha Album", ""), None)
+    await env.step()
+    (plan,) = rig.plans()
+    rig.merger.execute(plan.id)
+    rig.seed(2020)  # a single dated album of the same name turns up
+    rig.merger.undo_plan(plan.id)
+    (job,) = [j for j in env.jobs(JobKind.RECHECK) if j.status is JobState.QUEUED]
+    assert job.payload["album"] == list(KEY)  # the undated files fold into the dated album
+
+
+async def test_any_error_in_a_background_run_still_queues_the_next_check(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig = _rig(env)
+    rig.seed()
+
+    def broken(*_a: object) -> bool:
+        raise ValueError("boom")
+
+    monkeypatch.setattr(Rechecker, "_draft", broken)
+    rig.schedule()
+    await env.step()
+    assert [j.status for j in env.jobs(JobKind.RECHECK)][0] is JobState.FAILED
+    assert [a for a, _ in rig.queued()] == [1]
+
+
+async def test_startup_runs_in_the_worker_task_before_the_first_claim() -> None:
+    order: list[str] = []
+
+    class Queue:
+        def reap(self) -> None:
+            order.append("reap")
+
+        def claim(self, *_a: object) -> None:
+            stop.set()
+
+    stop = asyncio.Event()
+    await run_worker(Queue(), "w", stop, {}, startup=lambda: order.append("startup"))  # type: ignore[arg-type]
+    assert order == ["startup", "reap"]
