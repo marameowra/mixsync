@@ -22,6 +22,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
+from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
 
@@ -711,3 +712,31 @@ async def test_unverified_partial_failure_releases_nothing(
     assert status(env, rid) == "failed"
     assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
     assert env.source.cleared == []
+
+
+async def test_a_rerun_verify_records_nothing_more(env: Env) -> None:
+    """A job re-run after a lock hit complete() must not add a second review item or import."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    request(env)
+    await env.drain()
+    (job,) = env.jobs(JobKind.VERIFY)
+    before = len(decision_rows(env, 2))
+    await env.handlers[JobKind.VERIFY](env.queue.get(job.id))
+    assert len(decision_rows(env, 2)) == before == 1
+
+
+async def test_a_verify_superseded_by_a_repick_records_nothing(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (old,) = env.jobs(JobKind.VERIFY)
+    with env.sessions.begin() as s:  # what a repick leaves behind
+        req = s.get(Request, rid)
+        assert req
+        req.status = "verifying"
+        enqueue_in(s, env.clock.now(), JobKind.VERIFY, old.payload)
+    before = len(decision_rows(env, 2))
+    await env.handlers[JobKind.VERIFY](env.queue.get(old.id))  # the stale re-run
+    assert len(decision_rows(env, 2)) == before

@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
@@ -46,8 +47,11 @@ HANDLERS: dict[JobKind, Handler] = {JobKind.NOOP: _noop}
 async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta) -> None:
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
-        if not queue.heartbeat(job_id, worker, lease):
-            return
+        try:
+            if not queue.heartbeat(job_id, worker, lease):
+                return
+        except Exception:  # a dead heartbeat lets the lease expire and the job run twice
+            log.exception("heartbeat for job %s failed; trying again", job_id)
 
 
 async def run_job(
@@ -62,13 +66,16 @@ async def run_job(
         log.warning("lost lease on job %s", job.id)
     except Exception as e:
         try:
-            if isinstance(e, TransientError):
+            # A locked database is momentary, never a reason to fail finished work.
+            if isinstance(e, TransientError | OperationalError):
                 queue.retry(job.id, worker, str(e))
             else:  # PermanentError, SafetyError, bugs: never retried
                 log.exception("job %s failed", job.id)
                 queue.fail(job.id, worker, repr(e))
         except LeaseLostError:  # the job row was deleted or reaped while the handler ran
             log.warning("lost lease on job %s", job.id)
+        except Exception:  # the bookkeeping failed too: reap() requeues it once the lease expires
+            log.exception("could not record the outcome of job %s", job.id)
     finally:
         hb.cancel()
 
@@ -89,8 +96,12 @@ async def run_worker(
             log.exception("startup scan failed; the worker runs without it")
     # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
-        queue.reap()
-        job = queue.claim(worker, lease)
+        try:
+            queue.reap()
+            job = queue.claim(worker, lease)
+        except Exception:  # e.g. "database is locked": a dead loop leaves every job queued
+            log.exception("polling the job queue failed; trying again")
+            job = None
         if job is None:
             try:
                 await asyncio.wait_for(stop.wait(), poll)
@@ -206,6 +217,13 @@ async def serve_all() -> None:
         uvicorn.Config("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
     )
     task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))
+
+    def died(t: asyncio.Task[None]) -> None:  # never serve on without a worker: exit, restart
+        if not t.cancelled() and (e := t.exception()):
+            log.error("the worker stopped; shutting down", exc_info=e)
+            server.should_exit = True
+
+    task.add_done_callback(died)
     try:
         await server.serve()
     finally:
