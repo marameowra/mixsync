@@ -111,6 +111,11 @@ def _window(start_s: str, end_s: str, tz: tzinfo) -> tuple[datetime | None, date
     return first, last
 
 
+def _local_day(t: datetime, tz: tzinfo) -> str:
+    """SQLite hands back naive UTC; Postgres an aware time, maybe in another zone."""
+    return (t if t.tzinfo else t.replace(tzinfo=UTC)).astimezone(tz).date().isoformat()
+
+
 def _zone(request: Request) -> ZoneInfo:
     return ZoneInfo(request.app.state.settings.timezone)
 
@@ -130,13 +135,9 @@ def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") 
         entries.append(
             {
                 "m": m,
-                "start": (first or m.created_at.replace(tzinfo=UTC))
-                .astimezone(tz)
-                .date()
-                .isoformat(),
-                "end": last.astimezone(tz).date().isoformat(),
-                "csv_end": end
-                and last.astimezone(tz).date().isoformat(),  # unset: the CSV runs up to its own now
+                "start": _local_day(first or m.created_at, tz),
+                "end": _local_day(last, tz),
+                "csv_end": end and _local_day(last, tz),  # unset: the CSV runs up to its own now
                 "totals": mig.totals(rows),
                 "failures": [r for r in rows if r["status"] in ("failed", "skipped")],
                 "checking": _checking(db, m),
