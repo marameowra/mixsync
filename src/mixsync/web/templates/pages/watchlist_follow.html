@@ -2,6 +2,7 @@
 {% block title %}{{ f.name }} - MixSync{% endblock %}
 {% block content %}
 <h1>{{ f.name }}</h1>
+{% if msg %}<p>{{ msg }}</p>{% endif %}
 <p>{{ e.kind }} &middot; <a href="https://musicbrainz.org/{{ e.kind }}/{{ e.mbid }}">MusicBrainz</a>
   &middot; last check {{ e.last_checked_at or "never" }}, next {{ e.next_check_at or "-" }}</p>
 {% if e.kind == "artist" %}<p><a href="/watchlist/{{ f.id }}/catalog">Pick releases from the back catalogue</a></p>{% endif %}

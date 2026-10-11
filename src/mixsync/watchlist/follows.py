@@ -18,7 +18,7 @@ LABEL_WEEKLY_CAP = 5
 CHECK_NOW_GAP = timedelta(hours=1)  # a button must not turn into a poll loop on MusicBrainz
 
 
-def _waiting(entity_id: int) -> Select[Any]:
+def waiting(entity_id: int) -> Select[Any]:
     """Checks still to come. A running one does not count: it may have read the follows already."""
     return select(Job).where(
         Job.kind == JobKind.WATCHLIST_POLL,
@@ -29,7 +29,7 @@ def _waiting(entity_id: int) -> Select[Any]:
 
 def ensure_poll(s: Session, now: datetime, e: WatchedEntity) -> None:
     """Make sure a check is queued; none is when the chain ended or the entity is new."""
-    if s.scalar(_waiting(e.id).limit(1)) is None:
+    if s.scalar(waiting(e.id).limit(1)) is None:
         e.next_check_at = now
         enqueue_in(s, now, JobKind.WATCHLIST_POLL, {"entity_id": e.id})
 
@@ -63,6 +63,7 @@ def add_follow(s: Session, now: datetime, user_id: int, kind: str, mbid: str, na
         s.add(e)
         s.flush()
     f = s.scalar(select(Follow).where(Follow.user_id == user_id, Follow.entity_id == e.id))
+    created = f is None
     if f is None:
         f = Follow(
             user_id=user_id,
@@ -74,7 +75,10 @@ def add_follow(s: Session, now: datetime, user_id: int, kind: str, mbid: str, na
         )
         s.add(f)
         s.flush()
-    _run_now(s, now, e)
+    if created:
+        _run_now(s, now, e)
+    else:
+        ensure_poll(s, now, e)
     return f
 
 

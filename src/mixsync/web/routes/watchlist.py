@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -10,12 +11,10 @@ from sqlalchemy.orm import Session
 
 from mixsync.core.capabilities import Capability
 from mixsync.core.types import ReleaseGroupHit
-from mixsync.db import canonical as canonical_db
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
-from mixsync.library import canonical
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import catalog_request, is_owned, request_hit
+from mixsync.watchlist.poller import is_owned, is_requested, queue_picks, request_hit
 from mixsync.web.deps import Db, Watch, require
 from mixsync.web.templating import templates
 
@@ -60,7 +59,10 @@ def follow_list(request: Request, user: User, db: Db) -> HTMLResponse:
 
 
 @router.get("/search")
-async def search(request: Request, user: User, watch: Watch, kind: str, q: str) -> HTMLResponse:
+async def search(
+    request: Request, user: User, db: Db, watch: Watch, kind: str, q: str
+) -> HTMLResponse:
+    db.commit()  # the login's last_seen write must not hold the SQLite lock during the bucket's
     results = await watch.search_entities(_kind(kind), q[:200])
     ctx = {"user": user, "kind": kind, "q": q, "results": results}
     return templates.TemplateResponse(request, "pages/watchlist_search.html", ctx)
@@ -68,6 +70,7 @@ async def search(request: Request, user: User, watch: Watch, kind: str, q: str) 
 
 @router.post("/follow")
 async def follow(
+    request: Request,
     user: User,
     db: Db,
     watch: Watch,
@@ -79,20 +82,27 @@ async def follow(
     if not m:
         raise HTTPException(400, "not a MusicBrainz id or URL")
     mbid = str(uuid.UUID(m.group()))
-    name = name.strip() or await watch.entity_name(_kind(kind), mbid)
-    f = follows.add_follow(db, datetime.now(UTC), user.id, _kind(kind), mbid, name)
+    name = name.strip()
+    db.commit()  # see search(); the session is spent, so the follow is written in a fresh one
+    if not name:
+        name = await watch.entity_name(_kind(kind), mbid)
+    with request.app.state.session_factory.begin() as s:
+        f = follows.add_follow(s, datetime.now(UTC), user.id, _kind(kind), mbid, name)
+        fid = f.id
     picker = "/catalog" if kind == "artist" else ""  # offer an artist's back catalogue
-    return RedirectResponse(f"/watchlist/{f.id}{picker}", status_code=303)
+    return RedirectResponse(f"/watchlist/{fid}{picker}", status_code=303)
 
 
 @router.get("/{follow_id}")
-def follow_page(request: Request, follow_id: int, user: User, db: Db) -> HTMLResponse:
+def follow_page(
+    request: Request, follow_id: int, user: User, db: Db, msg: str = ""
+) -> HTMLResponse:
     f = _own(db, user, follow_id)
     e = db.get(WatchedEntity, f.entity_id)
     hits = db.scalars(
         select(FollowHit).where(FollowHit.follow_id == f.id).order_by(FollowHit.id.desc())
     ).all()
-    ctx = {"user": user, "f": f, "e": e, "hits": hits, "types": follows.RELEASE_TYPES}
+    ctx = {"user": user, "f": f, "e": e, "hits": hits, "types": follows.RELEASE_TYPES, "msg": msg}
     return templates.TemplateResponse(request, "pages/watchlist_follow.html", ctx)
 
 
@@ -140,6 +150,12 @@ def request_skipped(follow_id: int, hit_id: int, user: User, db: Db) -> Redirect
         raise HTTPException(404, "no such release")
     if hit.status not in ("skipped_cap", "skipped_filter"):
         raise HTTPException(409, f"release is {hit.status}")
+    if is_owned(db, hit.release_group_mbid) or is_requested(
+        db, f.user_id, hit.release_group_mbid, (hit.release_mbid,)
+    ):
+        return RedirectResponse(
+            f"/watchlist/{f.id}?msg=Already+owned+or+requested", status_code=303
+        )
     request_hit(db, datetime.now(UTC), f, hit)
     return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
 
@@ -147,18 +163,18 @@ def request_skipped(follow_id: int, hit_id: int, user: User, db: Db) -> Redirect
 _TYPES = ("album", "ep", "single")  # then the rest, as "other"
 
 
-def _disabled(db: Session, f: Follow, h: ReleaseGroupHit) -> str:
+def _disabled(db: Session, user_id: int, h: ReleaseGroupHit) -> str:
     """Why a release group cannot be picked, or ""."""
     if is_owned(db, h.group_id):
         return "owned"
-    done = db.scalar(
-        select(FollowHit.id).where(
+    status = db.scalar(
+        select(FollowHit.status).where(
             FollowHit.release_group_mbid == h.group_id,
-            FollowHit.status == "requested",
-            FollowHit.follow_id.in_(select(Follow.id).where(Follow.user_id == f.user_id)),
+            FollowHit.status.in_(("requested", "skipped_requested", "picked")),
+            FollowHit.follow_id.in_(select(Follow.id).where(Follow.user_id == user_id)),
         )
     )
-    return "already requested" if done else ""
+    return {None: "", "picked": "queued"}.get(status, "already requested")
 
 
 def _artist_follow(db: Db, user: AuthUser, follow_id: int) -> tuple[Follow, WatchedEntity]:
@@ -174,13 +190,16 @@ async def catalog(
     request: Request, follow_id: int, user: User, db: Db, watch: Watch
 ) -> HTMLResponse:
     f, e = _artist_follow(db, user, follow_id)
-    found, truncated = await watch.artist_discography(e.mbid)
+    follow_ref, mbid = SimpleNamespace(id=f.id, name=f.name), e.mbid
+    db.commit()  # see search(); the session is spent after this
+    found, truncated = await watch.artist_discography(mbid)
     groups: dict[str, list[tuple[ReleaseGroupHit, str]]] = {}
-    for h in sorted(found, key=lambda h: h.date or "", reverse=True):  # newest first, undated last
-        key = h.type if h.type in _TYPES else "other"
-        groups.setdefault(key, []).append((h, _disabled(db, f, h)))
+    with request.app.state.session_factory() as s:
+        for h in sorted(found, key=lambda h: h.date or "", reverse=True):  # undated last
+            key = h.type if h.type in _TYPES else "other"
+            groups.setdefault(key, []).append((h, _disabled(s, user.id, h)))
     order = [(k, groups[k]) for k in (*_TYPES, "other") if k in groups]
-    ctx = {"user": user, "f": f, "groups": order, "truncated": truncated}
+    ctx = {"user": user, "f": follow_ref, "groups": order, "truncated": truncated}
     return templates.TemplateResponse(request, "pages/watchlist_catalog.html", ctx)
 
 
@@ -193,24 +212,17 @@ async def catalog_submit(
     watch: Watch,
     groups: Annotated[list[str] | None, Form()] = None,
 ) -> RedirectResponse:
-    """One normal request per checked release group. The list is read again here, so only
-    groups MusicBrainz knows for this artist can be picked."""
+    """Queue the checked release groups. The ids are checked against the artist's discography
+    (cached from the page); the requests are made by the worker, not here."""
     f, e = _artist_follow(db, user, follow_id)
+    fid, mbid = f.id, e.mbid
+    db.commit()  # see search(); the session is spent after this
+    found, _ = await watch.artist_discography(mbid)
     wanted = set(groups or [])
-    found, _ = await watch.artist_discography(e.mbid)
-    settings = request.app.state.settings
-    now = datetime.now(UTC)
-    for h in found:
-        if h.group_id not in wanted or _disabled(db, f, h):
-            continue
-        # The phase 3 policy: the stored canonical release, else the best of the group's releases.
-        release = canonical_db.get(db, h.group_id)
-        if release is None:
-            releases = await watch.browse_group_releases(h.group_id)
-            if not releases:
-                continue
-            release = canonical.choose(
-                releases, tuple(settings.canonical_media), tuple(settings.canonical_countries)
-            )
-        catalog_request(db, now, f, h, release)
-    return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
+    with request.app.state.session_factory.begin() as s:
+        picks = [h for h in found if h.group_id in wanted and not _disabled(s, user.id, h)]
+        if (fresh := s.get(Follow, fid)) is not None:
+            queue_picks(s, datetime.now(UTC), fresh, picks)
+    return RedirectResponse(
+        f"/watchlist/{fid}?msg=Queued+{len(picks)}+for+request", status_code=303
+    )

@@ -17,6 +17,7 @@ class JobKind(StrEnum):
     MIGRATE_PREFLIGHT = "migrate_preflight"
     MIGRATE_CHECK = "migrate_check"
     WATCHLIST_POLL = "watchlist_poll"
+    WATCHLIST_PICK = "watchlist_pick"
 
 
 class JobState(StrEnum):

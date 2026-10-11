@@ -8,16 +8,18 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import LIVE, create_request
+from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import ReleaseWatch
 from mixsync.core.types import ReleaseGroupHit
+from mixsync.db import canonical as canonical_db
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.watchlist.follows import ensure_poll
+from mixsync.library import canonical
+from mixsync.watchlist.follows import ensure_poll, waiting
 
 OVERLAP = timedelta(days=7)  # covers search-index lag
 CAP_WINDOW = timedelta(days=7)
@@ -118,22 +120,23 @@ def apply_hit(s: Session, now: datetime, f: Follow, h: ReleaseGroupHit) -> None:
     s.flush()  # the cap count and the next hit's dedupe see this one
 
 
-def catalog_request(
-    s: Session, now: datetime, f: Follow, h: ReleaseGroupHit, release_id: str
-) -> None:
-    """A back-catalogue pick: the history row and request of a poll hit, whatever the filters."""
-    row = s.scalar(
-        select(FollowHit).where(
-            FollowHit.follow_id == f.id, FollowHit.release_group_mbid == h.group_id
+def queue_picks(s: Session, now: datetime, f: Follow, picks: list[ReleaseGroupHit]) -> None:
+    """Back-catalogue picks: a "picked" history row each and one job to resolve them, so the
+    web request does no MusicBrainz work."""
+    for h in picks:
+        row = s.scalar(
+            select(FollowHit).where(
+                FollowHit.follow_id == f.id, FollowHit.release_group_mbid == h.group_id
+            )
         )
-    )
-    if row is None:
-        row = FollowHit(follow_id=f.id, release_group_mbid=h.group_id, status="", created_at=now)
-        s.add(row)
-    row.release_mbid, row.release_date = release_id, h.date
-    row.artist, row.title = f.name[:255], h.title[:255]
-    request_hit(s, now, f, row)
-    s.flush()
+        if row is None:
+            row = FollowHit(follow_id=f.id, release_group_mbid=h.group_id, created_at=now)
+            s.add(row)
+        row.release_mbid, row.release_date, row.status = "", h.date, "picked"
+        row.artist, row.title = f.name[:255], h.title[:255]
+    if picks:
+        s.flush()
+        enqueue_in(s, now, JobKind.WATCHLIST_PICK, {"follow_id": f.id})
 
 
 class Watcher:
@@ -143,11 +146,14 @@ class Watcher:
         clock: Clock,
         watch: ReleaseWatch,
         rng: Rng = random.uniform,
+        media: tuple[str, ...] = ("Digital Media", "CD"),
+        countries: tuple[str, ...] = ("XW",),
     ) -> None:
         self.sessions, self.clock, self.watch, self.rng = sessions, clock, watch, rng
+        self.media, self.countries = media, countries
 
     def handlers(self) -> dict[JobKind, Handler]:
-        return {JobKind.WATCHLIST_POLL: self.poll}
+        return {JobKind.WATCHLIST_POLL: self.poll, JobKind.WATCHLIST_PICK: self.pick}
 
     def start_chains(self) -> None:
         """On startup: every followed entity gets a check queued if it has none waiting."""
@@ -161,29 +167,62 @@ class Watcher:
                 ensure_poll(s, now, e)
 
     def _schedule_next(self, s: Session, now: datetime, e: WatchedEntity, job_id: int) -> None:
-        """Queue the next check, keyed on this job so a re-run adds none, and only if no other
-        check is live (a new follow may have queued one)."""
+        """Queue the next check, keyed on this job so a re-run adds none, unless another check
+        is already waiting (a new follow may have queued one)."""
+        if s.scalar(waiting(e.id).where(Job.id != job_id).limit(1)) is not None:
+            return
         nxt = now + jitter(interval_for(e.last_release_date, now.date()), self.rng)
         e.next_check_at = nxt
-        other = s.scalar(
-            select(Job.id)
-            .where(
-                Job.kind == JobKind.WATCHLIST_POLL,
-                Job.status.in_(LIVE),
-                Job.payload["entity_id"].as_integer() == e.id,
-                Job.id != job_id,
-            )
-            .limit(1)
+        enqueue_in(
+            s,
+            now,
+            JobKind.WATCHLIST_POLL,
+            {"entity_id": e.id},
+            run_after=nxt,
+            idempotency_key=f"watchlist:{e.id}:after:{job_id}",
         )
-        if other is None:
-            enqueue_in(
-                s,
-                now,
-                JobKind.WATCHLIST_POLL,
-                {"entity_id": e.id},
-                run_after=nxt,
-                idempotency_key=f"watchlist:{e.id}:after:{job_id}",
+
+    async def pick(self, job: JobRecord) -> None:
+        """Turn the follow's picked release groups into requests. Each is its own transaction,
+        and none is held open across a MusicBrainz call, so a retry carries on where it stopped."""
+        with self.sessions() as s:
+            ids = list(
+                s.scalars(
+                    select(FollowHit.id).where(
+                        FollowHit.follow_id == job.payload["follow_id"],
+                        FollowHit.status == "picked",
+                    )
+                )
             )
+        for hid in ids:
+            with self.sessions() as s:
+                hit = s.get(FollowHit, hid)
+                if hit is None or hit.status != "picked":
+                    continue
+                group = hit.release_group_mbid
+                release = canonical_db.get(s, group)  # the phase 3 policy: stored, else chosen
+            known: tuple[str, ...] = ()
+            if release is None:
+                releases = await self.watch.browse_group_releases(group)
+                if not releases:  # nothing to request: let it be picked again
+                    with self.sessions.begin() as s:
+                        if (hit := s.get(FollowHit, hid)) and hit.status == "picked":
+                            s.delete(hit)
+                    continue
+                release = canonical.choose(releases, self.media, self.countries)
+                known = tuple(r.release_id for r in releases)
+            with self.sessions.begin() as s:
+                hit = s.get(FollowHit, hid)
+                f = hit and s.get(Follow, hit.follow_id)
+                if hit is None or f is None or hit.status != "picked":
+                    continue
+                if is_owned(s, group):
+                    hit.status = "skipped_owned"
+                elif is_requested(s, f.user_id, group, (release, *known)):
+                    hit.status = "skipped_requested"
+                else:
+                    hit.release_mbid = release
+                    request_hit(s, self.clock.now(), f, hit)
 
     async def poll(self, job: JobRecord) -> None:
         eid = job.payload["entity_id"]

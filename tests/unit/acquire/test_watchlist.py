@@ -1,5 +1,6 @@
 """Watchlist: cadence, the poll (filters, dedupe, cap, fan-out), the MB search and the UI."""
 
+import asyncio
 import json
 import re
 from collections.abc import Callable
@@ -17,7 +18,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
-from mixsync.ratelimit.client import PoliteClient
+from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.watchlist import follows
 from mixsync.watchlist.poller import Watcher, interval_for, jitter
 
@@ -515,11 +516,24 @@ def test_label_follow_redirects_to_the_follow_page(env: Env, web: TestClient) ->
     assert web.get(f"/watchlist/{lid}/catalog").status_code == 404
 
 
-def test_picker_requests_only_checked_enabled_groups(env: Env, web: TestClient) -> None:
+def _run_pick(env: Env, watch: FakeWatch) -> None:
+    (job,) = env.jobs(JobKind.WATCHLIST_PICK)
+    asyncio.run(Watcher(env.sessions, env.clock, watch).pick(env.queue.get(job.id)))
+
+
+def test_picker_queues_and_the_job_requests(env: Env, web: TestClient) -> None:
     watch, tok, fid = _catalog_world(env, web)
     picked = [rid(1), rid(3), rid(4), rid(99)]  # owned, requested and unknown are refused
     r = web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": picked})
-    assert r.status_code == 303
+    assert r.status_code == 303 and "Queued+1" in r.headers["location"]
+    assert watch.browsed == []  # the web request did no release browse
+    with env.sessions() as s:
+        assert s.scalar(select(func.count()).select_from(Request)) == 0
+        hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
+        assert hit.status == "picked"
+    assert "picked" in web.get(f"/watchlist/{fid}").text
+    _run_pick(env, watch)
+    _run_pick(env, watch)  # a re-run adds nothing
     with env.sessions() as s:
         reqs = s.scalars(select(Request)).all()
         assert [(q.release_mbid, q.source, q.user_id) for q in reqs] == [
@@ -531,6 +545,96 @@ def test_picker_requests_only_checked_enabled_groups(env: Env, web: TestClient) 
             s.scalar(select(func.count()).select_from(Job).where(Job.kind == JobKind.SEARCH)) == 1
         )
     assert watch.browsed == [rid(1)]
+
+
+def test_pick_skips_a_group_already_requested_by_hand(env: Env, web: TestClient) -> None:
+    watch, tok, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        s.add(
+            Request(user_id=env.user_id, release_mbid=rid(2001))
+        )  # the release the pick would use
+    web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": [rid(1)]})
+    _run_pick(env, watch)
+    with env.sessions() as s:
+        assert s.scalar(select(func.count()).select_from(Request)) == 1
+        hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
+        assert hit.status == "skipped_requested"
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert page.count('" disabled>') == 3  # owned, requested, and now skipped_requested
+
+
+def test_picker_is_closed_to_other_users(env: Env, web: TestClient) -> None:
+    _, _, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        create_user(s, "bob", "pw")
+    bob = login(web, "bob")
+    assert web.get(f"/watchlist/{fid}/catalog").status_code == 403
+    r = web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": bob, "groups": [rid(1)]})
+    assert r.status_code == 403
+    assert env.jobs(JobKind.WATCHLIST_PICK) == []
+
+
+def test_request_button_refuses_an_owned_album(env: Env, web: TestClient) -> None:
+    _, tok, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        h = FollowHit(
+            follow_id=fid, release_group_mbid=rid(3), release_mbid=rid(7), status="skipped_filter"
+        )
+        s.add(h)
+        s.flush()
+        hid = h.id
+    r = web.post(f"/watchlist/{fid}/hits/{hid}/request", data={"csrf_token": tok})
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    with env.sessions() as s:
+        assert s.scalar(select(func.count()).select_from(Request)) == 0
+
+
+def test_mb_routes_work_on_a_real_sqlite_file_with_the_db_bucket(env: Env, web: TestClient) -> None:
+    """The login's last_seen write must not hold the lock the rate-limit bucket needs."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/release-group"):
+            return httpx.Response(200, json={"release-group-count": 0, "release-groups": []})
+        if request.url.path.startswith("/ws/2/artist/"):
+            return httpx.Response(200, json={"id": ARTIST, "name": "Real Name"})
+        return httpx.Response(
+            200, json={"artists": [{"id": ARTIST, "name": "Real Name", "disambiguation": ""}]}
+        )
+
+    client = polite_client(
+        "musicbrainz", env.settings, env.sessions, transport=httpx.MockTransport(handler)
+    )
+    web.app.state.watch = MusicBrainzProvider(client)  # type: ignore[attr-defined]
+    tok = login(web, "alice")
+    assert "Real Name" in web.get("/watchlist/search", params={"kind": "artist", "q": "x"}).text
+    r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "artist", "mbid": ARTIST})
+    assert r.status_code == 303
+    fid = r.headers["location"].split("/")[2]
+    assert web.get(f"/watchlist/{fid}/catalog").status_code == 200
+    assert web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok}).status_code == 303
+
+
+async def test_follow_while_a_check_runs_queues_a_successor(env: Env) -> None:
+    follow(env)
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job)):
+            j.status = JobState.RUNNING
+    with env.sessions.begin() as s:
+        bob = create_user(s, "bob", "pw").id
+    follow(env, user=bob)
+    assert len([j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]) == 1
+
+
+async def test_a_new_follow_pulls_a_far_future_check_forward(env: Env) -> None:
+    follow(env)
+    far = env.clock.now() + timedelta(days=10)
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job)):
+            j.run_after = far
+        bob = create_user(s, "bob", "pw").id
+    follow(env, user=bob)
+    (job,) = env.jobs(JobKind.WATCHLIST_POLL)
+    assert job.run_after.replace(tzinfo=UTC) == env.clock.now()
 
 
 async def test_discography_stops_at_the_page_cap(make_client: Make) -> None:

@@ -190,7 +190,11 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         settings.mb_rate,
     )
     watcher = Watcher(
-        sessions, clock, MusicBrainzProvider(polite_client("musicbrainz", settings, sessions))
+        sessions,
+        clock,
+        MusicBrainzProvider(polite_client("musicbrainz", settings, sessions)),
+        media=tuple(settings.canonical_media),
+        countries=tuple(settings.canonical_countries),
     )
     handlers = (
         HANDLERS
