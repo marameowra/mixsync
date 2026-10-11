@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +24,7 @@ class Settings(BaseSettings):
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
     canonical_countries: list[str] = ["XW"]  # preferred release countries, best first
+    timezone: str = "UTC"  # the zone report days are read in
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
 
     @field_validator("database_url")
@@ -29,4 +32,13 @@ class Settings(BaseSettings):
     def _supported_url(cls, v: str) -> str:
         if not v.startswith(("sqlite:", "postgresql")):
             raise ValueError("MIXSYNC_DATABASE_URL must start with sqlite: or postgresql")
+        return v
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, v: str) -> str:
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(f"MIXSYNC_TIMEZONE is not a known time zone: {v!r}") from None
         return v
