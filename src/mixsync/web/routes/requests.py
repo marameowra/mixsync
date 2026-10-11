@@ -30,6 +30,13 @@ def _of(req_id: int) -> ColumnElement[bool]:
     return Job.payload["request_id"].as_integer() == req_id
 
 
+def _waiting(db: Session, ids: list[int], now: datetime) -> set[int]:
+    """Requests whose next step is due but the worker has not taken it yet."""
+    rid = Job.payload["request_id"].as_integer()
+    due = select(rid).where(rid.in_(ids), Job.status == JobState.QUEUED, Job.run_after <= now)
+    return set(db.scalars(due))
+
+
 def _deletable(db: Session, req: AlbumRequest) -> bool:
     """A no_results request always has a queued repeat search, which delete removes with it."""
     if req.status in _BUSY:
@@ -46,8 +53,11 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
         .order_by(AlbumRequest.id.desc())
     ).all()
     deletable = {r.id for r in items if _deletable(db, r)}
+    queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
     return templates.TemplateResponse(
-        request, "pages/requests.html", {"user": user, "items": items, "deletable": deletable}
+        request,
+        "pages/requests.html",
+        {"user": user, "items": items, "deletable": deletable, "queued": queued},
     )
 
 

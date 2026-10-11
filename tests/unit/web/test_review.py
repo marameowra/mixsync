@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -543,3 +543,24 @@ def test_unverified_409_for_stage_one_and_missing_paths(
     for i in (stage1, nopath):
         r = client.post(f"/review/{i}/unverified", data={**GOOD, "csrf_token": tok})
         assert r.status_code == 409
+
+
+def test_request_list_marks_jobs_the_worker_has_not_taken(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    waiting = _req(sf, "alice", "searching", JobState.QUEUED)
+    running = _req(sf, "alice", "searching", JobState.RUNNING)
+    later = _req(sf, "alice", "no_results", JobState.QUEUED)
+    with sf() as s, s.begin():
+        for j in s.scalars(select(Job)):
+            if j.payload.get("request_id") == later:  # a repeat search an hour away
+                j.run_after = datetime.now(UTC) + timedelta(hours=1)
+    _login(client, "alice")
+    page = client.get("/requests").text
+    rows = {
+        rid: next(r for r in page.split("<tr") if f"<td>{rid}</td>" in r)
+        for rid in (waiting, running, later)
+    }
+    assert "queued (searching)" in rows[waiting]
+    assert "queued" not in rows[running] and "searching" in rows[running]
+    assert "queued" not in rows[later] and "no_results" in rows[later]
