@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     navidrome_password: str = ""
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
+    import_source_dir: str = "/import-source"  # the old library; mounted read-only
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
     canonical_countries: list[str] = ["XW"]  # preferred release countries, best first
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"

@@ -50,3 +50,20 @@ class Request(TimestampMixin, Base):
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None]
+    migration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("migrations.id")
+    )  # old-library import
+
+
+class Migration(TimestampMixin, Base):
+    """One re-import of the old library (docs/design/migration.md)."""
+
+    __tablename__ = "migrations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # the admin who started it
+    # preflight/ready/failed/running/cancelled
+    status: Mapped[str] = mapped_column(String(16), default="preflight")
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # preflight results
+    manifest_path: Mapped[str] = mapped_column(String(500), default="")
+    verify: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # last byte-identical check
