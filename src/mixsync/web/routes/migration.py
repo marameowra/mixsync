@@ -83,8 +83,17 @@ def _preflight_live(db: Db, m: Migration) -> bool:
     )
 
 
-def _window(start: date | None, end: date | None) -> tuple[datetime | None, datetime]:
+def _day(v: str) -> date | None:
+    """A browser sends a cleared date input as an empty string: that means no bound."""
+    try:
+        return date.fromisoformat(v) if v else None
+    except ValueError:
+        raise HTTPException(422, f"not a date: {v!r}") from None
+
+
+def _window(start_s: str, end_s: str) -> tuple[datetime | None, datetime]:
     """Start is 00:00 UTC of its day; end is the last instant of its day (default: now)."""
+    start, end = _day(start_s), _day(end_s)
     if start and end and start > end:
         raise HTTPException(400, "start is after end")
     first = start and datetime.combine(start, time.min, UTC)
@@ -97,9 +106,7 @@ def _window(start: date | None, end: date | None) -> tuple[datetime | None, date
 
 
 @router.get("")
-def page(
-    request: Request, user: Admin, db: Db, start: date | None = None, end: date | None = None
-) -> HTMLResponse:
+def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") -> HTMLResponse:
     first, last = _window(start, end)
     latest = _latest(db)
     running = db.scalars(
@@ -114,6 +121,7 @@ def page(
                 "m": m,
                 "start": (first or m.created_at).date().isoformat(),
                 "end": last.date().isoformat(),
+                "csv_end": end and last.date().isoformat(),  # unset: the CSV runs up to its own now
                 "totals": mig.totals(rows),
                 "failures": [r for r in rows if r["status"] in ("failed", "skipped")],
                 "checking": _checking(db, m),
@@ -201,9 +209,7 @@ def _safe(v: Any) -> Any:
 
 
 @router.get("/{migration_id}/report.csv")
-def report_csv(
-    migration_id: int, user: Admin, db: Db, start: date | None = None, end: date | None = None
-) -> Response:
+def report_csv(migration_id: int, user: Admin, db: Db, start: str = "", end: str = "") -> Response:
     first, last = _window(start, end)
     out = io.StringIO()
     w = csv.writer(out)

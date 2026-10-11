@@ -100,6 +100,15 @@ def test_bad_dates_are_rejected(client: TestClient, migration_id: int, query: st
     assert client.get(f"/migration{query}").status_code in (400, 422)
 
 
+def test_cleared_date_inputs_mean_no_bound(client: TestClient, migration_id: int) -> None:
+    assert len(_csv(client, migration_id, "?start=&end=")) == 1
+    page = client.get("/migration?start=&end=")
+    assert page.status_code == 200
+    assert "partial: 1" in page.text
+    assert f"/migration/{migration_id}/report.csv?start=" in page.text
+    assert "&amp;end=" not in page.text  # no end chosen: the CSV link stays open-ended
+
+
 def test_page_prefills_the_dates_and_the_csv_link_carries_them(
     client: TestClient, migration_id: int
 ) -> None:
