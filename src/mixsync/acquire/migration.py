@@ -52,31 +52,35 @@ class Group:
     files: list[tuple[str, int]]  # path relative to the folder, size
 
 
-def _files(root: Path, skipped: list[str]) -> Iterator[Path]:
+def _skip(rel: Path, why: str) -> dict[str, str]:
+    return {"path": str(rel), "why": why}
+
+
+def _files(root: Path, skipped: list[dict[str, str]]) -> Iterator[Path]:
     """Every regular file, whatever its type: the byte-identical check covers the whole tree.
     Symlinks are never followed; what cannot be read or is not a regular file goes in `skipped`
-    as "<relative path>: <why>"."""
+    as {"path", "why"}: paths may contain ": ", so never one string."""
 
     def onerror(e: OSError) -> None:
-        skipped.append(f"{Path(e.filename or root).relative_to(root)}: cannot read folder")
+        skipped.append(_skip(Path(e.filename or root).relative_to(root), "cannot read folder"))
 
     for base, dirs, names in os.walk(root, onerror=onerror):
         dirs.sort()
         for d in dirs:
             if (p := Path(base) / d).is_symlink():
-                skipped.append(f"{p.relative_to(root)}: symlink skipped")
+                skipped.append(_skip(p.relative_to(root), "symlink skipped"))
         for n in sorted(names):
             p = Path(base) / n
             try:
                 mode = os.lstat(p).st_mode
             except OSError as e:
-                skipped.append(f"{p.relative_to(root)}: {e.strerror or e}")
+                skipped.append(_skip(p.relative_to(root), e.strerror or str(e)))
                 continue
             if stat.S_ISREG(mode):
                 yield p
             else:
                 why = "symlink skipped" if stat.S_ISLNK(mode) else "not a regular file, skipped"
-                skipped.append(f"{p.relative_to(root)}: {why}")
+                skipped.append(_skip(p.relative_to(root), why))
 
 
 def _hash(path: Path) -> tuple[int, str]:
@@ -96,7 +100,7 @@ def _album_dir(path: Path) -> Path:
 def scan(root: Path, out: Path) -> dict[str, Any]:
     """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
     out.mkdir(parents=True, exist_ok=True)
-    unreadable: list[str] = []
+    unreadable: list[dict[str, str]] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
     count = total = 0
     with (out / "manifest.jsonl").open("w") as manifest:
@@ -105,7 +109,7 @@ def scan(root: Path, out: Path) -> dict[str, Any]:
             try:
                 size, digest = _hash(path)
             except OSError as e:
-                unreadable.append(f"{rel}: {e.strerror or e}")
+                unreadable.append(_skip(rel, e.strerror or str(e)))
                 continue
             manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
@@ -114,7 +118,7 @@ def scan(root: Path, out: Path) -> dict[str, Any]:
             try:
                 tg = tags.read_fields(path)
             except Exception as e:  # corrupt or unsupported: it could not be imported either
-                unreadable.append(f"{rel}: {e}")
+                unreadable.append(_skip(rel, str(e)))
                 continue
             by_dir.setdefault(_album_dir(path), []).append((path, size, tg))
     groups: list[Group] = []
@@ -257,7 +261,7 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
     ]
     root = m.summary.get("source", "")
     for u in m.summary.get("unreadable", []):
-        rel, _, why = u.partition(": ")
+        rel, why = u["path"], u["why"]
         rows.append(
             {
                 "folder": str((Path(root) / rel).parent),

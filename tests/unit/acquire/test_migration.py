@@ -147,7 +147,7 @@ async def test_preflight_groups_manifest_and_eta(rig: Rig, monkeypatch: pytest.M
     sm = m.summary
     assert m.status == "ready", sm
     assert sm["files"] == 12 and sm["albums"] == 5 and sm["tagged_albums"] == 1
-    assert sorted(u.partition(":")[0] for u in sm["unreadable"]) == [
+    assert sorted(u["path"] for u in sm["unreadable"]) == [
         "junk.mp3",
         "locked/01 Song One.mp3",
     ]
@@ -418,7 +418,13 @@ def test_page_is_admin_only_and_confirm_is_guarded(rig: Rig, web: TestClient) ->
         m = s.get(Migration, job.payload["migration_id"])
         assert m
         m.manifest_path = str(out / "manifest.jsonl")
-        m.summary = {"albums": 51, "files": 51, "bytes": 1, "source": "/old", "unreadable": ["/x"]}
+        m.summary = {
+            "albums": 51,
+            "files": 51,
+            "bytes": 1,
+            "source": "/old",
+            "unreadable": [{"path": "A: B/x.mp3", "why": "Permission denied"}],
+        }
 
     def post(**data: str) -> int:
         return web.post("/migration/1/confirm", data={"csrf_token": tok, **data}).status_code
@@ -443,7 +449,9 @@ def test_page_is_admin_only_and_confirm_is_guarded(rig: Rig, web: TestClient) ->
     assert r.headers["content-type"].startswith("text/csv")
     assert rows[0] == ["folder", "status", "artist", "album", "release_mbid", "files", "reason"]
     assert rows[1][:2] == ["/old/0", "verifying"] and len(rows) == 1 + 51 + 1
-    assert rows[-1][:2] == ["/", "failed"]  # the unreadable file
+    # the unreadable file: a ": " in its path stays in the folder
+    assert rows[-1][:2] == ["/old/A: B", "failed"]
+    assert rows[-1][-1] == "x.mp3: Permission denied"
     assert "in progress: 51" in web.get("/migration").text
     assert "Check old tree" in web.get("/migration").text
     assert "No requests yet" in web.get("/requests").text  # migration requests are not listed
@@ -608,7 +616,7 @@ def test_scan_lists_what_it_cannot_follow_or_read(
         found = mig.scan(root, tmp_path / "out")
     finally:
         locked.chmod(0o755)
-    notes = sorted(found["unreadable"])
+    notes = sorted(f"{u['path']}: {u['why']}" for u in found["unreadable"])
     assert "A/One/link.mp3: symlink skipped" in notes
     assert "linkdir: symlink skipped" in notes
     assert "A/One/gone.mp3: No such file or directory" in notes

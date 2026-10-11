@@ -18,7 +18,7 @@
   <li>Estimated duration: at least {{ sm.get("eta_seconds", 0)|duration }} (MusicBrainz requests at their rate limit, then one AcoustID lookup per track at 3 per second)</li>
   <li>{{ sm.get("unreadable", [])|length }} unreadable file(s), left out of the import and listed as failed in the report</li>
 </ul>
-{% if sm.get("unreadable") %}<ul>{% for u in sm["unreadable"][:100] %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
+{% if sm.get("unreadable") %}<ul>{% for u in sm["unreadable"][:100] %}<li>{{ u.path }}: {{ u.why }}</li>{% endfor %}</ul>{% endif %}
 {% endif %}
 {% if sm.get("reason") %}<p class="band-reject">Preflight failed: {{ sm["reason"] }}</p>{% endif %}
 
