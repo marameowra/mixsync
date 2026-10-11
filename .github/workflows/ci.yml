@@ -1,17 +1,46 @@
 name: ci
 on:
   push:
+    branches: [main] # PR branches are covered by pull_request; pushing them too ran CI twice
   pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  # `check` is a required status check, so docs-only changes skip it with a job `if:` (a skipped
+  # job counts as passing) instead of paths-ignore (which would leave the PR waiting forever).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"  # unknown base: check everything
+          elif git diff --name-only "$BASE" HEAD | grep -qvE '^docs/|\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
   check:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
       - run: uv python install 3.13
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pyright
       - run: uv run lint-imports
-      - run: uv run pytest
+      - run: uv run pytest -n auto

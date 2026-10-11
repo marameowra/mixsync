@@ -29,6 +29,7 @@ dev = [
     "pyright",
     "import-linter",
     "hypothesis>=6.168.5",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
