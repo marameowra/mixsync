@@ -652,3 +652,56 @@ async def test_mark_unverified_imports_the_edited_tags_without_ids(
     login(web, "root")
     html = web.get("/library/unverified").text
     assert one in html and "Edited One" in html and "Edited Album" in html
+
+
+async def _review_form(env: Env, web: TestClient, **edits: Any) -> tuple[int, int, dict[str, Any]]:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    form: dict[str, Any] = {
+        "csrf_token": login(web, "alice"),
+        "albumartist": "Band",
+        "album": "Album",
+        "year": "",
+        "title": ["One", "Two"],
+        "artist": ["", ""],
+        "disc": ["1", "1"],
+        "track": ["1", "2"],
+    }
+    return rid, d.id, form | edits
+
+
+async def test_unverified_paths_stay_inside_the_library(env: Env, web: TestClient) -> None:
+    rid, did, form = await _review_form(
+        env, web, albumartist="../../etc", album="..", title=["A/../x", "B"]
+    )
+    assert web.post(f"/review/{did}/unverified", data=form).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported"
+    lib = (env.data_dir / "library").resolve()
+    found = library(env)
+    assert len(found) == 2
+    for rel in found:
+        assert ".." not in Path(rel).parts and (lib / rel).resolve().is_relative_to(lib)
+    assert not (env.data_dir.parent / "etc").exists() and not (env.data_dir / "etc").exists()
+
+
+async def test_unverified_partial_failure_releases_nothing(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid, did, form = await _review_form(env, web)
+    real = env.ops.import_file
+
+    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+        if "Two" in src.name:
+            raise OSError("disk full")
+        return real(src, rel, write_tags, batch)
+
+    monkeypatch.setattr(env.ops, "import_file", flaky)
+    assert web.post(f"/review/{did}/unverified", data=form).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "failed"
+    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
+    assert env.source.cleared == []

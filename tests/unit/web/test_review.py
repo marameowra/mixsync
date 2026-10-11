@@ -443,6 +443,9 @@ def test_unverified_form_falls_back_to_file_name(
         {"disc": ["0"]},
         {"track": ["-1"]},
         {"track": ["1", "2"]},
+        {"title": ["a\x00b"]},
+        {"album": "a\nb"},
+        {"artist": ["a\tb"]},
     ],
 )
 def test_unverified_rejects_bad_input(
@@ -500,3 +503,43 @@ def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[S
             }
         )
     assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 409
+
+
+def test_unverified_control_character_message(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, "artist": ["a\tb"], "csrf_token": tok})
+    assert "artist must not contain control characters" in r.text
+    assert "artist is required" not in r.text
+
+
+def test_unverified_error_page_escapes_submitted_values(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    evil = {"albumartist": '"><script>alert(1)</script>', "title": ['x" onfocus="y'], "year": "0"}
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, **evil, "csrf_token": tok})
+    assert r.status_code == 400
+    assert "<script>alert(1)</script>" not in r.text and 'onfocus="y' not in r.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text and "&#34;" in r.text
+
+
+def test_unverified_409_for_stage_one_and_missing_paths(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    stage1 = _make_decision(sf, "alice", "/x")
+    nopath = _make_decision(sf, "alice", "")
+    with sf() as s, s.begin():
+        d = decisions.get(s, stage1)
+        assert d
+        d.stage = 1
+        d = decisions.get(s, nopath)
+        assert d
+        d.evidence = {**d.evidence, "source": {"files": [{"name": "a.mp3"}]}}
+    tok = _login(client, "alice")
+    for i in (stage1, nopath):
+        r = client.post(f"/review/{i}/unverified", data={**GOOD, "csrf_token": tok})
+        assert r.status_code == 409

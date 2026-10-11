@@ -300,10 +300,8 @@ class Pipeline:
                 raise LookupError(f"decision {did} does not exist")
             cand = candidate_from_dict(d.evidence["candidate"])
             edits = d.evidence.get("unverified")
-            mbid, assignment = (
-                d.chosen_release_mbid or d.release_mbid,
-                d.evidence.get("assignment", []),
-            )
+            mbid = d.chosen_release_mbid or d.release_mbid
+            assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
         if edits:
             return await self._import_unverified(job, cand, edits)

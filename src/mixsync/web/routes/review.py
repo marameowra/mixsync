@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -123,8 +124,12 @@ def _int(text: str, what: str, minimum: int = 1) -> int:
 
 def _text(text: str, what: str, required: bool = True) -> str:
     text = text.strip()
-    if (required and not text) or len(text) > _TEXT_MAX:
-        raise ValueError(f"{what} is required and at most {_TEXT_MAX} characters")
+    if required and not text:
+        raise ValueError(f"{what} is required")
+    if len(text) > _TEXT_MAX:
+        raise ValueError(f"{what} is at most {_TEXT_MAX} characters")
+    if any(unicodedata.category(c) == "Cc" for c in text):
+        raise ValueError(f"{what} must not contain control characters")
     return text
 
 
