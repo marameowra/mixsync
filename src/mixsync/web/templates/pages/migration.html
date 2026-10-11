@@ -30,6 +30,9 @@
   <button type="submit">Start migration</button>
 </form>
 {% endif %}
+{% if m.status in ("ready", "preflight") %}
+<form method="post" action="/migration/{{ m.id }}/discard">{{ forms.csrf() }}<button type="submit">Discard preflight</button></form>
+{% endif %}
 
 {% if m.status == "running" %}
 <h3>Report</h3>

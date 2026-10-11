@@ -1,11 +1,11 @@
 import csv
 import io
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select, update
 
 from mixsync.acquire import migration as mig
 from mixsync.acquire.requests import LIVE
@@ -112,6 +112,33 @@ def confirm(
     if albums > TYPED_ABOVE and count.strip() != str(albums):
         raise HTTPException(400, f"type {albums} to confirm")
     mig.confirm(db, datetime.now(UTC), m)
+    return RedirectResponse("/migration", status_code=303)
+
+
+@router.post("/{migration_id}/discard")
+def discard(migration_id: int, user: Admin, db: Db) -> RedirectResponse:
+    """Drop an unconfirmed preflight (or one whose job died) so a new one can start."""
+    m = _get(db, migration_id)
+    live = db.scalar(
+        select(Job.id)
+        .where(
+            Job.kind == JobKind.MIGRATE_PREFLIGHT,
+            Job.status.in_(LIVE),
+            Job.payload["migration_id"].as_integer() == m.id,
+        )
+        .limit(1)
+    )
+    ok = ("ready",) if live else ("ready", "preflight")
+    done = cast(
+        CursorResult[Any],
+        db.execute(
+            update(Migration)
+            .where(Migration.id == m.id, Migration.status.in_(ok))
+            .values(status="cancelled")
+        ),
+    )
+    if done.rowcount != 1:
+        raise HTTPException(409, f"migration is {m.status}")
     return RedirectResponse("/migration", status_code=303)
 
 

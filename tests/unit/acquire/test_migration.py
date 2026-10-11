@@ -548,3 +548,22 @@ async def test_untagged_files_search_by_folder_name_and_keep_the_name(rig: Rig) 
     assert rig.meta.searches == [("", "Some Folder", 5)]
     (req,) = rig.requests()
     assert (req.status, req.album) == ("review", "Some Folder")
+
+
+async def test_discard_frees_a_ready_preflight_but_not_a_running_migration(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "A/One")
+    mid = await rig.preflight()
+    form = {"csrf_token": login(web, "root")}
+    assert web.post("/migration/preflight", data=form).status_code == 409  # ready blocks
+    assert web.post(f"/migration/{mid}/discard", data=form).status_code == 303
+    assert web.post(f"/migration/{mid}/confirm", data={**form, "paused": "1"}).status_code == 409
+    assert web.post("/migration/preflight", data=form).status_code == 303
+    new = mid + 1
+    # still preflighting with a live job: not discardable
+    assert web.post(f"/migration/{new}/discard", data=form).status_code == 409
+    await rig.env.drain()
+    rig.confirm(new)
+    assert web.post(f"/migration/{new}/discard", data=form).status_code == 409  # running
+    assert rig.requests()
