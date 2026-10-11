@@ -81,7 +81,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     if d is None or req is None:  # a decision that did not come from a request
         return
     src = d.evidence["source"]
-    if d.final_action == "accept":
+    if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
         enqueue_import(s, now, req, d.id)
     elif d.final_action == "repick":
         req.status = "verifying"

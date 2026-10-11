@@ -410,3 +410,73 @@ def test_delete_request_409_rolls_back_decision_rejects(
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
         assert [decisions.get(s, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
+
+
+GOOD = {
+    "albumartist": "Band",
+    "album": "Album",
+    "year": "2001",
+    "title": ["T"],
+    "artist": [""],
+    "disc": ["1"],
+    "track": ["1"],
+}
+
+
+def test_unverified_form_falls_back_to_file_name(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _make_decision(sf, "alice", "/missing.mp3")
+    _login(client, "alice")
+    html = client.get(f"/review/{i}").text
+    assert f'action="/review/{i}/unverified"' in html and 'value="a"' in html  # title from a.mp3
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"albumartist": " "},
+        {"album": "x" * 256},
+        {"year": "0"},
+        {"year": "abc"},
+        {"title": [" "]},
+        {"disc": ["0"]},
+        {"track": ["-1"]},
+        {"track": ["1", "2"]},
+    ],
+)
+def test_unverified_rejects_bad_input(
+    client: TestClient, sf: sessionmaker[Session], bad: dict[str, object]
+) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/unverified", data={**GOOD, **bad, "csrf_token": tok})
+    assert r.status_code == 400
+    with sf() as s:
+        d = decisions.get(s, i)
+        assert d and d.status == "pending_review" and "unverified" not in d.evidence
+
+
+def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    url = f"/review/{i}/unverified"
+    for who in ("nocap", "bob"):
+        assert client.post(url, data={**GOOD, "csrf_token": _login(client, who)}).status_code == 403
+    tok = _login(client, "alice")
+    assert client.post(url, data=GOOD).status_code == 403  # no CSRF token
+    assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 303
+    with sf() as s:
+        d = decisions.get(s, i)
+        assert (
+            d
+            and d.status == "unverified"
+            and d.evidence["unverified"]["tracks"][0]
+            == {
+                "local_path": "/x",
+                "title": "T",
+                "artist": "",
+                "disc": 1,
+                "track": 1,
+            }
+        )
+    assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 409

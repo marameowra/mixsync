@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -12,8 +13,8 @@ from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, l
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Plan
-from mixsync.library import fragmentation
+from mixsync.db.models.library import Plan, Track
+from mixsync.library import fragmentation, tags
 from mixsync.web.deps import Db, Merge, require
 from mixsync.web.templating import templates
 
@@ -64,6 +65,21 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
             "plans": plans,
             "allowed": {p.id: _allowed(db, p) for p in plans},
         },
+    )
+
+
+@router.get("/unverified")
+def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
+    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
+    root = Path(request.app.state.settings.data_dir) / "library"
+    items: list[tuple[Track, dict[str, str]]] = []
+    for t in rows:
+        try:
+            items.append((t, tags.read_fields(root / t.path)))
+        except Exception:  # file moved or unreadable: the path alone still identifies it
+            items.append((t, {}))
+    return templates.TemplateResponse(
+        request, "pages/unverified.html", {"user": user, "items": items}
     )
 
 

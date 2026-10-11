@@ -85,6 +85,33 @@
     <label>Pick another release (MusicBrainz release URL or MBID) <input name="release" type="text" required></label>
     <button type="submit">Pick another release</button>
   </form>
+  <form method="post" action="/review/{{ d.id }}/unverified">
+    {{ forms.csrf() }}
+    <h3>Mark unverified</h3>
+    <p>Imports the files with the tags below and no MusicBrainz ids.</p>
+    <p>
+      <label>Album artist <input name="albumartist" type="text" maxlength="255" required value="{{ prefill.albumartist }}"></label>
+      <label>Album <input name="album" type="text" maxlength="255" required value="{{ prefill.album }}"></label>
+      <label>Year <input name="year" type="number" min="1" max="9999" value="{{ prefill.year }}"></label>
+    </p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>File</th><th>Disc</th><th>Track</th><th>Title</th><th>Artist</th></tr></thead>
+      <tbody>
+      {% for r in prefill.rows %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td><input name="disc" type="number" min="1" max="9999" required value="{{ r.disc }}" aria-label="Disc"></td>
+        <td><input name="track" type="number" min="1" max="9999" required value="{{ r.track }}" aria-label="Track"></td>
+        <td><input name="title" type="text" maxlength="255" required value="{{ r.title }}" aria-label="Title"></td>
+        <td><input name="artist" type="text" maxlength="255" value="{{ r.artist }}" aria-label="Artist"></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <button type="submit">Mark unverified</button>
+  </form>
 </section>
 {% endif %}
 {% endblock %}

@@ -18,6 +18,7 @@ from mixsync.core.matching import AlbumInfo, TrackInfo, TransferStatus
 from mixsync.core.types import AcoustIdResult, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
+from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
@@ -585,3 +586,69 @@ async def test_import_of_only_owned_recordings_finishes_as_owned(env: Env) -> No
     await env.drain()
     assert sorted([status(env, first), status(env, second)]) == ["imported", "owned"]
     assert len(env.jobs(JobKind.IMPORT)) == 2 and library(env) == [FIRST, SECOND]
+
+
+async def test_mark_unverified_imports_the_edited_tags_without_ids(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    tok = login(web, "alice")
+    page = web.get(f"/review/{d.id}").text
+    assert 'value="Alpha Album"' in page and 'value="Song Two"' in page  # prefilled from tags
+    form = {
+        "albumartist": "Edited Band",
+        "album": "Edited Album",
+        "year": "1999",
+        "title": ["Edited One", "Edited Two"],
+        "artist": ["", "Guest"],
+        "disc": ["1", "1"],
+        "track": ["1", "2"],
+    }
+    # a crash after the files are in: the retry must not import them twice
+    real, calls = env.pipeline.importer.import_release, []
+
+    def crashing(*a: Any) -> Any:
+        calls.append(1)
+        results = real(*a)
+        if len(calls) == 1:
+            raise TransientError("killed")
+        return results
+
+    monkeypatch.setattr(env.pipeline.importer, "import_release", crashing)
+    assert web.post(f"/review/{d.id}/unverified", data=form).status_code == 403  # no CSRF token
+    r = web.post(f"/review/{d.id}/unverified", data=form | {"csrf_token": tok})
+    assert r.status_code == 303
+    assert status(env, rid) == "importing"
+    await env.drain()
+
+    one = "Edited Band/Edited Album (1999)/01-01 Edited One.mp3"
+    two = "Edited Band/Edited Album (1999)/01-02 Edited Two.mp3"
+    assert status(env, rid) == "imported" and library(env) == [one, two]
+    for rel, artist in ((one, "Edited Band"), (two, "Guest")):
+        t = release_tags(env, rel)
+        assert t["TXXX:MIXSYNC_STATUS"] == ["unverified"] and t["TPE1"] == [artist]
+        assert "TCON" not in t
+        assert not any(k.startswith(("UFID", "TXXX:MusicBrainz", "TXXX:Acoustid")) for k in t)
+    with env.sessions() as s:
+        rows = list(s.scalars(select(Track)))
+    assert sorted(r.path for r in rows) == [one, two]
+    assert {r.status for r in rows} == {"unverified"}
+    assert not any(r.recording_mbid or r.release_mbid or r.acoustid_id for r in rows)
+    assert list(env.downloads.iterdir()) == [] and env.source.cleared == ["peer1"]
+    assert env.target.rescans == 1 and len(calls) == 2
+    assert not (env.data_dir / "library" / one).with_name("cover.jpg").exists()
+
+    with env.sessions.begin() as s:
+        create_user(s, "root", "pw", admin=True)
+    login(web, "root")  # the library view (library.edit) and the home count
+    assert "2 unverified tracks" in web.get("/").text
+    assert web.get("/library/unverified").status_code == 200
+    login(web, "alice")
+    assert web.get("/library/unverified").status_code == 403
+    login(web, "root")
+    html = web.get("/library/unverified").text
+    assert one in html and "Edited One" in html and "Edited Album" in html
