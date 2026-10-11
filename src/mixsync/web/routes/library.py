@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,15 @@ from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.library import fragmentation, tags
+from mixsync.submit.harmony import harmony_url
+from mixsync.submit.mb_seed import (
+    SEED_URL,
+    Credit,
+    SeedMedium,
+    SeedRelease,
+    SeedTrack,
+    build_seed,
+)
 from mixsync.web.deps import Db, Merge, require
 from mixsync.web.templating import templates
 
@@ -68,19 +78,131 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
     )
 
 
-@router.get("/unverified")
-def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
+Item = tuple[Track, dict[str, str]]
+
+
+def _read_unverified(request: Request, db: Session) -> list[Item]:
+    # shortcut: reads the tags of every unverified file per request; move the album fields
+    # into DB columns when unverified sets get large.
     rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
     root = Path(request.app.state.settings.data_dir) / "library"
-    items: list[tuple[Track, dict[str, str]]] = []
+    items: list[Item] = []
     for t in rows:
         try:
             items.append((t, tags.read_fields(root / t.path)))
         except Exception:  # file moved or unreadable: the path alone still identifies it
             items.append((t, {}))
-    return templates.TemplateResponse(
-        request, "pages/unverified.html", {"user": user, "items": items}
+    return items
+
+
+def _year(tg: dict[str, str]) -> str:
+    y = tg.get("date", "")[:4]
+    return y if y.isascii() and y.isdigit() and y != "0000" else ""
+
+
+def _album_key(tg: dict[str, str]) -> tuple[str, str, str]:
+    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), _year(tg)
+
+
+def _group(items: list[Item]) -> dict[tuple[str, str, str], list[Item]]:
+    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
+    dated group with the same artist and album, if there is exactly one."""
+    albums: dict[tuple[str, str, str], list[Item]] = {}
+    for it in items:
+        albums.setdefault(_album_key(it[1]), []).append(it)
+    for key in [k for k in albums if not k[2]]:
+        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
+        if len(dated) == 1:
+            albums[dated[0]] += albums.pop(key)
+    return albums
+
+
+@router.get("/unverified")
+def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
+    items = _read_unverified(request, db)
+    ctx = {"user": user, "count": len(items), "albums": _group(items)}
+    return templates.TemplateResponse(request, "pages/unverified.html", ctx)
+
+
+def _num(v: str | None, default: int) -> int:
+    return int(v) if v and v.isascii() and v.isdigit() else default
+
+
+def _seed_release(
+    request: Request, items: list[Item], album: str, artist: str, year: str
+) -> SeedRelease:
+    root = Path(request.app.state.settings.data_dir) / "library"
+    discs: dict[int, list[Item]] = {}
+    for it in items:
+        discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
+    mediums: list[SeedMedium] = []
+    for d in sorted(discs):
+        disc = sorted(discs[d], key=lambda i: (_num(i[1].get("tracknumber"), 10**6), i[0].path))
+        nums = [_num(tg.get("tracknumber"), 0) for _, tg in disc]
+        nxt = max(nums)  # unnumbered tracks continue after the highest number (1.. if none)
+        out: list[SeedTrack] = []
+        for t, tg in disc:
+            try:
+                ms = tags.length_ms(root / t.path)
+            except Exception:  # unreadable audio: seed without a length
+                ms = None
+            if not tg.get("tracknumber"):
+                nxt += 1
+            a = tg.get("artist", "")
+            out.append(
+                SeedTrack(
+                    tg.get("tracknumber") or str(nxt),
+                    tg.get("title") or Path(t.path).stem,
+                    ms,
+                    [Credit(a)] if a and a != artist else [],
+                )
+            )
+        mediums.append(SeedMedium(out))
+    return SeedRelease(
+        album, [Credit(artist)] if artist else [], mediums, year=int(year) if year else None
     )
+
+
+@router.get("/unverified/submit")
+def unverified_submit(
+    request: Request,
+    user: User,
+    db: Db,
+    album: str,
+    albumartist: str = "",
+    year: str = "",
+    store_url: str = "",
+) -> HTMLResponse:
+    items = _group(_read_unverified(request, db)).get((albumartist, album, year), [])
+    if not items:
+        raise HTTPException(404, "no unverified tracks for that album")
+    seen = Counter(
+        (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0) or tg["tracknumber"])
+        for _, tg in items
+        if tg.get("tracknumber")
+    )
+    dupes = sorted(f"disc {d} track {n}" for (d, n), c in seen.items() if c > 1)
+    harmony, error = None, None
+    if store_url.strip():
+        try:
+            harmony = harmony_url(store_url)
+        except ValueError as e:
+            error = str(e)
+    ctx = {
+        "user": user,
+        "album": album,
+        "albumartist": albumartist,
+        "year": year,
+        "dupes": dupes,
+        "store_url": store_url,
+        "harmony": harmony,
+        "error": error,
+        "seed_url": SEED_URL,
+        "seed": build_seed(_seed_release(request, items, album, albumartist, year)),
+    }
+    resp = templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
+    resp.headers["Referrer-Policy"] = "no-referrer"  # Chromium ignores rel=noreferrer on forms
+    return resp
 
 
 @router.post("/fragments/plan")

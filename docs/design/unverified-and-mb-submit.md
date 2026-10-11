@@ -19,13 +19,13 @@ The **Submit to MusicBrainz** button on any unverified item picks a path:
 | Situation | Action |
 |---|---|
 | The release is on a store or streaming service (Bandcamp, Deezer, iTunes, Spotify, etc.) | Open **Harmony** with the release URL. Harmony gathers the metadata and seeds the MB editor. |
-| Not on any store | Generate an **MB release-editor seed**: an auto-submitting HTML form that POSTs to `https://musicbrainz.org/release/add` with artist, title, track list, durations, label, date, and barcode if known. It opens in a new tab. |
+| Not on any store | Generate an **MB release-editor seed**: an HTML form, submitted by the user's click (never on page load), that POSTs to `https://musicbrainz.org/release/add` with artist, title, track list, durations, label, date, and barcode if known. It opens in a new tab. |
 
 - The user reviews and submits the edit in MB with their own account. MixSync never submits edits for them.
 - The seed includes an edit note crediting MixSync and saying the data came from local files.
 
-> [!question] Seeding field names
-> Verify the field names against the current MB "Release Editor Seeding" documentation before implementing.
+> [!note] Seeding field names
+> Verified 2026-10-10 against the MB [Release Editor Seeding](https://musicbrainz.org/doc/Development/Release_Editor_Seeding) documentation.
 
 ## Re-check and promote
 - **Primary trigger is the user:** a **Check MusicBrainz now** button on the item or album, used after the user's seeded edit has been applied in MB.

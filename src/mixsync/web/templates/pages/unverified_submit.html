@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Submit to MusicBrainz - MixSync{% endblock %}
+{% block content %}
+<h1>Submit to MusicBrainz: {{ albumartist or "(no artist)" }} - {{ album }}{% if year %} ({{ year }}){% endif %}</h1>
+{% if dupes %}<p role="alert">Warning: more than one track has the same number ({{ dupes|join(", ") }}). Check the tags before submitting.</p>{% endif %}
+<p>You review and submit the edit in MusicBrainz with your own account. MixSync sends nothing to MusicBrainz itself.</p>
+
+<h2>On a store or streaming service?</h2>
+<form method="get">
+  <input type="hidden" name="albumartist" value="{{ albumartist }}">
+  <input type="hidden" name="album" value="{{ album }}">
+  <input type="hidden" name="year" value="{{ year }}">
+  <label>Release URL <input type="text" name="store_url" value="{{ store_url }}" size="60"></label>
+  <button type="submit">Look up with Harmony</button>
+</form>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if harmony %}<p><a href="{{ harmony }}" target="_blank" rel="noopener noreferrer">Open in Harmony</a></p>{% endif %}
+
+<h2>Not on any store?</h2>
+<form method="post" action="{{ seed_url }}" target="_blank" rel="noreferrer">
+  {% for name, value in seed %}
+  <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <button type="submit">Open MusicBrainz release editor</button>
+</form>
+{% endblock %}
