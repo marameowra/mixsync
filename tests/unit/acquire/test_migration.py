@@ -816,13 +816,16 @@ async def test_retry_refuses_when_a_merge_removed_every_imported_file(
     assert rig.requests()[0].status == "failed" and len(rig.env.jobs(JobKind.VERIFY)) == 1
 
 
+BIG = "44444444-4444-4444-4444-444444444444"
+
+
 def partial_setup(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
     """A 13-track release and the one-track album a migration has on disk."""
     tracks = ALBUM.tracks + tuple(
         replace(ALBUM.tracks[0], title=f"Song {i}", index=i, medium_index=i, recording_id=f"r{i}")
         for i in range(3, 14)
     )
-    big = replace(ALBUM, release_id="44444444-4444-4444-4444-444444444444", tracks=tracks)
+    big = replace(ALBUM, release_id=BIG, tracks=tracks)
     monkeypatch.setitem(CATALOG, str(big.release_id), big)
     return big, replace(big, tracks=big.tracks[:1])
 
@@ -855,9 +858,12 @@ async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
     await migrate_partial(rig, monkeypatch)
     rig.confirm(await rig.preflight())
     with rig.env.sessions.begin() as s:  # the same files and flow, but not a migration
-        s.execute(update(Request).values(migration_id=None))
-    await rig.env.drain()
-    assert rig.requests()[0].status == "review" and library(rig.env) == []
+        s.execute(update(Request).values(migration_id=None, release_mbid=BIG))
+        (job,) = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY))
+        job.payload = {**job.payload, "release_mbid": BIG}
+    await rig.env.drain(until=lambda: bool(decision_rows(rig.env, 2)))
+    (dec,) = decision_rows(rig.env, 2)
+    assert dec.band == "reject" and library(rig.env) == []  # not auto-accepted, not imported
 
 
 async def test_a_partial_album_with_an_unsure_file_goes_to_review(
@@ -874,7 +880,7 @@ async def test_a_partial_album_with_a_veto_goes_to_review(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     await migrate_partial(rig, monkeypatch)
-    big = CATALOG["44444444-4444-4444-4444-444444444444"]
+    big = CATALOG[BIG]
     long_first = replace(big.tracks[0], length=100.0)
     monkeypatch.setitem(
         CATALOG, str(big.release_id), replace(big, tracks=(long_first, *big.tracks[1:]))
