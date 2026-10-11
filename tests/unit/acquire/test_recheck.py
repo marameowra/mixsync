@@ -306,10 +306,24 @@ async def test_a_failed_plan_blocks_a_new_draft_and_is_linked(env: Env) -> None:
     with env.sessions.begin() as s:
         s.get_one(Plan, plan.id).status = "failed"
         st = statuses(s, group(read_unverified(s, env.ops.library)))
-    assert [x.plan_id for x in st.values()] == [plan.id]
+    assert [(x.plan_id, x.plan_failed) for x in st.values()] == [(plan.id, True)]
     rig.schedule(user_id=env.user_id)
     await env.step()
     assert [p.id for p in rig.plans("failed")] == [plan.id] and rig.plans() == []
+
+
+async def test_a_failed_undo_does_not_block_a_new_draft(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.schedule()
+    await env.step()
+    (plan,) = rig.plans()
+    with env.sessions.begin() as s:
+        p = s.get_one(Plan, plan.id)
+        p.status, p.error = "failed", "undo: row changed"
+    rig.schedule(user_id=env.user_id)
+    await env.step()
+    assert len(rig.plans()) == 1 and rig.plans("failed") != []
 
 
 def test_one_background_check_waits_per_album(env: Env) -> None:
