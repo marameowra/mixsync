@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from mixsync.acquire import migration as mig
 from mixsync.acquire import pipeline
@@ -29,7 +29,7 @@ from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 
 from .conftest import Env, login
-from .fakes import ALBUM, AUDIO, OTHER, FakeMetadata
+from .fakes import ALBUM, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
 from .test_pipeline import decision_rows, library
 
 
@@ -814,3 +814,70 @@ async def test_retry_refuses_when_a_merge_removed_every_imported_file(
     r = web.post(f"/migration/{mid}/retry/{req.id}", data=form)
     assert r.status_code == 409 and "merged or removed" in r.text
     assert rig.requests()[0].status == "failed" and len(rig.env.jobs(JobKind.VERIFY)) == 1
+
+
+def partial_setup(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
+    """A 13-track release and the one-track album a migration has on disk."""
+    tracks = ALBUM.tracks + tuple(
+        replace(ALBUM.tracks[0], title=f"Song {i}", index=i, medium_index=i, recording_id=f"r{i}")
+        for i in range(3, 14)
+    )
+    big = replace(ALBUM, release_id="44444444-4444-4444-4444-444444444444", tracks=tracks)
+    monkeypatch.setitem(CATALOG, str(big.release_id), big)
+    return big, replace(big, tracks=big.tracks[:1])
+
+
+async def migrate_partial(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> Path:
+    big, one = partial_setup(monkeypatch)
+    d = put_album(rig.root, "Alpha Band/Alpha Album", one, mbid=str(big.release_id))
+    return d
+
+
+async def run_partial(rig: Rig) -> Any:
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    (dec,) = decision_rows(rig.env, 2)
+    return dec
+
+
+async def test_a_confident_partial_album_imports_and_says_it_is_partial(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    dec = await run_partial(rig)
+    assert dec.band == "auto_accept" and dec.evidence["partial"] == "1 of 13 tracks present"
+    assert rig.requests()[0].status == "imported" and len(library(rig.env)) == 1
+
+
+async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    rig.confirm(await rig.preflight())
+    with rig.env.sessions.begin() as s:  # the same files and flow, but not a migration
+        s.execute(update(Request).values(migration_id=None))
+    await rig.env.drain()
+    assert rig.requests()[0].status == "review" and library(rig.env) == []
+
+
+async def test_a_partial_album_with_an_unsure_file_goes_to_review(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    assert (await run_partial(rig)).band == "review"
+
+
+async def test_a_partial_album_with_a_veto_goes_to_review(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await migrate_partial(rig, monkeypatch)
+    big = CATALOG["44444444-4444-4444-4444-444444444444"]
+    long_first = replace(big.tracks[0], length=100.0)
+    monkeypatch.setitem(
+        CATALOG, str(big.release_id), replace(big, tracks=(long_first, *big.tracks[1:]))
+    )
+    dec = await run_partial(rig)
+    assert dec.band == "review" and dec.vetoes
