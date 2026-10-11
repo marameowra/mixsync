@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Watchlist - MixSync{% endblock %}
+{% block content %}
+<h1>Watchlist</h1>
+<p>New releases from followed artists and labels are requested automatically.</p>
+<form method="get" action="/watchlist/search">
+  <label>Search MusicBrainz
+    <select name="kind"><option value="artist">artist</option><option value="label">label</option></select>
+    <input name="q" type="text" required></label>
+  <button type="submit">Search</button>
+</form>
+<form method="post" action="/watchlist/follow">
+  {{ forms.csrf() }}
+  <label>Or MusicBrainz URL or MBID
+    <select name="kind"><option value="artist">artist</option><option value="label">label</option></select>
+    <input name="mbid" type="text" required></label>
+  <button type="submit">Follow</button>
+</form>
+{% if rows %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Last check</th><th>Next check</th><th>Releases found</th></tr></thead>
+  <tbody>
+  {% for f, e in rows %}
+  <tr>
+    <td><a href="/watchlist/{{ f.id }}">{{ f.name }}</a></td>
+    <td>{{ e.kind }}</td>
+    <td>{{ e.last_checked_at or "never" }}</td>
+    <td>{{ e.next_check_at or "-" }}</td>
+    <td>{{ found.get(f.id, 0) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>Not following anyone yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,13 +1,13 @@
 """index on match_decisions.created_at, for the migration report
 
-Revision ID: 0009_decision_created_at_index
-Revises: 0008_migrations
+Revision ID: 0010_decision_created_at_index
+Revises: 0009_watchlist
 """
 
 from alembic import op
 
-revision = "0009_decision_created_at_index"
-down_revision: str | None = "0008_migrations"
+revision = "0010_decision_created_at_index"
+down_revision: str | None = "0009_watchlist"
 branch_labels = None
 depends_on = None
 

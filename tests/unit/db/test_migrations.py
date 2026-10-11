@@ -18,11 +18,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0009_decision_created_at_index"
+    assert _version(settings) == "0010_decision_created_at_index"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0009_decision_created_at_index"
+    assert _version(settings) == "0010_decision_created_at_index"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
