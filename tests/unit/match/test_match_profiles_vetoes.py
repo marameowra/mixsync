@@ -1,8 +1,9 @@
 import pytest
 
 from mixsync.core.matching import Band, FileTrack, Profile, TrackInfo
+from mixsync.core.types import AcoustIdResult
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT, band
-from mixsync.match.vetoes import find_vetoes
+from mixsync.match.vetoes import all_confident, find_vetoes
 
 
 @pytest.mark.parametrize(
@@ -38,3 +39,22 @@ def test_recording_id_veto() -> None:
     assert find_vetoes([(FileTrack("t", "a"), t)]) == ()
     (v,) = find_vetoes([(FileTrack("t", "a", recording_id="rec-2"), t)])
     assert "rec-2" in v
+
+
+def test_all_confident_needs_acoustid_to_name_each_paired_recording() -> None:
+    t = TrackInfo(title="t", recording_id="rec-1")
+
+    def file(*results: AcoustIdResult) -> FileTrack:
+        return FileTrack("t", "a", acoustid=results)
+
+    assert all_confident([(file(AcoustIdResult("x", 0.95, ("rec-1",))), t)])
+    assert not all_confident([])
+    assert not all_confident([(file(), t)])  # no AcoustID result
+    assert not all_confident([(file(AcoustIdResult("x", 0.95, ())), t)])  # sure but names nothing
+    assert not all_confident([(file(AcoustIdResult("x", 0.85, ("rec-1",))), t)])
+    assert not all_confident([(file(AcoustIdResult("x", 0.95, ("rec-2",))), t)])
+    assert not all_confident([(file(AcoustIdResult("x", 0.95, ("rec-1",))), TrackInfo(title="t"))])
+    # the best result decides, not any result
+    assert not all_confident(
+        [(file(AcoustIdResult("x", 0.91, ("rec-1",)), AcoustIdResult("y", 0.99, ())), t)]
+    )

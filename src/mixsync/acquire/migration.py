@@ -29,6 +29,7 @@ from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.library import Track
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import JobRecord, enqueue_in
@@ -307,15 +308,19 @@ def report(s: Session, m: Migration) -> list[dict[str, Any]]:
     for j in s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)):
         if j.payload["request_id"] in ids:
             first.setdefault(j.payload["request_id"], j.payload)
+    partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
+    for d in s.scalars(select(MatchDecision).order_by(MatchDecision.id)):
+        if d.evidence.get("request_id") in ids:
+            partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
     rows = [
         {
             "folder": first.get(r.id, {}).get("candidate", {}).get("folder", ""),
-            "status": r.status,
+            "status": "partial" if r.status == "imported" and partial.get(r.id) else r.status,
             "artist": r.artist,
             "album": r.album,
             "release_mbid": r.release_mbid,
             "files": len(first.get(r.id, {}).get("paths", [])),
-            "reason": r.last_error or "",
+            "reason": (r.status == "imported" and partial.get(r.id)) or r.last_error or "",
             "request_id": r.id,
         }
         for r in reqs

@@ -36,7 +36,7 @@
 {% if m.status == "running" %}
 <h3>Report</h3>
 <ul>
-  {% for key in ["imported", "owned", "review", "unverified", "skipped", "failed", "in progress"] %}
+  {% for key in ["imported", "partial", "owned", "review", "unverified", "skipped", "failed", "in progress"] %}
   <li>{{ key }}: {{ e.totals.get(key, 0) }}</li>
   {% endfor %}
 </ul>
