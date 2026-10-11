@@ -55,7 +55,7 @@ def _allowed(db: Session, plan: Plan) -> set[str]:
         return {"confirm"} if live_job(db, plan.id) else {"confirm", "discard"}
     if live_job(db, plan.id):
         return set()
-    if plan.status == "failed" and not (plan.error or "").startswith("undo:"):
+    if plan.status == "failed" and not (plan.error or "").startswith(("undo:", "blocked:")):
         return {"resume", "undo"}
     return {"undo"} if plan.status in ("done", "failed", "running", "undoing") else set()
 
@@ -67,7 +67,12 @@ def _check_count(plan: Plan, count: str) -> None:
 
 @router.get("/fragments")
 def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
-    plans = db.scalars(select(Plan).order_by(Plan.id.desc()).limit(20)).all()
+    stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
+    plans = [
+        *db.scalars(select(Plan).where(stuck).order_by(Plan.id.desc())),
+        *db.scalars(select(Plan).where(~stuck).order_by(Plan.id.desc()).limit(20)),
+    ]
+    plans.sort(key=lambda p: -p.id)
     return templates.TemplateResponse(
         request,
         "pages/fragments.html",

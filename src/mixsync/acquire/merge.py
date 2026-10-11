@@ -178,7 +178,10 @@ class Merger:
                         self._canonical_unchanged(plan_id)
                     (self._move if op["op"] == "move" else self._trash)(plan_id, batch, i, op)
         except Exception as e:  # a crash (BaseException) leaves "running": a retry resumes
-            self._fail(plan_id, str(e) or repr(e))
+            # a SafetyError precondition fails the same way again: marked, so only undo is offered
+            self._fail(
+                plan_id, ("blocked: " if isinstance(e, SafetyError) else "") + (str(e) or repr(e))
+            )
             raise
         with self.sessions.begin() as s:
             s.get_one(Plan, plan_id).status = "done"

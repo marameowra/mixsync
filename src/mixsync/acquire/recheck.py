@@ -61,7 +61,7 @@ def _has(plan: Plan, ids: set[int]) -> bool:
 
 def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, Status]:
     jobs = list(s.scalars(select(Job).where(Job.kind == JobKind.RECHECK)))
-    drafts = promote_plans(s, "draft")
+    drafts = promote_plans(s, "draft", "failed")  # a failed one still offers Resume / Undo
     out: dict[AlbumKey, Status] = {}
     for key, items in albums.items():
         mine = [j for j in jobs if tuple(j.payload["album"]) == key]
@@ -150,7 +150,9 @@ class Rechecker:
         (or no plan was made), so the caller keeps checking."""
         rows = [t for t, _ in items]
         ids = {t.id for t in rows}
-        mine = [p for p in promote_plans(s, "draft", "running", "undoing") if _has(p, ids)]
+        mine = [
+            p for p in promote_plans(s, "draft", "running", "undoing", "failed") if _has(p, ids)
+        ]
         if any(p.status != "draft" or live_job(s, p.id) for p in mine):
             return False  # a plan for this album is confirmed or running: leave it be
         pairs, _, _ = assign_tracks(list(files.values()), album.tracks)

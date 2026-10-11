@@ -307,6 +307,7 @@ def test_canonical_changed_underneath_fails_the_plan(world: World) -> None:
         world.merger.execute(pid)
     assert world.lib() == before and world.trashed() == [] and world.canonical() == OLD
     assert world.plan(pid).status == "failed"
+    assert str(world.plan(pid).error).startswith("blocked: ")
 
 
 def test_undo_restores_everything(world: World) -> None:

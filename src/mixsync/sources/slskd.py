@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from mixsync.core.errors import PermanentError, TransientError
+from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.matching import Candidate, CandidateFile, TransferInfo, TransferStatus
 from mixsync.ratelimit.client import PoliteClient
 
@@ -101,9 +101,7 @@ class SlskdSource:
             raise TransientError(f"slskd unreachable: {e!r}") from e
         code = response.status_code
         if code in (401, 403):
-            raise PermanentError(
-                f"slskd rejected the API key ({code}); check MIXSYNC_SLSKD_API_KEY"
-            )
+            raise AuthError(f"slskd rejected the API key ({code}); check MIXSYNC_SLSKD_API_KEY")
         if code >= 500:
             raise TransientError(f"slskd {path} returned {code}")
         if code >= 400:
