@@ -20,3 +20,9 @@ def test_bad_url_fails_readably(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_DATABASE_URL", "mysql://nope")
     with pytest.raises(ValidationError, match="must start with sqlite"):
         Settings()
+
+
+def test_unknown_timezone_fails_readably(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MIXSYNC_TIMEZONE", "Mars/Olympus")
+    with pytest.raises(ValidationError, match="not a known time zone"):
+        Settings()

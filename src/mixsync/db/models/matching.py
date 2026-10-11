@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -11,6 +11,7 @@ class MatchDecision(TimestampMixin, Base):
     """One scored match with its feature vector and final action: the calibration data."""
 
     __tablename__ = "match_decisions"
+    __table_args__ = (Index("ix_match_decisions_created_at", "created_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # the requester

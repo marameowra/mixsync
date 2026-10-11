@@ -124,3 +124,47 @@ def test_page_prefills_the_dates_and_the_csv_link_carries_them(
     assert 'name="start" value="2020-01-02"' in text and 'name="end" value="2030-03-04"' in text
     assert f"/migration/{migration_id}/report.csv?start=2020-01-02&amp;end=2030-03-04" in text
     assert re.search(r'name="start" value="\d{4}-\d\d-\d\d"', client.get("/migration").text)
+
+
+def test_page_totals_follow_the_window(client: TestClient, migration_id: int) -> None:
+    today = datetime.now(UTC).date()
+    day = timedelta(days=1)
+    inside = client.get(f"/migration?start={today - day}&end={today + day}").text
+    outside = client.get(f"/migration?start={today + day}&end={today + 2 * day}").text
+    assert "partial: 1" in inside
+    assert "partial: 0" in outside and "partial: 1" not in outside
+
+
+def _la_client(sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("MIXSYNC_TIMEZONE", "America/Los_Angeles")
+    c = TestClient(create_app(sf, Settings()), follow_redirects=False)
+    c.post("/login", data={"username": "root", "password": "pw"})
+    return c
+
+
+def test_days_are_local_days(
+    sf: sessionmaker[Session],
+    client: TestClient,
+    migration_id: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 2026-10-11 06:00 UTC is 23:00 on 10-10 in Los Angeles (PDT)
+    with sf() as s, s.begin():
+        s.query(AlbumRequest).update({"updated_at": datetime(2026, 10, 11, 6, tzinfo=UTC)})
+    la = _la_client(sf, monkeypatch)
+    for day, n in (("2026-10-10", 1), ("2026-10-11", 0)):
+        assert len(_csv(la, migration_id, f"?start={day}&end={day}")) == n
+        assert len(_csv(client, migration_id, f"?start={day}&end={day}")) == 1 - n
+
+
+def test_prefill_uses_the_local_date(
+    sf: sessionmaker[Session],
+    client: TestClient,
+    migration_id: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with sf() as s, s.begin():
+        s.query(Migration).update({"created_at": datetime(2026, 10, 11, 6, tzinfo=UTC)})
+    la = _la_client(sf, monkeypatch)
+    assert 'name="start" value="2026-10-10"' in la.get("/migration").text
+    assert 'name="start" value="2026-10-11"' in client.get("/migration").text

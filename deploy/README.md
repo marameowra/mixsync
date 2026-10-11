@@ -35,6 +35,7 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | Var | Purpose |
 |---|---|
 | `MIXSYNC_DATABASE_URL` | default `sqlite:////config/mixsync.db` |
+| `MIXSYNC_TIMEZONE` | IANA zone (e.g. `America/Los_Angeles`) in which the migration report reads its dates. Default `UTC` |
 | `MIXSYNC_SECRET_KEY` | Fernet key for linked-account secrets. Optional: if unset, `/config/secret.key` is used, or generated on first start. The env var wins if both exist ([details](../src/mixsync/db/README.md#conventions)). |
 | `MIXSYNC_MB_CONTACT` | contact for the MusicBrainz User-Agent. Optional; defaults to the project's GitHub URL |
 | `MIXSYNC_MB_BASE_URL` | optional local MusicBrainz mirror |
