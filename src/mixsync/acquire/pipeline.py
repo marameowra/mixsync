@@ -146,6 +146,7 @@ class Pipeline:
                 with self.sessions.begin() as s:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
+                    req.release_group_mbid = req.release_group_mbid or album.release_group_id
                     req.status, req.last_error = "owned", None
                 return
         ranked: list[tuple[Candidate, Any]] = []
@@ -159,6 +160,7 @@ class Pipeline:
         with self.sessions.begin() as s:
             req = self._request(s, job)
             req.artist, req.album = album.artist[:255], album.album[:255]
+            req.release_group_mbid = req.release_group_mbid or album.release_group_id
             if not ranked:
                 delay = NO_RESULTS_BACKOFF[
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
