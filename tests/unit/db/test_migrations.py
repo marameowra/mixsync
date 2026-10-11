@@ -1,6 +1,9 @@
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
 
 from mixsync.core.config import Settings
+from mixsync.db.base import Base
 from mixsync.db.engine import make_engine
 from mixsync.db.migrate import downgrade, upgrade
 
@@ -14,8 +17,17 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0008_migrations"
+    assert _version(settings) == "0011_roles_sequence"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0008_migrations"
+    assert _version(settings) == "0011_roles_sequence"
+
+
+def test_models_match_migrations(settings: Settings) -> None:
+    import mixsync.db.models  # noqa: F401  (registers every table)
+
+    upgrade()
+    with make_engine(settings).connect() as c:
+        diff = compare_metadata(MigrationContext.configure(c), Base.metadata)
+    assert diff == []

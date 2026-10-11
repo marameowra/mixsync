@@ -117,10 +117,6 @@ def upgrade() -> None:
                 for c in sorted(bundle)
             ],
         )
-    if op.get_bind().dialect.name == "postgresql":  # explicit ids leave the sequence at 1
-        op.execute(
-            "SELECT setval(pg_get_serial_sequence('roles', 'id'), (SELECT max(id) FROM roles))"
-        )
 
 
 def downgrade() -> None:

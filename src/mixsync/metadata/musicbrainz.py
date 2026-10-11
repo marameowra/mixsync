@@ -1,9 +1,24 @@
+import logging
+
 from mixsync.core.matching import AlbumInfo, TrackInfo
-from mixsync.core.types import ReleaseRef
+from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.metadata._http import get_json
-from mixsync.metadata.models import MbCredit, MbGenre, MbRelease, MbSearch
+from mixsync.metadata.models import (
+    MbCredit,
+    MbEntity,
+    MbEntitySearch,
+    MbGenre,
+    MbRelease,
+    MbReleaseGroup,
+    MbRgSearch,
+    MbSearch,
+)
 from mixsync.ratelimit.client import PoliteClient
 
+log = logging.getLogger(__name__)
+
+DISCOGRAPHY_PAGES = 5  # the picker reads at most this many pages of 100
+WATCH_LIMIT = 100  # a watch check is one search; this is the most it reads
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 _INC = "recordings artist-credits media labels release-groups genres"  # httpx sends spaces as +
 
@@ -69,8 +84,26 @@ def _album(r: MbRelease) -> AlbumInfo:
     )
 
 
+def _rg_type(primary: str | None, secondary: list[str]) -> str:
+    low = {s.lower() for s in secondary}
+    return next((t for t in ("compilation", "live") if t in low), (primary or "other").lower())
+
+
 def _quote(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _hit(
+    g: MbReleaseGroup, title: str, date: str | None, release_ids: list[str], credit: list[MbCredit]
+) -> ReleaseGroupHit:
+    return ReleaseGroupHit(
+        g.id or "",
+        title,
+        _credit(credit),
+        _rg_type(g.primary_type, g.secondary_types),
+        date or "",
+        tuple(release_ids),
+    )
 
 
 class MusicBrainzProvider:
@@ -122,3 +155,78 @@ class MusicBrainzProvider:
             )
             for r in MbSearch.model_validate(data).releases
         ]
+
+    async def new_release_groups(
+        self, kind: str, mbid: str, since: str | None
+    ) -> list[ReleaseGroupHit]:
+        """One search request. `mbid` must be a UUID (the caller parses it). An artist is a
+        release-group search on `firstreleasedate`; a label a release search on `date`, mapped
+        to release groups. A full page is taken as it is (and logged), never paged through."""
+        artist = kind == "artist"
+        field, date_field = ("arid", "firstreleasedate") if artist else ("laid", "date")
+        query = f"{field}:{mbid}" + (f" AND {date_field}:[{since} TO *]" if since else "")
+        data = await get_json(
+            self._client,
+            f"{self._base}/{'release-group' if artist else 'release'}",
+            {"query": query, "limit": WATCH_LIMIT, "fmt": "json"},
+        )
+        by_group: dict[str, ReleaseGroupHit] = {}
+        if artist:
+            rgs = MbRgSearch.model_validate(data).release_groups
+            n = len(rgs)
+            for g in rgs:
+                if g.id:
+                    by_group[g.id] = _hit(
+                        g,
+                        g.title,
+                        g.first_release_date,
+                        [r.id for r in g.releases],
+                        g.artist_credit,
+                    )
+        else:
+            rels = MbSearch.model_validate(data).releases
+            n = len(rels)
+            for r in rels:
+                if (g := r.release_group) is None or not g.id:
+                    continue
+                old = by_group.get(g.id)
+                ids = [*(old.release_ids if old else ()), r.id]
+                date = min((d for d in (old and old.date, r.date) if d), default="")
+                by_group[g.id] = _hit(g, g.title or r.title, date, ids, r.artist_credit)
+        if n >= WATCH_LIMIT:
+            log.warning("watch search for %s %s filled a page; older hits are unread", kind, mbid)
+        hits = list(by_group.values())
+        return [h for h in hits if h.date]
+
+    async def search_entities(self, kind: str, name: str) -> list[EntityRef]:
+        if not name.strip():
+            return []
+        data = await get_json(
+            self._client,
+            f"{self._base}/{kind}",
+            {"query": _quote(name), "limit": 10, "fmt": "json"},
+        )
+        found = MbEntitySearch.model_validate(data)
+        return [EntityRef(e.id, e.name, e.disambiguation) for e in found.artists + found.labels]
+
+    async def entity_name(self, kind: str, mbid: str) -> str:
+        data = await get_json(self._client, f"{self._base}/{kind}/{mbid}", {"fmt": "json"})
+        return MbEntity.model_validate(data).name
+
+    async def artist_discography(self, mbid: str) -> tuple[list[ReleaseGroupHit], bool]:
+        """Browse the artist's release groups, 100 a page, at most DISCOGRAPHY_PAGES pages.
+        Returns them and whether the list was cut short. Only the back-catalogue picker calls it."""
+        found: list[ReleaseGroupHit] = []
+        for page in range(DISCOGRAPHY_PAGES):
+            data = await get_json(
+                self._client,
+                f"{self._base}/release-group",
+                {"artist": mbid, "limit": WATCH_LIMIT, "offset": page * WATCH_LIMIT, "fmt": "json"},
+            )
+            body = MbRgSearch.model_validate(data)
+            found += [
+                _hit(g, g.title, g.first_release_date, [], []) for g in body.release_groups if g.id
+            ]
+            if (page + 1) * WATCH_LIMIT >= body.count or not body.release_groups:
+                return found, False
+        return found, True

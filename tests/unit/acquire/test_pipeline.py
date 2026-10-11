@@ -422,7 +422,7 @@ async def test_switch_that_lost_a_race_uses_the_stored_choice(
 
 async def test_search_stops_when_every_recording_is_owned(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
-    request(env)
+    first = request(env)
     await env.drain()
     searched = list(env.source.queries)
 
@@ -430,6 +430,10 @@ async def test_search_stops_when_every_recording_is_owned(env: Env) -> None:
     await env.drain()
     assert status(env, rid) == "owned" and env.source.queries == searched
     assert env.source.enqueued == ["peer1"]
+    with env.sessions() as s:  # both search paths record the group for watchlist dedupe
+        assert {s.get(Request, i).release_group_mbid for i in (first, rid)} == {  # type: ignore[union-attr]
+            ALBUM.release_group_id
+        }
 
 
 async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:

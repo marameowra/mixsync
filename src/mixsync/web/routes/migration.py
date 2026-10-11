@@ -1,7 +1,8 @@
 import csv
 import io
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Annotated, Any, cast
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -93,23 +94,36 @@ def _day(v: str) -> date | None:
         raise HTTPException(422, f"not a date: {v!r}") from None
 
 
-def _window(start_s: str, end_s: str) -> tuple[datetime | None, datetime]:
-    """Start is 00:00 UTC of its day; end is the last instant of its day (default: now)."""
+def _window(start_s: str, end_s: str, tz: tzinfo) -> tuple[datetime | None, datetime]:
+    """Days in the configured zone: start is 00:00 local, end the last instant of its day
+    (default: now). Returned in UTC."""
     start, end = _day(start_s), _day(end_s)
     if start and end and start > end:
         raise HTTPException(400, "start is after end")
-    first = start and datetime.combine(start, time.min, UTC)
+    first = start and datetime.combine(start, time.min, tz).astimezone(UTC)
     last = (
-        datetime.combine(end + timedelta(days=1), time.min, UTC) - timedelta.resolution
+        # subtract in UTC: in wall time a midnight fall-back would lose its repeated hour
+        datetime.combine(end + timedelta(days=1), time.min, tz).astimezone(UTC)
+        - timedelta.resolution
         if end
         else datetime.now(UTC)
     )
     return first, last
 
 
+def _local_day(t: datetime, tz: tzinfo) -> str:
+    """SQLite hands back naive UTC; Postgres an aware time, maybe in another zone."""
+    return (t if t.tzinfo else t.replace(tzinfo=UTC)).astimezone(tz).date().isoformat()
+
+
+def _zone(request: Request) -> ZoneInfo:
+    return ZoneInfo(request.app.state.settings.timezone)
+
+
 @router.get("")
 def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") -> HTMLResponse:
-    first, last = _window(start, end)
+    tz = _zone(request)
+    first, last = _window(start, end, tz)
     latest = _latest(db)
     running = db.scalars(
         select(Migration).where(Migration.status == "running").order_by(Migration.id.desc())
@@ -121,9 +135,9 @@ def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") 
         entries.append(
             {
                 "m": m,
-                "start": (first or m.created_at).date().isoformat(),
-                "end": last.date().isoformat(),
-                "csv_end": end and last.date().isoformat(),  # unset: the CSV runs up to its own now
+                "start": _local_day(first or m.created_at, tz),
+                "end": _local_day(last, tz),
+                "csv_end": end and _local_day(last, tz),  # unset: the CSV runs up to its own now
                 "totals": mig.totals(rows),
                 "failures": [r for r in rows if r["status"] in ("failed", "skipped")],
                 "checking": _checking(db, m),
@@ -211,8 +225,10 @@ def _safe(v: Any) -> Any:
 
 
 @router.get("/{migration_id}/report.csv")
-def report_csv(migration_id: int, user: Admin, db: Db, start: str = "", end: str = "") -> Response:
-    first, last = _window(start, end)
+def report_csv(
+    request: Request, migration_id: int, user: Admin, db: Db, start: str = "", end: str = ""
+) -> Response:
+    first, last = _window(start, end, _zone(request))
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(COLUMNS)
