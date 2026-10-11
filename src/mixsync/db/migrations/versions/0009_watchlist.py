@@ -42,7 +42,6 @@ def upgrade() -> None:
         sa.Column("entity_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("release_types", sa.JSON(), nullable=False),
-        sa.Column("only_after_follow", sa.Boolean(), nullable=False),
         sa.Column("min_date", sa.String(10), nullable=True),
         sa.Column("weekly_cap", sa.Integer(), nullable=True),
         *_stamps(),

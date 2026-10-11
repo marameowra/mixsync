@@ -6,7 +6,6 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, Select, delete, select, update
 from sqlalchemy.orm import Session
 
-from mixsync.acquire.requests import LIVE
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job
@@ -20,18 +19,38 @@ CHECK_NOW_GAP = timedelta(hours=1)  # a button must not turn into a poll loop on
 
 
 def _waiting(entity_id: int) -> Select[Any]:
+    """Checks still to come. A running one does not count: it may have read the follows already."""
     return select(Job).where(
         Job.kind == JobKind.WATCHLIST_POLL,
-        Job.status.in_(LIVE),
+        Job.status.in_((JobState.QUEUED, JobState.LEASED, JobState.RETRY_WAIT)),
         Job.payload["entity_id"].as_integer() == entity_id,
     )
 
 
-def _ensure_poll(s: Session, now: datetime, e: WatchedEntity) -> None:
+def ensure_poll(s: Session, now: datetime, e: WatchedEntity) -> None:
     """Make sure a check is queued; none is when the chain ended or the entity is new."""
     if s.scalar(_waiting(e.id).limit(1)) is None:
         e.next_check_at = now
         enqueue_in(s, now, JobKind.WATCHLIST_POLL, {"entity_id": e.id})
+
+
+def _run_now(s: Session, now: datetime, e: WatchedEntity) -> None:
+    """Bring the queued check forward to now, or queue one."""
+    e.next_check_at = now
+    moved = cast(
+        CursorResult[Any],
+        s.execute(
+            update(Job)
+            .where(
+                Job.kind == JobKind.WATCHLIST_POLL,
+                Job.status.in_((JobState.QUEUED, JobState.RETRY_WAIT)),
+                Job.payload["entity_id"].as_integer() == e.id,
+            )
+            .values(run_after=now)
+        ),
+    )
+    if moved.rowcount == 0:
+        ensure_poll(s, now, e)
 
 
 def add_follow(s: Session, now: datetime, user_id: int, kind: str, mbid: str, name: str) -> Follow:
@@ -50,13 +69,12 @@ def add_follow(s: Session, now: datetime, user_id: int, kind: str, mbid: str, na
             entity_id=e.id,
             name=name[:255],
             release_types=list(DEFAULT_TYPES),
-            only_after_follow=True,
             weekly_cap=LABEL_WEEKLY_CAP if kind == "label" else None,
             created_at=now,
         )
         s.add(f)
         s.flush()
-    _ensure_poll(s, now, e)
+    _run_now(s, now, e)
     return f
 
 
@@ -70,19 +88,5 @@ def check_now(s: Session, now: datetime, e: WatchedEntity) -> bool:
     """Bring the entity's next check forward to now. False if it was checked within the gap."""
     if e.last_checked_at and now - e.last_checked_at.replace(tzinfo=now.tzinfo) < CHECK_NOW_GAP:
         return False
-    e.next_check_at = now
-    moved = cast(
-        CursorResult[Any],
-        s.execute(
-            update(Job)
-            .where(
-                Job.kind == JobKind.WATCHLIST_POLL,
-                Job.status.in_((JobState.QUEUED, JobState.RETRY_WAIT)),
-                Job.payload["entity_id"].as_integer() == e.id,
-            )
-            .values(run_after=now)
-        ),
-    )
-    if moved.rowcount == 0:
-        _ensure_poll(s, now, e)
+    _run_now(s, now, e)
     return True

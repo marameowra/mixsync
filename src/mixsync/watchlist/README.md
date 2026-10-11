@@ -22,7 +22,8 @@ Follow artists and labels; turn their new release groups into requests automatic
 
 ## Filters (per follow)
 - Release types: album / EP / single / compilation / live (default: album + EP)
-- `only_after_follow_date` (default on)
+- Only releases dated after the follow (less the 7-day overlap) are auto-requested; the back catalogue is picked by hand.
+- `min_date`
 - `weekly_cap` (labels default 5; artists unlimited). Hits over the cap are recorded as `skipped_cap` and shown for manual request.
 
 **Decided:** labels default to 5 per week; artists default to unlimited. See [watchlist design](../../../docs/design/watchlist.md).

@@ -1,15 +1,17 @@
 """Watchlist: cadence, the poll (filters, dedupe, cap, fan-out), the MB search and the UI."""
 
 import json
+import re
 from collections.abc import Callable
 from datetime import UTC, date, timedelta
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.types import EntityRef, ReleaseGroupHit
+from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
@@ -34,6 +36,8 @@ class FakeWatch:
         self.hits: list[ReleaseGroupHit] = []
         self.calls: list[tuple[str, str, str | None]] = []
         self.found: list[EntityRef] = []
+        self.truncated = False
+        self.browsed: list[str] = []
 
     async def new_release_groups(
         self, kind: str, mbid: str, since: str | None
@@ -46,6 +50,14 @@ class FakeWatch:
 
     async def entity_name(self, kind: str, mbid: str) -> str:
         return "Looked Up"
+
+    async def artist_discography(self, mbid: str) -> tuple[list[ReleaseGroupHit], bool]:
+        return self.hits, self.truncated
+
+    async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
+        self.browsed.append(release_group_mbid)
+        n = int(release_group_mbid[-12:])
+        return [ReleaseRef(rid(2000 + n), "x", "y", "2020", status="Official")]
 
 
 def rg(n: int, date: str, type: str = "album") -> ReleaseGroupHit:
@@ -136,10 +148,11 @@ async def test_window_overlaps_and_hits_are_not_repeated(env: Env) -> None:
     fid, watch = follow(env), FakeWatch()
     watch.hits = [rg(1, today(env))]
     eid = entity_id(env, fid)
+    first = (env.clock.now() - timedelta(days=365)).date().isoformat()
     await poll(env, watch, eid)
     env.clock.advance(timedelta(days=3))
     await poll(env, watch, eid)  # the overlap returns the same release group
-    assert watch.calls[0] == ("artist", ARTIST, None)  # first check: no lower bound
+    assert watch.calls[0] == ("artist", ARTIST, first)  # first check: a year back, bounded
     last = (env.clock.now() - timedelta(days=3) - timedelta(days=7)).date().isoformat()
     assert watch.calls[1][2] == last
     with env.sessions() as s:
@@ -168,17 +181,6 @@ async def test_filters(env: Env) -> None:
         "Album 3": "skipped_filter",
         "Album 4": "skipped_filter",
     }
-
-
-async def test_only_after_follow_can_be_turned_off(env: Env) -> None:
-    fid, watch = follow(env), FakeWatch()
-    with env.sessions.begin() as s:
-        f = s.get(Follow, fid)
-        assert f
-        f.only_after_follow = False
-    watch.hits = [rg(1, (env.clock.now().date() - timedelta(days=3)).isoformat())]
-    await poll(env, watch, entity_id(env, fid))
-    assert history(env, fid) == {"Album 1": "requested"}
 
 
 async def test_owned_and_already_requested_are_skipped(env: Env) -> None:
@@ -366,7 +368,8 @@ def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> N
         },
     )
     assert r.status_code == 303
-    fid = int(r.headers["location"].rsplit("/", 1)[1])
+    fid = int(r.headers["location"].split("/")[2])
+    assert r.headers["location"].endswith("/catalog")
     listing = web.get("/watchlist").text
     assert "Looked Up" in listing and "never" in listing
     assert "Nothing found yet" in web.get(f"/watchlist/{fid}").text
@@ -390,9 +393,8 @@ def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> N
     with env.sessions() as s:
         f = s.get(Follow, fid)
         assert f
-        assert (f.release_types, f.only_after_follow, f.min_date, f.weekly_cap) == (
+        assert (f.release_types, f.min_date, f.weekly_cap) == (
             ["album", "live"],
-            False,
             "2026-01",
             3,
         )
@@ -414,3 +416,145 @@ def test_bad_input_is_refused(web: TestClient) -> None:
     for data in ({"kind": "artist", "mbid": "nope"}, {"kind": "album", "mbid": ARTIST}):
         r = web.post("/watchlist/follow", data={"csrf_token": tok, **data})
         assert r.status_code == 400
+
+
+async def test_failed_check_still_queues_the_next(env: Env) -> None:
+    fid = follow(env)
+
+    class Down(FakeWatch):
+        async def new_release_groups(
+            self, kind: str, mbid: str, since: str | None
+        ) -> list[ReleaseGroupHit]:
+            raise RuntimeError("MusicBrainz is down")
+
+    with pytest.raises(RuntimeError):
+        await poll(env, Down(), entity_id(env, fid))
+    live = [j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]
+    assert len(live) == 1 and live[0].run_after.replace(tzinfo=UTC) > env.clock.now()
+
+
+async def test_rerun_of_a_job_leaves_one_successor(env: Env) -> None:
+    import random
+
+    fid = follow(env)
+    eid = entity_id(env, fid)
+    job = env.jobs(JobKind.WATCHLIST_POLL)[0]
+    watcher = Watcher(env.sessions, env.clock, FakeWatch(), random.uniform)
+    rec = env.queue.get(job.id)
+    await watcher.poll(rec)
+    await watcher.poll(rec)  # e.g. the lease expired and the job ran again
+    with env.sessions() as s:
+        later = s.scalars(
+            select(Job).where(Job.kind == JobKind.WATCHLIST_POLL, Job.id != job.id)
+        ).all()
+        assert len(later) == 1 and later[0].payload == {"entity_id": eid}
+
+
+async def test_start_chains_restores_a_dead_chain(env: Env) -> None:
+    fid = follow(env)
+    with env.sessions.begin() as s:
+        for j in s.scalars(select(Job)):
+            j.status = JobState.FAILED
+    Watcher(env.sessions, env.clock, FakeWatch()).start_chains()
+    assert len([j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]) == 1
+    assert fid
+
+
+def _catalog_world(env: Env, web: TestClient) -> tuple[FakeWatch, str, int]:
+    watch = FakeWatch()
+    watch.hits = [
+        ReleaseGroupHit(rid(1), "Old LP", "A", "album", "2001", ()),
+        ReleaseGroupHit(rid(2), "New LP", "A", "album", "2020", ()),
+        ReleaseGroupHit(rid(3), "Owned LP", "A", "album", "2010", ()),
+        ReleaseGroupHit(rid(4), "Asked LP", "A", "album", "2011", ()),
+        ReleaseGroupHit(rid(5), "A Single", "A", "single", "2015", ()),
+        ReleaseGroupHit(rid(6), "Odd", "A", "other", "", ()),
+    ]
+    web.app.state.watch = watch  # type: ignore[attr-defined]
+    tok = login(web, "alice")
+    r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "artist", "mbid": ARTIST})
+    assert r.status_code == 303
+    fid = int(r.headers["location"].split("/")[2])
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path="o.mp3",
+                release_group_mbid=rid(3),
+                status="verified",
+                batch_id="b",
+                imported_at=env.clock.now(),
+            )
+        )
+        s.add(
+            FollowHit(
+                follow_id=fid,
+                release_group_mbid=rid(4),
+                release_mbid=rid(9),
+                status="requested",
+            )
+        )
+    return watch, tok, fid
+
+
+def test_picker_marks_owned_and_requested(env: Env, web: TestClient) -> None:
+    _, _, fid = _catalog_world(env, web)
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert page.index("Old LP") > page.index("New LP")  # newest first
+    assert page.index("<legend>album") < page.index("<legend>single") < page.index("<legend>other")
+    assert re.search(r"<input[^>]* checked", page) is None
+    assert page.count('" disabled>') == 2 and "owned" in page and "already requested" in page
+    assert web.app.state.watch.browsed == []  # type: ignore[attr-defined]
+
+
+def test_label_follow_redirects_to_the_follow_page(env: Env, web: TestClient) -> None:
+    web.app.state.watch = FakeWatch()  # type: ignore[attr-defined]
+    tok = login(web, "alice")
+    r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "label", "mbid": LABEL})
+    assert not r.headers["location"].endswith("/catalog")
+    lid = int(r.headers["location"].split("/")[2])
+    assert web.get(f"/watchlist/{lid}/catalog").status_code == 404
+
+
+def test_picker_requests_only_checked_enabled_groups(env: Env, web: TestClient) -> None:
+    watch, tok, fid = _catalog_world(env, web)
+    picked = [rid(1), rid(3), rid(4), rid(99)]  # owned, requested and unknown are refused
+    r = web.post(f"/watchlist/{fid}/catalog", data={"csrf_token": tok, "groups": picked})
+    assert r.status_code == 303
+    with env.sessions() as s:
+        reqs = s.scalars(select(Request)).all()
+        assert [(q.release_mbid, q.source, q.user_id) for q in reqs] == [
+            (rid(2001), "watchlist", env.user_id)
+        ]
+        hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
+        assert (hit.status, hit.title, hit.request_id) == ("requested", "Old LP", reqs[0].id)
+        assert (
+            s.scalar(select(func.count()).select_from(Job).where(Job.kind == JobKind.SEARCH)) == 1
+        )
+    assert watch.browsed == [rid(1)]
+
+
+async def test_discography_stops_at_the_page_cap(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        off = int(request.url.params["offset"])
+        groups = [
+            {"id": rid(off + i + 1), "title": "T", "primary-type": "Album"} for i in range(100)
+        ]
+        return httpx.Response(
+            200, text=json.dumps({"release-group-count": 900, "release-groups": groups})
+        )
+
+    mb = MusicBrainzProvider(make_client("musicbrainz", handler))
+    found, truncated = await mb.artist_discography(ARTIST)
+    assert len(seen) == 5 and len(found) == 500 and truncated
+    assert [r.url.params["offset"] for r in seen] == ["0", "100", "200", "300", "400"]
+    assert all(r.url.params["artist"] == ARTIST for r in seen)
+
+
+async def test_short_discography_is_one_page(make_client: Make) -> None:
+    body = {"release-group-count": 2, "release-groups": [{"id": rid(1), "title": "T"}]}
+    mb = MusicBrainzProvider(make_client("musicbrainz", lambda r: httpx.Response(200, json=body)))
+    found, truncated = await mb.artist_discography(ARTIST)
+    assert len(found) == 1 and not truncated

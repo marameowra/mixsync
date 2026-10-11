@@ -90,6 +90,7 @@ class MbSearch(_Raw):
 
 class MbRgSearch(_Raw):
     release_groups: list[MbReleaseGroup] = Field(default=[], alias="release-groups")
+    count: int = Field(default=0, alias="release-group-count")  # browse only
 
 
 class MbEntity(_Raw):

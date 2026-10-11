@@ -6,12 +6,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from mixsync.core.capabilities import Capability
+from mixsync.core.types import ReleaseGroupHit
+from mixsync.db import canonical as canonical_db
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
+from mixsync.library import canonical
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import request_hit
+from mixsync.watchlist.poller import catalog_request, is_owned, request_hit
 from mixsync.web.deps import Db, Watch, require
 from mixsync.web.templating import templates
 
@@ -77,7 +81,8 @@ async def follow(
     mbid = str(uuid.UUID(m.group()))
     name = name.strip() or await watch.entity_name(_kind(kind), mbid)
     f = follows.add_follow(db, datetime.now(UTC), user.id, _kind(kind), mbid, name)
-    return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
+    picker = "/catalog" if kind == "artist" else ""  # offer an artist's back catalogue
+    return RedirectResponse(f"/watchlist/{f.id}{picker}", status_code=303)
 
 
 @router.get("/{follow_id}")
@@ -97,7 +102,6 @@ def set_filters(
     user: User,
     db: Db,
     types: Annotated[list[str] | None, Form()] = None,
-    only_after_follow: Annotated[str, Form()] = "",
     min_date: Annotated[str, Form()] = "",
     weekly_cap: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
@@ -108,7 +112,6 @@ def set_filters(
     if weekly_cap and not (weekly_cap.isascii() and weekly_cap.isdigit()):
         raise HTTPException(400, "weekly cap is a whole number, or empty for unlimited")
     f.release_types = [t for t in follows.RELEASE_TYPES if t in (types or [])]
-    f.only_after_follow = bool(only_after_follow)
     f.min_date = min_date or None
     f.weekly_cap = int(weekly_cap) if weekly_cap else None
     return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
@@ -135,7 +138,79 @@ def request_skipped(follow_id: int, hit_id: int, user: User, db: Db) -> Redirect
     hit = db.get(FollowHit, hit_id)
     if hit is None or hit.follow_id != f.id:
         raise HTTPException(404, "no such release")
-    if hit.status != "skipped_cap":
+    if hit.status not in ("skipped_cap", "skipped_filter"):
         raise HTTPException(409, f"release is {hit.status}")
     request_hit(db, datetime.now(UTC), f, hit)
+    return RedirectResponse(f"/watchlist/{f.id}", status_code=303)
+
+
+_TYPES = ("album", "ep", "single")  # then the rest, as "other"
+
+
+def _disabled(db: Session, f: Follow, h: ReleaseGroupHit) -> str:
+    """Why a release group cannot be picked, or ""."""
+    if is_owned(db, h.group_id):
+        return "owned"
+    done = db.scalar(
+        select(FollowHit.id).where(
+            FollowHit.release_group_mbid == h.group_id,
+            FollowHit.status == "requested",
+            FollowHit.follow_id.in_(select(Follow.id).where(Follow.user_id == f.user_id)),
+        )
+    )
+    return "already requested" if done else ""
+
+
+def _artist_follow(db: Db, user: AuthUser, follow_id: int) -> tuple[Follow, WatchedEntity]:
+    f = _own(db, user, follow_id)
+    e = db.get(WatchedEntity, f.entity_id)
+    if e is None or e.kind != "artist":
+        raise HTTPException(404, "only an artist has a back catalogue")
+    return f, e
+
+
+@router.get("/{follow_id}/catalog")
+async def catalog(
+    request: Request, follow_id: int, user: User, db: Db, watch: Watch
+) -> HTMLResponse:
+    f, e = _artist_follow(db, user, follow_id)
+    found, truncated = await watch.artist_discography(e.mbid)
+    groups: dict[str, list[tuple[ReleaseGroupHit, str]]] = {}
+    for h in sorted(found, key=lambda h: h.date or "", reverse=True):  # newest first, undated last
+        key = h.type if h.type in _TYPES else "other"
+        groups.setdefault(key, []).append((h, _disabled(db, f, h)))
+    order = [(k, groups[k]) for k in (*_TYPES, "other") if k in groups]
+    ctx = {"user": user, "f": f, "groups": order, "truncated": truncated}
+    return templates.TemplateResponse(request, "pages/watchlist_catalog.html", ctx)
+
+
+@router.post("/{follow_id}/catalog")
+async def catalog_submit(
+    request: Request,
+    follow_id: int,
+    user: User,
+    db: Db,
+    watch: Watch,
+    groups: Annotated[list[str] | None, Form()] = None,
+) -> RedirectResponse:
+    """One normal request per checked release group. The list is read again here, so only
+    groups MusicBrainz knows for this artist can be picked."""
+    f, e = _artist_follow(db, user, follow_id)
+    wanted = set(groups or [])
+    found, _ = await watch.artist_discography(e.mbid)
+    settings = request.app.state.settings
+    now = datetime.now(UTC)
+    for h in found:
+        if h.group_id not in wanted or _disabled(db, f, h):
+            continue
+        # The phase 3 policy: the stored canonical release, else the best of the group's releases.
+        release = canonical_db.get(db, h.group_id)
+        if release is None:
+            releases = await watch.browse_group_releases(h.group_id)
+            if not releases:
+                continue
+            release = canonical.choose(
+                releases, tuple(settings.canonical_media), tuple(settings.canonical_countries)
+            )
+        catalog_request(db, now, f, h, release)
     return RedirectResponse(f"/watchlist/{f.id}", status_code=303)

@@ -17,6 +17,7 @@ from mixsync.ratelimit.client import PoliteClient
 
 log = logging.getLogger(__name__)
 
+DISCOGRAPHY_PAGES = 5  # the picker reads at most this many pages of 100
 WATCH_LIMIT = 100  # a watch check is one search; this is the most it reads
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 _INC = "recordings artist-credits media labels release-groups genres"  # httpx sends spaces as +
@@ -211,3 +212,21 @@ class MusicBrainzProvider:
     async def entity_name(self, kind: str, mbid: str) -> str:
         data = await get_json(self._client, f"{self._base}/{kind}/{mbid}", {"fmt": "json"})
         return MbEntity.model_validate(data).name
+
+    async def artist_discography(self, mbid: str) -> tuple[list[ReleaseGroupHit], bool]:
+        """Browse the artist's release groups, 100 a page, at most DISCOGRAPHY_PAGES pages.
+        Returns them and whether the list was cut short. Only the back-catalogue picker calls it."""
+        found: list[ReleaseGroupHit] = []
+        for page in range(DISCOGRAPHY_PAGES):
+            data = await get_json(
+                self._client,
+                f"{self._base}/release-group",
+                {"artist": mbid, "limit": WATCH_LIMIT, "offset": page * WATCH_LIMIT, "fmt": "json"},
+            )
+            body = MbRgSearch.model_validate(data)
+            found += [
+                _hit(g, g.title, g.first_release_date, [], []) for g in body.release_groups if g.id
+            ]
+            if (page + 1) * WATCH_LIMIT >= body.count or not body.release_groups:
+                return found, False
+        return found, True

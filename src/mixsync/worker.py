@@ -201,7 +201,12 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | submitter.handlers()
         | watcher.handlers()
     )
-    return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, rechecker.start_chains
+
+    def startup() -> None:
+        rechecker.start_chains()
+        watcher.start_chains()
+
+    return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
 
 async def serve_worker() -> None:

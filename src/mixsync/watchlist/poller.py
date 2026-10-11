@@ -8,18 +8,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import create_request
+from mixsync.acquire.requests import LIVE, create_request
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import ReleaseWatch
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
-from mixsync.db.models.work import Request
+from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
+from mixsync.watchlist.follows import ensure_poll
 
 OVERLAP = timedelta(days=7)  # covers search-index lag
 CAP_WINDOW = timedelta(days=7)
+FIRST_WINDOW = timedelta(days=365)
 Rng = Callable[[float, float], float]
 
 
@@ -46,28 +48,25 @@ def _date_ok(d: str, cutoff: str) -> bool:
 def _filtered(f: Follow, h: ReleaseGroupHit) -> bool:
     if h.type not in f.release_types:
         return True
-    if f.only_after_follow and not _date_ok(h.date, f.created_at.date().isoformat()):
-        return True
     return bool(f.min_date) and not _date_ok(h.date, f.min_date or "")
 
 
-def _owned(s: Session, h: ReleaseGroupHit) -> bool:
+def is_owned(s: Session, group_id: str) -> bool:
     return (
-        s.scalar(select(Track.id).where(Track.release_group_mbid == h.group_id).limit(1))
-        is not None
+        s.scalar(select(Track.id).where(Track.release_group_mbid == group_id).limit(1)) is not None
     )
 
 
-def _requested(s: Session, user_id: int, h: ReleaseGroupHit) -> bool:
+def is_requested(s: Session, user_id: int, group_id: str, release_ids: tuple[str, ...]) -> bool:
     manual = select(Request.id).where(
-        Request.user_id == user_id, Request.release_mbid.in_(h.release_ids)
+        Request.user_id == user_id, Request.release_mbid.in_(release_ids)
     )
     other = (
         select(FollowHit.id)
         .join(Follow, Follow.id == FollowHit.follow_id)
         .where(
             Follow.user_id == user_id,
-            FollowHit.release_group_mbid == h.group_id,
+            FollowHit.release_group_mbid == group_id,
             FollowHit.status == "requested",
         )
     )
@@ -108,15 +107,33 @@ def apply_hit(s: Session, now: datetime, f: Follow, h: ReleaseGroupHit) -> None:
     s.add(row)
     if _filtered(f, h):
         return
-    if _owned(s, h):
+    if is_owned(s, h.group_id):
         row.status = "skipped_owned"
-    elif _requested(s, f.user_id, h):
+    elif is_requested(s, f.user_id, h.group_id, h.release_ids):
         row.status = "skipped_requested"
     elif _over_cap(s, f, now):
         row.status = "skipped_cap"
     else:
         request_hit(s, now, f, row)
     s.flush()  # the cap count and the next hit's dedupe see this one
+
+
+def catalog_request(
+    s: Session, now: datetime, f: Follow, h: ReleaseGroupHit, release_id: str
+) -> None:
+    """A back-catalogue pick: the history row and request of a poll hit, whatever the filters."""
+    row = s.scalar(
+        select(FollowHit).where(
+            FollowHit.follow_id == f.id, FollowHit.release_group_mbid == h.group_id
+        )
+    )
+    if row is None:
+        row = FollowHit(follow_id=f.id, release_group_mbid=h.group_id, status="", created_at=now)
+        s.add(row)
+    row.release_mbid, row.release_date = release_id, h.date
+    row.artist, row.title = f.name[:255], h.title[:255]
+    request_hit(s, now, f, row)
+    s.flush()
 
 
 class Watcher:
@@ -132,15 +149,63 @@ class Watcher:
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.WATCHLIST_POLL: self.poll}
 
+    def start_chains(self) -> None:
+        """On startup: every followed entity gets a check queued if it has none waiting."""
+        now = self.clock.now()
+        with self.sessions.begin() as s:
+            for e in s.scalars(
+                select(WatchedEntity).where(
+                    select(Follow.id).where(Follow.entity_id == WatchedEntity.id).exists()
+                )
+            ):
+                ensure_poll(s, now, e)
+
+    def _schedule_next(self, s: Session, now: datetime, e: WatchedEntity, job_id: int) -> None:
+        """Queue the next check, keyed on this job so a re-run adds none, and only if no other
+        check is live (a new follow may have queued one)."""
+        nxt = now + jitter(interval_for(e.last_release_date, now.date()), self.rng)
+        e.next_check_at = nxt
+        other = s.scalar(
+            select(Job.id)
+            .where(
+                Job.kind == JobKind.WATCHLIST_POLL,
+                Job.status.in_(LIVE),
+                Job.payload["entity_id"].as_integer() == e.id,
+                Job.id != job_id,
+            )
+            .limit(1)
+        )
+        if other is None:
+            enqueue_in(
+                s,
+                now,
+                JobKind.WATCHLIST_POLL,
+                {"entity_id": e.id},
+                run_after=nxt,
+                idempotency_key=f"watchlist:{e.id}:after:{job_id}",
+            )
+
     async def poll(self, job: JobRecord) -> None:
         eid = job.payload["entity_id"]
+        try:
+            await self._poll(job, eid)
+        except Exception:
+            # Retries are the queue's (with backoff); once they run out the chain must go on.
+            with self.sessions.begin() as s:
+                e = s.get(WatchedEntity, eid)
+                if e is not None and s.scalar(select(Follow.id).where(Follow.entity_id == eid)):
+                    self._schedule_next(s, self.clock.now(), e, job.id)
+            raise
+
+    async def _poll(self, job: JobRecord, eid: int) -> None:
+        now = self.clock.now()
         with self.sessions() as s:
             e = s.get(WatchedEntity, eid)
             if e is None or not s.scalar(select(Follow.id).where(Follow.entity_id == eid).limit(1)):
-                return  # nobody follows it any more: the chain ends, a new follow restarts it
+                return  # nobody follows it any more: a new follow queues a check
             kind, mbid, last = e.kind, e.mbid, e.last_checked_at
-        # The first check has no lower bound, to learn how active the entity is.
-        since = (last - OVERLAP).date().isoformat() if last else None
+        # The first check looks back a year, which is enough to tell how active the entity is.
+        since = ((last - OVERLAP) if last else (now - FIRST_WINDOW)).date().isoformat()
         hits = await self.watch.new_release_groups(kind, mbid, since)
         now = self.clock.now()
         with self.sessions.begin() as s:
@@ -153,20 +218,12 @@ class Watcher:
                         select(FollowHit.release_group_mbid).where(FollowHit.follow_id == f.id)
                     )
                 )
-                # Nothing older than the follow (less the overlap) is new to this follower.
-                floor = (f.created_at - OVERLAP).date().isoformat()
+                floor = (
+                    (f.created_at - OVERLAP).date().isoformat()
+                )  # older is not new to a follower
                 for h in sorted(hits, key=lambda h: h.date):
                     if h.group_id not in seen and h.release_ids and _date_ok(h.date, floor):
                         apply_hit(s, now, f, h)
             dates = [d for d in (e.last_release_date, *(h.date for h in hits)) if d]
             e.last_release_date, e.last_checked_at = max(dates, default=None), now
-            nxt = now + jitter(interval_for(e.last_release_date, now.date()), self.rng)
-            e.next_check_at = nxt
-            enqueue_in(
-                s,
-                now,
-                JobKind.WATCHLIST_POLL,
-                {"entity_id": eid},
-                run_after=nxt,
-                idempotency_key=f"watchlist:{eid}:{nxt.isoformat()}",
-            )
+            self._schedule_next(s, now, e, job.id)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -29,7 +29,6 @@ class Follow(TimestampMixin, Base):
     entity_id: Mapped[int] = mapped_column(ForeignKey("watched_entities.id"))
     name: Mapped[str] = mapped_column(String(255))
     release_types: Mapped[list[str]] = mapped_column(JSON, default=list)
-    only_after_follow: Mapped[bool] = mapped_column(Boolean, default=True)
     min_date: Mapped[str | None] = mapped_column(String(10))
     weekly_cap: Mapped[int | None] = mapped_column(Integer)  # None = unlimited
 
