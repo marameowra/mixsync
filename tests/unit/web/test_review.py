@@ -584,7 +584,9 @@ def test_imported_delete_has_no_confirm_and_clear_button(
     assert form and "confirm" in form.group(0)
 
 
-def test_clear_imported(client: TestClient, sf: sessionmaker[Session]) -> None:
+def test_clear_imported(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
     mine = _req(sf, "alice", "imported", JobState.SUCCEEDED)
     leased = _req(sf, "alice", "imported", JobState.LEASED)
     mine2 = _req(sf, "alice", "imported", JobState.SUCCEEDED)
@@ -599,6 +601,25 @@ def test_clear_imported(client: TestClient, sf: sessionmaker[Session]) -> None:
         req = s.get(AlbumRequest, migr)
         assert req
         req.migration_id = m.id
+        leased_job = s.scalars(select(Job).where(requests_route._of(leased))).one()
+        s.add(
+            Job(
+                kind=leased_job.kind,
+                payload=leased_job.payload,
+                status=JobState.FAILED,
+                run_after=leased_job.run_after,
+            )
+        )
+    # A worker leases the row after listing: _delete rejects the decision and deletes the FAILED
+    # job, then 409s on the held one; only the savepoint undoes that.
+    monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
+    dec = {}
+    for rid in (mine, leased, mine2):
+        dec[rid] = _make_decision(sf, "alice", "/x")
+        with sf() as s, s.begin():
+            d = decisions.get(s, dec[rid])
+            assert d
+            d.evidence = {**d.evidence, "request_id": rid}
     tok = _login(client, "alice")
     r = client.post("/requests/delete-imported", data={"csrf_token": tok})
     assert r.status_code == 303
@@ -607,7 +628,13 @@ def test_clear_imported(client: TestClient, sf: sessionmaker[Session]) -> None:
         left = set(s.scalars(select(AlbumRequest.id)))
         assert left == {leased, failed, theirs, migr}
         assert mine not in left and mine2 not in left
-        assert JobState.LEASED in s.scalars(select(Job.status)).all()
+        assert sorted(s.scalars(select(Job.status).where(requests_route._of(leased)))) == sorted(
+            [JobState.LEASED, JobState.FAILED]
+        )
+        for rid, want in dec.items():
+            d = decisions.get(s, want)
+            assert d
+            assert d.status == (decisions.PENDING if rid == leased else "rejected")
 
 
 def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]) -> None:
