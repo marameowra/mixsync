@@ -216,3 +216,63 @@ def test_chain_starts_once_and_reschedules_about_a_day_later(
     with sessions() as s:
         assert len(list(s.scalars(select(Job).where(Job.kind == JobKind.TRASH_PURGE)))) == 3
     assert os.path.isdir(fo.library)
+
+
+def test_a_symlinked_trash_dir_is_never_purged_through(fo: FileOps, tmp_path: Path) -> None:
+    real = tmp_path / "elsewhere"
+    old = real / day(40) / "a.mp3"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"x")
+    fo.trash_dir.symlink_to(real)
+    assert fo.purge_trash(30, "b") == 0
+    assert old.read_bytes() == b"x"
+
+
+def test_a_symlinked_day_folder_is_skipped(fo: FileOps, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    (outside / "x.mp3").parent.mkdir()
+    (outside / "x.mp3").write_bytes(b"x")
+    fo.trash_dir.mkdir()
+    (fo.trash_dir / day(40)).symlink_to(outside)
+    assert fo.purge_trash(30, "b") == 0
+    assert (outside / "x.mp3").exists()
+
+
+def test_a_future_dated_folder_is_kept(fo: FileOps) -> None:
+    p = put(fo, f"{day(-3)}/a.mp3")
+    assert fo.purge_trash(30, "b") == 0 and p.exists()
+
+
+@pytest.mark.parametrize("rel", ["../outside.mp3", "ABSOLUTE", "plain.mp3", "2026-W01-1/a.mp3"])
+def test_recover_rejects_rows_outside_dated_folders(
+    fo: FileOps, sessions: sessionmaker[Session], tmp_path: Path, rel: str
+) -> None:
+    rel = str(tmp_path / "abs.mp3") if rel == "ABSOLUTE" else rel
+    target = Path(rel) if rel.startswith("/") else fo.trash_dir / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.touch()
+    SqlJournal(sessions, Clock()).begin("b", "purge", rel, "", root="library")
+    with pytest.raises(Exception, match="dated trash folder"):
+        fo.recover()
+    assert target.exists()
+
+
+@pytest.mark.parametrize("status", ["running", "undoing", "failed", "done"])
+def test_protection_covers_every_undoable_status(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, status: str
+) -> None:
+    (fo.library / "A").mkdir()
+    (fo.library / "A/b.mp3").write_bytes(b"orig")
+    rel = fo.trash("A/b.mp3", "merge-1")
+    _plan(sessions, status)
+    with sessions.begin() as s:  # long finished for done/failed, but still inside the window
+        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=29)
+    assert TrashPurger(sessions, clock, fo, 30).protected() == {rel}
+
+
+def test_a_protected_discover_entry_survives_and_odd_spellings_still_match(fo: FileOps) -> None:
+    nfd = put(fo, f"{day(40)}/.discover/Beyoncé/a.mp3")  # as the file system spells it
+    other = put(fo, f"{day(40)}/.discover/b.mp3")
+    keep = [f"{day(40)}//.discover/Beyoncé/a.mp3"]  # NFC with a double slash
+    assert fo.purge_trash(30, "b", keep) == 1
+    assert nfd.exists() and not other.exists()

@@ -1,5 +1,6 @@
 """The daily trash purge: a self-rescheduling job chain around FileOps.purge_trash."""
 
+import asyncio
 import random
 from collections.abc import Callable
 from datetime import timedelta
@@ -67,8 +68,11 @@ class TrashPurger:
 
     async def purge(self, job: JobRecord) -> None:
         try:
-            self.fileops.purge_trash(
-                self.days, f"purge-{self.clock.now().date().isoformat()}", self.protected()
+            await asyncio.to_thread(
+                self.fileops.purge_trash,
+                self.days,
+                f"purge-{self.clock.now().date().isoformat()}",
+                self.protected(),
             )
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()

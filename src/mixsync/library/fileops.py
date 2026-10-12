@@ -20,10 +20,11 @@ import logging
 import os
 import shutil
 import sys
+import unicodedata
 from collections.abc import Callable, Collection
 from contextlib import suppress
 from datetime import date, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
@@ -46,9 +47,15 @@ _libc = ctypes.CDLL(None, use_errno=True)
 def _day(name: str) -> date | None:
     """The date of a YYYY-MM-DD trash folder name, else None."""
     try:
-        return date.fromisoformat(name) if len(name) == 10 else None
+        d = date.fromisoformat(name)
+        return d if d.isoformat() == name else None  # not "20260101" or "2026-W01-1"
     except ValueError:
         return None
+
+
+def _norm(rel: str) -> str:
+    """One spelling of a trash-relative path, so a keep-list entry matches however it was typed."""
+    return unicodedata.normalize("NFC", str(PurePosixPath(rel)))
 
 
 def _sha256(path: Path) -> str:
@@ -286,7 +293,9 @@ class FileOps:
         if len(parts) < 2 or _day(parts[0]) is None:
             raise SafetyError(f"{rel!r} is not in a dated trash folder")
         p = self._under(self.trash_dir, rel)
-        if p.is_symlink() or not p.is_file() or p.resolve() != self.trash_dir.resolve() / rel:
+        # the data dir may sit behind a symlinked mount, but .trash itself must be real
+        real = self.trash_dir.parent.resolve() / self.trash_dir.name / rel
+        if self.trash_dir.is_symlink() or p.is_symlink() or not p.is_file() or p.resolve() != real:
             return False
         p.unlink()
         return True
@@ -300,8 +309,12 @@ class FileOps:
         trash-relative paths that must survive (an undoable plan still restores them). Symlinks
         and odd entries are skipped, never followed. Returns the number of files deleted."""
         cutoff = self._clock.now().date() - timedelta(days=older_than_days)
+        if self.trash_dir.is_symlink():
+            log.warning("purge: %s is a symlink; refusing to purge through it", self.trash_dir)
+            return 0
         if not self.trash_dir.is_dir():
             return 0
+        kept = {_norm(k) for k in keep}
         count = 0
         for day_dir in sorted(self.trash_dir.iterdir()):
             day = _day(day_dir.name)
@@ -314,7 +327,7 @@ class FileOps:
                 for name in filenames:
                     f = Path(dirpath, name)
                     rel = str(f.relative_to(self.trash_dir))
-                    if rel in keep:
+                    if _norm(rel) in kept:
                         log.info("purge: keeping %s: an undoable plan needs it", rel)
                         continue
                     if f.is_symlink() or not f.is_file():
@@ -323,12 +336,15 @@ class FileOps:
                     root = "discover" if Path(rel).parts[1] == ".discover" else "library"
                     op_id = self._journal.begin(batch_id, "purge", rel, "", root=root)
                     try:
-                        self._purge_file(rel)
+                        deleted = self._purge_file(rel)
                     except BaseException as e:
                         self._journal.fail(op_id, repr(e))
                         raise
-                    self._journal.complete(op_id, "")
-                    count += 1
+                    if deleted:
+                        self._journal.complete(op_id, "")
+                        count += 1
+                    else:
+                        self._journal.rolled_back(op_id)
                 for name in dirnames:
                     if Path(dirpath, name).is_symlink():
                         log.warning("purge: skipping symlink %s/%s", dirpath, name)
