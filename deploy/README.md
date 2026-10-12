@@ -46,6 +46,12 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
 | `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |
+| `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`. Default `127.0.0.1,::1`; see below |
+
+### Behind a TLS reverse proxy
+Set `FORWARDED_ALLOW_IPS` to the proxy's address or subnet (e.g. the compose network, `172.18.0.0/16`, or the proxy container's IP). Then the session cookie gets `Secure` (the scheme comes from `X-Forwarded-Proto`) and the login rate limit sees the real client IP instead of the proxy's.
+
+Never set it to `*` while port 8080 is reachable directly: any client could forge `X-Forwarded-For` to dodge the login limit, or forge the scheme. Prefer not publishing 8080 at all once the proxy is in front.
 
 ## Health and ops
 - `GET /healthz` (web) and a worker heartbeat row; compose `healthcheck` on both.

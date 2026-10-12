@@ -21,6 +21,9 @@ services:
   mixsync-web:
     <<: *mixsync
     command: ["web"]
+    environment:
+      # uvicorn trusts X-Forwarded-* only from these addresses; see deploy/README.md.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1}
     ports:
       - "8080:8080"
     restart: unless-stopped
