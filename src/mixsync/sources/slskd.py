@@ -148,6 +148,18 @@ class SlskdSource:
             TransferStatus.DONE, sent, tuple(self._local(f) for f in candidate.files)
         )
 
+    async def active_downloads(self) -> dict[str, int]:
+        """Transfer id -> bytes so far, for every download moving data right now. A transfer
+        still waiting in the peer's queue ("Queued, Remotely") uses no bandwidth: left out."""
+        data = await self._call("GET", "/transfers/downloads")
+        return {
+            t["id"]: t["bytesTransferred"]
+            for u in data
+            for d in u["directories"]
+            for t in d["files"]
+            if "InProgress" in t["state"]
+        }
+
     async def clear(self, candidate: Candidate) -> None:
         """Drop the candidate's finished transfers from slskd's list (files are not touched)."""
         data = await self._call("GET", f"/transfers/downloads/{candidate.username}")

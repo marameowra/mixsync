@@ -76,3 +76,4 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --frozen
       - run: uv run pytest -n auto --db=postgres
+      - run: uv run pytest -m crash --db=postgres

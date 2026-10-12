@@ -11,7 +11,7 @@ import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
     VERIFY_ATTEMPTS,
     AlbumKey,
@@ -78,6 +79,7 @@ NO_RESULTS_BACKOFF = (
 MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
+DOWNLOAD_BUSY_DELAY = timedelta(seconds=30)  # each look at a full cap is also a rate sample
 MONITOR_EVERY = timedelta(seconds=30)
 DOWNLOAD_STALL = timedelta(hours=2)  # no new bytes for this long -> the peer has failed us
 ACOUSTID_ID_SCORE = 0.9  # an AcoustID id is written to the tags only above this
@@ -99,6 +101,7 @@ class Pipeline:
     canonical_countries: tuple[str, ...] = ("XW",)
     reencode: bool = False  # lossless files go into the library as FLAC (see library/encode.py)
     flac_level: int = 8
+    gate: DownloadGate = field(default_factory=DownloadGate)
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -206,6 +209,17 @@ class Pipeline:
         p = job.payload
         cand = candidate_from_dict(p["candidate"])
         now = self.clock.now()
+        if "bytes" not in p and self.gate.full(now, await self.source.active_downloads()):
+            with self.sessions.begin() as s:  # a fresh job, like a busy search: no attempt burnt
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.DOWNLOAD,
+                    p,
+                    run_after=now + DOWNLOAD_BUSY_DELAY,
+                    idempotency_key=f"download:defer:{job.id}",
+                )
+            return
         try:
             if "bytes" not in p:
                 await self.source.enqueue(cand)
