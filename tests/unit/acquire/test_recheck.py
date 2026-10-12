@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from mixsync.acquire.merge import Merger, PlanInProgress
 from mixsync.acquire.recheck import Rechecker, statuses
@@ -383,7 +384,8 @@ async def test_an_outage_that_exhausts_retries_queues_one_check_at_the_same_atte
     rig.schedule()
     while (await env.step()) and env.jobs(JobKind.RECHECK)[0].status is not JobState.FAILED:
         assert rig.queued() == []
-    assert [a for a, _ in rig.queued()] == [0]
+    ((attempt, due),) = rig.queued()
+    assert attempt == 0 and _in_window(due, env.clock.now(), RECHECK_INTERVALS[0])
 
 
 async def test_a_transient_failure_that_retries_to_no_match_backs_off_as_usual(env: Env) -> None:
@@ -410,7 +412,7 @@ async def test_a_file_that_fails_to_read_is_skipped_and_the_rest_match(env: Env)
 async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:
     rig = _rig(env)
     rig.seed()
-    rig.meta.fail = ValueError("unexpected reply")
+    rig.meta.fail = OperationalError("x", None, Exception())  # the worker retries it
     rig.schedule()
     await env.step()  # fails, retry_wait
     assert [a for a, _ in rig.queued()] == [1]
