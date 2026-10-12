@@ -180,5 +180,7 @@ class SlskdSource:
         `Transfers.Download.Destination.Subdirectory` = ${SOURCE_DIRECTORY}; see
         DownloadService.DeriveDestination). A disc subfolder is therefore its own directory.
         Names slskd had to sanitize or de-duplicate will not exist here; callers check."""
+        if not _safe(f.path):  # candidates stored before the map_responses filter existed
+            raise PermanentError(f"unsafe slskd path from peer: {f.path!r}")
         parts = f.path.split("\\")
         return str(self._downloads.joinpath(*parts[-2:]))
