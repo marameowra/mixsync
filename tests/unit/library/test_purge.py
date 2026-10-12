@@ -168,9 +168,12 @@ def test_trash_of_a_plan_past_its_undo_window_is_purged(
     rel = fo.trash("A/b.mp3", "merge-1")
     clock.t = NOW
     _plan(sessions, "done")
-    with sessions.begin() as s:
-        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=30)  # at the edge
     purger = TrashPurger(sessions, clock, fo, 30)
+    with sessions.begin() as s:
+        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=30)
+    assert purger.protected()  # undo's edge, inside the purge's margin
+    with sessions.begin() as s:
+        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=31)
     assert purger.protected() == set()
     asyncio.run(purger.purge(_job(1)))
     assert not (fo.trash_dir / rel).exists()

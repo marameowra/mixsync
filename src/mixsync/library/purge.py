@@ -59,7 +59,8 @@ class TrashPurger:
             plans = s.scalars(
                 select(Plan).where(Plan.status.in_(UNDOABLE_STATUSES), Plan.batch_id != "")
             )
-            batches = [p.batch_id for p in plans if undoable(p, now, self.days)]
+            # +1 day margin: a snapshot must never call a plan expired while undo may accept it.
+            batches = [p.batch_id for p in plans if undoable(p, now, self.days + 1)]
             keep = set(
                 s.scalars(
                     select(FileOp.dst).where(FileOp.kind == "trash", FileOp.batch_id.in_(batches))

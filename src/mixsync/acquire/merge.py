@@ -322,9 +322,23 @@ class Merger:
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             if not undoable(plan, self.clock.now(), self.trash_days):
                 raise SafetyError(f"undo window of {self.trash_days} days has passed")
-            plan.status = "undoing"
             batch, ops, kind = plan.batch_id, plan.ops, plan.kind
         try:
+            # Before anything moves: a trashed original already purged cannot be restored.
+            for op in ops:
+                if op["op"] not in ("move", "trash"):
+                    continue
+                trashed = self._journaled(batch, "trash", src=op["old"]["path"])
+                if (
+                    trashed is not None
+                    and self._journaled(f"undo-{plan_id}", "restore", dst=op["old"]["path"]) is None
+                    and not (self.fileops.trash_dir / trashed.dst).is_file()
+                ):
+                    raise SafetyError(
+                        f"the trashed original of {op['old']['path']} is gone; nothing was moved"
+                    )
+            with self.sessions.begin() as s:
+                s.get_one(Plan, plan_id).status = "undoing"
             for i in reversed(range(len(ops))):
                 if ops[i]["op"] in ("move", "trash"):
                     self._undo_op(plan_id, batch, f"undo-{plan_id}", i, ops[i])

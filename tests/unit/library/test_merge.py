@@ -793,3 +793,18 @@ def test_undo_refuses_before_moving_anything_when_the_trashed_original_is_gone(
     with pytest.raises(SafetyError, match="is gone"):
         world.merger.undo_plan(pid)
     assert world.lib() == lib and world.plan(pid).status == "failed"
+
+
+def test_undo_refuses_up_front_when_only_some_trashed_originals_are_gone(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    lib = world.lib()
+    op = world.plan(pid).ops[0]
+    with world.sessions() as s:
+        trashed = s.scalars(
+            select(FileOp).where(FileOp.kind == "trash", FileOp.src == op["old"]["path"])
+        ).one()
+    (world.ops.trash_dir / trashed.dst).unlink()
+    with pytest.raises(SafetyError, match="is gone"):
+        world.merger.undo_plan(pid)
+    assert world.lib() == lib and world.plan(pid).status != "undoing"
