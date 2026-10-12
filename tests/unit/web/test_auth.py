@@ -101,7 +101,6 @@ def test_expired_session_rejected(client: TestClient, sf: sessionmaker[Session])
 def clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     from mixsync.web.routes import auth as auth_routes
 
-    auth_routes._failures.clear()
     t = [1000.0]
     monkeypatch.setattr(auth_routes, "_now", lambda: t[0])
     return t
@@ -132,3 +131,20 @@ def test_lockout_is_per_user_and_ip(client: TestClient, clock: list[float]) -> N
     assert _login(client, "root", "pw-root").status_code == 303
     with TestClient(client.app, follow_redirects=False, client=("10.0.0.9", 1)) as other:
         assert _login(other, "alice", "pw-alice").status_code == 303
+
+
+def test_failure_dict_is_capped(
+    client: TestClient, clock: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "MAX_KEYS", 3)
+    for u in ("u1", "u2"):
+        _login(client, u, "bad")
+    clock[0] += 15 * 60 + 1
+    for u in ("u3", "u4", "u5"):
+        _login(client, u, "bad")
+        assert len(auth_routes._failures) <= 3
+    assert {k[1] for k in auth_routes._failures} == {"u3", "u4", "u5"}
+    _login(client, "u6", "bad")
+    assert len(auth_routes._failures) == 3
