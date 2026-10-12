@@ -61,6 +61,19 @@ def test_write_uses_picard_names(fmt: str, make_src: MakeSrc) -> None:
     assert got[TRACK[fmt]] == ["8"]
 
 
+@pytest.mark.parametrize("fmt", ["flac", "mp3"])
+def test_write_to_file_without_tag_block(fmt: str, make_src: MakeSrc) -> None:
+    f = make_src(fmt)
+    audio = tags._sniff(f)  # pyright: ignore[reportPrivateUsage]
+    audio.delete()
+    assert tags._sniff(f).tags is None  # pyright: ignore[reportPrivateUsage]
+    blank = tags.read_all(f)
+    tags.write(f, TAGSET)
+    assert tags.read_all(f)["tags"][TITLE[fmt]] == ["Idioteque"]
+    tags.restore(f, blank)
+    assert tags.read_all(f) == blank
+
+
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_snapshot_and_restore(fmt: str, make_src: MakeSrc) -> None:
     f = make_src(fmt)
