@@ -19,6 +19,7 @@ class FileOp(TimestampMixin, Base):
     kind: Mapped[str] = mapped_column(String(16))
     src: Mapped[str] = mapped_column(Text)
     dst: Mapped[str] = mapped_column(Text)
+    root: Mapped[str] = mapped_column(String(16), server_default="library")
     src_hash: Mapped[str | None] = mapped_column(String(128))
     dst_hash: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(String(16))

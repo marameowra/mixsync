@@ -1,6 +1,6 @@
 """Run by test_crash.py in a subprocess: import one file and SIGKILL itself at the given step.
 
-usage: python -I crash_worker.py <step> <data_dir> <src> <final_rel>
+usage: python -I crash_worker.py <step> <data_dir> <src> <final_rel> [root]
 """
 
 import os
@@ -15,7 +15,7 @@ from mixsync.db.journal import SqlJournal
 from mixsync.library import fileops, tags
 from mixsync.library.fileops import FileOps
 
-step, data_dir, src, rel = sys.argv[1:]
+step, data_dir, src, rel, *rest = sys.argv[1:]
 
 
 def hook(name: str) -> None:
@@ -30,5 +30,5 @@ def write_tags(path: Path, _op_id: int) -> None:
 fileops._hook = hook  # pyright: ignore[reportPrivateUsage]
 journal = SqlJournal(make_session_factory(make_engine(Settings())), SystemClock())
 FileOps(Path(data_dir), Path(src).parent, journal, SystemClock()).import_file(
-    Path(src), rel, write_tags, "crash"
+    Path(src), rel, write_tags, "crash", root=rest[0] if rest else "library"
 )
