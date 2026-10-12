@@ -2,7 +2,10 @@
 
 The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir,
 and `clear_work()`, which empties MixSync's own re-encode scratch space; leftovers and trashed
-files are moved into `.trash/YYYY-MM-DD/`.
+files are moved into `.trash/YYYY-MM-DD/` (`.trash/YYYY-MM-DD/.discover/` for the discover
+root). Two roots, `library` and `discover`, live under the data dir; every journal row records
+its `root` and `recover()` resolves relative paths against it. Discover must be on the same
+filesystem as `.incoming` and `.trash`, or every discover import fails safely with EXDEV.
 Journal rows: `src` and `dst` of a copy op are the source path and the final library-relative
 path; the staging file is always `.incoming/<op_id>`. `dst_hash` is journaled before the
 rename, so `recover()` can tell a finished import from an abandoned one.
@@ -96,7 +99,10 @@ class FileOps:
 
     def _trash_rel(self, rel: str, root: str = "library") -> str:
         day = self._clock.now().date().isoformat()
-        sub = "" if root == "library" else f"{root}/"  # library trash keeps its layout
+        if root == "library" and rel.split("/")[0] == ".discover":
+            raise SafetyError(f"{rel!r} would collide with the discover trash prefix")
+        # sanitize() strips leading dots, so no rendered library path starts with ".discover"
+        sub = "" if root == "library" else f".{root}/"
         return unique(f"{day}/{sub}{rel}", lambda r: (self.trash_dir / r).exists())
 
     def _move_to_trash(self, src: Path, trash_rel: str) -> None:
@@ -214,27 +220,27 @@ class FileOps:
     def find_imported(self, batch_id: str, src: Path, root: str = "library") -> str | None:
         """Path (relative to root) of an earlier completed import of src in this batch, if the
         file is still there and intact."""
-        op = self._journal.find_completed(batch_id, str(src))
+        op = self._journal.find_completed(batch_id, str(src), root)
         if op and op.root == root and op.dst_hash and (f := self._root(root) / op.dst).is_file():
             return op.dst if _sha256(f) == op.dst_hash else None
         return None
 
-    def release(self, src: Path, batch_id: str) -> None:
-        """Delete a download once its library copy from this batch is verified. Refuses
+    def release(self, src: Path, batch_id: str, root: str = "library") -> None:
+        """Delete a download once its copy under root from this batch is verified. Refuses
         anything not strictly inside the downloads dir (symlinks and `..` included)."""
-        root = self._downloads.resolve()
-        if ".." in src.parts or src.is_symlink() or root not in src.resolve().parents:
-            raise SafetyError(f"{src} is not inside {root}")
-        rel = self.find_imported(batch_id, src)
-        op = self._journal.find_completed(batch_id, str(src))
+        dl = self._downloads.resolve()
+        if ".." in src.parts or src.is_symlink() or dl not in src.resolve().parents:
+            raise SafetyError(f"{src} is not inside {dl}")
+        rel = self.find_imported(batch_id, src, root)
+        op = self._journal.find_completed(batch_id, str(src), root)
         if rel is None or op is None or op.dst_hash is None:
             raise SafetyError(f"{src} has no verified import in batch {batch_id}")
-        op_id = self._journal.begin(batch_id, "release", str(src), rel)
+        op_id = self._journal.begin(batch_id, "release", str(src), rel, root=root)
         self._journal.set_dst_hash(op_id, op.dst_hash)
         try:
             _hook("release")
             src.unlink(missing_ok=True)
-            if src.parent.resolve() != root:  # never the root itself
+            if src.parent.resolve() != dl:  # never the root itself
                 with suppress(OSError):  # not empty
                     src.parent.rmdir()
         except Exception as e:  # an interrupt stays pending: recover() settles it
@@ -267,6 +273,10 @@ class FileOps:
         FileExistsError if rel is taken, leaving both alone."""
         src = self._under(self.trash_dir, trash_rel)
         dst = self._under(self._root(root), rel)
+        parts = Path(trash_rel).parts
+        trashed_from = parts[1][1:] if len(parts) > 1 and parts[1] == ".discover" else "library"
+        if trashed_from != root:
+            raise SafetyError(f"{trash_rel!r} was not trashed from root {root!r}")
         op_id = self._journal.begin(batch_id, "restore", trash_rel, rel, root=root)
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,8 @@
 """file_ops.root: which FileOps root (library / discover) an op's relative paths belong to
 
+Downgrading drops the column, so a pending discover op would then be recovered against the
+library: run recover() (finish or roll back pending ops) before downgrading.
+
 Revision ID: 0012_file_ops_root
 Revises: 0011_roles_sequence
 """

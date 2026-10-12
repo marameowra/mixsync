@@ -31,3 +31,18 @@ def test_models_match_migrations(settings: Settings) -> None:
     with make_engine(settings).connect() as c:
         diff = compare_metadata(MigrationContext.configure(c), Base.metadata)
     assert diff == []
+
+
+def test_pre_0012_file_op_reads_back_as_library(settings: Settings) -> None:
+    upgrade("0011_roles_sequence")
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO file_ops (batch_id, kind, src, dst, status, started_at,"
+                " created_at, updated_at) VALUES ('b', 'copy', 's', 'd', 'started',"
+                " '2026-01-01', '2026-01-01', '2026-01-01')"
+            )
+        )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        assert c.execute(text("SELECT root FROM file_ops")).scalar() == "library"

@@ -46,14 +46,15 @@ class SqlJournal:
             rows = s.scalars(select(FileOp).where(FileOp.status == "started").order_by(FileOp.id))
             return [_to_op(r) for r in rows]
 
-    def find_completed(self, batch_id: str, src: str) -> JournalOp | None:
-        """Most recent completed copy op for this batch and source."""
+    def find_completed(self, batch_id: str, src: str, root: str = "library") -> JournalOp | None:
+        """Most recent completed copy op for this batch, source and root."""
         with self._sessions() as s:
             r = s.scalars(
                 select(FileOp)
                 .where(
                     FileOp.batch_id == batch_id,
                     FileOp.src == src,
+                    FileOp.root == root,
                     FileOp.kind == "copy",
                     FileOp.status == "done",
                 )
