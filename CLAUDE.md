@@ -11,6 +11,9 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
 - Before reporting work as done, run every CI step (`.github/workflows/ci.yml`), not just
   tests: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`,
   `uv run lint-imports`, `uv run pytest`.
+- Keep test files. Removing or rewriting individual tests is fine when the behavior they
+  cover changes or goes away, but don't delete, rename, or move a test file. If a whole
+  file looks obsolete, stop and ask. Test-file deletion gets flagged in review.
 - Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
   agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
   PR for the user to merge. Merging to main publishes the `:dev` image.
