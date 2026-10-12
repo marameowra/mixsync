@@ -22,7 +22,12 @@ from mixsync.db.queue import enqueue_in
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import Watcher, interval_for, jitter
+from mixsync.watchlist.poller import (
+    Watcher,
+    _date_ok,  # pyright: ignore[reportPrivateUsage]
+    interval_for,
+    jitter,
+)
 
 from .conftest import Env, login
 
@@ -128,6 +133,15 @@ def test_jitter_stays_in_range() -> None:
         assert all(base / 2 <= j <= base * 1.5 for j in samples)
         assert len(set(samples)) > 100  # random, not a fixed point
     assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # the roadmap's bound
+
+
+def test_year_only_dates_pass_a_cutoff_in_their_year() -> None:
+    # Live MB (2026-10-11, #44): a year-only "1995" matches firstreleasedate:[1995-12-31 TO *]
+    # but not [1996-01-01 TO *], so the floor must keep it for the rest of its year too.
+    assert _date_ok("2026", "2026-06-01")
+    assert _date_ok("2026-06", "2026-06-15")
+    assert not _date_ok("2025", "2026-01-01")
+    assert not _date_ok("2026-05", "2026-06-01")
 
 
 async def test_new_release_becomes_a_request(env: Env) -> None:
