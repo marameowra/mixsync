@@ -4,7 +4,7 @@ import re
 import pytest
 
 from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, TrackInfo
-from mixsync.match.profiles import BALANCED
+from mixsync.match.profiles import BALANCED, LOOSE, STRICT
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
     SCORER_VERSION,
@@ -254,3 +254,9 @@ def test_score_files_garbage_rejects() -> None:
     files = [FileTrack("qqq", "zzz", track=9)]
     r = score_files(files, Likelies(artist="zzz", album="qqq"), album("one", "two"), BALANCED)
     assert r.band == Band.REJECT and r.breakdown
+
+
+def test_empty_tracklist_rejects_under_every_profile() -> None:
+    for profile in (STRICT, BALANCED, LOOSE):
+        r = score_files([], Likelies(), AlbumInfo("artist", "album", ()), profile)
+        assert r.band == Band.REJECT and r.vetoes == ("release has no tracklist",)

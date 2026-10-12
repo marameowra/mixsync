@@ -32,6 +32,7 @@ from types import MappingProxyType
 
 from mixsync.core.matching import (
     AlbumInfo,
+    Band,
     FileTrack,
     Likelies,
     MatchResult,
@@ -373,6 +374,16 @@ def album_distance(
     return dist
 
 
+def reject(reason: str) -> MatchResult:
+    return MatchResult(
+        distance=1.0,
+        band=Band.REJECT,
+        breakdown=(Penalty("unsupported_folder", 1.0, 1.0, reason),),
+        vetoes=(reason,),
+        scorer_version=SCORER_VERSION,
+    )
+
+
 def score_files(
     files: Sequence[FileTrack],
     likelies: Likelies,
@@ -380,6 +391,8 @@ def score_files(
     profile: Profile,
     weights: Mapping[str, float] = DEFAULT_WEIGHTS,
 ) -> MatchResult:
+    if not album.tracks:
+        return reject("release has no tracklist")
     pairs, extra_files, _ = assign_tracks(files, album.tracks, weights)
     dist = album_distance(likelies, album, pairs, len(extra_files), weights)
     vetoes = find_vetoes(pairs)

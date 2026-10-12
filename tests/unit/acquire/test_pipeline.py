@@ -993,3 +993,16 @@ async def test_transfers_above_both_thresholds_keep_the_cap_full(env: Env) -> No
     await env.step()
     await step_until_started(env, steps=10)
     assert env.source.enqueued == [] and t() > 120
+
+
+async def test_release_without_tracks_fails_and_is_never_imported(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = replace(ALBUM, release_id="55555555-5555-5555-5555-555555555555", tracks=())
+    monkeypatch.setitem(CATALOG, str(empty.release_id), empty)
+    rid = request(env, str(empty.release_id))
+    await env.drain()
+    assert status(env, rid) == "failed"
+    with env.sessions() as s:
+        assert s.get(Request, rid).last_error == "release has no tracklist"  # type: ignore[union-attr]
+    assert library(env) == []

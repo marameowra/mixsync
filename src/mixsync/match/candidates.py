@@ -14,7 +14,6 @@ from mixsync.core.matching import (
     CandidateFile,
     FileTrack,
     MatchResult,
-    Penalty,
     Profile,
 )
 from mixsync.match.features import normalize, string_dist
@@ -25,6 +24,7 @@ from mixsync.match.scorer import (
     TRACK_LENGTH_MAX,
     Distance,
     assign_tracks,
+    reject,
 )
 from mixsync.match.vetoes import find_vetoes
 
@@ -123,26 +123,18 @@ def _size_problem(f: CandidateFile, duration: float | None) -> str:
     return ""
 
 
-def _reject(reason: str) -> MatchResult:
-    return MatchResult(
-        distance=1.0,
-        band=Band.REJECT,
-        breakdown=(Penalty("unsupported_folder", 1.0, 1.0, reason),),
-        vetoes=(reason,),
-        scorer_version=SCORER_VERSION,
-    )
-
-
 def score_candidate(
     candidate: Candidate,
     album: AlbumInfo,
     profile: Profile,
     weights: Mapping[str, float] = STAGE1_WEIGHTS,
 ) -> MatchResult:
+    if not album.tracks:
+        return reject("release has no tracklist")
     if not candidate.files:
-        return _reject("no audio files in the folder")
+        return reject("no audio files in the folder")
     if candidate.has_cue and len(candidate.files) == 1 and len(album.tracks) > 1:
-        return _reject("single-file album rip with a .cue sheet is not supported")
+        return reject("single-file album rip with a .cue sheet is not supported")
 
     parsed = _dedupe([_parse(f) for f in candidate.files])
     tracks = [FileTrack(p.title, "", p.file.duration, p.track, p.disc) for p in parsed]
