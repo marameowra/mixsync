@@ -57,8 +57,11 @@ class Lookup:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.fail: Exception | None = None
+        self.broken: set[str] = set()  # fingerprints whose reply is malformed
 
     async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]:
+        if fp.fingerprint in self.broken:
+            raise ValueError("malformed reply")
         if self.fail:
             raise self.fail
         self.calls.append(fp.fingerprint)
@@ -358,24 +361,56 @@ async def test_no_file_to_fingerprint_is_no_match_and_the_chain_goes_on(env: Env
     assert rig.plans("draft") == [] and [a for a, _ in rig.queued()] == [1]
 
 
-async def test_an_acoustid_outage_retries_the_job_with_its_attempt_unchanged(env: Env) -> None:
+async def test_an_outage_that_clears_leaves_no_next_check_queued(env: Env) -> None:
     rig = _rig(env)
     rig.seed()
     rig.lookup.fail = TransientError("acoustid is down")
     rig.schedule()
     await env.step()
-    job = env.jobs(JobKind.RECHECK)[0]
-    assert job.status is not JobState.SUCCEEDED and job.payload["attempt"] == 0
+    assert rig.queued() == []  # no continuation while the job can still retry
     rig.lookup.fail = None
     await env.step()  # the retry finds the match
     assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
-    assert len(rig.plans("draft")) == 1
+    assert len(rig.plans("draft")) == 1 and rig.queued() == []
+
+
+async def test_an_outage_that_exhausts_retries_queues_one_check_at_the_same_attempt(
+    env: Env,
+) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.fail = TransientError("acoustid is down")
+    rig.schedule()
+    while (await env.step()) and env.jobs(JobKind.RECHECK)[0].status is not JobState.FAILED:
+        assert rig.queued() == []
+    assert [a for a, _ in rig.queued()] == [0]
+
+
+async def test_a_transient_failure_that_retries_to_no_match_backs_off_as_usual(env: Env) -> None:
+    rig = _rig(env, match=False)
+    rig.seed()
+    rig.meta.fail = TransientError("musicbrainz is down")
+    rig.schedule()
+    await env.step()
+    rig.meta.fail = None
+    await env.step()
+    assert [a for a, _ in rig.queued()] == [1]
+
+
+async def test_a_file_that_fails_to_read_is_skipped_and_the_rest_match(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.broken.add("Song Two")
+    rig.schedule()
+    await env.step()
+    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
+    assert rig.lookup.calls == ["Song One"] and rig.queued() != []
 
 
 async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:
     rig = _rig(env)
     rig.seed()
-    rig.meta.fail = TransientError("musicbrainz is down")
+    rig.meta.fail = ValueError("unexpected reply")
     rig.schedule()
     await env.step()  # fails, retry_wait
     assert [a for a, _ in rig.queued()] == [1]
