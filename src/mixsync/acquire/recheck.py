@@ -133,7 +133,8 @@ class Rechecker:
         self, key: AlbumKey, items: list[Item], profile: Profile
     ) -> tuple[AlbumInfo, dict[int, FileTrack]] | None:
         """The best of the top releases, if it is confident enough to promote to. A file that
-        cannot be fingerprinted or looked up is skipped (an outage retries the job); none left means no match."""
+        cannot be fingerprinted or looked up is skipped (an outage retries the job); none left
+        means no match."""
         refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT)
         albums = [await self.metadata.get_release(r.release_id) for r in refs[:MAX_RELEASES]]
         if not albums:
