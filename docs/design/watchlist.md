@@ -10,7 +10,7 @@ Follow artists or record labels and request their new releases automatically.
 ## Poller
 MusicBrainz asks clients not to poll for changes ([rules](services-etiquette.md#musicbrainz)), so a check is kept as cheap and as rare as is still useful:
 - **One request per check:** a date-range search (artist: release groups with `firstreleasedate` since the last check; label: releases with `date` since the last check). The window overlaps by 7 days to cover search-index lag. There's no full browse.
-  - **Verified against live MB (2026-10-11):** a release search result's `release-group` carries `primary-type` and, when it has any, `secondary-types`, so label hits get a real type (#43). A year-only date such as `1995` matches `[1995-12-31 TO *]` but not `[1996-01-01 TO *]`. So a year-only release entered late in its year is still found, and the follow's date floor compares only to the hit's precision (#44).
+  - **Verified against live MB (2026-10-11):** a release search result's `release-group` carries `primary-type` and, when it has any, `secondary-types`, so label hits get a real type (#43). A partial date counts up to the end of its period, for both `firstreleasedate` (artists) and `date` (labels): `1995` matches `[1995-12-31 TO *]` but not `[1996-01-01 TO *]`, and `1995-06` matches `[1995-06-30 TO *]` but not `[1995-07-01 TO *]`. So a year-only release entered late in its year is still found, and the follow's date floor and `min_date` compare only to the hit's precision (#44).
 - **Adaptive cadence** per followed entity:
 
 | Entity activity | Interval |
