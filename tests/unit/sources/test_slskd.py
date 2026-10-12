@@ -218,6 +218,26 @@ async def test_done_reports_local_paths_by_each_files_own_folder(make_client: Ma
     assert info.local_paths == ("/downloads/Album/01 x.flac", "/downloads/CD2/01 y.flac")
 
 
+@pytest.mark.parametrize(
+    "bad", ["x\\/data/library/A/B\\01.flac", "x\\..\\01.flac", "x\\A\\\\01.flac", "x\\.\\01.flac"]
+)
+def test_unsafe_peer_paths_are_never_candidates(bad: str) -> None:
+    good = "x\\Album\\01.flac"
+    files = [{"filename": n, "size": 1} for n in (bad, good)]
+    resp = {"username": "p", "hasFreeUploadSlot": True, "queueLength": 0, "uploadSpeed": 1}
+    cands = map_responses([{**resp, "files": files}])
+    assert [f.path for c in cands for f in c.files] == [good]
+
+
+async def test_done_rejects_stored_candidate_with_unsafe_path(make_client: Make) -> None:
+    bad = "x\\/etc\\01.flac"
+    cand = Candidate("p", "x", (CandidateFile(bad, 1, "flac"),))
+    files = [{"filename": bad, "state": "Completed, Succeeded", "bytesTransferred": 1}]
+    body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
+    with pytest.raises(PermanentError):
+        await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+
+
 async def test_status_before_all_files_are_listed(make_client: Make) -> None:
     cand = Candidate("peer-001", "d", (CandidateFile("d\\a.flac", 1, "flac"),))
     body = {"username": "peer-001", "directories": []}
