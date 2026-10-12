@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Discover - MixSync{% endblock %}
+{% block content %}
+<h1>Discover</h1>
+<p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
+{% if rows %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Playlist</th><th>Last build</th><th>Next build</th><th>Tracks</th><th>Note</th><th></th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+  <tr>
+    <td>{{ p.name }}</td>
+    <td>{{ p.last_built_at or "never" }}</td>
+    <td>{{ p.next_build_at or "-" }}</td>
+    <td>{{ p.entries | length }}</td>
+    <td>{{ p.last_error or "" }}</td>
+    <td><form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Build now</button></form></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No playlists yet. Link ListenBrainz and Navidrome on <a href="/account">your account</a>.</p>
+{% endif %}
+{% endblock %}

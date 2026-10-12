@@ -24,6 +24,8 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.db.secretbox import load_box
+from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.discovery.playlists import Discovery
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
@@ -32,7 +34,7 @@ from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.sources.query import queries
 from mixsync.sources.slskd import SlskdSource
-from mixsync.targets.navidrome import NavidromeTarget
+from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
 
 log = logging.getLogger(__name__)
@@ -207,6 +209,16 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
+    navidrome_http = polite_client("navidrome", settings, sessions)
+    discovery = Discovery(
+        sessions,
+        clock,
+        ListenBrainzClient(polite_client("listenbrainz", settings, sessions)),
+        lambda user, password: NavidromeUser.for_user(
+            navidrome_http, settings.navidrome_url, user, password
+        ),
+        load_box(settings),
+    )
     handlers = (
         HANDLERS
         | pipeline.handlers()
@@ -215,11 +227,13 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | rechecker.handlers()
         | submitter.handlers()
         | watcher.handlers()
+        | discovery.handlers()
     )
 
     def startup() -> None:
         rechecker.start_chains()
         watcher.start_chains()
+        discovery.start_chains()
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 

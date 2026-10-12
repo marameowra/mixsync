@@ -206,3 +206,19 @@ forbidden_modules = [
     "mixsync.submit",
 ]
 allow_indirect_imports = true  # ratelimit itself reaches db
+
+[[tool.importlinter.contracts]]
+name = "discovery.playlists gets its services injected"
+type = "forbidden"
+source_modules = ["mixsync.discovery.playlists"]
+forbidden_modules = [
+    "mixsync.ratelimit",
+    "mixsync.metadata",
+    "mixsync.sources",
+    "mixsync.targets",
+    "mixsync.discovery.listenbrainz",
+    "mixsync.web",
+    "mixsync.app",
+    "mixsync.worker",
+]
+allow_indirect_imports = true  # db itself may reach ratelimit
