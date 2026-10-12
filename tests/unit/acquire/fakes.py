@@ -2,6 +2,7 @@
 test's subprocess loads this file by path."""
 
 import shutil
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -109,6 +110,7 @@ class FakeSource:
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
         self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
+        self.moving: Callable[[], dict[str, int]] = dict  # the other transfers: id -> bytes
 
     def add(
         self,
@@ -173,6 +175,9 @@ class FakeSource:
             return TransferInfo(state, 0)
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
         return TransferInfo(state, 1, tuple(str(self._dir(candidate) / n) for n in names))
+
+    async def active_downloads(self) -> dict[str, int]:
+        return self.moving()
 
     async def clear(self, candidate: Candidate) -> None:
         self.cleared.append(candidate.username)

@@ -254,3 +254,25 @@ async def test_search_with_no_results_returns_immediately(make_client: Make) -> 
         return httpx.Response(200, json={**load("search_complete.json"), "responseCount": 0})  # pyright: ignore[reportArgumentType]
 
     assert await source(make_client, handler).search("x") == []
+
+
+async def test_active_downloads_counts_only_transfers_moving_data(make_client: Make) -> None:
+    def file(i: str, state: str, sent: int) -> dict[str, object]:
+        return {"id": i, "state": state, "bytesTransferred": sent}
+
+    body = [
+        {
+            "username": "p",
+            "directories": [
+                {
+                    "files": [
+                        file("a", "InProgress", 5),
+                        file("b", "Queued, Remotely", 0),
+                        file("c", "Completed, Succeeded", 9),
+                    ]
+                }
+            ],
+        }
+    ]
+    src = source(make_client, lambda r: httpx.Response(200, json=body))
+    assert await src.active_downloads() == {"a": 5}

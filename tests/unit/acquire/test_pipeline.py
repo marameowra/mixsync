@@ -1,6 +1,7 @@
 """The acquire pipeline end to end against fakes: the Phase 2 exit criteria 1 and 2, and the
 rules around them (backoff, debounce, retries, review)."""
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, timedelta
 from pathlib import Path
@@ -795,3 +796,64 @@ async def test_a_repick_of_a_nonexistent_release_reopens_the_review(
             "review",
             f"release {ghost} not found on MusicBrainz",
         )
+
+
+def start_at(env: Env) -> Callable[[], float]:
+    t0 = env.clock.now()
+    return lambda: (env.clock.now() - t0).total_seconds()
+
+
+async def step_until_started(env: Env, steps: int = 6) -> None:
+    for _ in range(steps):
+        if env.source.enqueued:
+            return
+        await env.step()
+
+
+async def test_full_download_cap_defers_without_burning_attempts(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    env.source.moving = lambda: {"a": 0, "b": 0}  # two fresh transfers: no rate known, both count
+    request(env)
+    await env.step()  # search
+    job = await env.step()
+    assert job and job.kind is JobKind.DOWNLOAD
+    assert env.source.enqueued == []
+    first, deferred = env.jobs(JobKind.DOWNLOAD)
+    assert first.status == JobState.SUCCEEDED and first.attempts == 1
+    assert deferred.status == JobState.QUEUED and deferred.attempts == 0
+    assert deferred.payload == first.payload
+
+
+async def test_transfer_below_the_floor_for_the_window_frees_its_slot(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1000), "b": int(t() * 10_000_000)}  # 1 KB/s, fast
+    request(env)
+    await env.step()
+    await step_until_started(env)
+    assert env.source.enqueued == ["peer1"]
+    assert t() >= 60  # not before a full window was seen
+
+
+async def test_transfer_below_a_tenth_of_the_total_frees_its_slot(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1_000_000), "b": int(t() * 60_000)}  # 6% of total
+    request(env)
+    await env.step()
+    await step_until_started(env)
+    assert env.source.enqueued == ["peer1"]
+
+
+async def test_transfers_above_both_thresholds_keep_the_cap_full(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1_000_000), "b": int(t() * 150_000)}  # 13%
+    request(env)
+    await env.step()
+    await step_until_started(env, steps=10)
+    assert env.source.enqueued == [] and t() > 120

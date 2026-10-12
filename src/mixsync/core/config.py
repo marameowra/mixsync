@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     acoustid_user_key: str = ""  # one key for the deployment; all submissions go under it
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
+    max_concurrent_downloads: int = Field(default=3, ge=1)
+    slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
+    slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow
+    slow_download_share: float = Field(default=0.10, ge=0, le=1)  # of total download throughput
     navidrome_url: str = "http://navidrome:4533"
     navidrome_user: str = ""  # an admin: startScan needs it
     navidrome_password: str = ""
