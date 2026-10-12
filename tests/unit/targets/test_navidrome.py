@@ -1,6 +1,7 @@
 import hashlib
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -145,14 +146,45 @@ async def test_starred_and_play_counts(make_client: Make) -> None:
     assert await u.play_counts(["s1", "s2"]) == {"s1": 3, "s2": 0}
 
 
-async def test_resolve_picks_exact_path_among_hits(make_client: Make) -> None:
+async def test_resolve_picks_recording_mbid_among_hits(make_client: Make) -> None:
     songs = [
-        {"id": "a", "path": "/data/discover/A/x.flac"},
-        {"id": "b", "path": "/data/library/A/x.flac"},
+        {"id": "a", "musicBrainzId": "mbid-1"},
+        {"id": "b", "musicBrainzId": "mbid-2"},
+        {"id": "c"},
     ]
     u = user(make_client, lambda r: ok(searchResult3={"song": songs}))
-    assert await u.resolve("/data/library/A/x.flac", "x", "A") == "b"
-    assert await u.resolve("/data/other.flac", "x", "A") is None
+    assert await u.resolve("mbid-2", "x", "A") == "b"
+    assert await u.resolve("mbid-9", "x", "A") is None
+
+
+async def test_resolve_passes_music_folder_and_folder_lookup(make_client: Make) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/rest/getMusicFolders":
+            folders = [{"id": 1, "name": "music"}, {"id": 2, "name": "discover"}]
+            return ok(musicFolders={"musicFolder": folders})
+        assert request.url.params["musicFolderId"] == "2"
+        assert request.url.params["query"] == "A x"
+        return ok(searchResult3={"song": [{"id": "a", "musicBrainzId": "m"}]})
+
+    u = user(make_client, handler)
+    folder = await u.music_folder_id("discover")
+    assert folder == "2"
+    assert await u.music_folder_id("nope") is None
+    assert await u.resolve("m", "x", "A", folder) == "a"
+
+
+async def test_play_counts_batch_from_playlist(make_client: Make) -> None:
+    paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/rest/getPlaylist":
+            return ok(playlist={"entry": [{"id": "s1", "playCount": 4}, {"id": "s2"}]})
+        return ok(song={"id": "s3", "playCount": 7})
+
+    counts = await user(make_client, handler).play_counts(["s1", "s2", "s3"], "p1")
+    assert counts == {"s1": 4, "s2": 0, "s3": 7}
+    assert paths == ["/rest/getPlaylist", "/rest/getSong"]
 
 
 async def test_search3_and_music_folders_parse(make_client: Make) -> None:
@@ -167,25 +199,49 @@ async def test_search3_and_music_folders_parse(make_client: Make) -> None:
     assert await sc.search3("q", music_folder_id="2") == [{"id": "a"}]
 
 
-async def test_push_playlist_creates_then_replaces_then_recreates_on_70(
-    make_client: Make,
+def form(request: httpx.Request) -> dict[str, list[str]]:
+    return parse_qs(request.content.decode())
+
+
+@pytest.mark.parametrize("gone", [70, 50])
+async def test_push_playlist_posts_form_and_recreates_when_gone(
+    make_client: Make, gone: int
 ) -> None:
-    seen: list[dict[str, list[str]]] = []
+    seen: list[tuple[str, str, dict[str, list[str]]]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        q = request.url.params
-        seen.append({k: q.get_list(k) for k in ("playlistId", "name", "songId")})
-        if q.get("playlistId") == "gone":
-            return err(70)
-        return ok(playlist={"id": q.get("playlistId") or "new"})
+        f = form(request)
+        seen.append((request.method, request.url.path, f))
+        assert not request.url.query  # nothing, token included, in the URL
+        if f.get("playlistId") == ["gone"]:
+            return err(gone)
+        return ok(playlist={"id": f.get("playlistId", ["new"])[0]})
 
     u = user(make_client, handler)
     assert await u.push_playlist("Mix", ["a", "b"], None) == "new"
-    assert seen[-1] == {"playlistId": [], "name": ["Mix"], "songId": ["a", "b"]}
-    assert await u.push_playlist("Mix", ["a"], "p1") == "p1"
-    assert seen[-1]["playlistId"] == ["p1"]
+    method, path, f = seen[-1]
+    assert (method, path) == ("POST", "/rest/createPlaylist")
+    assert f["songId"] == ["a", "b"]
+    assert f["name"] == ["Mix"]
+    assert "playlistId" not in f
+
+    seen.clear()
+    assert await u.push_playlist("Renamed", ["a"], "p1") == "p1"
+    assert [(p, f.get("name"), f.get("playlistId")) for _, p, f in seen] == [
+        ("/rest/createPlaylist", None, ["p1"]),
+        ("/rest/updatePlaylist", ["Renamed"], ["p1"]),
+    ]
+
+    seen.clear()
     assert await u.push_playlist("Mix", ["a"], "gone") == "new"
-    assert seen[-1]["name"] == ["Mix"]
+    assert seen[-1][2]["name"] == ["Mix"]
+
+
+async def test_not_authorized_uses_linked_account_hint(make_client: Make) -> None:
+    with pytest.raises(PermanentError) as exc:
+        await user(make_client, lambda r: err(50)).starred_song_ids()
+    assert "linked Navidrome account" in str(exc.value)
+    assert "admin" not in str(exc.value)
 
 
 @pytest.mark.parametrize("code", [40, 41])
@@ -209,3 +265,5 @@ async def test_transport_error_hides_token(make_client: Make) -> None:
     with pytest.raises(TransientError) as exc:
         await user(make_client, handler).starred_song_ids()
     assert PASSWORD not in str(exc.value)
+    assert SALT not in str(exc.value)
+    assert hashlib.md5((PASSWORD + SALT).encode()).hexdigest() not in str(exc.value)  # noqa: S324

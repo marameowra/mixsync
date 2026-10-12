@@ -13,10 +13,15 @@ _NOT_AUTHORIZED = 50
 _NOT_FOUND = 70
 
 _ADMIN_HINT = "check MIXSYNC_NAVIDROME_USER and its password"
+_ADMIN_ONLY = "MIXSYNC_NAVIDROME_USER must be an admin user to start scans"
 
 
 class NotFoundError(PermanentError):
     """Subsonic error 70: the requested item does not exist."""
+
+
+class NotAuthorizedError(PermanentError):
+    """Subsonic error 50: the user may not do this (e.g. someone else's playlist)."""
 
 
 def _dig(body: dict[str, Any], key: str) -> dict[str, Any]:
@@ -38,8 +43,10 @@ class SubsonicClient:
         user: str,
         password: str,
         credentials_hint: str = _ADMIN_HINT,
+        forbidden_hint: str = _ADMIN_ONLY,
     ) -> None:
         self._hint = credentials_hint
+        self._forbidden_hint = forbidden_hint
         self._client = client
         self._base = base_url.rstrip("/")
         self._user = user
@@ -50,10 +57,15 @@ class SubsonicClient:
         token = hashlib.md5((self._password + salt).encode()).hexdigest()  # noqa: S324 - Subsonic protocol
         return {"u": self._user, "t": token, "s": salt, "v": "1.16.1", "c": "mixsync", "f": "json"}
 
-    async def _call(self, endpoint: str, **params: Any) -> dict[str, Any]:
+    async def _call(self, endpoint: str, *, post: bool = False, **params: Any) -> dict[str, Any]:
         url = f"{self._base}/rest/{endpoint}"
         try:
-            response = await self._client.get(url, params={**self._auth(), **params})
+            merged = {**self._auth(), **params}
+            if post:
+                # OpenSubsonic formPost extension; keeps long songId lists and t/s out of URLs
+                response = await self._client.post(url, data=merged)
+            else:
+                response = await self._client.get(url, params=merged)
         except httpx.TransportError as e:
             # str(e) can embed the request URL; the query holds the token, so name the type only
             raise TransientError(f"Subsonic {endpoint} unreachable ({type(e).__name__})") from None
@@ -73,9 +85,9 @@ class SubsonicClient:
             if code == _NOT_FOUND:
                 raise NotFoundError(f"Subsonic {endpoint}: not found ({message})")
             if code == _NOT_AUTHORIZED:
-                raise PermanentError(
+                raise NotAuthorizedError(
                     f"Navidrome user is not authorized for {endpoint} ({message}); "
-                    "MIXSYNC_NAVIDROME_USER must be an admin user to start scans"
+                    f"{self._forbidden_hint}"
                 )
             raise PermanentError(f"Subsonic {endpoint} failed: code {code}: {message}")
         return body
@@ -96,11 +108,17 @@ class SubsonicClient:
         # With playlistId the docs don't say replace vs append; Navidrome replaces the tracks.
         params: dict[str, Any] = {"songId": song_ids}
         params.update({"playlistId": playlist_id} if playlist_id else {"name": name})
-        body = await self._call("createPlaylist", **params)
+        body = await self._call("createPlaylist", post=True, **params)
         return str(_dig(body, "playlist").get("id") or playlist_id)
+
+    async def update_playlist(self, playlist_id: str, name: str) -> None:
+        await self._call("updatePlaylist", post=True, playlistId=playlist_id, name=name)
 
     async def get_starred2(self) -> dict[str, Any]:
         return _dig(await self._call("getStarred2"), "starred2")
+
+    async def get_playlist(self, playlist_id: str) -> dict[str, Any]:
+        return _dig(await self._call("getPlaylist", id=playlist_id), "playlist")
 
     async def get_song(self, song_id: str) -> dict[str, Any]:
         return _dig(await self._call("getSong", id=song_id), "song")
