@@ -59,7 +59,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
-from mixsync.library.encode import to_flac
+from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
@@ -293,18 +293,32 @@ class Pipeline:
                     if not _stale(s, job, self._request(s, job)):
                         self._reopen(s, job, p["release_mbid"])
                 return
+        for path in paths:  # import must be able to turn WAV/AIFF into FLAC, so check now
+            if why := await self._unusable(path):
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        retry_search(
+                            s,
+                            self.clock.now(),
+                            self._request(s, job),
+                            cand.username,
+                            cand.folder,
+                            why,
+                        )
+                return
         files: list[FileTrack] = []
         for path in paths:
             fp = await self.fingerprint(path)
             results = await self.acoustid.lookup(fp)
             files.append(file_track(path, fp.duration, tuple(results)))
+        like = likelies(paths)
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
         if album is not None:
-            result = score_files(files, likelies(paths), album, profile)
+            result = score_files(files, like, album, profile)
         else:
-            album, result = await self._identify(files, paths, profile, cand.folder)
+            album, result = await self._identify(files, like, profile, cand.folder)
         if migrating and result.band is Band.REJECT:  # nothing to search again: a human decides
             result = replace(result, band=Band.REVIEW)
         pairs, extra, _ = assign_tracks(files, album.tracks)
@@ -329,7 +343,7 @@ class Pipeline:
             and all_confident(pairs)
         ):
             free = score_files(
-                files, likelies(paths), album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
+                files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
             if free.band is Band.AUTO_ACCEPT:
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
@@ -369,6 +383,15 @@ class Pipeline:
             else:  # files stay in /downloads: reject never deletes
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
 
+    async def _unusable(self, path: Path) -> str | None:
+        """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
+        need the ffprobe check; other readable formats import as they are."""
+        if not await asyncio.to_thread(tags.readable, path):
+            return f"unsupported audio: {path.name} is not readable audio"
+        if await asyncio.to_thread(tags.is_pcm, path) and (why := await encodable(path)):
+            return f"unsupported audio: {path.name}: {why}"
+        return None
+
     def _reopen(self, s: Session, job: JobRecord, mbid: str) -> None:
         """Put the review item whose repick named `mbid` back, so the reviewer can choose again."""
         req = self._request(s, job)
@@ -384,11 +407,10 @@ class Pipeline:
         raise PermanentError(f"release {mbid} not found on MusicBrainz")
 
     async def _identify(
-        self, files: list[FileTrack], paths: list[Path], profile: Profile, folder: str
+        self, files: list[FileTrack], like: Likelies, profile: Profile, folder: str
     ) -> tuple[AlbumInfo, MatchResult]:
         """The best-scoring release for files of unknown release: the one their tags name, else
         the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
-        like = likelies(paths)
         albums: list[AlbumInfo] = []
         if tagged := _uuid(like.release_id):
             try:
