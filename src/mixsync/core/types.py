@@ -45,3 +45,11 @@ class EntityRef:
     mbid: str
     name: str
     disambiguation: str = ""
+
+
+@dataclass(frozen=True)
+class RecordingRef:
+    recording_mbid: str
+    release_mbid: str | None
+    artist: str
+    title: str

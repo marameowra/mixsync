@@ -9,6 +9,7 @@ from mixsync.core.types import (
     AcoustIdResult,
     EntityRef,
     Fingerprint,
+    RecordingRef,
     ReleaseGroupHit,
     ReleaseRef,
 )
@@ -86,3 +87,11 @@ class CoverArt(Protocol):
 
 class LibraryTarget(Protocol):
     async def rescan(self) -> None: ...
+
+
+class HistorySource(Protocol):
+    async def recommendations(self, user: str, token: str, count: int) -> list[RecordingRef]: ...
+    async def weekly_exploration(self, user: str, token: str) -> list[RecordingRef]: ...
+    async def lb_radio(self, prompt: str, mode: str, token: str) -> list[RecordingRef]: ...
+    async def recording_metadata(self, mbids: list[str]) -> dict[str, RecordingRef]: ...
+    async def validate_token(self, token: str) -> str | None: ...

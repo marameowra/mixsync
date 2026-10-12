@@ -106,6 +106,39 @@ async def test_retry_after_blocks_and_is_honored(
     assert calls[1] - calls[0] == timedelta(seconds=10)
 
 
+async def test_reset_in_blocks_when_remaining_is_zero(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    calls: list[datetime] = []
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        calls.append(clock.now())
+        headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-In": "7"}
+        return httpx.Response(200, headers=headers if len(calls) == 1 else {})
+
+    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/a")
+        await c.get("https://x.test/b")
+    assert calls[1] - calls[0] == timedelta(seconds=7)
+
+
+async def test_429_without_retry_after_uses_reset_in(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    calls: list[datetime] = []
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        calls.append(clock.now())
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"X-RateLimit-Reset-In": "12"})
+        return httpx.Response(200)
+
+    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        r = await c.get("https://x.test/")
+    assert r.status_code == 200
+    assert calls[1] - calls[0] == timedelta(seconds=12)
+
+
 async def test_503_without_header_backs_off(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:
