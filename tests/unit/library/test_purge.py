@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.jobs import JobKind
 from mixsync.db.journal import SqlJournal
+from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
@@ -321,3 +322,41 @@ def test_a_file_that_cannot_be_deleted_is_rolled_back_not_counted(
     monkeypatch.setattr(fo, "_purge_file", lambda _rel: False)
     assert fo.purge_trash(30, "b") == 0
     assert p.exists() and [o.status for o in ops(sessions)] == ["rolled_back"]
+
+
+def test_purge_deletes_expired_http_cache_rows_and_keeps_fresh_ones(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    def row(key: str, expires: datetime) -> HttpCache:
+        return HttpCache(
+            key=key,
+            service="mb",
+            status=200,
+            headers={},
+            body=b"x",
+            fetched_at=NOW,
+            expires_at=expires,
+        )
+
+    with sessions.begin() as s:
+        s.add_all([row("old", NOW - timedelta(seconds=1)), row("fresh", NOW + timedelta(hours=1))])
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    with sessions() as s:
+        assert list(s.scalars(select(HttpCache.key))) == ["fresh"]
+
+
+def test_a_failing_cache_delete_neither_skips_the_file_purge_nor_the_chain(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = put(fo, f"{day(40)}/Artist/l.mp3")
+
+    def boom(self: Session, *a: object, **k: object) -> None:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(Session, "execute", boom)
+    with pytest.raises(RuntimeError):
+        asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    monkeypatch.undo()
+    assert not old.exists()
+    with sessions() as s:
+        assert len(list(s.scalars(select(Job).where(Job.kind == JobKind.TRASH_PURGE)))) == 1

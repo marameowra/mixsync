@@ -5,12 +5,13 @@ import random
 from collections.abc import Callable
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import JobKind, JobState
+from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
@@ -93,6 +94,9 @@ class TrashPurger:
                 f"purge-{self.clock.now().date().isoformat()}",
                 self.protected(),
             )
+            # after the file purge, so a failing cache delete cannot skip it
+            with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
+                s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:
