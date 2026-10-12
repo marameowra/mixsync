@@ -162,3 +162,17 @@ def test_login_cookie_secure_behind_trusted_proxy(sf: sessionmaker[Session]) -> 
             headers={"X-Forwarded-Proto": "https"},
         )
     assert "secure" in r.headers["set-cookie"].lower()
+
+
+@pytest.mark.parametrize("trusted", ["testclient", "203.0.113.9"])
+def test_login_cookie_not_secure_without_trusted_forwarded_https(
+    sf: sessionmaker[Session], trusted: str
+) -> None:
+    with sf() as s, s.begin():
+        create_user(s, "alice", "pw-alice")
+    app = ProxyHeadersMiddleware(create_app(sf), trusted_hosts=trusted)
+    # trusted proxy but no X-Forwarded-Proto, then an untrusted peer sending it
+    headers = {} if trusted == "testclient" else {"X-Forwarded-Proto": "https"}
+    with TestClient(app, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": "alice", "password": "pw-alice"}, headers=headers)
+    assert "secure" not in r.headers["set-cookie"].lower()
