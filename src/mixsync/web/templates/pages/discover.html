@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Discover</h1>
 <p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
+{% if not rows %}<p>No playlists yet.</p>{% endif %}
 {% if not linked %}<p>Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
 
 {% if soon %}
