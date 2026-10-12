@@ -26,6 +26,7 @@ from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.db.secretbox import load_box
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
+from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
@@ -207,6 +208,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
+    purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
     handlers = (
         HANDLERS
         | pipeline.handlers()
@@ -215,11 +217,13 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | rechecker.handlers()
         | submitter.handlers()
         | watcher.handlers()
+        | purger.handlers()
     )
 
     def startup() -> None:
         rechecker.start_chains()
         watcher.start_chains()
+        purger.start_chains()
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
