@@ -20,7 +20,7 @@ from mixsync.acquire.requests import (
     group,
     read_unverified,
 )
-from mixsync.core.errors import SafetyError, TransientError
+from mixsync.core.errors import PermanentError, SafetyError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
@@ -56,8 +56,11 @@ class Meta(FakeMetadata):
 class Lookup:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.fail: Exception | None = None
 
     async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]:
+        if self.fail:
+            raise self.fail
         self.calls.append(fp.fingerprint)
         return [AcoustIdResult("aid-" + fp.fingerprint, 0.97, (RECORDINGS[fp.fingerprint],))]
 
@@ -68,7 +71,7 @@ BAD: set[str] = set()  # titles whose files cannot be fingerprinted
 async def _fingerprint(path: Path) -> Fingerprint:
     title = tags.read_fields(path)["title"]
     if title in BAD:
-        raise RuntimeError("fpcalc failed")
+        raise PermanentError("fpcalc failed")
     return Fingerprint(1.0, title)
 
 
@@ -353,6 +356,20 @@ async def test_no_file_to_fingerprint_is_no_match_and_the_chain_goes_on(env: Env
     rig.schedule()
     await env.step()
     assert rig.plans("draft") == [] and [a for a, _ in rig.queued()] == [1]
+
+
+async def test_an_acoustid_outage_retries_the_job_with_its_attempt_unchanged(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.fail = TransientError("acoustid is down")
+    rig.schedule()
+    await env.step()
+    job = env.jobs(JobKind.RECHECK)[0]
+    assert job.status is not JobState.SUCCEEDED and job.payload["attempt"] == 0
+    rig.lookup.fail = None
+    await env.step()  # the retry finds the match
+    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
+    assert len(rig.plans("draft")) == 1
 
 
 async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:

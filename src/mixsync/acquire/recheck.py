@@ -26,6 +26,7 @@ from mixsync.acquire.requests import (
     read_unverified,
 )
 from mixsync.core.clock import Clock
+from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, Band, FileTrack, Profile
 from mixsync.core.protocols import AcoustIdLookup, Fingerprinter, MetadataProvider
@@ -129,7 +130,7 @@ class Rechecker:
         self, key: AlbumKey, items: list[Item], profile: Profile
     ) -> tuple[AlbumInfo, dict[int, FileTrack]] | None:
         """The best of the top releases, if it is confident enough to promote to. A file that
-        cannot be fingerprinted or looked up is skipped; none left means no match."""
+        cannot be fingerprinted or looked up (permanently) is skipped; none left means no match."""
         refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT)
         albums = [await self.metadata.get_release(r.release_id) for r in refs[:MAX_RELEASES]]
         if not albums:
@@ -140,7 +141,7 @@ class Rechecker:
             try:
                 fp = await self.fingerprint(path)
                 files[t.id] = file_track(path, fp.duration, tuple(await self.acoustid.lookup(fp)))
-            except Exception:
+            except PermanentError:  # a bad file is skipped; an outage must retry the job
                 log.warning("re-check of %s skipped", t.path, exc_info=True)
         if not files:
             return None
