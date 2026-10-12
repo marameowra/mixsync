@@ -18,7 +18,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
-from mixsync.db.models.work import Job
+from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
@@ -564,3 +564,55 @@ def test_request_list_marks_jobs_the_worker_has_not_taken(
     assert "queued (searching)" in rows[waiting]
     assert "queued" not in rows[running] and "searching" in rows[running]
     assert "queued" not in rows[later] and "no_results" in rows[later]
+
+
+def test_imported_delete_has_no_confirm_and_clear_button(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    _login(client, "alice")
+    failed = _req(sf, "alice", "failed", JobState.FAILED)
+    page = client.get("/requests").text
+    assert "/requests/delete-imported" not in page
+    assert page.count("confirm(") == 1
+    imported = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    page = client.get("/requests").text
+    assert "/requests/delete-imported" in page
+    assert page.count("confirm(") == 1
+    form = re.search(rf'<form[^>]*/requests/{imported}/delete"[^>]*>', page)
+    assert form and "confirm" not in form.group(0)
+    form = re.search(rf'<form[^>]*/requests/{failed}/delete"[^>]*>', page)
+    assert form and "confirm" in form.group(0)
+
+
+def test_clear_imported(client: TestClient, sf: sessionmaker[Session]) -> None:
+    mine = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    leased = _req(sf, "alice", "imported", JobState.LEASED)
+    mine2 = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    failed = _req(sf, "alice", "failed", JobState.FAILED)
+    theirs = _req(sf, "bob", "imported", JobState.SUCCEEDED)
+    migr = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        m = Migration(user_id=uid, status="running", summary={})
+        s.add(m)
+        s.flush()
+        req = s.get(AlbumRequest, migr)
+        assert req
+        req.migration_id = m.id
+    tok = _login(client, "alice")
+    r = client.post("/requests/delete-imported", data={"csrf_token": tok})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/requests"
+    with sf() as s:
+        left = set(s.scalars(select(AlbumRequest.id)))
+        assert left == {leased, failed, theirs, migr}
+        assert mine not in left and mine2 not in left
+        assert JobState.LEASED in s.scalars(select(Job.status)).all()
+
+
+def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]) -> None:
+    rid = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    _login(client, "alice")
+    assert client.post("/requests/delete-imported").status_code == 403
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is not None
