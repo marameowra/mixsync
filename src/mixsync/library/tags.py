@@ -138,7 +138,7 @@ def _open(path: Path) -> tuple[str, Any]:
     fmt = _kind(f)
     if fmt is None:
         raise ValueError(f"unsupported audio file: {path}")
-    if fmt == "mp3" and f.tags is None:
+    if f.tags is None:  # e.g. a FLAC with no comment block
         f.add_tags()
     return fmt, f
 
