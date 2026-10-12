@@ -24,13 +24,18 @@ def _split(path: str) -> tuple[str, str]:
     return (head if _DISC_DIR.match(last) else folder), name
 
 
+def _safe(path: str) -> bool:
+    """Peer names are untrusted: `_local` joins the last two parts onto our downloads dir."""
+    return all(p not in ("", ".", "..") and "/" not in p for p in path.split("\\")[-2:])
+
+
 def map_responses(responses: list[dict[str, Any]]) -> list[Candidate]:
     """One Candidate per peer folder. Non-audio files are dropped; a `.cue` is remembered."""
     out: list[Candidate] = []
     for r in responses:
         folders: dict[str, list[CandidateFile]] = defaultdict(list)
         cues: set[str] = set()
-        for f in r["files"]:
+        for f in filter(lambda f: _safe(f["filename"]), r["files"]):
             folder, name = _split(f["filename"])
             ext = name.rpartition(".")[2].lower() if "." in name else ""
             if ext == "cue":
@@ -175,5 +180,7 @@ class SlskdSource:
         `Transfers.Download.Destination.Subdirectory` = ${SOURCE_DIRECTORY}; see
         DownloadService.DeriveDestination). A disc subfolder is therefore its own directory.
         Names slskd had to sanitize or de-duplicate will not exist here; callers check."""
+        if not _safe(f.path):  # candidates stored before the map_responses filter existed
+            raise PermanentError(f"unsafe slskd path from peer: {f.path!r}")
         parts = f.path.split("\\")
         return str(self._downloads.joinpath(*parts[-2:]))
