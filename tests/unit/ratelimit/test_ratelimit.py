@@ -10,7 +10,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
 from mixsync.db.models.infra import RateBucket
 from mixsync.ratelimit.bucket import Bucket, aware
-from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.ratelimit.client import _BACKOFF_CAP, PoliteClient, polite_client
 from mixsync.ratelimit.services import limits
 
 
@@ -169,6 +169,22 @@ async def test_retry_after_wins_over_reset_in(
 ) -> None:
     headers = {"Retry-After": "3", "X-RateLimit-Reset-In": "9"}
     assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=3)
+
+
+@pytest.mark.parametrize("value", ["86400", "Fri, 01 Jan 2027 00:00:00 GMT"])
+async def test_huge_retry_after_is_capped(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock, value: str
+) -> None:
+    gap = await gap_after_429(settings, sessions, clock, {"Retry-After": value})
+    assert gap == timedelta(seconds=_BACKOFF_CAP)
+
+
+async def test_small_retry_after_is_exact(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    assert await gap_after_429(settings, sessions, clock, {"Retry-After": "5"}) == timedelta(
+        seconds=5
+    )
 
 
 async def test_429_with_remaining_zero_waits_reset_in(

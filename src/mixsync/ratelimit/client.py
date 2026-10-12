@@ -95,12 +95,15 @@ class PoliteClient:
         raise TransientError(f"{request.url.host} still refusing after {_MAX_ATTEMPTS} attempts")
 
     def _delay(self, response: httpx.Response, attempt: int) -> timedelta:
+        cap = timedelta(seconds=_BACKOFF_CAP)
         retry_after = response.headers.get("Retry-After")
         if retry_after:
             if retry_after.isdigit():
-                return timedelta(seconds=int(retry_after))
+                return min(cap, timedelta(seconds=int(retry_after)))
             try:
-                return max(timedelta(0), parsedate_to_datetime(retry_after) - self.clock.now())
+                return min(
+                    cap, max(timedelta(0), parsedate_to_datetime(retry_after) - self.clock.now())
+                )
             except ValueError:
                 pass
         if reset := _reset_in(response):
