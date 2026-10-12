@@ -7,6 +7,7 @@ import pytest
 from mutagen.flac import FLAC
 
 from mixsync.core.errors import PermanentError
+from mixsync.library import encode
 from mixsync.library.encode import _pcm_md5, to_flac
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
@@ -15,8 +16,11 @@ SINE = ["-f", "lavfi", "-i", "sine=frequency=440:duration=2:sample_rate=44100"]
 COVER = ["-f", "lavfi", "-i", "color=c=red:s=64x64:d=1"]
 
 
-def ff(out: Path, *args: str, cover: bool = False) -> Path:
-    cmd = ["ffmpeg", "-v", "error", "-y", *SINE, *(COVER if cover else []), *args, str(out)]
+HI_RES = ["-f", "lavfi", "-i", "aevalsrc=0.5*sin(2*PI*440*t):d=2:s=44100"]  # float: real 24-bit
+
+
+def ff(out: Path, *args: str, cover: bool = False, sine: list[str] = SINE) -> Path:
+    cmd = ["ffmpeg", "-v", "error", "-y", *sine, *(COVER if cover else []), *args, str(out)]
     subprocess.run(cmd, check=True)
     return out
 
@@ -90,10 +94,65 @@ async def test_wav_source_is_untouched(downloads: Path, work: Path) -> None:
     assert (src.read_bytes(), src.stat().st_mtime_ns) == (before, mtime)
 
 
-async def test_failed_encode_is_a_permanent_error_with_ffmpeg_output(
+async def test_failed_ffmpeg_is_a_permanent_error_with_its_output(tmp_path: Path) -> None:
+    with pytest.raises(PermanentError, match="ffmpeg failed: .*Error opening input"):
+        await encode._ffmpeg("-i", str(tmp_path / "nonexistent.wav"), "-f", "null", "-")
+
+
+async def test_unreadable_audio_passes_through(downloads: Path, work: Path) -> None:
+    src = downloads / "a.wav"
+    src.write_bytes(b"RIFF not audio")
+    assert await to_flac(src, work) == src
+
+
+async def test_deep_float_and_wrapped_lossy_pass_through_untouched(
     downloads: Path, work: Path
 ) -> None:
-    src = ff(downloads / "a.wav")
-    src.write_bytes(src.read_bytes()[:60])  # a header and no audio: still sniffs as WAV
-    with pytest.raises(PermanentError, match="ffmpeg"):
-        await to_flac(src, work)
+    files = [
+        ff(downloads / "i32.wav", "-c:a", "pcm_s32le"),
+        ff(downloads / "f32.wav", "-c:a", "pcm_f32le"),
+        ff(downloads / "mp3.wav", "-c:a", "libmp3lame", "-f", "wav"),
+    ]
+    for src in files:
+        before = src.read_bytes()
+        assert await to_flac(src, work) == src
+        assert src.read_bytes() == before
+
+
+async def test_24_bit_is_encoded(downloads: Path, work: Path) -> None:
+    src = ff(downloads / "a.wav", "-c:a", "pcm_s24le")
+    out = await to_flac(src, work)
+    assert out != src and FLAC(out).info.bits_per_sample == 24
+
+
+async def test_md5_sees_the_low_bits(downloads: Path) -> None:
+    src = ff(downloads / "a.wav", "-c:a", "pcm_s24le", sine=HI_RES)
+    cut = ff(downloads / "cut.flac", "-c:a", "flac", "-sample_fmt", "s16", sine=HI_RES)
+    assert await _pcm_md5(src) != await _pcm_md5(cut)
+
+
+async def test_a_24_bit_source_cut_to_16_bits_keeps_the_original(
+    downloads: Path, work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = encode._ffmpeg
+
+    async def cutting(*args: str) -> str:
+        if "-compression_level" in args:
+            args = (*args[:-1], "-sample_fmt", "s16", args[-1])
+        return await real(*args)
+
+    monkeypatch.setattr(encode, "_ffmpeg", cutting)
+    src = ff(downloads / "a.wav", "-c:a", "pcm_s24le", sine=HI_RES)
+    assert await to_flac(src, work) == src
+
+
+async def test_alac_cover_is_a_front_cover_without_container_keys(
+    downloads: Path, work: Path
+) -> None:
+    src = ff(
+        downloads / "alac.m4a", "-map", "0:a", "-map", "1:v", "-c:a", "alac", "-c:v", "mjpeg",
+        "-disposition:v", "attached_pic", cover=True,
+    )  # fmt: skip
+    f = FLAC(await to_flac(src, work))
+    assert [p.type for p in f.pictures] == [3]
+    assert not {"major_brand", "minor_version", "compatible_brands"} & set(f.keys())

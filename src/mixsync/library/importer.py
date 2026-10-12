@@ -100,6 +100,9 @@ class Importer:
     def work_dir(self) -> Path:
         return self._fileops.work
 
+    def is_imported(self, src: Path, batch_id: str) -> bool:
+        return self._fileops.find_imported(batch_id, src) is not None
+
     def clear_work(self, batch_id: str) -> None:
         self._fileops.clear_work(batch_id)
 

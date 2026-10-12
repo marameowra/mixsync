@@ -491,11 +491,17 @@ class Pipeline:
             )
         work = self.importer.work_dir / batch
         try:
-            encoded = {
-                src: await to_flac(src, work / str(i), self.flac_level)
-                for i, (src, _, _) in enumerate(files)
-            }
-            encoded = {k: v for k, v in encoded.items() if v != k}
+            encoded: dict[Path, Path] = {}
+            for i, (src, _, _) in enumerate(files):
+                if await asyncio.to_thread(self.importer.is_imported, src, batch):
+                    continue  # a resumed batch: this file is already in
+                try:
+                    out = await to_flac(src, work / str(i), self.flac_level)
+                except (PermanentError, RuntimeError) as e:  # import this one as it is
+                    log.warning("not re-encoding %s: %s", src, e)
+                    continue
+                if out != src:
+                    encoded[src] = out
             return await asyncio.to_thread(
                 self.importer.import_release, files, album, status, batch, encoded
             )

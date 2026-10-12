@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import pipeline
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -112,19 +113,17 @@ def level0(src: Path, out: Path) -> None:
     )  # fmt: skip
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
-async def test_lossless_download_is_reencoded_into_the_library_and_released(env: Env) -> None:
+def lossless_album(env: Env) -> dict[str, int]:
+    """Offer the album as level 0 FLACs (bigger than level 8) and turn re-encoding on. Returns
+    the offered size of each file by name."""
     cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ext="flac")
     key = (cand.username, cand.folder)
-    for name, data in env.source.blobs[key].items():  # a level 0 FLAC is bigger than level 8
+    for name, data in env.source.blobs[key].items():
         src, big = env.source.scratch / name, env.source.scratch / f"big-{name}"
         src.write_bytes(data)
         level0(src, big)
         env.source.blobs[key][name] = big.read_bytes()
-    sizes = {
-        f.path.rsplit("\\", 1)[-1]: len(env.source.blobs[key][f.path.rsplit("\\", 1)[-1]])
-        for f in cand.files
-    }
+    sizes = {n: len(d) for n, d in env.source.blobs[key].items()}
     env.source.catalog["alpha album"] = [
         replace(
             cand,
@@ -133,6 +132,15 @@ async def test_lossless_download_is_reencoded_into_the_library_and_released(env:
     ]
     env.pipeline = replace(env.pipeline, reencode=True)
     env.handlers = env.pipeline.handlers()
+    return sizes
+
+
+needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
+
+
+@needs_ffmpeg
+async def test_lossless_download_is_reencoded_into_the_library_and_released(env: Env) -> None:
+    sizes = lossless_album(env)
     rid = request(env)
     await env.drain()
 
@@ -145,6 +153,57 @@ async def test_lossless_download_is_reencoded_into_the_library_and_released(env:
     assert sum(p.stat().st_size for p in lib.rglob("*.flac")) < sum(sizes.values())
     assert list(env.downloads.iterdir()) == []  # the originals were released
     assert not any((env.data_dir / ".work").rglob("*.flac"))  # scratch space is cleaned up
+
+
+@needs_ffmpeg
+async def test_a_file_that_fails_to_encode_is_imported_as_it_is(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sizes = lossless_album(env)
+    real = pipeline.to_flac
+
+    async def flaky(src: Path, work: Path, level: int) -> Path:
+        if "Two" in src.name:
+            raise PermanentError("ffmpeg failed: boom")
+        return await real(src, work, level)
+
+    monkeypatch.setattr(pipeline, "to_flac", flaky)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    lib = env.data_dir / "library"
+    one, two = (next(lib.rglob(f"*{n}.flac")) for n in ("Song One", "Song Two"))
+    assert one.stat().st_size < sizes["01 Song One.flac"]  # encoded
+    assert two.stat().st_size >= sizes["02 Song Two.flac"]  # as downloaded, plus tags
+
+
+@needs_ffmpeg
+async def test_resumed_import_does_not_encode_files_that_are_already_in(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lossless_album(env)
+    real, calls, encoded = env.pipeline.importer.import_release, [], []
+    real_encode = pipeline.to_flac
+
+    async def counting(src: Path, work: Path, level: int) -> Path:
+        encoded.append(src.name)
+        return await real_encode(src, work, level)
+
+    def crashing(*a: Any) -> Any:
+        calls.append(1)
+        results = real(*a)
+        if len(calls) == 1:  # the files are in, then the worker dies
+            raise TransientError("killed")
+        return results
+
+    monkeypatch.setattr(pipeline, "to_flac", counting)
+    monkeypatch.setattr(env.pipeline.importer, "import_release", crashing)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported" and len(calls) == 2
+    assert len(encoded) == 2  # the retry encoded nothing
 
 
 async def test_partial_failure_releases_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:

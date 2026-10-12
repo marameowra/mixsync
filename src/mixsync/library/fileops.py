@@ -275,6 +275,9 @@ class FileOps:
 
     def recover(self) -> None:
         """Finish or roll back every op that was started and never finished."""
+        if self.work.is_dir():  # scratch of a crashed run
+            for d in self.work.iterdir():
+                self.clear_work(d.name)
         for op in self._journal.pending():
             if op.kind == "copy":
                 self._recover_copy(op)
