@@ -67,12 +67,9 @@ def new_request(user: User, db: Db, release: Annotated[str, Form()]) -> Redirect
     return RedirectResponse("/requests", status_code=303)
 
 
-@router.post("/{request_id}/delete")
-def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
-    """Drops the row and its finished jobs; files on disk and decisions (the audit record) stay."""
-    req = db.get(AlbumRequest, request_id)
-    if req is None or req.user_id != user.id:
-        raise HTTPException(403 if req else 404, "not your request")
+def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
+    """Drops the row and its finished jobs; files on disk and decisions (the audit record) stay.
+    Raises HTTPException(409) when the request cannot be deleted; the caller rolls back."""
     if req.migration_id is not None:
         raise HTTPException(409, "a migration album cannot be deleted")
     if not _deletable(db, req):
@@ -85,7 +82,7 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     for d in db.scalars(pending):
         if d.evidence.get("request_id") == req.id:
             try:
-                decisions.act(db, d.id, user.id, "reject")
+                decisions.act(db, d.id, user_id, "reject")
             except decisions.DecisionStateError:
                 raise HTTPException(409, "a review is acting on this request") from None
     # A worker may have claimed the repeat search since _deletable checked; never delete its job.
@@ -94,4 +91,30 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     if db.scalar(select(Job.id).where(_of(req.id)).limit(1)) is not None:
         raise HTTPException(409, "request is in progress")  # get_db rolls the whole delete back
     db.delete(req)
+
+
+@router.post("/delete-imported")
+def delete_imported(user: User, db: Db) -> RedirectResponse:
+    mine = select(AlbumRequest).where(
+        AlbumRequest.user_id == user.id,
+        AlbumRequest.status == "imported",
+        AlbumRequest.migration_id.is_(None),
+    )
+    for req in db.scalars(mine).all():
+        try:
+            # On SQLite the savepoint nests only because the session already began a transaction
+            # (the last_seen_at autoflush); db/engine.py has no pysqlite SAVEPOINT recipe.
+            with db.begin_nested():  # a refused row rolls back only its own changes
+                _delete(db, req, user.id)
+        except HTTPException:
+            continue
+    return RedirectResponse("/requests", status_code=303)
+
+
+@router.post("/{request_id}/delete")
+def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
+    req = db.get(AlbumRequest, request_id)
+    if req is None or req.user_id != user.id:
+        raise HTTPException(403 if req else 404, "not your request")
+    _delete(db, req, user.id)
     return RedirectResponse("/requests", status_code=303)
