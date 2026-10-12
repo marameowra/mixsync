@@ -343,3 +343,20 @@ def test_purge_deletes_expired_http_cache_rows_and_keeps_fresh_ones(
     asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
     with sessions() as s:
         assert list(s.scalars(select(HttpCache.key))) == ["fresh"]
+
+
+def test_a_failing_cache_delete_neither_skips_the_file_purge_nor_the_chain(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = put(fo, f"{day(40)}/Artist/l.mp3")
+
+    def boom(self: Session, *a: object, **k: object) -> None:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(Session, "execute", boom)
+    with pytest.raises(RuntimeError):
+        asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    monkeypatch.undo()
+    assert not old.exists()
+    with sessions() as s:
+        assert len(list(s.scalars(select(Job).where(Job.kind == JobKind.TRASH_PURGE)))) == 1

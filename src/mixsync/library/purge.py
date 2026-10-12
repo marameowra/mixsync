@@ -88,14 +88,15 @@ class TrashPurger:
 
     async def purge(self, job: JobRecord) -> None:
         try:
-            with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
-                s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
             await asyncio.to_thread(
                 self.fileops.purge_trash,
                 self.days,
                 f"purge-{self.clock.now().date().isoformat()}",
                 self.protected(),
             )
+            # after the file purge, so a failing cache delete cannot skip it
+            with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
+                s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:
