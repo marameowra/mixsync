@@ -59,7 +59,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
-from mixsync.library.encode import to_flac
+from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
@@ -293,23 +293,25 @@ class Pipeline:
                     if not _stale(s, job, self._request(s, job)):
                         self._reopen(s, job, p["release_mbid"])
                 return
+        for path in paths:  # import must be able to turn WAV/AIFF into FLAC, so check now
+            if why := await self._unusable(path):
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        retry_search(
+                            s,
+                            self.clock.now(),
+                            self._request(s, job),
+                            cand.username,
+                            cand.folder,
+                            why,
+                        )
+                return
         files: list[FileTrack] = []
-        readables: list[Path] = []
-        # WAV/AIFF are converted to FLAC in a scratch dir for reading only; import still starts
-        # from the original download (and re-encodes it), and nothing here stores the scratch path.
-        verify_dir = self.importer.work_dir / "verify"
-        verify_dir.mkdir(parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(dir=verify_dir))
-        try:
-            for i, path in enumerate(paths):
-                readable = await self._readable(path, scratch / str(i))
-                fp = await self.fingerprint(readable)
-                results = await self.acoustid.lookup(fp)
-                files.append(file_track(readable, fp.duration, tuple(results)))
-                readables.append(readable)
-            like = likelies(readables)
-        finally:
-            await asyncio.to_thread(self.importer.clear_work, f"verify/{scratch.name}")
+        for path in paths:
+            fp = await self.fingerprint(path)
+            results = await self.acoustid.lookup(fp)
+            files.append(file_track(path, fp.duration, tuple(results)))
+        like = likelies(paths)
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
@@ -381,20 +383,14 @@ class Pipeline:
             else:  # files stay in /downloads: reject never deletes
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
 
-    async def _readable(self, path: Path, work: Path) -> Path:
-        """`path` if the tag code can open it, else its FLAC conversion in `work`."""
-        if await asyncio.to_thread(tags.readable, path):
-            return path
-        try:
-            out = await to_flac(path, work)
-        except PermanentError as e:
-            raise PermanentError(f"cannot convert {path} to FLAC: {e}") from e
-        if out == path:  # to_flac passes through what it cannot store losslessly
-            raise PermanentError(
-                f"unsupported audio: {path} is not integer-PCM WAV/AIFF up to 24 bits"
-                " (or not audio)"
-            )
-        return out
+    async def _unusable(self, path: Path) -> str | None:
+        """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
+        need the ffprobe check; other readable formats import as they are."""
+        if not await asyncio.to_thread(tags.readable, path):
+            return f"unsupported audio: {path.name} is not readable audio"
+        if await asyncio.to_thread(tags.is_pcm, path) and (why := await encodable(path)):
+            return f"unsupported audio: {path.name}: {why}"
+        return None
 
     def _reopen(self, s: Session, job: JobRecord, mbid: str) -> None:
         """Put the review item whose repick named `mbid` back, so the reviewer can choose again."""

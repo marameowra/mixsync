@@ -12,11 +12,13 @@ from typing import Any, cast
 
 import mutagen
 import mutagen.id3
+from mutagen.aiff import AIFF
 from mutagen.flac import FLAC
 from mutagen.id3 import TXXX, UFID
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4, MP4FreeForm
 from mutagen.oggvorbis import OggVorbis
+from mutagen.wave import WAVE
 
 Snapshot = dict[str, Any]
 _ITUNES = "----:com.apple.iTunes:"
@@ -110,7 +112,7 @@ def _kind(f: object) -> str | None:
         return "flac"
     if isinstance(f, OggVorbis):
         return "ogg"
-    if isinstance(f, MP3):
+    if isinstance(f, MP3 | WAVE | AIFF):  # WAV/AIFF carry ID3; import encodes them to FLAC
         return "mp3"
     return "m4a" if isinstance(f, MP4) else None
 
@@ -119,7 +121,15 @@ def readable(path: Path) -> bool:
     """Whether the tag functions can open `path` (by content)."""
     try:
         return _kind(_sniff(path)) is not None
-    except mutagen.MutagenError:  # a damaged or fake WAV: let the converter judge it
+    except mutagen.MutagenError:  # damaged, or not what its extension says
+        return False
+
+
+def is_pcm(path: Path) -> bool:
+    """Whether `path` is a WAV or AIFF container (by content)."""
+    try:
+        return isinstance(_sniff(path), WAVE | AIFF)
+    except mutagen.MutagenError:
         return False
 
 

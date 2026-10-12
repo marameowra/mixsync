@@ -16,9 +16,9 @@ _MAX_BITS = 24  # the FLAC subset; deeper or float audio cannot be stored lossle
 _PCM_BITS = {"pcm_u8": 8, "pcm_s8": 8}  # others: pcm_s16le, pcm_s24be, ... (bits in the name)
 
 
-async def _probe(src: Path) -> tuple[str, str] | None:
-    """(kind, codec) for a file we may encode, else None. kind is "flac" or "other"; only
-    integer PCM, FLAC and ALAC up to 24 bits qualify (by content, via ffprobe)."""
+async def _codec_bits(src: Path) -> tuple[str, int] | None:
+    """(codec, sample bits; 0 if unknown) of the first audio stream, None if ffprobe cannot
+    read audio in `src` (by content)."""
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffprobe", "-v", "error", "-select_streams", "a:0",
@@ -42,8 +42,27 @@ async def _probe(src: Path) -> tuple[str, str] | None:
         bits = _PCM_BITS.get(codec) or (
             int(raw) if codec in ("flac", "alac") and raw.isdigit() else 0
         )
-    if not 0 < bits <= _MAX_BITS:
+    return codec, bits
+
+
+async def encodable(src: Path) -> str | None:
+    """Why `to_flac` would leave `src` as it is (a short reason), or None if it can encode it."""
+    if not (cb := await _codec_bits(src)):
+        return "not readable audio"
+    codec, bits = cb
+    if 0 < bits <= _MAX_BITS:
         return None
+    if codec.startswith("pcm_f"):
+        return f"{codec} is floating point"
+    return f"{codec} is {bits}-bit" if bits else f"{codec} is not integer PCM"
+
+
+async def _probe(src: Path) -> tuple[str, str] | None:
+    """(kind, codec) for a file we may encode, else None. kind is "flac" or "other"; only
+    integer PCM, FLAC and ALAC up to 24 bits qualify."""
+    if not (cb := await _codec_bits(src)) or not 0 < cb[1] <= _MAX_BITS:
+        return None
+    codec = cb[0]
     return {"flac": "flac", "alac": "alac"}.get(codec, "other"), codec
 
 
