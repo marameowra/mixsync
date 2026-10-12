@@ -156,3 +156,14 @@ async def test_alac_cover_is_a_front_cover_without_container_keys(
     f = FLAC(await to_flac(src, work))
     assert [p.type for p in f.pictures] == [3]
     assert not {"major_brand", "minor_version", "compatible_brands"} & set(f.keys())
+
+
+async def test_corrupt_flac_is_an_error_not_a_shorter_file(downloads: Path, work: Path) -> None:
+    noise = ["-f", "lavfi", "-i", "anoisesrc=d=3:r=44100"]
+    src = ff(downloads / "a.flac", "-c:a", "flac", sine=noise)
+    data = bytearray(src.read_bytes())
+    mid = len(data) // 2
+    data[mid : mid + 4000] = bytes(4000)
+    src.write_bytes(data)
+    with pytest.raises(PermanentError):
+        await to_flac(src, work)

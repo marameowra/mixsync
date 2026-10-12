@@ -59,6 +59,7 @@ async def _ffmpeg(*args: str) -> str:
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-nostdin",
+            "-xerror",  # a decode error is a failure, not a shorter file
             "-v",
             "error",
             *args,

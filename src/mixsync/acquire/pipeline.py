@@ -7,6 +7,7 @@ current job's id, so a handler re-run after a crash never forks the chain.
 
 import asyncio
 import logging
+import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
@@ -489,7 +490,10 @@ class Pipeline:
             return await asyncio.to_thread(
                 self.importer.import_release, files, album, status, batch
             )
-        work = self.importer.work_dir / batch
+        batch_dir = self.importer.work_dir / batch
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        # Its own dir per run: an overlapping run of the same job must not rewrite our files.
+        work = Path(tempfile.mkdtemp(dir=batch_dir))
         try:
             encoded: dict[Path, Path] = {}
             for i, (src, _, _) in enumerate(files):
@@ -506,7 +510,7 @@ class Pipeline:
                 self.importer.import_release, files, album, status, batch, encoded
             )
         finally:
-            await asyncio.to_thread(self.importer.clear_work, batch)
+            await asyncio.to_thread(self.importer.clear_work, f"{batch}/{work.name}")
 
     async def _finish(
         self,

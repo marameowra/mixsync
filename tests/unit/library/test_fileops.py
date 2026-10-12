@@ -262,3 +262,15 @@ def test_clear_work_stays_inside_the_work_dir(ops: FileOps, data_dir: Path, tmp_
     assert not (ops.work / "b1").exists() and (ops.work / "b2" / "0" / "x.flac").exists()
     ops.recover()  # stale scratch of a crashed run
     assert list(ops.work.iterdir()) == []
+
+
+def test_recover_clears_work_and_never_follows_a_symlink(ops: FileOps, tmp_path: Path) -> None:
+    keep = tmp_path / "outside"
+    keep.mkdir()
+    (keep / "x").write_bytes(b"x")
+    (ops.work / "b1" / "run").mkdir(parents=True)
+    (ops.work / "b1" / "run" / "x.flac").write_bytes(b"x")
+    (ops.work / "link").symlink_to(keep, target_is_directory=True)
+    ops.recover()
+    assert not (ops.work / "b1").exists()
+    assert (keep / "x").read_bytes() == b"x"

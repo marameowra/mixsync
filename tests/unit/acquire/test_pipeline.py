@@ -179,6 +179,22 @@ async def test_a_file_that_fails_to_encode_is_imported_as_it_is(
 
 
 @needs_ffmpeg
+async def test_a_corrupt_lossless_download_is_imported_as_downloaded(env: Env) -> None:
+    sizes = lossless_album(env)
+    blobs = env.source.blobs[("peer1", "Music\\Alpha Band\\Alpha Album")]
+    data = bytearray(blobs["02 Song Two.flac"])
+    mid = len(data) // 2
+    data[mid : mid + 100] = bytes(100)  # decodes with errors; the same size, so it still downloads
+    blobs["02 Song Two.flac"] = bytes(data)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    two = next((env.data_dir / "library").rglob("*Song Two.flac"))
+    assert two.stat().st_size >= sizes["02 Song Two.flac"]  # not re-encoded
+
+
+@needs_ffmpeg
 async def test_resumed_import_does_not_encode_files_that_are_already_in(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
