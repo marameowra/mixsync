@@ -18,7 +18,8 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   - Fewer assertions: when behavior changes, rewrite a test's assertions to the new
     behavior instead of deleting them or the test.
   - Skip markers: no `skip`, `skipif`, `xfail`, or `.only`. Fix the code under test.
-  If one of these is truly needed, ask first and say why.
+  If one of these is truly needed, ask first and say why. Write tests against public
+  behavior, not internals, so refactors don't force rewriting them.
 - Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
   agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
   PR for the user to merge. Merging to main publishes the `:dev` image.
