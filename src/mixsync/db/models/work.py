@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.core.jobs import JobKind, JobState
@@ -55,6 +55,9 @@ class Request(TimestampMixin, Base):
     )  # old-library import
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual / watchlist
     release_group_mbid: Mapped[str | None] = mapped_column(String(36))  # when the creator knew it
+    # discovery: import only the wanted recordings, into /data/discover
+    provisional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    recording_mbids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
 
 
 class Migration(TimestampMixin, Base):

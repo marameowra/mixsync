@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
 from mixsync.core.matching import AlbumInfo, TrackInfo
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import paths, tags
@@ -86,22 +87,23 @@ class Importer:
         status: str,
         batch_id: str,
         encoded: dict[Path, Path] | None = None,  # source -> the file to copy in its place
+        root: str = "library",  # "discover": no `tracks` rows, the caller records its own
     ) -> list[ImportResult]:
         """Each file is its own journaled op: one failure leaves the others imported. The
         sources are not released here."""
         enc = encoded or {}
-        return [self._one(f, album, status, batch_id, enc.get(f[0])) for f in files]
+        return [self._one(f, album, status, batch_id, enc.get(f[0]), root) for f in files]
 
-    def release(self, srcs: list[Path], batch_id: str) -> None:
+    def release(self, srcs: list[Path], batch_id: str, root: str = "library") -> None:
         for src in srcs:
-            self._fileops.release(src, batch_id)
+            self._fileops.release(src, batch_id, root)
 
     @property
     def work_dir(self) -> Path:
         return self._fileops.work
 
-    def is_imported(self, src: Path, batch_id: str) -> bool:
-        return self._fileops.find_imported(batch_id, src) is not None
+    def is_imported(self, src: Path, batch_id: str, root: str = "library") -> bool:
+        return self._fileops.find_imported(batch_id, src, root) is not None
 
     def clear_work(self, batch_id: str) -> None:
         self._fileops.clear_work(batch_id)
@@ -119,23 +121,42 @@ class Importer:
         status: str,
         batch_id: str,
         encoded: Path | None,
+        root: str,
     ) -> ImportResult:
         src, track, acoustid_id = file
         tagset = tagset_for(track, album, acoustid_id, status)
         try:
-            if done := self._fileops.find_imported(batch_id, src):
-                self._ensure_row(done, tagset, acoustid_id, status, batch_id)
+            main = root == "library"
+            if done := self._fileops.find_imported(batch_id, src, root):
+                if main:
+                    self._ensure_row(done, tagset, acoustid_id, status, batch_id)
                 return ImportResult(src, done)
             rel = paths.unique(
                 render_path(self._template, tagset, (encoded or src).suffix),
-                lambda r: (self._fileops.library / r).exists(),
+                lambda r: self._taken(root, r),
             )
             write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
-            self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src)
-            self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
+            self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
+            if main:
+                self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
         except Exception as e:
             return ImportResult(src, None, repr(e))
         return ImportResult(src, rel)
+
+    def _taken(self, root: str, rel: str) -> bool:
+        if (self._fileops.roots[root] / rel).exists():
+            return True
+        if root == "library":
+            return False
+        with self._sessions() as s:  # an active row holds its path even if the file is gone
+            return (
+                s.scalar(
+                    select(ProvisionalTrack.id).where(
+                        ProvisionalTrack.path == rel, ProvisionalTrack.status == "active"
+                    )
+                )
+                is not None
+            )
 
     def _ensure_row(
         self, rel: str, t: tags.TagSet, acoustid_id: str | None, status: str, batch_id: str

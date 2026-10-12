@@ -219,10 +219,12 @@ async def test_partial_failure_releases_nothing(env: Env, monkeypatch: pytest.Mo
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     real = env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path) -> str:
+    def flaky(
+        src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path, root: str = "library"
+    ) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch, origin)
+        return real(src, rel, write_tags, batch, origin, root)
 
     monkeypatch.setattr(env.ops, "import_file", flaky)
     rid = request(env)

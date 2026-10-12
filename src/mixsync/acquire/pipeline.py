@@ -30,6 +30,7 @@ from mixsync.acquire.requests import (
     enqueue_rescan,
     profile_for,
     retry_search,
+    search_priority,
 )
 from mixsync.core.clock import Clock
 from mixsync.core.errors import AuthError, PermanentError
@@ -55,6 +56,8 @@ from mixsync.core.protocols import (
 )
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
+from mixsync.db.models.discovery import ProvisionalTrack
+from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
@@ -139,13 +142,34 @@ class Pipeline:
                     JobKind.SEARCH,
                     job.payload,
                     run_after=later,
+                    priority=search_priority(req),
                     idempotency_key=f"search:defer:{job.id}",
                 )
                 return
             mbid, tried, profile = req.release_mbid, req.tried, profile_for(s, req.user_id)
+            wanted = set(req.recording_mbids) if req.provisional else None
 
         album = await self.metadata.get_release(mbid)
-        if album.release_group_id and album.tracks:
+        if wanted is not None:  # discovery: any copy of the wanted recordings will do
+            with self.sessions() as s:
+                have = self._have_recordings(s, wanted)
+            if wanted <= have:
+                with self.sessions.begin() as s:
+                    req = self._request(s, job)
+                    req.artist, req.album = album.artist[:255], album.album[:255]
+                    req.release_group_mbid = req.release_group_mbid or album.release_group_id
+                    req.status, req.last_error = "owned", None
+                return
+            if album.tracks and not wanted & {t.recording_id for t in album.tracks}:
+                with self.sessions.begin() as s:
+                    req = self._request(s, job)
+                    req.artist, req.album = album.artist[:255], album.album[:255]
+                    req.status = "failed"
+                    req.last_error = (
+                        f"none of the {len(wanted)} wanted recordings are on this release"
+                    )
+                return
+        elif album.release_group_id and album.tracks:
             with self.sessions() as s:
                 have = canonical_db.owned(
                     s, album.release_group_id, [t.recording_id or "" for t in album.tracks]
@@ -181,6 +205,7 @@ class Pipeline:
                     JobKind.SEARCH,
                     job.payload,
                     run_after=now + delay,
+                    priority=search_priority(req),
                     idempotency_key=f"search:again:{job.id}",
                 )
                 return
@@ -202,6 +227,22 @@ class Pipeline:
                 {"request_id": req.id, "candidate": candidate_dict(cand)},
                 idempotency_key=f"download:{job.id}",
             )
+
+    @staticmethod
+    def _have_recordings(s: Session, wanted: set[str], batch: str = "") -> set[str | None]:
+        """Which wanted recordings the library or an active discovery track (not of this
+        batch: a resumed import must still finish its own) already has."""
+        return set(
+            s.scalars(select(Track.recording_mbid).where(Track.recording_mbid.in_(wanted)))
+        ) | set(
+            s.scalars(
+                select(ProvisionalTrack.recording_mbid).where(
+                    ProvisionalTrack.recording_mbid.in_(wanted),
+                    ProvisionalTrack.status == "active",
+                    ProvisionalTrack.batch_id != batch,
+                )
+            )
+        )
 
     async def download(self, job: JobRecord) -> None:
         """First run enqueues the transfer; then each run is one status check that schedules
@@ -315,6 +356,7 @@ class Pipeline:
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
+            provisional = req.provisional
         if album is not None:
             result = score_files(files, like, album, profile)
         else:
@@ -378,6 +420,17 @@ class Pipeline:
             )
             if result.band is Band.AUTO_ACCEPT:
                 enqueue_import(s, now, req, d.id)
+            elif result.band is Band.REVIEW and provisional:  # discovery never fills Review
+                d.status = "rejected_auto"
+                why = "; ".join(result.vetoes) or f"distance {result.distance:.2f}"
+                retry_search(
+                    s,
+                    now,
+                    req,
+                    cand.username,
+                    cand.folder,
+                    f"would need review, which discovery skips: {why}",
+                )
             elif result.band is Band.REVIEW:
                 req.status = "review"
             else:  # files stay in /downloads: reject never deletes
@@ -446,6 +499,8 @@ class Pipeline:
             assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
             unassigned = tuple(d.evidence.get("unassigned", ()))
+            req = self._request(s, job)
+            wanted = set(req.recording_mbids) if req.provisional else None
         if edits:
             return await self._import_unverified(job, cand, edits)
         if not mbid:
@@ -458,6 +513,8 @@ class Pipeline:
         ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
+        if wanted is not None:
+            return await self._import_provisional(job, cand, album, files, wanted, batch)
         target, n = album, len(files)
         while (cid := await self._canonical_id(album)) and cid != album.release_id:
             canon = await self.metadata.get_release(cid)
@@ -492,6 +549,72 @@ class Pipeline:
         await self._cover(target, results, batch)
         await self._finish(job, cand, results, batch, unassigned=unassigned)
 
+    async def _import_provisional(
+        self,
+        job: JobRecord,
+        cand: Candidate,
+        album: AlbumInfo,
+        files: list[tuple[Path, TrackInfo, str | None]],
+        wanted: set[str],
+        batch: str,
+    ) -> None:
+        """Only the wanted recordings, under /data/discover: no canonical logic, no `tracks`
+        rows, no cover. The rest of the album stays in /downloads."""
+        on_release = {t.recording_id for t in album.tracks} & wanted
+        with self.sessions() as s:
+            todo = wanted - self._have_recordings(s, wanted, batch)  # also covers a racing user
+        seen: set[str | None] = set()
+        picked: list[tuple[Path, TrackInfo, str | None]] = []
+        for f in files:  # the first file of a recording that is on the release twice
+            rec = f[1].recording_id
+            # a copy this batch already made is recorded even if the recording is owned by now
+            if (
+                rec in wanted
+                and rec not in seen
+                and (rec in todo or self.importer.is_imported(f[0], batch, "discover"))
+            ):
+                seen.add(f[1].recording_id)
+                picked.append(f)
+        files = picked
+        note = (
+            f"{len(wanted) - len(on_release)} of {len(wanted)} wanted recordings "
+            "not on this release"
+            if on_release != wanted
+            else ""
+        )
+        if not files:
+            with self.sessions.begin() as s:
+                req = self._request(s, job)
+                if todo:
+                    req.status = "failed"
+                    req.last_error = "none of the wanted recordings are on the downloaded release"
+                else:  # everything wanted is owned by now
+                    req.status, req.last_error = "owned", None
+            return
+        results = await self._import_files(files, album, "verified", batch, "discover")
+        by_src = {f[0]: f for f in files}
+        with self.sessions.begin() as s:  # idempotent: a resumed import adds no second row
+            for r in results:
+                if r.rel is None or s.scalar(
+                    select(ProvisionalTrack.id).where(
+                        ProvisionalTrack.path == r.rel, ProvisionalTrack.batch_id == batch
+                    )
+                ):
+                    continue
+                _, track, acoustid = by_src[r.src]
+                s.add(
+                    ProvisionalTrack(
+                        path=r.rel,
+                        recording_mbid=track.recording_id,
+                        release_mbid=album.release_id,
+                        release_group_mbid=album.release_group_id,
+                        acoustid_id=acoustid,
+                        batch_id=batch,
+                        imported_at=self.clock.now(),
+                    )
+                )
+        await self._finish(job, cand, results, batch, root="discover", note=note)
+
     async def _import_unverified(
         self, job: JobRecord, cand: Candidate, edits: dict[str, Any]
     ) -> None:
@@ -519,12 +642,13 @@ class Pipeline:
         album: AlbumInfo,
         status: str,
         batch: str,
+        root: str = "library",
     ) -> list[ImportResult]:
         """Lossless files are re-encoded to FLAC in a work dir first (the downloads are never
         touched); the encodes run as subprocesses so the job's heartbeat keeps going."""
         if not self.reencode:
             return await asyncio.to_thread(
-                self.importer.import_release, files, album, status, batch
+                self.importer.import_release, files, album, status, batch, None, root
             )
         batch_dir = self.importer.work_dir / batch
         batch_dir.mkdir(parents=True, exist_ok=True)
@@ -533,7 +657,7 @@ class Pipeline:
         try:
             encoded: dict[Path, Path] = {}
             for i, (src, _, _) in enumerate(files):
-                if await asyncio.to_thread(self.importer.is_imported, src, batch):
+                if await asyncio.to_thread(self.importer.is_imported, src, batch, root):
                     continue  # a resumed batch: this file is already in
                 try:
                     out = await to_flac(src, work / str(i), self.flac_level)
@@ -543,7 +667,7 @@ class Pipeline:
                 if out != src:
                     encoded[src] = out
             return await asyncio.to_thread(
-                self.importer.import_release, files, album, status, batch, encoded
+                self.importer.import_release, files, album, status, batch, encoded, root
             )
         finally:
             await asyncio.to_thread(self.importer.clear_work, f"{batch}/{work.name}")
@@ -556,19 +680,21 @@ class Pipeline:
         batch: str,
         recheck: AlbumKey | None = None,  # an unverified import: look for it on MusicBrainz later
         unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
+        root: str = "library",
+        note: str = "",
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
             migrating = self._request(s, job).migration_id is not None
         if results and not errors and not migrating:  # the old library is never touched
-            await self._release(cand, [r.src for r in results], batch)
+            await self._release(cand, [r.src for r in results], batch, root)
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
             req.status = "failed" if errors else "imported"
             if migrating and recheck and not errors:
                 req.status = "unverified"
-            notes = list(errors)
+            notes = [*errors, *([note] if note else [])]
             if unassigned:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
@@ -611,11 +737,13 @@ class Pipeline:
         with self.sessions.begin() as s:
             return canonical_db.store(s, group, pick)
 
-    async def _release(self, cand: Candidate, srcs: list[Path], batch: str) -> None:
+    async def _release(
+        self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
+    ) -> None:
         """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is
         logged and the import still counts."""
         try:
-            await asyncio.to_thread(self.importer.release, srcs, batch)
+            await asyncio.to_thread(self.importer.release, srcs, batch, root)
             await self.source.clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)

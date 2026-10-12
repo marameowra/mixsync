@@ -710,10 +710,12 @@ async def test_retry_of_a_partly_imported_album_imports_the_same_decision_again(
     put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
     real = rig.env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: Any, batch: str, origin: Path) -> str:
+    def flaky(
+        src: Path, rel: str, write_tags: Any, batch: str, origin: Path, root: str = "library"
+    ) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch, origin)
+        return real(src, rel, write_tags, batch, origin, root)
 
     monkeypatch.setattr(rig.env.ops, "import_file", flaky)
     mid = await rig.preflight()
@@ -802,10 +804,12 @@ async def test_retry_refuses_when_a_merge_removed_every_imported_file(
     put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
     real = rig.env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: Any, batch: str, origin: Path) -> str:
+    def flaky(
+        src: Path, rel: str, write_tags: Any, batch: str, origin: Path, root: str = "library"
+    ) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch, origin)
+        return real(src, rel, write_tags, batch, origin, root)
 
     monkeypatch.setattr(rig.env.ops, "import_file", flaky)
     mid = await rig.preflight()
