@@ -20,6 +20,15 @@ _BACKOFF_CAP = 300.0
 _MAX_ATTEMPTS = 5
 
 
+def _reset_in(response: httpx.Response) -> timedelta | None:
+    """Seconds until the window resets (ListenBrainz-style `X-RateLimit-Reset-In`)."""
+    try:
+        seconds = float(response.headers["X-RateLimit-Reset-In"])
+    except (KeyError, ValueError):
+        return None
+    return timedelta(seconds=min(_BACKOFF_CAP, seconds)) if seconds > 0 else None
+
+
 class PoliteClient:
     """The only way to make outbound HTTP: rate limited, cached, identified, backed off."""
 
@@ -74,6 +83,10 @@ class PoliteClient:
             while (wait := self.bucket.reserve()) > timedelta(0):
                 await self._sleep(wait.total_seconds())
             response = await self._http.send(request)
+            if response.headers.get("X-RateLimit-Remaining") == "0" and (
+                reset := _reset_in(response)
+            ):
+                self.bucket.block(reset)
             if response.status_code not in (429, 503):
                 if ttl is not None and response.status_code == 200:
                     self.cache.put(request, response, self.clock.now(), ttl)
@@ -90,6 +103,8 @@ class PoliteClient:
                 return max(timedelta(0), parsedate_to_datetime(retry_after) - self.clock.now())
             except ValueError:
                 pass
+        if reset := _reset_in(response):
+            return reset
         return timedelta(seconds=min(_BACKOFF_CAP, 2.0**attempt) * random.uniform(0.5, 1.0))
 
 
