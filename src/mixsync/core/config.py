@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:////config/mixsync.db"
     config_dir: str = "/config"
+    secret_key: str = ""  # Fernet key for stored user secrets; wins over config_dir/secret.key
     mb_contact: str = Field(default="https://github.com/marameowra/mixsync", min_length=1)
     mb_rate: float = Field(default=1.0, gt=0, le=1)  # MusicBrainz allows 1 req/s per IP
     mb_base_url: str = "https://musicbrainz.org"  # optional local mirror

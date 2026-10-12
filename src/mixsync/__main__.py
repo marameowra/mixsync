@@ -14,6 +14,10 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "web":
         import uvicorn
 
+        from mixsync.core.config import Settings
+        from mixsync.db.secretbox import load_box
+
+        load_box(Settings())  # refuse a bad key file now, not at the first /account request
         uvicorn.run("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
     elif cmd == "migrate":
         from mixsync.db.migrate import upgrade
