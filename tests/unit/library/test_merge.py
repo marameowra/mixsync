@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +22,11 @@ from mixsync.db.journal import SqlJournal
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
+from mixsync.db.undo import undoable
 from mixsync.library import fileops, fragmentation, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
+from mixsync.library.purge import TrashPurger
 
 from .conftest import MakeSrc
 from .test_fileops import files, sha
@@ -738,3 +741,70 @@ def test_merge_and_undo_requests_share_one_job_per_plan_state(world: World) -> N
     with world.sessions() as s:
         kinds = [j.kind for j in s.scalars(select(Job).where(Job.kind != JobKind.RESCAN))]
     assert kinds == [JobKind.MERGE]
+
+
+def test_undo_window_closes_and_the_trash_is_then_purged(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    before = world.lib()
+    assert world.trashed()
+    purger = TrashPurger(world.sessions, SystemClock(), world.ops, 30)
+    assert purger.protected()  # inside the window: undo works and its trash is kept
+    with world.sessions.begin() as s:  # finished 31 days ago
+        s.get_one(Plan, pid).updated_at = datetime.now(UTC) - timedelta(days=31)
+    assert purger.protected() == set()
+    with pytest.raises(SafetyError, match="undo window of 30 days has passed"):
+        world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "done" and world.lib() == before
+
+
+def test_undoable_window_edge_is_one_rule() -> None:
+    now = datetime(2026, 10, 11, tzinfo=UTC)
+
+    def plan(status: str, age: timedelta) -> Plan:
+        return Plan(status=status, updated_at=now - age)
+
+    day = timedelta(days=1)
+    assert undoable(plan("done", 30 * day - timedelta(seconds=1)), now, 30)
+    assert not undoable(plan("done", 30 * day), now, 30)  # exactly at the edge: hidden and purged
+    assert undoable(plan("failed", 99 * day), now, 30)  # may hold the only copy: never windowed
+    assert undoable(plan("running", 99 * day), now, 30)
+    assert undoable(plan("undoing", 99 * day), now, 30)
+    assert not undoable(plan("undone", day), now, 30)
+
+
+def test_an_aware_non_utc_timestamp_is_compared_as_the_instant_it_is() -> None:
+    now = datetime(2026, 10, 11, 12, tzinfo=UTC)
+    east = timezone(timedelta(hours=14))
+    old = datetime(2026, 9, 11, 13, tzinfo=east)  # 2026-09-10 23:00Z: 31 days before now
+    recent = datetime(2026, 9, 13, 1, tzinfo=east)  # 2026-09-12 11:00Z: 29 days before now
+    assert not undoable(Plan(status="done", updated_at=old), now, 30)
+    assert undoable(Plan(status="done", updated_at=recent), now, 30)
+
+
+def test_undo_refuses_before_moving_anything_when_the_trashed_original_is_gone(
+    world: World,
+) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    lib = world.lib()
+    for rel in world.trashed():
+        (world.ops.trash_dir / rel).unlink()
+    with pytest.raises(SafetyError, match="is gone"):
+        world.merger.undo_plan(pid)
+    assert world.lib() == lib and world.plan(pid).status == "failed"
+
+
+def test_undo_refuses_up_front_when_only_some_trashed_originals_are_gone(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    lib = world.lib()
+    op = world.plan(pid).ops[0]
+    with world.sessions() as s:
+        trashed = s.scalars(
+            select(FileOp).where(FileOp.kind == "trash", FileOp.src == op["old"]["path"])
+        ).one()
+    (world.ops.trash_dir / trashed.dst).unlink()
+    with pytest.raises(SafetyError, match="is gone"):
+        world.merger.undo_plan(pid)
+    assert world.lib() == lib and world.plan(pid).status != "undoing"

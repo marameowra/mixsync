@@ -28,6 +28,7 @@ from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
+from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
@@ -175,6 +176,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         settings.path_template,
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
+        settings.trash_days,
     )
     pipeline = _pipeline(settings, fileops, sessions, clock)
     rechecker = Rechecker(
@@ -209,6 +211,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
+    purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
     navidrome_http = polite_client("navidrome", settings, sessions)
     discovery = Discovery(
         sessions,
@@ -229,12 +232,14 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | rechecker.handlers()
         | submitter.handlers()
         | watcher.handlers()
+        | purger.handlers()
         | discovery.handlers()
     )
 
     def startup() -> None:
         rechecker.start_chains()
         watcher.start_chains()
+        purger.start_chains()
         discovery.start_chains()
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup

@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -300,3 +300,43 @@ def test_discarded_is_terminal(client: TestClient, sf: sessionmaker[Session]) ->
     for action in ("confirm", "undo"):
         r = client.post(f"/library/plans/{pid}/{action}", data={"csrf_token": tok})
         assert r.status_code == 409
+
+
+def _aged_plan(sf: sessionmaker[Session], status: str, days: float) -> int:
+    with sf() as s, s.begin():
+        p = Plan(
+            kind="merge",
+            release_group_mbid=G,
+            canonical_release_mbid=R2,
+            ops=[_op("move", 0)],
+            status=status,
+            updated_at=datetime.now(UTC) - timedelta(days=days),
+        )
+        s.add(p)
+        s.flush()
+        return p.id
+
+
+def test_a_failed_plan_stays_undoable_past_the_window(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    old = _aged_plan(sf, "failed", 90)  # its original may exist only in the trash
+    tok = _login(client, "root")
+    assert f"/library/plans/{old}/undo" in client.get(f"/library/plans/{old}").text
+    assert client.post(f"/library/plans/{old}/undo", data={"csrf_token": tok}).status_code == 303
+
+
+def test_undo_is_offered_only_within_the_window(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    status = "done"
+    fresh = _aged_plan(sf, status, 29)
+    stale = _aged_plan(sf, status, 31)
+    tok = _login(client, "root")
+    html = client.get("/library/fragments").text
+    assert f"/library/plans/{fresh}/undo" in html
+    assert f"/library/plans/{stale}/undo" not in html
+    assert f"/library/plans/{fresh}/undo" in client.get(f"/library/plans/{fresh}").text
+    assert f"/library/plans/{stale}/undo" not in client.get(f"/library/plans/{stale}").text
+    assert client.post(f"/library/plans/{stale}/undo", data={"csrf_token": tok}).status_code == 409
+    assert client.post(f"/library/plans/{fresh}/undo", data={"csrf_token": tok}).status_code == 303
