@@ -673,3 +673,55 @@ async def test_picks_without_a_release_do_not_take_a_slot(rig: Rig) -> None:
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
     assert [e["recording_mbid"] for e in rig.pl(pid).entries] == [rec(3), rec(4), rec(5)]
+
+
+async def test_a_good_push_clears_an_earlier_push_error(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main = {rec(1): "s1"}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rig.lib.error = AuthError("Navidrome rejected the credentials")
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    assert (rig.pl(pid).last_error or "").startswith("Navidrome: ")
+    rig.lib.error = None  # relinked
+    await rig.disc.push(_record(rig, pid))
+    assert rig.pl(pid).last_error is None and rig.lib.playlists == {"pl1": ["s1"]}
+
+
+async def test_unfound_main_library_is_noted(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main, rig.lib.folders = {rec(1): "s1"}, {}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    assert "'Music Library' library is not visible" in (rig.pl(pid).last_error or "")
+
+
+async def test_a_recording_missing_from_an_imported_release_is_not_asked_for_again(
+    rig: Rig,
+) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    with rig.env.sessions.begin() as s:
+        s.add(
+            Request(
+                user_id=rig.env.user_id,
+                release_mbid=REL_A,
+                provisional=True,
+                recording_mbids=[rec(1), rec(2)],
+                status="imported",
+                last_error="1 of 2 wanted recordings not on this release",
+            )
+        )
+    provisional(rig.env, 2)  # the one it did bring in
+    rig.history.weekly = [ref(1, REL_A), ref(3, REL_A)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rs = requests(rig.env)[1:]
+    assert [(r.release_mbid, r.recording_mbids) for r in rs] == [(REL_A, [rec(3)])]

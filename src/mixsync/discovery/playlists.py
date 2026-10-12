@@ -33,6 +33,7 @@ BUILD_NOW_GAP = timedelta(hours=1)  # a button must not turn into a ListenBrainz
 NO_LINKS = "link ListenBrainz/Navidrome on /account"
 JITTER_CAP = timedelta(hours=6)  # "weekly" stays weekly: up to 10% of the cadence, this at most
 LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
+PARTIAL_RELEASE = "not on this release"  # an imported request's last_error (pipeline)
 NOT_ON_RELEASE = "none of the wanted recordings"  # a failed request's last_error (pipeline)
 DONE = ("imported", "owned", "failed", "skipped")  # requests that will not bring a file
 LibraryFor = Callable[[str, str], UserLibrary]  # (Navidrome username, password)
@@ -224,13 +225,24 @@ class Discovery:
                     )
                 )
             }
+            ever = set(  # imported at some point (a trashed copy is not "not on the release")
+                s.scalars(
+                    select(ProvisionalTrack.recording_mbid).where(
+                        ProvisionalTrack.recording_mbid.in_(mbids)
+                    )
+                )
+            )
             dead = {  # a release the recording is not on: asking again finds the same
                 (r.release_mbid, m)
                 for r in s.scalars(
-                    select(Request).where(Request.provisional, Request.status == "failed")
+                    select(Request).where(
+                        Request.provisional, Request.status.in_(("failed", "imported"))
+                    )
                 )
                 if (r.last_error or "").startswith(NOT_ON_RELEASE)
+                or (r.status == "imported" and (r.last_error or "").endswith(PARTIAL_RELEASE))
                 for m in r.recording_mbids
+                if r.status == "failed" or m not in ever
             }
         owned = in_library | provisional.keys()
         todo = [c for c in cands if c.recording_mbid not in owned]
@@ -354,6 +366,11 @@ class Discovery:
         try:
             # a main-library entry must not resolve to its discover copy: restrict both
             main_folder = await lib.music_folder_id(self.main_library) if main else None
+            if main and main_folder is None:
+                note = (
+                    f"the '{self.main_library}' library is not visible to your "
+                    "Navidrome account; searching all libraries"
+                )
             folder = None
             if discover - main:
                 folder = await lib.music_folder_id(self.discover_library)
@@ -377,5 +394,5 @@ class Discovery:
             return self._note(pid, f"Navidrome: {e}")
         with self.sessions.begin() as s:
             if (pl := s.get(DiscoveryPlaylist, pid)) is not None:
-                pl.last_error = note or pl.last_error
+                pl.last_error = note  # a good push clears what an earlier one reported
                 pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id
