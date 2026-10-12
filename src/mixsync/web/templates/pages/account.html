@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Account - MixSync{% endblock %}
+{% block content %}
+<h1>Account</h1>
+{% for sv, label in (("listenbrainz", "ListenBrainz"), ("navidrome", "Navidrome")) %}
+{% set link = links[sv] %}
+<h2>{{ label }}</h2>
+{% if error and error[0] == sv %}<p role="alert">{{ error[1] }}</p>{% endif %}
+{% if link %}<p>Linked as {{ link.username }}</p>{% else %}<p>Not linked.</p>{% endif %}
+<form method="post" action="/account/{{ sv }}">
+  {{ forms.csrf() }}
+  {% if sv == "navidrome" %}<p><label>Username <input name="username" type="text" value="{{ link.username if link else '' }}" required autocomplete="off"></label></p>{% endif %}
+  <p><label>{{ "Password" if sv == "navidrome" else "User token" }} <input name="secret" type="password" value="" required autocomplete="off"></label></p>
+  <button type="submit">{{ "Replace" if link else "Link" }}</button>
+</form>
+{% if link %}<form method="post" action="/account/{{ sv }}/unlink">{{ forms.csrf() }}<button type="submit">Unlink</button></form>{% endif %}
+{% endfor %}
+{% endblock %}

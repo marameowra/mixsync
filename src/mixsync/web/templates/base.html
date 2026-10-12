@@ -17,6 +17,7 @@
     {% if "library.edit" in user.capabilities %}<a href="/library/unverified">Unverified</a>{% endif %}
     {% if "request" in user.capabilities %}<a href="/watchlist">Watchlist</a>{% endif %}
     {% if "admin" in user.capabilities %}<a href="/migration">Migration</a>{% endif %}
+    <a href="/account">Account</a>
     <form method="post" action="/logout">{{ forms.csrf() }}<button type="submit">Log out</button></form>
   </nav>
   {% endif %}
