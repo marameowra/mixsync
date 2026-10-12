@@ -117,6 +117,7 @@ async def test_transport_error_is_transient_and_leaks_nothing(make_client: Make)
 
 from mixsync.core.errors import AuthError  # noqa: E402
 from mixsync.targets.navidrome import NavidromeUser  # noqa: E402
+from mixsync.targets.subsonic import NotAuthorizedError  # noqa: E402
 
 
 def ok(**payload: object) -> httpx.Response:
@@ -213,6 +214,10 @@ async def test_push_playlist_posts_form_and_recreates_when_gone(
         f = form(request)
         seen.append((request.method, request.url.path, f))
         assert not request.url.query  # nothing, token included, in the URL
+        assert f["u"] == ["ann"]
+        assert f["s"] == [SALT]
+        assert f["t"] == [hashlib.md5((PASSWORD + SALT).encode()).hexdigest()]  # noqa: S324
+        assert (f["v"], f["c"], f["f"]) == (["1.16.1"], ["mixsync"], ["json"])
         if f.get("playlistId") == ["gone"]:
             return err(gone)
         return ok(playlist={"id": f.get("playlistId", ["new"])[0]})
@@ -238,7 +243,7 @@ async def test_push_playlist_posts_form_and_recreates_when_gone(
 
 
 async def test_not_authorized_uses_linked_account_hint(make_client: Make) -> None:
-    with pytest.raises(PermanentError) as exc:
+    with pytest.raises(NotAuthorizedError) as exc:
         await user(make_client, lambda r: err(50)).starred_song_ids()
     assert "linked Navidrome account" in str(exc.value)
     assert "admin" not in str(exc.value)
@@ -267,3 +272,18 @@ async def test_transport_error_hides_token(make_client: Make) -> None:
     assert PASSWORD not in str(exc.value)
     assert SALT not in str(exc.value)
     assert hashlib.md5((PASSWORD + SALT).encode()).hexdigest() not in str(exc.value)  # noqa: S324
+
+
+@pytest.mark.parametrize("playlist_error", [70, 50])
+async def test_play_counts_falls_back_to_get_song_and_tolerates_missing_songs(
+    make_client: Make, playlist_error: int
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/rest/getPlaylist":
+            return err(playlist_error)
+        if request.url.params["id"] == "gone":
+            return err(70)
+        return ok(song={"id": "s1", "playCount": 2})
+
+    counts = await user(make_client, handler).play_counts(["s1", "gone"], "p1")
+    assert counts == {"s1": 2, "gone": 0}

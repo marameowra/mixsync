@@ -54,7 +54,10 @@ class NavidromeUser:
         counts: dict[str, int] = {}
         for i in song_ids:
             if i not in known:
-                known[i] = int((await self._subsonic.get_song(i)).get("playCount") or 0)
+                try:
+                    known[i] = int((await self._subsonic.get_song(i)).get("playCount") or 0)
+                except NotFoundError:
+                    known[i] = 0  # deleted, or rescanned under a new id
             counts[i] = known[i]
         return counts
 
