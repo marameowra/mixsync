@@ -74,3 +74,4 @@ jobs:
       - run: uv python install 3.13
       - run: uv sync --frozen
       - run: uv run pytest -n auto --db=postgres
+      - run: uv run pytest -m crash --db=postgres
