@@ -3,25 +3,56 @@
 {% block content %}
 <h1>Discover</h1>
 <p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
-{% if rows %}
+{% if not linked %}<p>Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
+
+{% if soon %}
+<h2>Expiring in the next 7 days</h2>
 <div class="scroll">
 <table>
-  <thead><tr><th>Playlist</th><th>Last build</th><th>Next build</th><th>Tracks</th><th>Note</th><th></th></tr></thead>
+  <thead><tr><th>Track</th><th>Expires</th><th></th></tr></thead>
   <tbody>
-  {% for p in rows %}
+  {% for h, t in soon %}
   <tr>
-    <td>{{ p.name }}</td>
-    <td>{{ p.last_built_at or "never" }}</td>
-    <td>{{ p.next_build_at or "-" }}</td>
-    <td>{{ p.entries | length }}</td>
-    <td>{{ p.last_error or "" }}</td>
-    <td><form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Build now</button></form></td>
+    <td>{{ t.artist }} - {{ t.title }}</td>
+    <td>{{ h.expires_at.date() }}</td>
+    <td><form method="post" action="/discover/keep/{{ h.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form></td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
-{% else %}
-<p>No playlists yet. Link ListenBrainz and Navidrome on <a href="/account">your account</a>.</p>
 {% endif %}
+
+{% for p in rows %}
+<h2>{{ p.name }}</h2>
+<p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}.</p>
+{% if p.last_error %}<p>Note: {{ p.last_error }}</p>{% endif %}
+<form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Build now</button></form>
+{% if tracks[p.id] %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Track</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for t in tracks[p.id] %}
+  <tr>
+    <td>{{ t.artist }} - {{ t.title }}</td>
+    <td>{{ t.status }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
+    <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p>No tracks yet.</p>{% endif %}
+<h3>Settings</h3>
+<form method="post" action="/discover/{{ p.id }}/settings">
+  {{ forms.csrf() }}
+  <p><label>Size <input name="size" type="text" inputmode="numeric" value="{{ p.size }}"></label></p>
+  <p><label>Unowned ratio (0 to 1) <input name="unowned_ratio" type="text" value="{{ p.unowned_ratio }}"></label></p>
+  <p><label>Cadence (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ p.cadence_days }}"></label></p>
+  <p><label>Retention (days) <input name="retention_days" type="text" inputmode="numeric" value="{{ p.retention_days }}"></label> applies to tracks imported from now on, not to ones already in discover</p>
+  <p><label>Keep after plays <input name="keep_plays" type="text" inputmode="numeric" value="{{ p.keep_plays }}"></label></p>
+  <button type="submit">Save</button>
+</form>
+{% endfor %}
 {% endblock %}
