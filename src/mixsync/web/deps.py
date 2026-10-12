@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -71,13 +72,17 @@ def get_watch(request: Request) -> ReleaseWatch:
 Watch = Annotated[ReleaseWatch, Depends(get_watch)]
 
 
+_box_lock = threading.Lock()
+
+
 def get_box(request: Request) -> SecretBox:
     """Loaded on first use; a key file with loose permissions fails here, before any secret is
     read or written."""
     state = request.app.state
-    if getattr(state, "secret_box", None) is None:
-        state.secret_box = load_box(state.settings)
-    box: SecretBox = state.secret_box
+    with _box_lock:  # sync dependencies run in a thread pool
+        if getattr(state, "secret_box", None) is None:
+            state.secret_box = load_box(state.settings)
+        box: SecretBox = state.secret_box
     return box
 
 
@@ -90,6 +95,16 @@ def get_navidrome_http(request: Request) -> PoliteClient:
     if getattr(state, "navidrome_http", None) is None:
         state.navidrome_http = polite_client("navidrome", state.settings, state.session_factory)
     http: PoliteClient = state.navidrome_http
+    return http
+
+
+def get_listenbrainz_http(request: Request) -> PoliteClient:
+    state = request.app.state
+    if getattr(state, "listenbrainz_http", None) is None:
+        state.listenbrainz_http = polite_client(
+            "listenbrainz", state.settings, state.session_factory
+        )
+    http: PoliteClient = state.listenbrainz_http
     return http
 
 

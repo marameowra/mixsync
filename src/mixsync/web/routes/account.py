@@ -12,9 +12,16 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
+from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
-from mixsync.web.deps import Box, CurrentUser, Db, get_navidrome_http
+from mixsync.web.deps import (
+    Box,
+    CurrentUser,
+    Db,
+    get_listenbrainz_http,
+    get_navidrome_http,
+)
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
@@ -29,21 +36,22 @@ class Ping(StrEnum):
 
 class LinkValidator(Protocol):
     async def listenbrainz_username(self, token: str) -> str | None:
-        """The username the token belongs to, or None if ListenBrainz rejects it."""
+        """The username the token belongs to, or None if ListenBrainz rejects it. Raises
+        TransientError when ListenBrainz can't be reached."""
         ...
 
     async def navidrome_ping(self, username: str, password: str) -> Ping: ...
 
 
 class DefaultValidator:
-    def __init__(self, http: PoliteClient, navidrome_url: str) -> None:
-        self._http, self._url = http, navidrome_url
+    def __init__(self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient) -> None:
+        self._http, self._url, self._lb = http, navidrome_url, lb
 
-    # SEAM: the real ListenBrainz client (GET /1/validate-token) arrives in a later slice.
-    # Until then no token validates, so nothing unverified is ever stored. Replace this method,
-    # or set app.state.link_validator.
     async def listenbrainz_username(self, token: str) -> str | None:
-        return None
+        try:
+            return await self._lb.validate_token(token)
+        except PermanentError:
+            return None  # the exception text is not shown
 
     async def navidrome_ping(self, username: str, password: str) -> Ping:
         try:
@@ -56,10 +64,14 @@ class DefaultValidator:
 
 
 def get_validator(
-    request: Request, http: Annotated[PoliteClient, Depends(get_navidrome_http)]
+    request: Request,
+    http: Annotated[PoliteClient, Depends(get_navidrome_http)],
+    lb_http: Annotated[PoliteClient, Depends(get_listenbrainz_http)],
 ) -> LinkValidator:
     v: LinkValidator | None = getattr(request.app.state, "link_validator", None)
-    return v or DefaultValidator(http, request.app.state.settings.navidrome_url)
+    return v or DefaultValidator(
+        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http)
+    )
 
 
 Validator = Annotated[LinkValidator, Depends(get_validator)]
@@ -109,6 +121,8 @@ async def save(
     username: Annotated[str, Form()] = "",
 ) -> Response:
     _service(service)
+    # shortcut: no attempt limit on Navidrome logins; a logged-in user can guess their own
+    # Navidrome password via this form. Accepted: Navidrome rate-limits itself; add one if abused.
     # a Navidrome password may legitimately start or end with spaces; the rest are identifiers
     secret = secret if service == "navidrome" else secret.strip()
     username = username.strip()
@@ -116,8 +130,11 @@ async def save(
     name, msg = "", "That is too long."
     if len(secret) <= MAX_LEN and len(username) <= MAX_LEN:
         if service == "listenbrainz":
-            name = (await validator.listenbrainz_username(secret) if secret else None) or ""
             msg = "ListenBrainz did not accept that token."
+            try:
+                name = (await validator.listenbrainz_username(secret) if secret else None) or ""
+            except TransientError:
+                name, msg = "", "Couldn't reach ListenBrainz; try again."
         else:
             name, msg = "", "Navidrome did not accept that username and password."
             if username and secret:

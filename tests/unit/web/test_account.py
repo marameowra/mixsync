@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
 from mixsync.core.config import Settings
+from mixsync.core.errors import TransientError
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import User
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
+from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.ratelimit.client import polite_client
 from mixsync.web.routes import account
 from mixsync.web.routes.account import DefaultValidator, Ping, get_link
@@ -27,8 +29,11 @@ class FakeValidator:
     def __init__(self) -> None:
         self.ok = True
         self.ping = Ping.ok
+        self.lb_down = False
 
     async def listenbrainz_username(self, token: str) -> str | None:
+        if self.lb_down:
+            raise TransientError("down")
         return "lb-real-name" if self.ok else None
 
     async def navidrome_ping(self, username: str, password: str) -> Ping:
@@ -248,7 +253,11 @@ def _subsonic(status: str, code: int = 0) -> httpx.Response:
 
 def _ping(settings: Settings, sf: sessionmaker[Session], handler: object) -> DefaultValidator:
     t = httpx.MockTransport(handler)  # type: ignore[arg-type]
-    return DefaultValidator(polite_client("navidrome", settings, sf, transport=t), "http://nd")
+    return DefaultValidator(
+        polite_client("navidrome", settings, sf, transport=t),
+        "http://nd",
+        ListenBrainzClient(polite_client("listenbrainz", settings, sf, transport=t)),
+    )
 
 
 async def test_default_validator_ok_and_rejected(
@@ -267,3 +276,47 @@ async def test_default_validator_transport_error_is_unreachable(
         raise httpx.ConnectError("down")
 
     assert await _ping(settings, sf, boom).navidrome_ping("u", "p") == Ping.unreachable
+
+
+def test_listenbrainz_unreachable_message(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox, fake: FakeValidator
+) -> None:
+    tok = _login(client, "alice")
+    fake.lb_down = True
+    r = client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 400 and "reach ListenBrainz; try again." in r.text
+    assert "did not accept" not in r.text and _link(sf, box, "alice", "listenbrainz") is None
+
+
+def test_relinking_clears_needs_relink(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    tok = _login(client, "alice")
+    client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
+    new = SecretBox(Fernet.generate_key())
+    client.app.state.secret_box = new  # type: ignore[attr-defined]
+    assert "can no longer be decrypted" in client.get("/account").text
+    client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
+    assert "can no longer be decrypted" not in client.get("/account").text
+    with sf() as s:
+        link = s.query(UserLink).one()
+        assert not link.needs_relink and link_secret(new, link) == SECRET
+
+
+async def test_default_validator_listenbrainz(
+    settings: Settings, sf: sessionmaker[Session]
+) -> None:
+    def valid(r: httpx.Request) -> httpx.Response:
+        assert r.headers["Authorization"] == "Token good"
+        return httpx.Response(200, json={"valid": True, "user_name": "lbuser"})
+
+    v = _ping(settings, sf, valid)
+    assert await v.listenbrainz_username("good") == "lbuser"
+    rejected = _ping(settings, sf, lambda r: httpx.Response(401, json={"code": 401}))
+    assert await rejected.listenbrainz_username("bad") is None
+
+    def boom(r: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    with pytest.raises(TransientError):
+        await _ping(settings, sf, boom).listenbrainz_username("x")
