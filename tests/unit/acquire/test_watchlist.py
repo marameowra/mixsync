@@ -325,17 +325,26 @@ async def test_artist_search_is_one_date_range_request(make_client: Make) -> Non
 async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
     seen: list[httpx.Request] = []
 
-    def rel(i: int, date: str, group: int) -> dict[str, object]:
+    def rel(i: int, date: str, group: int, *secondary: str) -> dict[str, object]:
+        # the release-group shape a live label search returns (checked 2026-10-11, #43):
+        # "secondary-types" is left out when there are none
+        rg: dict[str, object] = {"id": rid(group), "primary-type": "Album"}
+        if secondary:
+            rg["secondary-types"] = list(secondary)
         return {
             "id": rid(i),
             "title": f"R{i}",
             "date": date,
             "artist-credit": [{"name": "A", "artist": {"id": ARTIST}}],
-            "release-group": {"id": rid(group), "primary-type": "Album"},
+            "release-group": rg,
         }
 
     body = {
-        "releases": [rel(1, "2026-06-02", 50), rel(2, "2026-05-30", 50), rel(3, "2026-06-01", 51)]
+        "releases": [
+            rel(1, "2026-06-02", 50),
+            rel(2, "2026-05-30", 50),
+            rel(3, "2026-06-01", 51, "Compilation"),
+        ]
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -347,9 +356,9 @@ async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
     (req,) = seen
     assert req.url.path == "/ws/2/release"
     assert req.url.params["query"] == f"laid:{LABEL}"
-    assert [(h.group_id, h.release_ids, h.date) for h in hits] == [
-        (rid(50), (rid(1), rid(2)), "2026-05-30"),
-        (rid(51), (rid(3),), "2026-06-01"),
+    assert [(h.group_id, h.release_ids, h.date, h.type) for h in hits] == [
+        (rid(50), (rid(1), rid(2)), "2026-05-30", "album"),
+        (rid(51), (rid(3),), "2026-06-01", "compilation"),
     ]
 
 
