@@ -85,14 +85,23 @@ class Importer:
         album: AlbumInfo,
         status: str,
         batch_id: str,
+        encoded: dict[Path, Path] | None = None,  # source -> the file to copy in its place
     ) -> list[ImportResult]:
         """Each file is its own journaled op: one failure leaves the others imported. The
         sources are not released here."""
-        return [self._one(f, album, status, batch_id) for f in files]
+        enc = encoded or {}
+        return [self._one(f, album, status, batch_id, enc.get(f[0])) for f in files]
 
     def release(self, srcs: list[Path], batch_id: str) -> None:
         for src in srcs:
             self._fileops.release(src, batch_id)
+
+    @property
+    def work_dir(self) -> Path:
+        return self._fileops.work
+
+    def clear_work(self, batch_id: str) -> None:
+        self._fileops.clear_work(batch_id)
 
     def has_file(self, rel: str) -> bool:
         return self._fileops.has(rel)
@@ -106,6 +115,7 @@ class Importer:
         album: AlbumInfo,
         status: str,
         batch_id: str,
+        encoded: Path | None,
     ) -> ImportResult:
         src, track, acoustid_id = file
         tagset = tagset_for(track, album, acoustid_id, status)
@@ -114,11 +124,11 @@ class Importer:
                 self._ensure_row(done, tagset, acoustid_id, status, batch_id)
                 return ImportResult(src, done)
             rel = paths.unique(
-                render_path(self._template, tagset, src.suffix),
+                render_path(self._template, tagset, (encoded or src).suffix),
                 lambda r: (self._fileops.library / r).exists(),
             )
             write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
-            self._fileops.import_file(src, rel, write_tags, batch_id)
+            self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src)
             self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
         except Exception as e:
             return ImportResult(src, None, repr(e))

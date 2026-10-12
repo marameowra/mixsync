@@ -57,6 +57,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
+from mixsync.library.encode import to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
@@ -95,6 +96,8 @@ class Pipeline:
     target: LibraryTarget
     canonical_media: tuple[str, ...] = ("Digital Media", "CD")
     canonical_countries: tuple[str, ...] = ("XW",)
+    reencode: bool = False  # lossless files go into the library as FLAC (see library/encode.py)
+    flac_level: int = 8
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -448,9 +451,7 @@ class Pipeline:
                 req = self._request(s, job)
                 req.status, req.last_error = "owned", None
             return
-        results = await asyncio.to_thread(
-            self.importer.import_release, files, target, "verified", batch
-        )
+        results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
         await self._finish(job, cand, results, batch, unassigned=unassigned)
 
@@ -471,11 +472,35 @@ class Pipeline:
             for t in edits["tracks"]
         ]
         batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
-        results = await asyncio.to_thread(
-            self.importer.import_release, files, album, "unverified", batch
-        )
+        results = await self._import_files(files, album, "unverified", batch)
         year = str(edits["year"]) if edits["year"] else ""
         await self._finish(job, cand, results, batch, (album.artist, album.album, year))
+
+    async def _import_files(
+        self,
+        files: list[tuple[Path, TrackInfo, str | None]],
+        album: AlbumInfo,
+        status: str,
+        batch: str,
+    ) -> list[ImportResult]:
+        """Lossless files are re-encoded to FLAC in a work dir first (the downloads are never
+        touched); the encodes run as subprocesses so the job's heartbeat keeps going."""
+        if not self.reencode:
+            return await asyncio.to_thread(
+                self.importer.import_release, files, album, status, batch
+            )
+        work = self.importer.work_dir / batch
+        try:
+            encoded = {
+                src: await to_flac(src, work / str(i), self.flac_level)
+                for i, (src, _, _) in enumerate(files)
+            }
+            encoded = {k: v for k, v in encoded.items() if v != k}
+            return await asyncio.to_thread(
+                self.importer.import_release, files, album, status, batch, encoded
+            )
+        finally:
+            await asyncio.to_thread(self.importer.clear_work, batch)
 
     async def _finish(
         self,

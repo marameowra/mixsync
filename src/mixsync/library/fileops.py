@@ -1,7 +1,8 @@
 """The only module that writes under the data dir. See docs/design/data-safety.md.
 
-The only delete is `release()`, which unlinks a hash-verified download from the downloads dir;
-leftovers and trashed files are moved into `.trash/YYYY-MM-DD/`.
+The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir,
+and `clear_work()`, which empties MixSync's own re-encode scratch space; leftovers and trashed
+files are moved into `.trash/YYYY-MM-DD/`.
 Journal rows: `src` and `dst` of a copy op are the source path and the final library-relative
 path; the staging file is always `.incoming/<op_id>`. `dst_hash` is journaled before the
 rename, so `recover()` can tell a finished import from an abandoned one.
@@ -12,6 +13,7 @@ import errno
 import hashlib
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Callable
 from contextlib import suppress
@@ -75,6 +77,7 @@ class FileOps:
         self.library = data_dir / "library"
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
+        self.work = data_dir / ".work"  # scratch space for re-encoded copies of downloads
         self._downloads = downloads_dir
         self._journal = journal
         self._clock = clock
@@ -117,11 +120,19 @@ class FileOps:
                 raise SafetyError(f"{staging} and {final} are on different devices") from e
             raise
 
-    def import_file(self, src: Path, final_rel: str, write_tags: WriteTags, batch_id: str) -> str:
+    def import_file(
+        self,
+        src: Path,
+        final_rel: str,
+        write_tags: WriteTags,
+        batch_id: str,
+        origin: Path
+        | None = None,  # the download src was made from; journaled so it can be released
+    ) -> str:
         """Copy src into the library at final_rel (verified, tagged, atomic, never replacing
         a file). Returns the sha256 of the imported file. src is never modified."""
         final = self._under(self.library, final_rel)
-        op_id = self._journal.begin(batch_id, "copy", str(src), final_rel)
+        op_id = self._journal.begin(batch_id, "copy", str(origin or src), final_rel)
         staging = self.incoming / str(op_id)
         published = False
         try:
@@ -222,6 +233,12 @@ class FileOps:
             self._journal.fail(op_id, repr(e))
             raise
         self._journal.complete(op_id, op.dst_hash)
+
+    def clear_work(self, batch_id: str) -> None:
+        """Delete the scratch files of one batch. Only ever acts inside the work dir."""
+        d = self._under(self.work, batch_id)
+        if d.is_dir() and not d.is_symlink():
+            shutil.rmtree(d, ignore_errors=True)  # noqa: TID251
 
     def trash(self, rel: str, batch_id: str) -> str:
         """Move a library file to `.trash/<day>/<rel>`. Returns the trash-relative path."""

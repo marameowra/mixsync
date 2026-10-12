@@ -1,6 +1,8 @@
 """The acquire pipeline end to end against fakes: the Phase 2 exit criteria 1 and 2, and the
 rules around them (backoff, debounce, retries, review)."""
 
+import shutil
+import subprocess
 from dataclasses import replace
 from datetime import UTC, timedelta
 from pathlib import Path
@@ -102,14 +104,57 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
     assert env.source.cleared == ["peer1"]
 
 
+def level0(src: Path, out: Path) -> None:
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(src), "-c:a", "flac", "-compression_level", "0",
+         "-map_metadata", "0", "-f", "flac", str(out)],
+        check=True,
+    )  # fmt: skip
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
+async def test_lossless_download_is_reencoded_into_the_library_and_released(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ext="flac")
+    key = (cand.username, cand.folder)
+    for name, data in env.source.blobs[key].items():  # a level 0 FLAC is bigger than level 8
+        src, big = env.source.scratch / name, env.source.scratch / f"big-{name}"
+        src.write_bytes(data)
+        level0(src, big)
+        env.source.blobs[key][name] = big.read_bytes()
+    sizes = {
+        f.path.rsplit("\\", 1)[-1]: len(env.source.blobs[key][f.path.rsplit("\\", 1)[-1]])
+        for f in cand.files
+    }
+    env.source.catalog["alpha album"] = [
+        replace(
+            cand,
+            files=tuple(replace(f, size=sizes[f.path.rsplit("\\", 1)[-1]]) for f in cand.files),
+        )
+    ]
+    env.pipeline = replace(env.pipeline, reencode=True)
+    env.handlers = env.pipeline.handlers()
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    lib = env.data_dir / "library"
+    assert sorted(p.name for p in lib.rglob("*.flac")) == [
+        "01-01 Song One.flac",
+        "01-02 Song Two.flac",
+    ]
+    assert sum(p.stat().st_size for p in lib.rglob("*.flac")) < sum(sizes.values())
+    assert list(env.downloads.iterdir()) == []  # the originals were released
+    assert not any((env.data_dir / ".work").rglob("*.flac"))  # scratch space is cleaned up
+
+
 async def test_partial_failure_releases_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     real = env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch)
+        return real(src, rel, write_tags, batch, origin)
 
     monkeypatch.setattr(env.ops, "import_file", flaky)
     rid = request(env)
