@@ -24,6 +24,7 @@ from mixsync.discovery import retention
 from mixsync.discovery.playlists import Discovery, ensure_build
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
+from mixsync.ratelimit.bucket import aware
 
 from .conftest import Env
 from .fakes import ALBUM, ALBUM_B, AUDIO
@@ -483,9 +484,8 @@ async def test_a_slow_redownload_after_a_repick_gets_its_window_from_the_import(
     shutil.copy(AUDIO / "cc0-tone-01.mp3", env.data_dir / "discover" / "Alpha Band/y.mp3")
     await r.retain(env.user_id)
     hold = r.holds()[0]
-    assert hold.expired_at is None and hold.expires_at == (
-        env.clock.now() + timedelta(days=30)
-    ).replace(tzinfo=None)
+    assert hold.expired_at is None
+    assert aware(hold.expires_at) == env.clock.now() + timedelta(days=30)
 
 
 async def test_a_repick_on_a_track_another_user_keeps_gets_a_fresh_window(env: Env) -> None:
@@ -503,9 +503,7 @@ async def test_a_repick_on_a_track_another_user_keeps_gets_a_fresh_window(env: E
     await r.run(JobKind.DISCOVERY_BUILD)
     alice = r.holds()[0]
     assert alice.expired_at is None and alice.provisional_track_id == r.track().id
-    assert alice.expires_at == (env.clock.now() + timedelta(days=30)).replace(
-        tzinfo=None
-    )  # clock from the pick
+    assert aware(alice.expires_at) == env.clock.now() + timedelta(days=30)  # clock from the pick
     await r.retain(env.user_id)
     assert r.holds()[0].expired_at is None and r.track().status == "active"
 
