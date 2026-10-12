@@ -18,6 +18,8 @@ class JobKind(StrEnum):
     MIGRATE_CHECK = "migrate_check"
     WATCHLIST_POLL = "watchlist_poll"
     WATCHLIST_PICK = "watchlist_pick"
+    DISCOVERY_BUILD = "discovery_build"
+    DISCOVERY_PUSH = "discovery_push"
 
 
 class JobState(StrEnum):

@@ -12,6 +12,7 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
+from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
@@ -157,6 +158,8 @@ async def save(
                 link.external_username = name
                 set_secret(box, link, secret)
                 link.verified_at = datetime.now(UTC)
+                if service == "listenbrainz":
+                    playlists.ensure_default(s, datetime.now(UTC), user.id)
             break
         except IntegrityError:
             if attempt == 2:

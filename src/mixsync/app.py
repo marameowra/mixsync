@@ -12,6 +12,7 @@ from mixsync.web.csrf import check_csrf
 from mixsync.web.routes import (
     account,
     auth,
+    discover,
     home,
     library,
     media,
@@ -53,6 +54,7 @@ def create_app(
     app.include_router(media.router)
     app.include_router(migration.router)
     app.include_router(watchlist.router)
+    app.include_router(discover.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]  # registered by decorator

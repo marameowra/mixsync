@@ -16,6 +16,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import User
+from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.ratelimit.client import polite_client
@@ -104,6 +105,20 @@ def test_save_and_display_never_leaks_secret(
     assert "Linked as lb-real-name" in page.text and "Linked as ali" in page.text
     assert "Replace" in page.text and "Unlink" in page.text
     assert SECRET not in page.text and SECRET not in r.text
+
+
+def test_linking_listenbrainz_creates_the_default_playlist_once(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = _login(client, "alice")
+    client.post("/account/navidrome", data={"username": "a", "secret": "x", "csrf_token": tok})
+    with sf() as s:
+        assert s.query(DiscoveryPlaylist).count() == 0  # Navidrome alone makes none
+    for _ in range(2):  # a relink adds no second one
+        r = client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
+        assert r.status_code == 303
+    with sf() as s:
+        assert [p.name for p in s.query(DiscoveryPlaylist)] == ["Discovery"]
 
 
 def test_failed_validation_stores_nothing(
