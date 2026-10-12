@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import httpx
 import pytest
@@ -9,10 +9,18 @@ from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
 from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.web.routes import auth as auth_routes
 
 
 async def _no_sleep(_seconds: float) -> None:
     return None
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_failures() -> Iterator[None]:
+    auth_routes._failures.clear()
+    yield
+    auth_routes._failures.clear()
 
 
 @pytest.fixture
