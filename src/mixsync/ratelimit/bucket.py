@@ -44,6 +44,9 @@ class Bucket:
                 updated_at=now,
             )
             s.add(row)
+        else:  # pick up rate changes from config; reserve() clamps tokens to the new capacity
+            row.refill_per_sec = rate
+            row.capacity = max(1.0, rate)
         return row
 
     def reserve(self) -> timedelta:
