@@ -2,7 +2,7 @@
 rules around them (backoff, debounce, retries, review)."""
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
-from mixsync.db.queue import enqueue_in
+from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
 
@@ -823,6 +823,28 @@ async def test_full_download_cap_defers_without_burning_attempts(env: Env) -> No
     assert first.status == JobState.SUCCEEDED and first.attempts == 1
     assert deferred.status == JobState.QUEUED and deferred.attempts == 0
     assert deferred.payload == first.payload
+    # running the same job again (a crash replay) leaves one deferred job, not two
+    await env.pipeline.download(
+        JobRecord(**{f.name: getattr(first, f.name) for f in fields(JobRecord)})
+    )
+    assert len(env.jobs(JobKind.DOWNLOAD)) == 2
+
+
+async def test_a_progress_check_skips_the_full_cap(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    request(env)
+    await env.step()  # search
+    await env.step()  # the download starts: nothing else is moving
+    assert env.source.enqueued == ["peer1"]
+    env.pipeline.gate.cap = 1
+
+    def boom() -> dict[str, int]:
+        raise AssertionError("a progress check must not look at the cap")
+
+    env.source.moving = boom
+    job = await env.step()  # the status check carries `bytes`
+    assert job and job.payload["bytes"] == 0
+    assert env.jobs(JobKind.VERIFY)
 
 
 async def test_transfer_below_the_floor_for_the_window_frees_its_slot(env: Env) -> None:

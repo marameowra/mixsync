@@ -1,6 +1,7 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -257,22 +258,8 @@ async def test_search_with_no_results_returns_immediately(make_client: Make) -> 
 
 
 async def test_active_downloads_counts_only_transfers_moving_data(make_client: Make) -> None:
-    def file(i: str, state: str, sent: int) -> dict[str, object]:
-        return {"id": i, "state": state, "bytesTransferred": sent}
-
-    body = [
-        {
-            "username": "p",
-            "directories": [
-                {
-                    "files": [
-                        file("a", "InProgress", 5),
-                        file("b", "Queued, Remotely", 0),
-                        file("c", "Completed, Succeeded", 9),
-                    ]
-                }
-            ],
-        }
-    ]
-    src = source(make_client, lambda r: httpx.Response(200, json=body))
-    assert await src.active_downloads() == {"a": 5}
+    body: Any = load("downloads_peer-001.json")
+    for n, f in enumerate(body["directories"][0]["files"]):
+        f["id"] = f"id-{n}"  # the fixture reuses one id; slskd's are distinct
+    src = source(make_client, lambda r: httpx.Response(200, json=[body]))
+    assert await src.active_downloads() == {"id-1": 1000}  # InProgress only; no queued/done

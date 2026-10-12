@@ -27,3 +27,19 @@ def test_a_finished_transfer_forgets_its_samples() -> None:
     gate.counted(at(0), {"a": 0})
     gate.counted(at(60), {})
     assert gate.counted(at(120), {"a": 0}) == 1  # a fresh transfer: no history, counts
+
+
+def run(gate: DownloadGate, rates: list[int]) -> int:
+    """Feed constant per-transfer rates (bytes/s) over two windows; the last count."""
+    n = 0
+    for s in (0, 30, 60, 90, 120):
+        n = gate.counted(at(s), {str(i): r * s for i, r in enumerate(rates)})
+    return n
+
+
+def test_equal_rates_never_exempt_each_other() -> None:
+    assert run(DownloadGate(cap=3), [1_000_000] * 11) == 11  # each is 9% of the total
+
+
+def test_a_saturated_link_does_not_exempt_everything() -> None:
+    assert run(DownloadGate(cap=3), [40_000] * 3) == 3  # 120 KB/s total < 3 x 50 KB/s

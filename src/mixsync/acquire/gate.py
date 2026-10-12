@@ -32,7 +32,15 @@ class DownloadGate:
             if t0 <= now - self.window:
                 rates[tid] = (sent - b0) / (now - t0).total_seconds()
         total = sum(rates.values())
-        slow = sum(1 for r in rates.values() if r < self.floor or r < self.share * total)
+        # Below the floor only counts as slow while the link has room (else the link is the
+        # bottleneck); below the share never exempts the fastest, or equal rates would all drop.
+        roomy = total >= self.cap * self.floor
+        fastest = max(rates.values(), default=0)
+        slow = sum(
+            1
+            for r in rates.values()
+            if (roomy and r < self.floor) or (r < self.share * total and r < fastest)
+        )
         return len(active) - slow
 
     def full(self, now: datetime, active: dict[str, int]) -> bool:
