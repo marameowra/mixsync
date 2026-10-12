@@ -1,4 +1,3 @@
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -9,8 +8,6 @@ from mutagen.flac import FLAC
 from mixsync.core.errors import PermanentError
 from mixsync.library import encode
 from mixsync.library.encode import _pcm_md5, to_flac
-
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
 
 SINE = ["-f", "lavfi", "-i", "sine=frequency=440:duration=2:sample_rate=44100"]
 COVER = ["-f", "lavfi", "-i", "color=c=red:s=64x64:d=1"]

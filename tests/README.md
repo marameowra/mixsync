@@ -17,6 +17,7 @@ uv run pytest -m integration       # needs docker compose
 uv run pytest -m crash             # SIGKILL crash-safety tests
 uv run pytest --db=postgres        # run against Postgres instead of SQLite (see below)
 ```
+The unit suite needs `ffmpeg` on PATH (the FLAC encode and WAV/AIFF tests use it, as the image does). Without it those tests fail rather than skip.
 
 ## Running on Postgres
 `--db=postgres` needs `MIXSYNC_TEST_DATABASE_URL` and refuses to run unless the database name starts with `test_` or ends with `_test`, and refuses URLs whose query sets `dbname`, `service` or `options` (they would override the name). Each test gets its own schema (created and dropped around it), so `-n auto` is safe.

@@ -1,7 +1,6 @@
 """The acquire pipeline end to end against fakes: the Phase 2 exit criteria 1 and 2, and the
 rules around them (backoff, debounce, retries, review)."""
 
-import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import fields, replace
@@ -136,10 +135,6 @@ def lossless_album(env: Env) -> dict[str, int]:
     return sizes
 
 
-needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
-
-
-@needs_ffmpeg
 async def test_lossless_download_is_reencoded_into_the_library_and_released(env: Env) -> None:
     sizes = lossless_album(env)
     rid = request(env)
@@ -156,7 +151,6 @@ async def test_lossless_download_is_reencoded_into_the_library_and_released(env:
     assert not any((env.data_dir / ".work").rglob("*.flac"))  # scratch space is cleaned up
 
 
-@needs_ffmpeg
 async def test_a_file_that_fails_to_encode_is_imported_as_it_is(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -179,7 +173,6 @@ async def test_a_file_that_fails_to_encode_is_imported_as_it_is(
     assert two.stat().st_size >= sizes["02 Song Two.flac"]  # as downloaded, plus tags
 
 
-@needs_ffmpeg
 async def test_a_corrupt_lossless_download_is_imported_as_downloaded(env: Env) -> None:
     sizes = lossless_album(env)
     blobs = env.source.blobs[("peer1", "Music\\Alpha Band\\Alpha Album")]
@@ -195,7 +188,6 @@ async def test_a_corrupt_lossless_download_is_imported_as_downloaded(env: Env) -
     assert two.stat().st_size >= sizes["02 Song Two.flac"]  # not re-encoded
 
 
-@needs_ffmpeg
 async def test_resumed_import_does_not_encode_files_that_are_already_in(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -18,7 +18,7 @@ from mixsync.library import tags
 
 from .conftest import Env
 from .fakes import ALBUM, AUDIO
-from .test_pipeline import decision_rows, needs_ffmpeg, request, status
+from .test_pipeline import decision_rows, request, status
 
 
 def pcm_album(env: Env, ext: str, codec: str = "pcm_s16le") -> dict[str, Path]:
@@ -65,7 +65,6 @@ def snapshot(paths: dict[str, Path]) -> dict[str, tuple[bytes, int]]:
     return {n: (p.read_bytes(), p.stat().st_mtime_ns) for n, p in paths.items()}
 
 
-@needs_ffmpeg
 @pytest.mark.parametrize(("ext", "codec"), [("wav", "pcm_s16le"), ("aiff", "pcm_s16be")])
 async def test_wav_and_aiff_verify_like_flac_and_import_as_flac(
     env: Env, ext: str, codec: str
@@ -87,7 +86,6 @@ async def test_wav_and_aiff_verify_like_flac_and_import_as_flac(
     ]
 
 
-@needs_ffmpeg
 async def test_downloads_are_byte_and_mtime_unchanged_by_verify(env: Env) -> None:
     paths = pcm_album(env, "wav")
     request(env)
@@ -110,7 +108,6 @@ async def refused(env: Env) -> Request:
         return req
 
 
-@needs_ffmpeg
 async def test_a_non_audio_file_named_wav_is_refused_and_the_next_peer_tried(env: Env) -> None:
     paths = pcm_album(env, "wav")
     blobs = env.source.blobs[("peer1", "Music\\Alpha Band\\Alpha Album")]
@@ -124,7 +121,6 @@ async def test_a_non_audio_file_named_wav_is_refused_and_the_next_peer_tried(env
 
 
 @pytest.mark.parametrize("codec", ["pcm_s32le", "pcm_f32le"])
-@needs_ffmpeg
 async def test_32_bit_and_float_wav_are_refused_and_the_next_peer_tried(
     env: Env, codec: str
 ) -> None:
