@@ -15,6 +15,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db import decisions
 from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
@@ -22,6 +23,7 @@ from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
+LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
 LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
@@ -73,6 +75,35 @@ def create_request(
     s.flush()
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
     return req
+
+
+def hold_imports(s: Session, now: datetime, batch: str) -> None:
+    """A discover import landed: start the holds on its tracks' retention clock and queue a push
+    of each playlist that wants them (after the rescan that makes Navidrome see the files)."""
+    for pt in s.scalars(
+        select(ProvisionalTrack).where(
+            ProvisionalTrack.batch_id == batch, ProvisionalTrack.status == "active"
+        )
+    ):
+        for hold in s.scalars(
+            select(ProvisionalHold).where(ProvisionalHold.recording_mbid == pt.recording_mbid)
+        ):
+            pl = s.get(DiscoveryPlaylist, hold.playlist_id)
+            if pl is None:
+                continue
+            hold.provisional_track_id = hold.provisional_track_id or pt.id
+            if hold.expires_at is None:
+                hold.expires_at = now + timedelta(days=pl.retention_days)
+            # a second, later push for when Navidrome's scan was still running at the first
+            for suffix, delay in (("", 2 * RESCAN_DELAY), (":late", LATE_PUSH)):
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.DISCOVERY_PUSH,
+                    {"playlist_id": pl.id},
+                    run_after=now + delay,
+                    idempotency_key=f"discovery-push:{pl.id}:import:{batch}{suffix}",
+                )
 
 
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:

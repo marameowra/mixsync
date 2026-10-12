@@ -28,6 +28,7 @@ from mixsync.acquire.requests import (
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
+    hold_imports,
     profile_for,
     retry_search,
     search_priority,
@@ -701,6 +702,8 @@ class Pipeline:
             req.last_error = "; ".join(notes) or None
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
+                if root == "discover":
+                    hold_imports(s, now, batch)
                 if recheck:
                     enqueue_recheck(s, now, recheck, None)
 

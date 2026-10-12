@@ -19,6 +19,8 @@ class JobKind(StrEnum):
     WATCHLIST_POLL = "watchlist_poll"
     WATCHLIST_PICK = "watchlist_pick"
     TRASH_PURGE = "trash_purge"
+    DISCOVERY_BUILD = "discovery_build"
+    DISCOVERY_PUSH = "discovery_push"
 
 
 class JobState(StrEnum):

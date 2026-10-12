@@ -17,11 +17,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0014_provisional"
+    assert _version(settings) == "0015_discovery_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0014_provisional"
+    assert _version(settings) == "0015_discovery_playlists"
 
 
 def test_models_match_migrations(settings: Settings) -> None:

@@ -3,6 +3,7 @@ recordings are imported, into /data/discover."""
 
 import hashlib
 from dataclasses import replace
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind
 from mixsync.core.types import AcoustIdResult
 from mixsync.db import canonical as canonical_db
-from mixsync.db.models.discovery import ProvisionalTrack
+from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import CanonicalRelease, Track
 from mixsync.db.models.work import Request
 
@@ -281,3 +282,26 @@ async def test_a_retried_import_does_not_duplicate_files_or_rows(
     assert status(env, rid) == "imported" and len(calls) == 2
     assert len(discover(env)) == 2 and len(rows(env)) == 2
     assert len(tree(env.downloads)) == 8
+
+
+async def test_a_discover_import_starts_the_holds_and_queues_pushes(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    rid = discovery(env)
+    with env.sessions.begin() as s:
+        pl = DiscoveryPlaylist(user_id=env.user_id, name="Discovery", retention_days=5)
+        s.add(pl)
+        s.flush()
+        pid = pl.id
+        s.add(
+            ProvisionalHold(
+                user_id=env.user_id, recording_mbid=WANTED[0], playlist_id=pid, request_id=rid
+            )
+        )
+    await env.drain()
+    with env.sessions() as s:
+        hold = s.scalars(select(ProvisionalHold)).one()
+        assert hold.provisional_track_id is not None and hold.expires_at is not None
+        imported = rows(env)[0].imported_at.replace(tzinfo=UTC)
+        assert hold.expires_at.replace(tzinfo=UTC) == imported + timedelta(days=5)
+    pushes = env.jobs(JobKind.DISCOVERY_PUSH)  # one soon, one for a scan that ran long
+    assert [j.payload for j in pushes] == [{"playlist_id": pid}] * 2

@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     navidrome_url: str = "http://navidrome:4533"
     navidrome_user: str = ""  # an admin: startScan needs it
     navidrome_password: str = ""
+    navidrome_library: str = "Music Library"  # the main library's name in Navidrome
+    navidrome_discover_library: str = "discover"  # the library over /data/discover
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
