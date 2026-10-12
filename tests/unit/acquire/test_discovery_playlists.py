@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.acquire.requests import hold_imports
-from mixsync.core.errors import PermanentError
+from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import RecordingRef
 from mixsync.db.auth import create_user
@@ -67,18 +67,19 @@ class FakeHistory:
         return "u"
 
 
-DISCOVER_FOLDER = "7"
+MAIN_FOLDER, DISCOVER_FOLDER = "1", "7"
 
 
 class FakeLib:
-    """Navidrome as the push sees it: songs by (recording, folder restriction)."""
+    """Navidrome as the push sees it: two libraries; unrestricted searches see discover first."""
 
     def __init__(self) -> None:
-        self.songs: dict[str, str] = {}  # recording -> song id
-        self.discover: set[str] = set()  # recordings that live in the discover library
+        self.main: dict[str, str] = {}  # recording -> song id, in the main library
+        self.disc: dict[str, str] = {}  # the same, in the discover library
+        self.folders: dict[str, str] = {"Music Library": MAIN_FOLDER, "discover": DISCOVER_FOLDER}
+        self.error: Exception | None = None
         self.playlists: dict[str, list[str]] = {}
         self.names: dict[str, str] = {}
-        self.folder: str | None = DISCOVER_FOLDER
         self.credentials: list[tuple[str, str]] = []
 
     async def push_playlist(self, name: str, song_ids: list[str], existing_id: str | None) -> str:
@@ -95,14 +96,18 @@ class FakeLib:
         return {}
 
     async def music_folder_id(self, name: str) -> str | None:
-        return self.folder
+        return self.folders.get(name)
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
     ) -> str | None:
-        if music_folder_id is not None and recording_mbid not in self.discover:
-            return None
-        return self.songs.get(recording_mbid)
+        if self.error:
+            raise self.error
+        if music_folder_id == MAIN_FOLDER:
+            return self.main.get(recording_mbid)
+        if music_folder_id == DISCOVER_FOLDER:
+            return self.disc.get(recording_mbid)
+        return self.disc.get(recording_mbid) or self.main.get(recording_mbid)
 
 
 class Rig:
@@ -221,9 +226,13 @@ async def test_ratio_is_respected_and_the_rest_is_owned_without_duplicates(rig: 
     unowned = [m for m in mbids if int(m[-12:]) > 40]
     assert len(unowned) == 15 and unowned == [rec(n) for n in range(41, 56)]  # source order
     assert [m for m in mbids if int(m[-12:]) <= 40] == [rec(n) for n in range(1, 36)]
-    assert len(requests(rig.env)) == 15 and len(holds(rig.env)) == 15
+    assert len(requests(rig.env)) == 1 and len(holds(rig.env)) == 15  # one release
     r = requests(rig.env)[0]
-    assert (r.source, r.provisional, r.recording_mbids) == ("discovery", True, [rec(41)])
+    assert (r.source, r.provisional, r.recording_mbids) == (
+        "discovery",
+        True,
+        [rec(n) for n in range(41, 56)],
+    )
     assert rig.history.calls == ["weekly"]  # long enough: no top-up
     assert rig.pl(pid).last_error is None
 
@@ -339,8 +348,7 @@ async def test_push_replaces_contents_recreates_and_restricts_provisional(rig: R
     pid = rig.playlist()
     own(rig.env, 1)
     provisional(rig.env, 2)
-    rig.lib.songs = {rec(1): "s1", rec(2): "s2"}
-    rig.lib.discover = {rec(2)}
+    rig.lib.main, rig.lib.disc = {rec(1): "s1"}, {rec(2): "s2"}
     rig.history.weekly = [ref(1), ref(2), ref(3)]  # 3 is not imported yet
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
@@ -350,7 +358,7 @@ async def test_push_replaces_contents_recreates_and_restricts_provisional(rig: R
     )
     assert rig.pl(pid).navidrome_playlist_id == "pl1"
     assert rig.lib.credentials[-1] == ("navidrome-name", "navidrome-secret")
-    rig.lib.songs = {rec(1): "s1"}  # song 2 went away: contents are replaced, not appended
+    rig.lib.disc = {}  # song 2 went away: contents are replaced, not appended
     await rig.disc.push(_record(rig, pid))
     assert rig.lib.playlists == {"pl1": ["s1"]}
     rig.lib.playlists.clear()  # the user deleted it in Navidrome
@@ -371,7 +379,7 @@ async def test_an_unscanned_song_is_skipped_then_pushed_after_the_import_hook(ri
     rig.link(rig.env.user_id)
     pid = rig.playlist(retention_days=10)
     own(rig.env, 1)
-    rig.lib.songs = {rec(1): "s1"}
+    rig.lib.main = {rec(1): "s1"}
     rig.history.weekly = [ref(1), ref(2)]
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
@@ -385,10 +393,10 @@ async def test_an_unscanned_song_is_skipped_then_pushed_after_the_import_hook(ri
     assert h.provisional_track_id and h.expires_at
     assert h.expires_at.replace(tzinfo=UTC) == rig.env.clock.now() + timedelta(days=10)
     pushes = [j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued"]
-    assert len(pushes) == 1 and pushes[0].payload == {"playlist_id": pid}
+    assert len(pushes) == 2 and {j.payload["playlist_id"] for j in pushes} == {pid}  # early, late
     await rig.run(JobKind.DISCOVERY_PUSH)  # ...but Navidrome has not scanned it
     assert rig.lib.playlists["pl1"] == ["s1"]
-    rig.lib.songs[rec(2)], rig.lib.discover = "s2", {rec(2)}  # the rescan ran
+    rig.lib.disc[rec(2)] = "s2"  # the rescan ran
     with rig.env.sessions.begin() as s:
         hold_imports(s, rig.env.clock.now(), "batch-2")  # same key: still one push waiting
     await rig.disc.push(_record(rig, pid))
@@ -399,12 +407,13 @@ async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     pid = rig.playlist()
     provisional(rig.env, 2)
-    rig.lib.songs, rig.lib.folder = {rec(2): "s2"}, None
+    rig.lib.disc, rig.lib.folders = {rec(2): "s2"}, {}
     rig.history.weekly = [ref(2)]
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
     await rig.run(JobKind.DISCOVERY_PUSH)
-    assert rig.lib.playlists == {"pl1": ["s2"]} and pid
+    assert rig.lib.playlists == {"pl1": ["s2"]}
+    assert "'discover' library is not visible" in (rig.pl(pid).last_error or "")
 
 
 async def test_next_build_is_one_jittered_job_and_a_rerun_adds_none(rig: Rig) -> None:
@@ -421,17 +430,19 @@ async def test_next_build_is_one_jittered_job_and_a_rerun_adds_none(rig: Rig) ->
     assert rig.pl(pid).next_build_at
 
 
-@pytest.mark.parametrize(("pick", "days"), [(0.5, 3.5), (1.5, 10.5)])
-async def test_jitter_stays_within_half_to_one_and_a_half_cadences(
-    rig: Rig, pick: float, days: float
+@pytest.mark.parametrize(("cadence", "edge"), [(7, timedelta(hours=6)), (1, timedelta(hours=2.4))])
+@pytest.mark.parametrize("sign", [-1, 1])
+async def test_jitter_is_a_tenth_of_the_cadence_and_at_most_six_hours(
+    rig: Rig, cadence: int, edge: timedelta, sign: int
 ) -> None:
     rig.link(rig.env.user_id)
-    pid = rig.playlist(cadence_days=7)
-    rig.disc.rng = lambda a, b: a + (b - a) * (pick - 0.5)
+    pid = rig.playlist(cadence_days=cadence)
+    rig.disc.rng = lambda a, b: sign * b  # the end of the range asked for
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
     due = rig.pl(pid).next_build_at
-    assert due and due.replace(tzinfo=UTC) == rig.env.clock.now() + timedelta(days=days)
+    want = rig.env.clock.now() + timedelta(days=cadence) + sign * edge
+    assert due and due.replace(tzinfo=UTC) == want
 
 
 async def test_a_failing_source_still_queues_the_next_build(rig: Rig) -> None:
@@ -502,18 +513,163 @@ def test_build_now_queues_at_user_priority_and_only_for_the_owner(
     assert web.post("/discover/999/build", data={"csrf_token": tok}).status_code == 404
 
 
-def test_build_now_is_refused_within_the_hour_and_first_visit_makes_the_default(
+def test_build_now_is_refused_within_the_hour_and_the_page_only_reads(
     rig: Rig, web: TestClient
 ) -> None:
     env = rig.env
     rig.link(env.user_id)
     tok = login(web, "alice")
-    page = web.get("/discover").text  # the first look creates the default playlist
+    assert "No playlists yet" in web.get("/discover").text  # a visit creates nothing
+    with env.sessions() as s:
+        assert s.scalars(select(DiscoveryPlaylist)).first() is None
+    pid = rig.playlist()
+    page = web.get("/discover").text
     assert "never" in page and "Build now" in page
     with env.sessions.begin() as s:
-        pl = s.scalars(select(DiscoveryPlaylist)).one()
-        pl.last_built_at, pid = env.clock.now(), pl.id
+        pl = s.get(DiscoveryPlaylist, pid)
+        assert pl
+        pl.last_built_at = env.clock.now()
     with user_sessions(env.sessions).begin() as s:
         pl = s.get(DiscoveryPlaylist, pid)
         assert pl and not playlists.build_now(s, env.clock.now(), pl)
     assert web.post(f"/discover/{pid}/build", data={"csrf_token": tok}).status_code == 409
+
+
+REL_A = "11111111-0000-0000-0000-00000000000a"
+REL_B = "11111111-0000-0000-0000-00000000000b"
+
+
+def test_two_concurrent_default_creations_end_with_one_playlist(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.link(rig.env.user_id)
+    # both callers saw "no playlist yet": the unique (user, name) key settles the race
+    monkeypatch.setattr(playlists, "_has_playlist", lambda s, uid: False)
+    for _ in range(2):
+        with rig.env.sessions.begin() as s:
+            playlists.ensure_default(s, rig.env.clock.now(), rig.env.user_id)
+    with rig.env.sessions() as s:
+        assert len(list(s.scalars(select(DiscoveryPlaylist)))) == 1
+    assert len(rig.env.jobs(JobKind.DISCOVERY_BUILD)) == 1
+
+
+async def test_picks_on_one_release_make_one_request(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(3, REL_B)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rs = requests(rig.env)
+    assert [(r.release_mbid, r.recording_mbids) for r in rs] == [
+        (REL_A, [rec(1), rec(2)]),
+        (REL_B, [rec(3)]),
+    ]
+    assert {h.recording_mbid: h.request_id for h in holds(rig.env)} == {
+        rec(1): rs[0].id,
+        rec(2): rs[0].id,
+        rec(3): rs[1].id,
+    }
+
+
+async def test_the_import_hook_alone_repushes_once_navidrome_has_scanned(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main = {rec(1): "s1"}
+    rig.history.weekly = [ref(1), ref(2)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    provisional(rig.env, 2, batch="batch-2")
+    with rig.env.sessions.begin() as s:
+        hold_imports(s, rig.env.clock.now(), "batch-2")
+    early, late = (j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued")
+    assert late.run_after > early.run_after
+    await rig.run(JobKind.DISCOVERY_PUSH)  # the scan is still running
+    assert rig.lib.playlists["pl1"] == ["s1"]
+    rig.lib.disc[rec(2)] = "s2"  # ...and has finished by the later push
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    assert rig.lib.playlists["pl1"] == ["s1", "s2"]
+
+
+async def test_a_main_library_track_resolves_to_the_main_copy(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    own(rig.env, 1)
+    provisional(rig.env, 1)  # both copies exist
+    rig.lib.main, rig.lib.disc = {rec(1): "main"}, {rec(1): "disc"}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    assert rig.lib.playlists == {"pl1": ["main"]}
+
+
+async def test_an_undecryptable_link_says_to_relink(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    rig.disc.box = SecretBox(Fernet.generate_key())  # the key changed
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    err = rig.pl(pid).last_error or ""
+    assert err.endswith("needs relinking on /account")
+    assert err.split()[0] in ("ListenBrainz", "Navidrome")
+    assert not rig.history.calls
+
+
+async def test_a_rejected_listenbrainz_token_is_recorded_not_retried(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+
+    async def refused(user: str, token: str) -> list[RecordingRef]:
+        raise AuthError("ListenBrainz rejected the user token")
+
+    rig.history.weekly_exploration = refused  # type: ignore[method-assign]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)  # does not raise
+    assert "rejected the token" in (rig.pl(pid).last_error or "")
+    assert any(j.status == "queued" for j in rig.env.jobs(JobKind.DISCOVERY_BUILD))
+
+
+async def test_navidrome_refusing_the_account_is_recorded_not_retried(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main = {rec(1): "s1"}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rig.lib.error = AuthError("Navidrome rejected the credentials")
+    await rig.run(JobKind.DISCOVERY_PUSH)  # does not raise
+    assert (rig.pl(pid).last_error or "").startswith("Navidrome: Navidrome rejected")
+
+
+async def test_a_recording_known_not_to_be_on_the_release_is_not_asked_for_again(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    with rig.env.sessions.begin() as s:
+        s.add(
+            Request(
+                user_id=rig.env.user_id,
+                release_mbid=REL_A,
+                provisional=True,
+                recording_mbids=[rec(1)],
+                status="failed",
+                last_error="none of the wanted recordings are on the downloaded release",
+            )
+        )
+    rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(1, REL_B)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rs = requests(rig.env)[1:]
+    assert [(r.release_mbid, r.recording_mbids) for r in rs] == [(REL_A, [rec(2)])]
+    assert [e["recording_mbid"] for e in rig.pl(pid).entries] == [rec(2)]
+
+
+async def test_picks_without_a_release_do_not_take_a_slot(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist(size=10)  # 3 unowned slots
+    rig.history.weekly = [ref(1, None), ref(2, None)] + [ref(n) for n in range(3, 9)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    assert [e["recording_mbid"] for e in rig.pl(pid).entries] == [rec(3), rec(4), rec(5)]

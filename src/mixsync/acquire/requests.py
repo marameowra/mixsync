@@ -23,6 +23,7 @@ from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
+LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
 LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
@@ -93,14 +94,16 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
             hold.provisional_track_id = hold.provisional_track_id or pt.id
             if hold.expires_at is None:
                 hold.expires_at = now + timedelta(days=pl.retention_days)
-            enqueue_in(
-                s,
-                now,
-                JobKind.DISCOVERY_PUSH,
-                {"playlist_id": pl.id},
-                run_after=now + 2 * RESCAN_DELAY,
-                idempotency_key=f"discovery-push:{pl.id}:import:{batch}",
-            )
+            # a second, later push for when Navidrome's scan was still running at the first
+            for suffix, delay in (("", 2 * RESCAN_DELAY), (":late", LATE_PUSH)):
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.DISCOVERY_PUSH,
+                    {"playlist_id": pl.id},
+                    run_after=now + delay,
+                    idempotency_key=f"discovery-push:{pl.id}:import:{batch}{suffix}",
+                )
 
 
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:

@@ -218,6 +218,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
             navidrome_http, settings.navidrome_url, user, password
         ),
         load_box(settings),
+        main_library=settings.navidrome_library,
+        discover_library=settings.navidrome_discover_library,
     )
     handlers = (
         HANDLERS

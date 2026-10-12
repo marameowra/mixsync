@@ -18,7 +18,6 @@ User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 @router.get("")
 def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
-    playlists.ensure_default(db, datetime.now(UTC), user.id)  # a first look after linking
     rows = db.scalars(
         select(DiscoveryPlaylist)
         .where(DiscoveryPlaylist.user_id == user.id)

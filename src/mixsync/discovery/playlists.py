@@ -8,11 +8,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, Select, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
+from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.protocols import HistorySource, UserLibrary
 from mixsync.core.types import RecordingRef
@@ -22,22 +24,25 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import USER_PRIORITY, JobRecord, enqueue_in
 from mixsync.db.secretbox import SecretBox, link_secret
-from mixsync.watchlist.poller import Rng, jitter
+from mixsync.watchlist.poller import Rng
 
 log = logging.getLogger(__name__)
 
 DEFAULT_SOURCES: list[dict[str, Any]] = [{"type": "weekly_exploration"}]
 BUILD_NOW_GAP = timedelta(hours=1)  # a button must not turn into a ListenBrainz poll loop
 NO_LINKS = "link ListenBrainz/Navidrome on /account"
+JITTER_CAP = timedelta(hours=6)  # "weekly" stays weekly: up to 10% of the cadence, this at most
+LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
+NOT_ON_RELEASE = "none of the wanted recordings"  # a failed request's last_error (pipeline)
 DONE = ("imported", "owned", "failed", "skipped")  # requests that will not bring a file
 LibraryFor = Callable[[str, str], UserLibrary]  # (Navidrome username, password)
 
 
 def waiting(playlist_id: int) -> Select[Any]:
-    """Builds still to come. A running one does not count: it may have read the playlist."""
+    """Builds queued, leased, running or waiting to retry."""
     return select(Job).where(
         Job.kind == JobKind.DISCOVERY_BUILD,
-        Job.status.in_((JobState.QUEUED, JobState.LEASED, JobState.RETRY_WAIT)),
+        Job.status.in_((JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)),
         Job.payload["playlist_id"].as_integer() == playlist_id,
     )
 
@@ -55,13 +60,20 @@ def ensure_default(s: Session, now: datetime, user_id: int) -> None:
     has_lb = s.scalar(
         select(UserLink.id).where(UserLink.user_id == user_id, UserLink.service == "listenbrainz")
     )
-    mine = select(DiscoveryPlaylist.id).where(DiscoveryPlaylist.user_id == user_id)
-    if has_lb is None or s.scalar(mine.limit(1)) is not None:
+    if has_lb is None or _has_playlist(s, user_id):
         return
     pl = DiscoveryPlaylist(user_id=user_id, name="Discovery", sources=list(DEFAULT_SOURCES))
-    s.add(pl)
-    s.flush()
+    try:
+        with s.begin_nested():  # a racing caller may have made it: the unique key says so
+            s.add(pl)
+    except IntegrityError:
+        return
     ensure_build(s, now, pl)
+
+
+def _has_playlist(s: Session, user_id: int) -> bool:
+    mine = select(DiscoveryPlaylist.id).where(DiscoveryPlaylist.user_id == user_id)
+    return s.scalar(mine.limit(1)) is not None
 
 
 def build_now(s: Session, now: datetime, pl: DiscoveryPlaylist) -> bool:
@@ -95,11 +107,12 @@ class Discovery:
         library_for: LibraryFor,
         box: SecretBox,
         rng: Rng = random.uniform,
-        discover_library: str = "discover",  # the Navidrome library over /data/discover
+        main_library: str = "Music Library",  # Navidrome library names; None found: unrestricted
+        discover_library: str = "discover",  # the library over /data/discover
     ) -> None:
         self.sessions, self.clock, self.history = sessions, clock, history
         self.library_for, self.box, self.rng = library_for, box, rng
-        self.discover_library = discover_library
+        self.main_library, self.discover_library = main_library, discover_library
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.DISCOVERY_BUILD: self.build, JobKind.DISCOVERY_PUSH: self.push}
@@ -119,7 +132,8 @@ class Discovery:
         """Queue the next build, keyed on this job so a re-run adds none."""
         if s.scalar(waiting(pl.id).where(Job.id != job_id).limit(1)) is not None:
             return
-        nxt = now + jitter(timedelta(days=pl.cadence_days), self.rng)
+        cadence = timedelta(days=pl.cadence_days)
+        nxt = now + cadence + min(cadence * 0.1, JITTER_CAP) * self.rng(-1, 1)
         pl.next_build_at = nxt
         enqueue_in(
             s,
@@ -130,13 +144,23 @@ class Discovery:
             idempotency_key=f"discovery:{pl.id}:after:{job_id}",
         )
 
-    def _links(self, s: Session, user_id: int) -> dict[str, tuple[str, str]] | None:
-        """service -> (external username, secret) for both links, or None if either is missing."""
+    def _links(self, s: Session, user_id: int) -> tuple[dict[str, tuple[str, str]] | None, str]:
+        """(service -> (external username, secret), "") when both links work, else (None, why)."""
         out: dict[str, tuple[str, str]] = {}
+        relink: list[str] = []
         for link in s.scalars(select(UserLink).where(UserLink.user_id == user_id)):
-            if (secret := link_secret(self.box, link)) is not None:
+            if (secret := link_secret(self.box, link)) is None:
+                relink.append(LINK_NAMES.get(link.service, link.service))
+            else:
                 out[link.service] = (link.external_username, secret)
-        return out if {"listenbrainz", "navidrome"} <= out.keys() else None
+        if {"listenbrainz", "navidrome"} <= out.keys():
+            return out, ""
+        return None, f"{relink[0]} needs relinking on /account" if relink else NO_LINKS
+
+    def _note(self, pid: int, why: str | None) -> None:
+        with self.sessions.begin() as s:
+            if pl := s.get(DiscoveryPlaylist, pid):
+                pl.last_error = why
 
     async def build(self, job: JobRecord) -> None:
         pid = job.payload["playlist_id"]
@@ -177,16 +201,15 @@ class Discovery:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None:
                 return
-            links = self._links(s, pl.user_id)
+            links, why = self._links(s, pl.user_id)
             sources, size, ratio = list(pl.sources) or DEFAULT_SOURCES, pl.size, pl.unowned_ratio
         if links is None:
-            with self.sessions.begin() as s:
-                if pl := s.get(DiscoveryPlaylist, pid):
-                    pl.last_error = NO_LINKS
-                    self._schedule_next(s, self.clock.now(), pl, job.id)
-            return
+            return self._stop(pid, job.id, why)
         lb_name, lb_token = links["listenbrainz"]
-        cands = await self._candidates(sources, size, lb_name, lb_token)
+        try:
+            cands = await self._candidates(sources, size, lb_name, lb_token)
+        except AuthError:
+            return self._stop(pid, job.id, "ListenBrainz rejected the token; relink it on /account")
         mbids = [c.recording_mbid for c in cands]
         with self.sessions() as s:
             in_library = set(
@@ -201,36 +224,48 @@ class Discovery:
                     )
                 )
             }
+            dead = {  # a release the recording is not on: asking again finds the same
+                (r.release_mbid, m)
+                for r in s.scalars(
+                    select(Request).where(Request.provisional, Request.status == "failed")
+                )
+                if (r.last_error or "").startswith(NOT_ON_RELEASE)
+                for m in r.recording_mbids
+            }
         owned = in_library | provisional.keys()
-        unowned = [c for c in cands if c.recording_mbid not in owned][: round(size * ratio)]
-        fill = [c for c in cands if c.recording_mbid in owned][: size - len(unowned)]
-        picked = {c.recording_mbid for c in (*unowned, *fill)}
-        missing = [c.recording_mbid for c in unowned if not c.release_mbid]
+        todo = [c for c in cands if c.recording_mbid not in owned]
+        missing = [c.recording_mbid for c in todo if not c.release_mbid]
         found = await self.history.recording_metadata(missing) if missing else {}
+        # (pick, release): those with no known release can't be asked for, so they take no slot
+        asks: list[tuple[RecordingRef, str]] = []
+        for c in todo:
+            release = c.release_mbid or (
+                found[c.recording_mbid].release_mbid if c.recording_mbid in found else None
+            )
+            if release and (release, c.recording_mbid) not in dead:
+                asks.append((c, release))
+            else:
+                log.info("discovery: %s has no usable release; not requested", c.recording_mbid)
+        asks = asks[: round(size * ratio)]
+        fill = [c for c in cands if c.recording_mbid in owned][: size - len(asks)]
+        picked = {c.recording_mbid for c in (*(c for c, _ in asks), *fill)}
         now = self.clock.now()
         with self.sessions.begin() as s:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None:
                 return
             live = self._live_requests(s)
-            for c in unowned:
-                mbid = c.recording_mbid
-                release = c.release_mbid or (found[mbid].release_mbid if mbid in found else None)
-                if not release:
-                    log.info("discovery: no release known for %s; not requested", mbid)
-                    continue
-                hold = self._hold(s, pl, mbid)
-                if mbid not in live:
-                    live[mbid] = create_request(
-                        s,
-                        now,
-                        pl.user_id,
-                        release,
-                        "discovery",
-                        provisional=True,
-                        recordings=[mbid],
-                    ).id
-                hold.request_id = live[mbid]
+            by_release: dict[str, list[str]] = {}  # one request per release, all its tracks
+            for c, release in asks:
+                if c.recording_mbid not in live:
+                    by_release.setdefault(release, []).append(c.recording_mbid)
+            for release, wanted in by_release.items():
+                req = create_request(
+                    s, now, pl.user_id, release, "discovery", provisional=True, recordings=wanted
+                )
+                live.update({m: req.id for m in wanted})
+            for c, _ in asks:
+                self._hold(s, pl, c.recording_mbid).request_id = live[c.recording_mbid]
             for c in fill:  # a track another user's request imported still needs this user's hold
                 pt = provisional.get(c.recording_mbid)
                 if pt and c.recording_mbid not in in_library:
@@ -257,6 +292,13 @@ class Discovery:
                     idempotency_key=f"discovery-push:{pl.id}:build:{job.id}",
                 )
             self._schedule_next(s, now, pl, job.id)
+
+    def _stop(self, pid: int, job_id: int, why: str) -> None:
+        """Record why this build did nothing, and keep the chain going."""
+        with self.sessions.begin() as s:
+            if pl := s.get(DiscoveryPlaylist, pid):
+                pl.last_error = why
+                self._schedule_next(s, self.clock.now(), pl, job_id)
 
     @staticmethod
     def _live_requests(s: Session) -> dict[str, int]:
@@ -286,12 +328,9 @@ class Discovery:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None or not pl.entries:
                 return
-            links = self._links(s, pl.user_id)
+            links, why = self._links(s, pl.user_id)
             if links is None:
-                with self.sessions.begin() as w:
-                    if (p := w.get(DiscoveryPlaylist, pid)) is not None:
-                        p.last_error = NO_LINKS
-                return
+                return self._note(pid, why)
             entries, name, existing = list(pl.entries), pl.name, pl.navidrome_playlist_id
             mbids: list[str] = [e["recording_mbid"] for e in entries]
             main = {
@@ -310,20 +349,33 @@ class Discovery:
                 )
             )
         lib = self.library_for(*links["navidrome"])
-        folder = await lib.music_folder_id(self.discover_library) if discover - main else None
+        note = None
         ids: list[str] = []
-        for e in entries:
-            m = e["recording_mbid"]
-            if m not in main and m not in discover:
-                continue  # not imported yet: it joins on the push after its import
-            song = await lib.resolve(m, e["title"], e["artist"], None if m in main else folder)
-            if song is None:
-                log.info("discovery: %s is not in Navidrome yet; a later push adds it", m)
-            elif song not in ids:
-                ids.append(song)
-        if not ids:
-            return
-        new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing)
+        try:
+            # a main-library entry must not resolve to its discover copy: restrict both
+            main_folder = await lib.music_folder_id(self.main_library) if main else None
+            folder = None
+            if discover - main:
+                folder = await lib.music_folder_id(self.discover_library)
+                if folder is None:
+                    note = (
+                        f"the '{self.discover_library}' library is not visible to your "
+                        "Navidrome account; searching all libraries"
+                    )
+            for e in entries:
+                m = e["recording_mbid"]
+                if m not in main and m not in discover:
+                    continue  # not imported yet: it joins on the push after its import
+                where = main_folder if m in main else folder
+                song = await lib.resolve(m, e["title"], e["artist"], where)
+                if song is None:
+                    log.info("discovery: %s is not in Navidrome yet; a later push adds it", m)
+                elif song not in ids:
+                    ids.append(song)
+            new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing) if ids else None
+        except PermanentError as e:  # AuthError, not authorized: retrying would not help
+            return self._note(pid, f"Navidrome: {e}")
         with self.sessions.begin() as s:
             if (pl := s.get(DiscoveryPlaylist, pid)) is not None:
-                pl.navidrome_playlist_id = new_id
+                pl.last_error = note or pl.last_error
+                pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id

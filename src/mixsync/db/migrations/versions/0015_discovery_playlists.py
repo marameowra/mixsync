@@ -41,6 +41,7 @@ def upgrade() -> None:
         sa.Column("last_error", sa.Text(), nullable=True),
         *_stamps(),
         sa.PrimaryKeyConstraint("id", name="pk_discovery_playlists"),
+        sa.UniqueConstraint("user_id", "name", name="uq_discovery_playlists_user_id"),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.id"],

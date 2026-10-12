@@ -51,6 +51,7 @@ class DiscoveryPlaylist(TimestampMixin, Base):
     """A user's generated playlist: what it draws on, how big, and how long unowned tracks stay."""
 
     __tablename__ = "discovery_playlists"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)  # racing first visits: one default
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
