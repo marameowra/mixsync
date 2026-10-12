@@ -142,3 +142,30 @@ def test_discover_path_held_by_an_active_row_is_taken_even_without_its_file(
         [(make_src("flac", "a"), T1, None)], ALBUM, "verified", "b1", root="discover"
     )
     assert r.error is None and r.rel == rel.replace(".flac", " (2).flac")
+
+
+def test_retrying_a_batch_after_its_file_was_deleted_reuses_path_and_row(
+    importer: Importer, ops: FileOps, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    src = make_src("flac", "a")
+    (first,) = importer.import_release([(src, T1, None)], ALBUM, "x", "b1")
+    assert first.rel
+    (ops.library / first.rel).unlink()
+    (again,) = importer.import_release([(src, T1, None)], ALBUM, "x", "b1")
+    assert again.rel == first.rel and (ops.library / first.rel).is_file()
+    with sessions() as s:
+        assert [t.path for t in s.scalars(select(Track))] == [first.rel]
+
+
+def test_a_row_whose_file_is_missing_still_holds_its_library_path(
+    importer: Importer, ops: FileOps, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    (first,) = importer.import_release([(make_src("flac", "a"), T1, None)], ALBUM, "x", "b1")
+    assert first.rel
+    (ops.library / first.rel).unlink()  # the row outlives the file
+    t = TrackInfo(T1.title, "Radiohead", medium=1, medium_index=1, recording_id="rec-new")
+    (second,) = importer.import_release([(make_src("flac", "b"), t, None)], ALBUM, "x", "b2")
+    assert second.rel == first.rel.replace(".flac", " (2).flac")
+    with sessions() as s:
+        rows = {r.path: r.recording_mbid for r in s.scalars(select(Track))}
+    assert rows == {first.rel: "rec1", second.rel: "rec-new"}
