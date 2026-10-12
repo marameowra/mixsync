@@ -1,15 +1,14 @@
 """user_links: per-user ListenBrainz and Navidrome accounts
 
 Revision ID: 0013_user_links
-Revises: 0011_roles_sequence
+Revises: 0012_file_ops_root
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0013_user_links"
-# TODO at merge: rebase onto 0012_file_ops_root (down_revision = "0012_file_ops_root")
-down_revision: str | None = "0011_roles_sequence"
+down_revision: str | None = "0012_file_ops_root"
 branch_labels = None
 depends_on = None
 

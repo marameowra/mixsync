@@ -219,6 +219,133 @@ def test_recover_trash_ops(
     assert journal.pending() == []
 
 
+# --- discover root ---
+
+
+def test_discover_import_then_trash(ops: FileOps, data_dir: Path, make_src: MakeSrc) -> None:
+    src = make_src()
+    ops.import_file(src, REL, noop_tags, "b1", root="discover")
+    assert files(data_dir / "discover") == [REL] and files(data_dir / "library") == []
+    assert ops.has(REL, root="discover") and not ops.has(REL)
+    assert ops.find_imported("b1", src, root="discover") == REL
+    assert ops.find_imported("b1", src) is None
+    t = ops.trash(REL, "b2", root="discover")
+    assert re.fullmatch(r"\d{4}-\d\d-\d\d/\.discover/" + re.escape(REL), t)
+    assert sha(data_dir / ".trash" / t) == sha(src)
+    assert files(data_dir / "discover") == []
+
+
+def test_write_new_in_discover(ops: FileOps, data_dir: Path) -> None:
+    ops.write_new("a/cover.jpg", b"img", "b1", root="discover")
+    assert files(data_dir / "discover") == ["a/cover.jpg"] and files(data_dir / "library") == []
+
+
+def test_recover_pending_discover_copy_and_trash(
+    ops: FileOps, data_dir: Path, journal: SqlJournal, sessions: sessionmaker[Session]
+) -> None:
+    c = journal.begin("b", "copy", "s", REL, root="discover")
+    final = data_dir / "discover" / REL
+    final.parent.mkdir(parents=True)
+    final.write_bytes(b"audio")
+    journal.set_dst_hash(c, hashlib.sha256(b"audio").hexdigest())
+    journal.begin("b", "trash", "b.flac", "2026-01-01/.discover/b.flac", root="discover")
+    (data_dir / ".trash/2026-01-01/.discover").mkdir(parents=True)
+    (data_dir / ".trash/2026-01-01/.discover/b.flac").write_bytes(b"b")
+    ops.recover()
+    assert statuses(sessions) == ["done", "done"]
+    assert files(data_dir / "library") == []
+
+
+def test_recover_discover_trash_not_moved_rolls_back(
+    ops: FileOps, data_dir: Path, journal: SqlJournal, sessions: sessionmaker[Session]
+) -> None:
+    journal.begin("b", "trash", "b.flac", "2026-01-01/.discover/b.flac", root="discover")
+    (data_dir / "discover").mkdir()
+    (data_dir / "discover/b.flac").write_bytes(b"b")
+    ops.recover()
+    assert statuses(sessions) == ["rolled_back"]
+    assert (data_dir / "discover/b.flac").read_bytes() == b"b"
+
+
+@pytest.mark.parametrize("rel", ["../escape.flac", "/abs.flac", ""])
+def test_discover_rejects_paths_outside_root(ops: FileOps, make_src: MakeSrc, rel: str) -> None:
+    with pytest.raises(SafetyError):
+        ops.import_file(make_src(), rel, noop_tags, "b1", root="discover")
+    with pytest.raises(SafetyError):
+        ops.trash(rel, "b1", root="discover")
+
+
+@pytest.mark.parametrize("root", ["other", "", "../library", "/tmp"])
+def test_unknown_root_refused(ops: FileOps, make_src: MakeSrc, root: str) -> None:
+    with pytest.raises(SafetyError):
+        ops.import_file(make_src(), REL, noop_tags, "b1", root=root)
+    with pytest.raises(SafetyError):
+        ops.has(REL, root=root)
+    with pytest.raises(SafetyError):
+        ops.trash(REL, "b1", root=root)
+
+
+def test_find_imported_same_src_in_both_roots(ops: FileOps, make_src: MakeSrc) -> None:
+    src = make_src()
+    ops.import_file(src, REL, noop_tags, "b1")
+    ops.import_file(src, "d/x.flac", noop_tags, "b1", root="discover")
+    assert ops.find_imported("b1", src) == REL
+    assert ops.find_imported("b1", src, root="discover") == "d/x.flac"
+
+
+def test_discover_trash_restore_round_trip(ops: FileOps, data_dir: Path, make_src: MakeSrc) -> None:
+    src = make_src()
+    ops.import_file(src, REL, noop_tags, "b1", root="discover")
+    t = ops.trash(REL, "b2", root="discover")
+    ops.restore(t, REL, "b3", root="discover")
+    assert files(data_dir / "discover") == [REL] and files(data_dir / "library") == []
+    assert sha(data_dir / "discover" / REL) == sha(src)
+
+
+def test_restore_refuses_a_root_mismatch(ops: FileOps, data_dir: Path, make_src: MakeSrc) -> None:
+    ops.import_file(make_src(), REL, noop_tags, "b1", root="discover")
+    ops.import_file(make_src(name="two"), "two.flac", noop_tags, "b1")
+    td = ops.trash(REL, "b2", root="discover")
+    tl = ops.trash("two.flac", "b2")
+    with pytest.raises(SafetyError):
+        ops.restore(td, REL, "b3")  # discover trash into the library
+    with pytest.raises(SafetyError):
+        ops.restore(tl, "two.flac", "b3", root="discover")
+    assert files(data_dir / "library") == [] and files(data_dir / "discover") == []
+
+
+def test_library_path_cannot_use_the_discover_trash_prefix(ops: FileOps, make_src: MakeSrc) -> None:
+    ops.import_file(make_src(), ".discover/x.flac", noop_tags, "b1")
+    with pytest.raises(SafetyError):
+        ops.trash(".discover/x.flac", "b2")
+
+
+def test_recover_restore_in_discover(
+    ops: FileOps, data_dir: Path, journal: SqlJournal, sessions: sessionmaker[Session]
+) -> None:
+    done = journal.begin("b", "restore", "2026-01-01/.discover/a.flac", "a.flac", root="discover")
+    (data_dir / "discover").mkdir()
+    (data_dir / "discover/a.flac").write_bytes(b"a")  # back in discover, trash name gone
+    todo = journal.begin("b", "restore", "2026-01-01/.discover/b.flac", "b.flac", root="discover")
+    (data_dir / ".trash/2026-01-01/.discover").mkdir(parents=True)
+    (data_dir / ".trash/2026-01-01/.discover/b.flac").write_bytes(b"b")  # never restored
+    ops.recover()
+    assert statuses(sessions) == ["done", "rolled_back"] and done < todo
+    assert files(data_dir / "library") == []
+
+
+def test_recover_discover_trash_ignores_same_rel_in_library(
+    ops: FileOps, data_dir: Path, journal: SqlJournal, sessions: sessionmaker[Session]
+) -> None:
+    journal.begin("b", "trash", "b.flac", "2026-01-01/.discover/b.flac", root="discover")
+    (data_dir / "library/b.flac").write_bytes(b"lib")
+    (data_dir / ".trash/2026-01-01/.discover").mkdir(parents=True)
+    (data_dir / ".trash/2026-01-01/.discover/b.flac").write_bytes(b"d")  # moved already
+    ops.recover()
+    assert statuses(sessions) == ["done"]
+    assert (data_dir / "library/b.flac").read_bytes() == b"lib"
+
+
 def test_only_release_deletes() -> None:
     banned = re.compile(r"\.unlink\(|os\.remove|\brmtree\b|\.rmdir\(|removedirs|os\.unlink")
     src = Path(fileops.__file__).parents[1]

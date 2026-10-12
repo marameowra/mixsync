@@ -21,9 +21,11 @@ This folder holds **two kinds of code**. Keep them in separate files:
 ## Key interfaces
 ```
 HistorySource (core.protocols):
-  recommendations(user, limit) -> list[RecordingRef]
-  similar(seed: ArtistRef | RecordingRef, limit) -> list[RecordingRef]
-  top_artists(user, period) -> list[ArtistRef]
+  recommendations(user, token, count) -> list[RecordingRef]
+  weekly_exploration(user, token) -> list[RecordingRef]   # newest created-for playlist
+  lb_radio(prompt, mode, token) -> list[RecordingRef]
+  recording_metadata(mbids) -> dict[str, RecordingRef]
+  validate_token(token) -> str | None                     # username
 
 Playlist definition (stored as JSON): sources[], size=50, unowned_ratio=0.3, cadence=weekly
 ```

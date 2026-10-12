@@ -13,13 +13,14 @@ class SqlJournal:
         self._sessions = sessions
         self._clock = clock
 
-    def begin(self, batch_id: str, kind: str, src: str, dst: str) -> int:
+    def begin(self, batch_id: str, kind: str, src: str, dst: str, root: str = "library") -> int:
         with self._sessions.begin() as s:
             op = FileOp(
                 batch_id=batch_id,
                 kind=kind,
                 src=src,
                 dst=dst,
+                root=root,
                 status="started",
                 started_at=self._clock.now(),
             )
@@ -45,14 +46,15 @@ class SqlJournal:
             rows = s.scalars(select(FileOp).where(FileOp.status == "started").order_by(FileOp.id))
             return [_to_op(r) for r in rows]
 
-    def find_completed(self, batch_id: str, src: str) -> JournalOp | None:
-        """Most recent completed copy op for this batch and source."""
+    def find_completed(self, batch_id: str, src: str, root: str = "library") -> JournalOp | None:
+        """Most recent completed copy op for this batch, source and root."""
         with self._sessions() as s:
             r = s.scalars(
                 select(FileOp)
                 .where(
                     FileOp.batch_id == batch_id,
                     FileOp.src == src,
+                    FileOp.root == root,
                     FileOp.kind == "copy",
                     FileOp.status == "done",
                 )
@@ -86,4 +88,5 @@ def _to_op(r: FileOp) -> JournalOp:
         started_at=r.started_at,
         finished_at=r.finished_at,
         error=r.error,
+        root=r.root,
     )

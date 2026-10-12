@@ -24,6 +24,7 @@ A crash at any step leaves either the old state or the new state, never a partia
 
 ## 4. Operation journal
 - Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / release / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
+- Each op also records its `root`: `library` (`/data/library`) or `discover` (`/data/discover`, a second Navidrome library). `recover()` resolves relative paths against the op's root. Discover trash goes to `/data/.trash/YYYY-MM-DD/.discover/<rel>` (a prefix no sanitized library path can have, since segments never start with a dot). Discover must be on the same filesystem as `.incoming` and `.trash`, otherwise every discover import fails safely with EXDEV.
 - A batch (merge, reorganize, migration) can be undone as a unit, replayed in reverse.
 - On startup, the worker scans for ops that were started but not finished and either completes or rolls back each one.
 

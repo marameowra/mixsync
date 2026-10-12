@@ -13,8 +13,8 @@ from mixsync.core.config import Settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
-from mixsync.db.models.auth import User
 from mixsync.db.models.accounts import UserLink
+from mixsync.db.models.auth import User
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
 from mixsync.ratelimit.client import polite_client
 from mixsync.web.routes import account
@@ -81,11 +81,16 @@ def _link(
         return (link.external_username, link_secret(box, link)) if link else None
 
 
-def test_save_and_display_never_leaks_secret(client: TestClient, sf: sessionmaker[Session], box: SecretBox) -> None:
+def test_save_and_display_never_leaks_secret(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
     tok = _login(client, "alice")
     r = client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     assert r.status_code == 303
-    assert _link(sf, box, "alice", "listenbrainz") == ("lb-real-name", SECRET)  # validated name wins
+    assert _link(sf, box, "alice", "listenbrainz") == (
+        "lb-real-name",
+        SECRET,
+    )  # validated name wins
     r = client.post(
         "/account/navidrome", data={"username": "ali", "secret": SECRET, "csrf_token": tok}
     )
@@ -107,7 +112,10 @@ def test_failed_validation_stores_nothing(
         "/account/navidrome", data={"username": "ali", "secret": SECRET, "csrf_token": tok}
     )
     assert r.status_code == 400 and "did not accept" in r.text and SECRET not in r.text
-    assert _link(sf, box, "alice", "listenbrainz") is None and _link(sf, box, "alice", "navidrome") is None
+    assert (
+        _link(sf, box, "alice", "listenbrainz") is None
+        and _link(sf, box, "alice", "navidrome") is None
+    )
 
 
 def test_failed_replace_keeps_old_link(
@@ -139,7 +147,9 @@ def test_csrf_required(client: TestClient, sf: sessionmaker[Session], box: Secre
     assert _link(sf, box, "alice", "listenbrainz") is None
 
 
-def test_unlink_and_unknown_service(client: TestClient, sf: sessionmaker[Session], box: SecretBox) -> None:
+def test_unlink_and_unknown_service(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
     tok = _login(client, "alice")
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     r = client.post("/account/listenbrainz/unlink", data={"csrf_token": tok})
@@ -220,7 +230,9 @@ def test_navidrome_unreachable_message_and_password_not_stripped(
     fake.ping = Ping.unreachable
     data = {"username": "ali", "secret": " pw ", "csrf_token": tok}
     r = client.post("/account/navidrome", data=data)
-    assert r.status_code == 400 and "Couldn't reach Navidrome; try again." in r.text
+    assert (
+        r.status_code == 400 and "reach Navidrome; try again." in r.text
+    )  # the apostrophe is HTML-escaped
     assert "did not accept" not in r.text and _link(sf, box, "alice", "navidrome") is None
     fake.ping = Ping.ok
     client.post("/account/navidrome", data=data)
