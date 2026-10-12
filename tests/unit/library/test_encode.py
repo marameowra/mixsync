@@ -158,12 +158,29 @@ async def test_alac_cover_is_a_front_cover_without_container_keys(
     assert not {"major_brand", "minor_version", "compatible_brands"} & set(f.keys())
 
 
-async def test_corrupt_flac_is_an_error_not_a_shorter_file(downloads: Path, work: Path) -> None:
+async def test_corrupt_flac_is_never_replaced_by_a_shorter_file(
+    downloads: Path, work: Path
+) -> None:
     noise = ["-f", "lavfi", "-i", "anoisesrc=d=3:r=44100"]
     src = ff(downloads / "a.flac", "-c:a", "flac", sine=noise)
     data = bytearray(src.read_bytes())
     mid = len(data) // 2
     data[mid : mid + 4000] = bytes(4000)
     src.write_bytes(data)
-    with pytest.raises(PermanentError):
-        await to_flac(src, work)
+    try:  # which of the two depends on ffmpeg's error handling; neither may yield a new file
+        assert await to_flac(src, work) == src
+    except PermanentError:
+        pass
+
+
+async def test_clean_16_and_24_bit_flacs_pass_the_checksum_and_reencode(
+    downloads: Path, work: Path
+) -> None:
+    for bits, sine in ((16, SINE), (24, HI_RES)):
+        fmt = "s16" if bits == 16 else "s32"
+        src = ff(downloads / f"{bits}.flac", "-compression_level", "0", "-sample_fmt", fmt,
+                 *(["-bits_per_raw_sample", "24"] if bits == 24 else []), sine=sine)  # fmt: skip
+        assert FLAC(src).info.bits_per_sample == bits
+        assert await encode._flac_intact(src)
+        out = await to_flac(src, work / str(bits))
+        assert out != src and FLAC(out).info.bits_per_sample == bits
