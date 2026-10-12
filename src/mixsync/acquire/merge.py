@@ -367,6 +367,8 @@ class Merger:
         if op["op"] == "move" and (row is None or row.path not in (new, path)):
             raise SafetyError(f"track row for {new} changed since the merge")
         restored = self._journaled(ubatch, "restore", dst=path) is not None
+        if not restored and not (fo.trash_dir / trashed.dst).is_file():
+            raise SafetyError(f"the trashed original of {path} is gone; nothing was moved")
         # The file at new_path is ours if it is the batch's copy, or if the library still lists
         # it (the user may have retagged it). Decided before anything moves.
         trash_new = new is not None and not (new == path and restored) and fo.has(new)

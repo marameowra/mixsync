@@ -276,3 +276,45 @@ def test_a_protected_discover_entry_survives_and_odd_spellings_still_match(fo: F
     keep = [f"{day(40)}//.discover/Beyoncé/a.mp3"]  # NFC with a double slash
     assert fo.purge_trash(30, "b", keep) == 1
     assert nfd.exists() and not other.exists()
+
+
+def _trashed_long_ago(fo: FileOps, clock: Clock) -> str:
+    (fo.library / "A").mkdir(exist_ok=True)
+    (fo.library / "A/b.mp3").write_bytes(b"only copy")
+    clock.t = NOW - timedelta(days=40)
+    rel = fo.trash("A/b.mp3", "merge-1")
+    clock.t = NOW
+    return rel
+
+
+def test_a_failed_plan_past_the_window_keeps_its_only_copy(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    rel = _trashed_long_ago(fo, clock)
+    _plan(sessions, "failed")
+    with sessions.begin() as s:
+        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=90)
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert (fo.trash_dir / rel).read_bytes() == b"only copy"
+
+
+def test_a_not_done_op_keeps_its_trashed_original_even_in_an_old_done_plan(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    rel = _trashed_long_ago(fo, clock)
+    _plan(sessions, "done")
+    with sessions.begin() as s:
+        p = s.execute(select(Plan)).scalar_one()
+        p.updated_at = NOW - timedelta(days=90)
+        p.ops = [{"op": "move", "old": {"path": "A/b.mp3"}, "done": False}]
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert (fo.trash_dir / rel).exists()
+
+
+def test_a_file_that_cannot_be_deleted_is_rolled_back_not_counted(
+    fo: FileOps, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = put(fo, f"{day(40)}/a.mp3")
+    monkeypatch.setattr(fo, "_purge_file", lambda _rel: False)
+    assert fo.purge_trash(30, "b") == 0
+    assert p.exists() and [o.status for o in ops(sessions)] == ["rolled_back"]

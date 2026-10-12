@@ -317,10 +317,19 @@ def _aged_plan(sf: sessionmaker[Session], status: str, days: float) -> int:
         return p.id
 
 
-@pytest.mark.parametrize("status", ["done", "failed"])
-def test_undo_is_offered_only_within_the_window(
-    client: TestClient, sf: sessionmaker[Session], status: str
+def test_a_failed_plan_stays_undoable_past_the_window(
+    client: TestClient, sf: sessionmaker[Session]
 ) -> None:
+    old = _aged_plan(sf, "failed", 90)  # its original may exist only in the trash
+    tok = _login(client, "root")
+    assert f"/library/plans/{old}/undo" in client.get(f"/library/plans/{old}").text
+    assert client.post(f"/library/plans/{old}/undo", data={"csrf_token": tok}).status_code == 303
+
+
+def test_undo_is_offered_only_within_the_window(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    status = "done"
     fresh = _aged_plan(sf, status, 29)
     stale = _aged_plan(sf, status, 31)
     tok = _login(client, "root")

@@ -53,18 +53,36 @@ class TrashPurger:
                 enqueue_in(s, self.clock.now(), JobKind.TRASH_PURGE, {})
 
     def protected(self) -> set[str]:
-        """Trash paths a plan that can still be undone would restore."""
+        """Trash paths a plan that can still be undone, or a half-done op, would need."""
         now = self.clock.now()
         with self.sessions() as s:
             plans = s.scalars(
                 select(Plan).where(Plan.status.in_(UNDOABLE_STATUSES), Plan.batch_id != "")
             )
             batches = [p.batch_id for p in plans if undoable(p, now, self.days)]
-            return set(
+            keep = set(
                 s.scalars(
                     select(FileOp.dst).where(FileOp.kind == "trash", FileOp.batch_id.in_(batches))
                 )
             )
+            # Second layer, whatever the plan's status: a trashed original whose op is not
+            # done (a half-finished move) may be the only copy.
+            live = select(Plan).where(
+                Plan.status.not_in(("undone", "discarded", "draft")), Plan.batch_id != ""
+            )
+            for p in s.scalars(live):
+                for op in p.ops:
+                    if op["op"] in ("move", "trash") and not op["done"]:
+                        keep.update(
+                            s.scalars(
+                                select(FileOp.dst).where(
+                                    FileOp.kind == "trash",
+                                    FileOp.batch_id == p.batch_id,
+                                    FileOp.src == op["old"]["path"],
+                                )
+                            )
+                        )
+            return keep
 
     async def purge(self, job: JobRecord) -> None:
         try:
