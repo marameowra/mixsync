@@ -39,7 +39,10 @@ for each provisional_tracks row not kept and not expired:
 a track is trashed only when every user's row is expired (never while any user still wants it)
 ```
 - Expiry → `library.fileops.trash()`. Never deleted outright.
-- A "Expiring in 7 days" digest query backs the UI page.
+- A "Expiring in 7 days" digest query (`expiring_soon`) backs the UI page; `keep(s, now, user_id, mbid)` is the manual keep.
+- Job `DISCOVERY_RETAIN` runs daily per user (jittered, self-rescheduling, started in `start_chains`). Stars and play counts are fetched once per user per run. A user without a working Navidrome link is skipped with a note on their playlists.
+- Promote: the discover file is copied through `Importer.import_release` into the main library (filed under the group's canonical release when the track is on it), then the discover copy is trashed. Both are journaled ops. A recording already in `tracks` is not imported again. Kept holds stay `kept` until promoted, so a failed promote is retried the next day.
+- A run that promoted or expired anything queues a rescan and a `DISCOVERY_PUSH` per affected playlist.
 
 **Defaults (decided):** 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. See [discovery design](../../../docs/design/discovery-retention.md).
 

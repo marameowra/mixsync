@@ -147,7 +147,7 @@ class Discovery:
             idempotency_key=f"discovery:{pl.id}:after:{job_id}",
         )
 
-    def _links(self, s: Session, user_id: int) -> tuple[dict[str, tuple[str, str]] | None, str]:
+    def links(self, s: Session, user_id: int) -> tuple[dict[str, tuple[str, str]] | None, str]:
         """(service -> (external username, secret), "") when both links work, else (None, why)."""
         out: dict[str, tuple[str, str]] = {}
         relink: list[str] = []
@@ -204,7 +204,7 @@ class Discovery:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None:
                 return
-            links, why = self._links(s, pl.user_id)
+            links, why = self.links(s, pl.user_id)
             sources, size, ratio = list(pl.sources) or DEFAULT_SOURCES, pl.size, pl.unowned_ratio
         if links is None:
             return self._stop(pid, job.id, why)
@@ -342,7 +342,7 @@ class Discovery:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None or not pl.entries:
                 return
-            links, why = self._links(s, pl.user_id)
+            links, why = self.links(s, pl.user_id)
             if links is None:
                 return self._note(pid, why)
             entries, name, existing = list(pl.entries), pl.name, pl.navidrome_playlist_id

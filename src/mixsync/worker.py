@@ -26,6 +26,7 @@ from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.db.secretbox import load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
+from mixsync.discovery.retention import Retention
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
@@ -221,6 +222,14 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         main_library=settings.navidrome_library,
         discover_library=settings.navidrome_discover_library,
     )
+    retention = Retention(
+        discovery,
+        pipeline.importer,
+        fileops,
+        pipeline.metadata,
+        tuple(settings.canonical_media),
+        tuple(settings.canonical_countries),
+    )
     handlers = (
         HANDLERS
         | pipeline.handlers()
@@ -230,12 +239,14 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | submitter.handlers()
         | watcher.handlers()
         | discovery.handlers()
+        | retention.handlers()
     )
 
     def startup() -> None:
         rechecker.start_chains()
         watcher.start_chains()
         discovery.start_chains()
+        retention.start_chains()
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 

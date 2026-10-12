@@ -20,6 +20,7 @@ class JobKind(StrEnum):
     WATCHLIST_PICK = "watchlist_pick"
     DISCOVERY_BUILD = "discovery_build"
     DISCOVERY_PUSH = "discovery_push"
+    DISCOVERY_RETAIN = "discovery_retain"
 
 
 class JobState(StrEnum):
