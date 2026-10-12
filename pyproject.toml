@@ -185,3 +185,23 @@ forbidden_modules = [
     "mixsync.worker",
 ]
 allow_indirect_imports = true  # db itself may reach ratelimit
+
+[[tool.importlinter.contracts]]
+name = "discovery.listenbrainz imports only core and ratelimit"
+type = "forbidden"
+source_modules = ["mixsync.discovery.listenbrainz"]
+forbidden_modules = [
+    "mixsync.db",
+    "mixsync.match",
+    "mixsync.library",
+    "mixsync.acquire",
+    "mixsync.web",
+    "mixsync.app",
+    "mixsync.worker",
+    "mixsync.metadata",
+    "mixsync.sources",
+    "mixsync.targets",
+    "mixsync.watchlist",
+    "mixsync.submit",
+]
+allow_indirect_imports = true  # ratelimit itself reaches db
