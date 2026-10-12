@@ -28,6 +28,7 @@ from mixsync.acquire.requests import (
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
+    enqueue_verify,
     hold_imports,
     profile_for,
     retry_search,
@@ -376,7 +377,8 @@ class Pipeline:
         assignment = [
             {
                 "local_path": str(paths[index[id(f)]]),
-                "track": track_no[id(t)],
+                "track": track_no[id(t)],  # old decisions have only this
+                "recording_id": t.recording_id,
                 "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
@@ -502,6 +504,7 @@ class Pipeline:
                 raise LookupError(f"decision {did} does not exist")
             cand = candidate_from_dict(d.evidence["candidate"])
             edits = d.evidence.get("unverified")
+            evidence = d.evidence
             mbid = d.chosen_release_mbid or d.release_mbid
             assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
@@ -517,11 +520,27 @@ class Pipeline:
         if not assignment:  # never mark a request imported when nothing was assigned
             raise PermanentError("the decision assigns no files to import")
         album = await self.metadata.get_release(mbid)
-        files: list[tuple[Path, TrackInfo, str | None]] = [
-            (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
-        ]
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
+        by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
+        files: list[tuple[Path, TrackInfo, str | None]] = []
+        for a in assignment:
+            pos: int = a["track"]
+            track: TrackInfo | None = album.tracks[pos] if pos < len(album.tracks) else None
+            # shortcut: a recording on the release twice AND a shifted list maps to the last
+            # one; upgrade by storing the medium and position in the assignment.
+            if "recording_id" in a and (track is None or track.recording_id != a["recording_id"]):
+                track = by_rec.get(a["recording_id"])
+            if track is None:  # the release changed since verify
+                if any(self.importer.is_imported(Path(x["local_path"]), batch) for x in assignment):
+                    raise PermanentError(
+                        "the release changed on MusicBrainz after part of this album was "
+                        "imported; check it by hand"
+                    )
+                with self.sessions.begin() as s:
+                    enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
+                return
+            files.append((Path(a["local_path"]), track, a["acoustid_id"]))
         if wanted is not None:
             return await self._import_provisional(job, cand, album, files, wanted, batch)
         target, n = album, len(files)
