@@ -512,22 +512,27 @@ class Pipeline:
                 "no release was found for these files; pick one or mark unverified"
             )
         album = await self.metadata.get_release(mbid)
+        # Same batch id on every retry, so a resumed import skips what is already in.
+        batch = f"request-{rid}-decision-{did}"
         by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
         files: list[tuple[Path, TrackInfo, str | None]] = []
         for a in assignment:
-            track: TrackInfo | None
-            if "recording_id" in a:
+            pos: int = a["track"]
+            track: TrackInfo | None = album.tracks[pos] if pos < len(album.tracks) else None
+            # shortcut: a recording on the release twice AND a shifted list maps to the last
+            # one; upgrade by storing the medium and position in the assignment.
+            if "recording_id" in a and (track is None or track.recording_id != a["recording_id"]):
                 track = by_rec.get(a["recording_id"])
-            else:  # decided before recording ids were stored: the position is all there is
-                pos: int = a["track"]
-                track = album.tracks[pos] if pos < len(album.tracks) else None
-            if track is None:  # the release changed since verify: match the files again
+            if track is None:  # the release changed since verify
+                if any(self.importer.is_imported(Path(x["local_path"]), batch) for x in assignment):
+                    raise PermanentError(
+                        "the release changed on MusicBrainz after part of this album was "
+                        "imported; check it by hand"
+                    )
                 with self.sessions.begin() as s:
                     enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
                 return
             files.append((Path(a["local_path"]), track, a["acoustid_id"]))
-        # Same batch id on every retry, so a resumed import skips what is already in.
-        batch = f"request-{rid}-decision-{did}"
         if wanted is not None:
             return await self._import_provisional(job, cand, album, files, wanted, batch)
         target, n = album, len(files)

@@ -333,6 +333,44 @@ async def test_accept_verifies_again_when_an_assigned_recording_left_the_release
     assert status(env, rid) == "verifying" and len(env.jobs(JobKind.VERIFY)) == verifies + 1
 
 
+async def test_accept_keeps_each_file_on_its_own_position_of_a_repeated_recording(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    one = ALBUM.tracks[0]
+    reprise = replace(one, title="Reprise", index=3, medium_index=3)
+    _release_changed(monkeypatch, (one, ALBUM.tracks[1], reprise))  # one recording, two tracks
+    with env.sessions.begin() as s:
+        d = decisions.get(s, did)
+        assert d
+        first, second = d.evidence["assignment"]
+        d.evidence = {
+            **d.evidence,
+            "assignment": [
+                {**first, "track": 0, "recording_id": "Alpha-rec-1"},
+                {**second, "track": 2, "recording_id": "Alpha-rec-1"},
+            ],
+        }
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported"
+    assert _imported(env) == {("Alpha-rec-1", "Song One"), ("Alpha-rec-1", "Reprise")}
+
+
+async def test_changed_release_after_a_partial_import_fails_instead_of_verifying_again(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    _release_changed(monkeypatch, ALBUM.tracks[:1])  # Song Two was removed
+    monkeypatch.setattr(env.pipeline.importer, "is_imported", lambda *a: True)  # one is in
+    verifies = len(env.jobs(JobKind.VERIFY))
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    (job,) = env.jobs(JobKind.IMPORT)
+    assert job.status is JobState.FAILED and "check it by hand" in (job.last_error or "")
+    assert len(env.jobs(JobKind.VERIFY)) == verifies
+
+
 async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
     env: Env, web: TestClient
 ) -> None:
