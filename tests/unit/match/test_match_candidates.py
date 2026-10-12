@@ -5,7 +5,7 @@ import pytest
 
 from mixsync.core.matching import AlbumInfo, Band, Candidate, CandidateFile, MatchResult, TrackInfo
 from mixsync.match.candidates import parse_name, rank, score_candidate
-from mixsync.match.profiles import BALANCED
+from mixsync.match.profiles import BALANCED, LOOSE, STRICT
 from mixsync.match.scorer import SCORER_VERSION
 
 TITLES = ["Opening", "Second Song", "Third Song", "Closing"]
@@ -330,3 +330,10 @@ def test_stage1_ties_break_on_slot_queue_speed() -> None:
     ranked = rank(cands, ALBUM, BALANCED)
     assert {r.distance for _, r in ranked[:3]} == {0.0}
     assert [c.username for c, _ in ranked] == ["peer-004", "peer-003", "peer-002", "peer-001"]
+
+
+def test_empty_tracklist_rejects_under_every_profile() -> None:
+    empty = replace(ALBUM, tracks=())
+    for profile in (STRICT, BALANCED, LOOSE):
+        r = score_candidate(cand(album_files()), empty, profile)
+        assert r.band == Band.REJECT and r.vetoes == ("release has no tracklist",)

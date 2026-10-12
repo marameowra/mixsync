@@ -152,6 +152,12 @@ class Pipeline:
             wanted = set(req.recording_mbids) if req.provisional else None
 
         album = await self.metadata.get_release(mbid)
+        if not album.tracks:
+            with self.sessions.begin() as s:
+                req = self._request(s, job)
+                req.artist, req.album = album.artist[:255], album.album[:255]
+                req.status, req.last_error = "failed", "release has no tracklist"
+            return
         if wanted is not None:  # discovery: any copy of the wanted recordings will do
             with self.sessions() as s:
                 have = self._have_recordings(s, wanted)
@@ -511,6 +517,8 @@ class Pipeline:
             raise PermanentError(
                 "no release was found for these files; pick one or mark unverified"
             )
+        if not assignment:  # never mark a request imported when nothing was assigned
+            raise PermanentError("the decision assigns no files to import")
         album = await self.metadata.get_release(mbid)
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"

@@ -1098,3 +1098,33 @@ async def test_transfers_above_both_thresholds_keep_the_cap_full(env: Env) -> No
     await env.step()
     await step_until_started(env, steps=10)
     assert env.source.enqueued == [] and t() > 120
+
+
+async def test_release_without_tracks_fails_and_is_never_imported(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = replace(ALBUM, release_id="55555555-5555-5555-5555-555555555555", tracks=())
+    monkeypatch.setitem(CATALOG, str(empty.release_id), empty)
+    rid = request(env, str(empty.release_id))
+    await env.drain()
+    assert status(env, rid) == "failed"
+    with env.sessions() as s:
+        assert s.get(Request, rid).last_error == "release has no tracklist"  # type: ignore[union-attr]
+    assert library(env) == []
+
+
+async def test_import_with_an_empty_assignment_fails_instead_of_importing(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain(until=lambda: bool(env.jobs(JobKind.IMPORT)))
+    (d,) = decision_rows(env, 2)
+    with env.sessions.begin() as s:
+        row = decisions.get(s, d.id)
+        assert row
+        row.evidence = {**row.evidence, "assignment": []}
+    await env.drain()
+
+    assert [j.status for j in env.jobs(JobKind.IMPORT)] == [JobState.FAILED]
+    assert "assigns no files" in (env.jobs(JobKind.IMPORT)[0].last_error or "")
+    assert status(env, rid) != "imported"
+    assert library(env) == []
