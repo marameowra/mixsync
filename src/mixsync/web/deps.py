@@ -50,6 +50,7 @@ def get_merger(request: Request) -> Merger:
             st.path_template,
             tuple(st.canonical_media),
             tuple(st.canonical_countries),
+            st.trash_days,
         )
     merger: Merger = state.merger
     return merger

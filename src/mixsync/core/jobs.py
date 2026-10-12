@@ -18,6 +18,7 @@ class JobKind(StrEnum):
     MIGRATE_CHECK = "migrate_check"
     WATCHLIST_POLL = "watchlist_poll"
     WATCHLIST_PICK = "watchlist_pick"
+    TRASH_PURGE = "trash_purge"
     DISCOVERY_BUILD = "discovery_build"
     DISCOVERY_PUSH = "discovery_push"
     DISCOVERY_RETAIN = "discovery_retain"

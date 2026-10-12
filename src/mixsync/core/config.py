@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
     canonical_countries: list[str] = ["XW"]  # preferred release countries, best first
+    trash_days: int = Field(default=30, ge=1)  # trash from day folders older than this is purged
     timezone: str = "UTC"  # the zone report days are read in
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
 
