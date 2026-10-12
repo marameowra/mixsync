@@ -95,3 +95,40 @@ def test_expired_session_rejected(client: TestClient, sf: sessionmaker[Session])
         token = create_session(s, uid, datetime.now(UTC), timedelta(seconds=-1))
     client.cookies.set(SESSION_COOKIE, token)
     assert client.get("/").status_code == 303
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    from mixsync.web.routes import auth as auth_routes
+
+    auth_routes._failures.clear()
+    t = [1000.0]
+    monkeypatch.setattr(auth_routes, "_now", lambda: t[0])
+    return t
+
+
+def _fail(c: TestClient, n: int, user: str = "alice") -> None:
+    for _ in range(n):
+        assert _login(c, user, "bad").status_code == 401
+
+
+def test_login_locks_after_ten_failures(client: TestClient, clock: list[float]) -> None:
+    _fail(client, 10)
+    r = _login(client, "alice", "pw-alice")
+    assert r.status_code == 429 and "Too many attempts" in r.text
+    assert _login(client, "ALICE", "pw-alice").status_code == 429
+    clock[0] += 15 * 60 + 1
+    assert _login(client, "alice", "pw-alice").status_code == 303
+
+
+def test_login_success_resets_counter(client: TestClient, clock: list[float]) -> None:
+    _fail(client, 9)
+    assert _login(client, "alice", "pw-alice").status_code == 303
+    _fail(client, 9)
+
+
+def test_lockout_is_per_user_and_ip(client: TestClient, clock: list[float]) -> None:
+    _fail(client, 10)
+    assert _login(client, "root", "pw-root").status_code == 303
+    with TestClient(client.app, follow_redirects=False, client=("10.0.0.9", 1)) as other:
+        assert _login(other, "alice", "pw-alice").status_code == 303
