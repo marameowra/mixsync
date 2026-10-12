@@ -115,6 +115,14 @@ def _kind(f: object) -> str | None:
     return "m4a" if isinstance(f, MP4) else None
 
 
+def readable(path: Path) -> bool:
+    """Whether the tag functions can open `path` (by content)."""
+    try:
+        return _kind(_sniff(path)) is not None
+    except mutagen.MutagenError:  # a damaged or fake WAV: let the converter judge it
+        return False
+
+
 def _open(path: Path) -> tuple[str, Any]:
     f = _sniff(path)
     fmt = _kind(f)
