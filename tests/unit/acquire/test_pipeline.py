@@ -1,7 +1,10 @@
 """The acquire pipeline end to end against fakes: the Phase 2 exit criteria 1 and 2, and the
 rules around them (backoff, debounce, retries, review)."""
 
-from dataclasses import replace
+import shutil
+import subprocess
+from collections.abc import Callable
+from dataclasses import fields, replace
 from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
@@ -11,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import pipeline
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -22,7 +26,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
-from mixsync.db.queue import enqueue_in
+from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
 
@@ -102,14 +106,131 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
     assert env.source.cleared == ["peer1"]
 
 
+def level0(src: Path, out: Path) -> None:
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(src), "-c:a", "flac", "-compression_level", "0",
+         "-map_metadata", "0", "-f", "flac", str(out)],
+        check=True,
+    )  # fmt: skip
+
+
+def lossless_album(env: Env) -> dict[str, int]:
+    """Offer the album as level 0 FLACs (bigger than level 8) and turn re-encoding on. Returns
+    the offered size of each file by name."""
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ext="flac")
+    key = (cand.username, cand.folder)
+    for name, data in env.source.blobs[key].items():
+        src, big = env.source.scratch / name, env.source.scratch / f"big-{name}"
+        src.write_bytes(data)
+        level0(src, big)
+        env.source.blobs[key][name] = big.read_bytes()
+    sizes = {n: len(d) for n, d in env.source.blobs[key].items()}
+    env.source.catalog["alpha album"] = [
+        replace(
+            cand,
+            files=tuple(replace(f, size=sizes[f.path.rsplit("\\", 1)[-1]]) for f in cand.files),
+        )
+    ]
+    env.pipeline = replace(env.pipeline, reencode=True)
+    env.handlers = env.pipeline.handlers()
+    return sizes
+
+
+needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
+
+
+@needs_ffmpeg
+async def test_lossless_download_is_reencoded_into_the_library_and_released(env: Env) -> None:
+    sizes = lossless_album(env)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    lib = env.data_dir / "library"
+    assert sorted(p.name for p in lib.rglob("*.flac")) == [
+        "01-01 Song One.flac",
+        "01-02 Song Two.flac",
+    ]
+    assert sum(p.stat().st_size for p in lib.rglob("*.flac")) < sum(sizes.values())
+    assert list(env.downloads.iterdir()) == []  # the originals were released
+    assert not any((env.data_dir / ".work").rglob("*.flac"))  # scratch space is cleaned up
+
+
+@needs_ffmpeg
+async def test_a_file_that_fails_to_encode_is_imported_as_it_is(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sizes = lossless_album(env)
+    real = pipeline.to_flac
+
+    async def flaky(src: Path, work: Path, level: int) -> Path:
+        if "Two" in src.name:
+            raise PermanentError("ffmpeg failed: boom")
+        return await real(src, work, level)
+
+    monkeypatch.setattr(pipeline, "to_flac", flaky)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    lib = env.data_dir / "library"
+    one, two = (next(lib.rglob(f"*{n}.flac")) for n in ("Song One", "Song Two"))
+    assert one.stat().st_size < sizes["01 Song One.flac"]  # encoded
+    assert two.stat().st_size >= sizes["02 Song Two.flac"]  # as downloaded, plus tags
+
+
+@needs_ffmpeg
+async def test_a_corrupt_lossless_download_is_imported_as_downloaded(env: Env) -> None:
+    sizes = lossless_album(env)
+    blobs = env.source.blobs[("peer1", "Music\\Alpha Band\\Alpha Album")]
+    data = bytearray(blobs["02 Song Two.flac"])
+    mid = len(data) // 2
+    data[mid : mid + 100] = bytes(100)  # decodes with errors; the same size, so it still downloads
+    blobs["02 Song Two.flac"] = bytes(data)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    two = next((env.data_dir / "library").rglob("*Song Two.flac"))
+    assert two.stat().st_size >= sizes["02 Song Two.flac"]  # not re-encoded
+
+
+@needs_ffmpeg
+async def test_resumed_import_does_not_encode_files_that_are_already_in(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lossless_album(env)
+    real, calls, encoded = env.pipeline.importer.import_release, [], []
+    real_encode = pipeline.to_flac
+
+    async def counting(src: Path, work: Path, level: int) -> Path:
+        encoded.append(src.name)
+        return await real_encode(src, work, level)
+
+    def crashing(*a: Any) -> Any:
+        calls.append(1)
+        results = real(*a)
+        if len(calls) == 1:  # the files are in, then the worker dies
+            raise TransientError("killed")
+        return results
+
+    monkeypatch.setattr(pipeline, "to_flac", counting)
+    monkeypatch.setattr(env.pipeline.importer, "import_release", crashing)
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported" and len(calls) == 2
+    assert len(encoded) == 2  # the retry encoded nothing
+
+
 async def test_partial_failure_releases_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     real = env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch)
+        return real(src, rel, write_tags, batch, origin)
 
     monkeypatch.setattr(env.ops, "import_file", flaky)
     rid = request(env)
@@ -795,3 +916,86 @@ async def test_a_repick_of_a_nonexistent_release_reopens_the_review(
             "review",
             f"release {ghost} not found on MusicBrainz",
         )
+
+
+def start_at(env: Env) -> Callable[[], float]:
+    t0 = env.clock.now()
+    return lambda: (env.clock.now() - t0).total_seconds()
+
+
+async def step_until_started(env: Env, steps: int = 6) -> None:
+    for _ in range(steps):
+        if env.source.enqueued:
+            return
+        await env.step()
+
+
+async def test_full_download_cap_defers_without_burning_attempts(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    env.source.moving = lambda: {"a": 0, "b": 0}  # two fresh transfers: no rate known, both count
+    request(env)
+    await env.step()  # search
+    job = await env.step()
+    assert job and job.kind is JobKind.DOWNLOAD
+    assert env.source.enqueued == []
+    first, deferred = env.jobs(JobKind.DOWNLOAD)
+    assert first.status == JobState.SUCCEEDED and first.attempts == 1
+    assert deferred.status == JobState.QUEUED and deferred.attempts == 0
+    assert deferred.payload == first.payload
+    # running the same job again (a crash replay) leaves one deferred job, not two
+    await env.pipeline.download(
+        JobRecord(**{f.name: getattr(first, f.name) for f in fields(JobRecord)})
+    )
+    assert len(env.jobs(JobKind.DOWNLOAD)) == 2
+
+
+async def test_a_progress_check_skips_the_full_cap(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    request(env)
+    await env.step()  # search
+    await env.step()  # the download starts: nothing else is moving
+    assert env.source.enqueued == ["peer1"]
+    env.pipeline.gate.cap = 1
+
+    def boom() -> dict[str, int]:
+        raise AssertionError("a progress check must not look at the cap")
+
+    env.source.moving = boom
+    job = await env.step()  # the status check carries `bytes`
+    assert job and job.payload["bytes"] == 0
+    assert env.jobs(JobKind.VERIFY)
+
+
+async def test_transfer_below_the_floor_for_the_window_frees_its_slot(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1000), "b": int(t() * 10_000_000)}  # 1 KB/s, fast
+    request(env)
+    await env.step()
+    await step_until_started(env)
+    assert env.source.enqueued == ["peer1"]
+    assert t() >= 60  # not before a full window was seen
+
+
+async def test_transfer_below_a_tenth_of_the_total_frees_its_slot(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1_000_000), "b": int(t() * 60_000)}  # 6% of total
+    request(env)
+    await env.step()
+    await step_until_started(env)
+    assert env.source.enqueued == ["peer1"]
+
+
+async def test_transfers_above_both_thresholds_keep_the_cap_full(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.pipeline.gate.cap = 2
+    t = start_at(env)
+    env.source.moving = lambda: {"a": int(t() * 1_000_000), "b": int(t() * 150_000)}  # 13%
+    request(env)
+    await env.step()
+    await step_until_started(env, steps=10)
+    assert env.source.enqueued == [] and t() > 120

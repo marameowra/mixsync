@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
+from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.merge import Merger
 from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
@@ -127,11 +128,19 @@ def _pipeline(
             settings.slskd_api_key,
             downloads_dir=Path(settings.downloads_dir),
         ),
+        gate=DownloadGate(
+            settings.max_concurrent_downloads,
+            timedelta(seconds=settings.slow_download_window),
+            settings.slow_download_floor,
+            settings.slow_download_share,
+        ),
         queries=queries,
         metadata=MusicBrainzProvider(client("musicbrainz")),
         fingerprint=fingerprint,
         acoustid=AcoustIdClient(client("acoustid"), settings),
         importer=Importer(fileops, sessions, clock, settings.path_template),
+        reencode=True,
+        flac_level=settings.flac_level,
         canonical_media=tuple(settings.canonical_media),
         canonical_countries=tuple(settings.canonical_countries),
         coverart=CoverArtClient(client("coverart")),

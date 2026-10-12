@@ -246,3 +246,31 @@ def test_failure_after_publish_stays_pending_and_recovers(
     assert statuses(sessions) == ["started"] and len(journal.pending()) == 1
     ops.recover()
     assert statuses(sessions) == ["done"] and final.read_bytes() == data
+
+
+def test_clear_work_stays_inside_the_work_dir(ops: FileOps, data_dir: Path, tmp_path: Path) -> None:
+    for batch in ("b1", "b2"):
+        (ops.work / batch / "0").mkdir(parents=True)
+        (ops.work / batch / "0" / "x.flac").write_bytes(b"x")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    for bad in ("", "..", "../outside", str(outside)):
+        with pytest.raises(SafetyError):
+            ops.clear_work(bad)
+    assert outside.exists() and (ops.work / "b1" / "0" / "x.flac").exists()
+    ops.clear_work("b1")
+    assert not (ops.work / "b1").exists() and (ops.work / "b2" / "0" / "x.flac").exists()
+    ops.recover()  # stale scratch of a crashed run
+    assert list(ops.work.iterdir()) == []
+
+
+def test_recover_clears_work_and_never_follows_a_symlink(ops: FileOps, tmp_path: Path) -> None:
+    keep = tmp_path / "outside"
+    keep.mkdir()
+    (keep / "x").write_bytes(b"x")
+    (ops.work / "b1" / "run").mkdir(parents=True)
+    (ops.work / "b1" / "run" / "x.flac").write_bytes(b"x")
+    (ops.work / "link").symlink_to(keep, target_is_directory=True)
+    ops.recover()
+    assert not (ops.work / "b1").exists()
+    assert (keep / "x").read_bytes() == b"x"

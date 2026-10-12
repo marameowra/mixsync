@@ -7,10 +7,11 @@ current job's id, so a handler re-run after a crash never forks the chain.
 
 import asyncio
 import logging
+import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
     VERIFY_ATTEMPTS,
     AlbumKey,
@@ -57,6 +59,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
+from mixsync.library.encode import to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
 from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
@@ -76,6 +79,7 @@ NO_RESULTS_BACKOFF = (
 MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
+DOWNLOAD_BUSY_DELAY = timedelta(seconds=30)  # each look at a full cap is also a rate sample
 MONITOR_EVERY = timedelta(seconds=30)
 DOWNLOAD_STALL = timedelta(hours=2)  # no new bytes for this long -> the peer has failed us
 ACOUSTID_ID_SCORE = 0.9  # an AcoustID id is written to the tags only above this
@@ -95,6 +99,9 @@ class Pipeline:
     target: LibraryTarget
     canonical_media: tuple[str, ...] = ("Digital Media", "CD")
     canonical_countries: tuple[str, ...] = ("XW",)
+    reencode: bool = False  # lossless files go into the library as FLAC (see library/encode.py)
+    flac_level: int = 8
+    gate: DownloadGate = field(default_factory=DownloadGate)
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -202,6 +209,17 @@ class Pipeline:
         p = job.payload
         cand = candidate_from_dict(p["candidate"])
         now = self.clock.now()
+        if "bytes" not in p and self.gate.full(now, await self.source.active_downloads()):
+            with self.sessions.begin() as s:  # a fresh job, like a busy search: no attempt burnt
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.DOWNLOAD,
+                    p,
+                    run_after=now + DOWNLOAD_BUSY_DELAY,
+                    idempotency_key=f"download:defer:{job.id}",
+                )
+            return
         try:
             if "bytes" not in p:
                 await self.source.enqueue(cand)
@@ -448,9 +466,7 @@ class Pipeline:
                 req = self._request(s, job)
                 req.status, req.last_error = "owned", None
             return
-        results = await asyncio.to_thread(
-            self.importer.import_release, files, target, "verified", batch
-        )
+        results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
         await self._finish(job, cand, results, batch, unassigned=unassigned)
 
@@ -471,11 +487,44 @@ class Pipeline:
             for t in edits["tracks"]
         ]
         batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
-        results = await asyncio.to_thread(
-            self.importer.import_release, files, album, "unverified", batch
-        )
+        results = await self._import_files(files, album, "unverified", batch)
         year = str(edits["year"]) if edits["year"] else ""
         await self._finish(job, cand, results, batch, (album.artist, album.album, year))
+
+    async def _import_files(
+        self,
+        files: list[tuple[Path, TrackInfo, str | None]],
+        album: AlbumInfo,
+        status: str,
+        batch: str,
+    ) -> list[ImportResult]:
+        """Lossless files are re-encoded to FLAC in a work dir first (the downloads are never
+        touched); the encodes run as subprocesses so the job's heartbeat keeps going."""
+        if not self.reencode:
+            return await asyncio.to_thread(
+                self.importer.import_release, files, album, status, batch
+            )
+        batch_dir = self.importer.work_dir / batch
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        # Its own dir per run: an overlapping run of the same job must not rewrite our files.
+        work = Path(tempfile.mkdtemp(dir=batch_dir))
+        try:
+            encoded: dict[Path, Path] = {}
+            for i, (src, _, _) in enumerate(files):
+                if await asyncio.to_thread(self.importer.is_imported, src, batch):
+                    continue  # a resumed batch: this file is already in
+                try:
+                    out = await to_flac(src, work / str(i), self.flac_level)
+                except (PermanentError, RuntimeError) as e:  # import this one as it is
+                    log.warning("not re-encoding %s: %s", src, e)
+                    continue
+                if out != src:
+                    encoded[src] = out
+            return await asyncio.to_thread(
+                self.importer.import_release, files, album, status, batch, encoded
+            )
+        finally:
+            await asyncio.to_thread(self.importer.clear_work, f"{batch}/{work.name}")
 
     async def _finish(
         self,
