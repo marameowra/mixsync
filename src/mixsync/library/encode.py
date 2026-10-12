@@ -5,6 +5,9 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any, cast
+
+from mutagen.flac import FLAC
 
 from mixsync.core.errors import PermanentError
 
@@ -102,6 +105,26 @@ async def _pcm_md5(path: Path) -> str:
     return m.group(1)
 
 
+def _info(path: Path) -> Any:
+    return cast(Any, FLAC(path).info)  # pyright: ignore[reportUnknownMemberType]
+
+
+_RAW = {8: "pcm_s8", 16: "pcm_s16le", 24: "pcm_s24le"}
+
+
+async def _flac_intact(src: Path) -> bool:
+    """Does the FLAC decode to the audio its STREAMINFO MD5 was taken from? ffmpeg's decoder
+    may skip corrupt frames and still exit 0, so this does not rely on its error handling.
+    True when there is nothing to compare (no MD5 stored, or a bit depth we do not decode raw)."""
+    info = await asyncio.to_thread(_info, src)
+    codec = _RAW.get(info.bits_per_sample)
+    if not info.md5_signature or codec is None:
+        return True
+    out = await _ffmpeg("-i", str(src), "-map", "0:a", "-c:a", codec, "-f", "md5", "-")
+    m = re.search(r"MD5=([0-9a-f]+)", out)
+    return bool(m) and m.group(1) == f"{info.md5_signature:032x}"
+
+
 async def to_flac(src: Path, work_dir: Path, level: int = 8) -> Path:
     """The file to import in place of `src`: a FLAC in `work_dir` for WAV, AIFF, ALAC and a FLAC
     that shrinks at `level`; `src` itself for lossy files, a FLAC that does not shrink, or an
@@ -110,6 +133,9 @@ async def to_flac(src: Path, work_dir: Path, level: int = 8) -> Path:
     if not (probed := await _probe(src)):
         return src
     kind = probed[0]
+    if kind == "flac" and not await _flac_intact(src):
+        log.warning("%s does not match its own checksum; keeping it as downloaded", src)
+        return src
     await asyncio.to_thread(work_dir.mkdir, parents=True, exist_ok=True)
     out = work_dir / f"{src.stem}.flac"
     if out == src:  # a work dir that holds the source would be overwritten by -y
@@ -120,7 +146,12 @@ async def to_flac(src: Path, work_dir: Path, level: int = 8) -> Path:
         "-c:a", "flac", "-compression_level", str(level), "-c:v", "copy",
         "-disposition:v", "attached_pic", *(_ALAC_ARGS if kind == "alac" else ()), str(out),
     )  # fmt: skip
-    if await _pcm_md5(src) != await _pcm_md5(out):
+    same_length = (
+        kind != "flac"
+        or (await asyncio.to_thread(_info, src)).total_samples
+        == (await asyncio.to_thread(_info, out)).total_samples
+    )
+    if not same_length or await _pcm_md5(src) != await _pcm_md5(out):
         log.warning("re-encoding %s changed the audio; keeping the original", src)
     elif kind != "flac" or (out.stat().st_size < src.stat().st_size):  # noqa: ASYNC240
         return out
