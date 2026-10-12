@@ -86,3 +86,13 @@ def test_crash_between_begin_and_unlink_recovers_and_retries(
     assert statuses(sessions) == ["done", "rolled_back"]
     ops.release(src, "b1")
     assert not src.exists() and statuses(sessions) == ["done", "rolled_back", "done"]
+
+
+def test_release_after_discover_import(ops: FileOps, make_src: MakeSrc, data_dir: Path) -> None:
+    src = make_src()
+    ops.import_file(src, REL, append_tag, "b1", root="discover")
+    with pytest.raises(SafetyError):  # imported into discover, not the library
+        ops.release(src, "b1")
+    assert src.exists()
+    ops.release(src, "b1", root="discover")
+    assert not src.exists() and (data_dir / "discover" / REL).exists()

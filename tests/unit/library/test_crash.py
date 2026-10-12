@@ -75,6 +75,28 @@ def test_sigkill_at_step(
     assert files(data_dir / ".incoming") == []
 
 
+def test_sigkill_mid_discover_import_recovers_against_discover(
+    ops: FileOps, data_dir: Path, make_src: MakeSrc, journal: SqlJournal
+) -> None:
+    src = make_src()
+    worker = Path(__file__).with_name("crash_worker.py")
+    proc = subprocess.run(
+        [sys.executable, "-I", str(worker), "rename", str(data_dir), str(src), REL, "discover"],
+        env=os.environ,
+        capture_output=True,
+    )
+    assert proc.returncode == -signal.SIGKILL, proc.stderr
+    assert files(data_dir / "discover") == [REL] and files(data_dir / "library") == []
+    assert [o.root for o in journal.pending()] == ["discover"]
+
+    ops.recover()
+
+    assert journal.pending() == []
+    assert files(data_dir / "discover") == [REL] and files(data_dir / "library") == []
+    with pytest.raises(FileExistsError):
+        ops.import_file(src, REL, append_tag, "again", root="discover")
+
+
 def test_sigkill_between_import_and_row_insert_then_rerun(
     ops: FileOps,
     data_dir: Path,

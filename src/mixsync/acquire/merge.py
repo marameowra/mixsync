@@ -293,7 +293,10 @@ class Merger:
     ) -> FileOp | None:
         """A completed file op of this batch."""
         q = select(FileOp).where(
-            FileOp.batch_id == batch, FileOp.kind == kind, FileOp.status == "done"
+            FileOp.batch_id == batch,
+            FileOp.kind == kind,
+            FileOp.status == "done",
+            FileOp.root == "library",
         )
         if src is not None:
             q = q.where(FileOp.src == src)
