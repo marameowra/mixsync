@@ -1,4 +1,5 @@
 from sqlite3 import Connection
+from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,3 +31,9 @@ def make_engine(settings: Settings | None = None) -> Engine:
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(engine, expire_on_commit=False)
+
+
+def user_sessions(factory: sessionmaker[Session]) -> sessionmaker[Session]:
+    """The web app's sessions. Jobs they queue are user-initiated, so they run first."""
+    kw: dict[str, Any] = {**factory.kw, "info": {"user": True}}
+    return sessionmaker(**kw)

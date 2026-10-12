@@ -3,18 +3,18 @@ import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState, backoff
-from mixsync.db.engine import make_engine
+from mixsync.db.engine import make_engine, make_session_factory, user_sessions
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import User
 from mixsync.db.models.work import Job, Request
-from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
+from mixsync.db.queue import USER_PRIORITY, JobQueue, JobRecord, LeaseLostError, enqueue_in
 from mixsync.worker import HANDLERS, Handler, _heartbeat, run_job  # pyright: ignore[reportPrivateUsage]
 
 LEASE = timedelta(seconds=30)
@@ -301,3 +301,17 @@ def test_a_failed_heartbeat_keeps_beating() -> None:
 
     asyncio.run(_heartbeat(Queue(), 1, "w", timedelta(seconds=0)))  # type: ignore[arg-type]
     assert len(beats) == 3
+
+
+def test_web_sessions_raise_only_default_priority(engine: Engine, clock: FakeClock) -> None:
+    plain = make_session_factory(engine)
+    for factory, prio, tag in (
+        (plain, 0, "worker"),  # follow-on jobs keep their priority
+        (user_sessions(plain), 0, "click"),
+        (user_sessions(plain), 1, "migration"),  # explicit, like a confirm's bulk VERIFY jobs
+    ):
+        with factory() as s, s.begin():
+            enqueue_in(s, clock.now(), JobKind.SEARCH, {"tag": tag}, priority=prio)
+    with plain() as s:
+        got = {j.payload["tag"]: j.priority for j in s.scalars(select(Job))}
+    assert got == {"worker": 0, "click": USER_PRIORITY, "migration": 1}
