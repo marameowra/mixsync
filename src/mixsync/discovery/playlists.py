@@ -334,6 +334,10 @@ class Discovery:
             hold = ProvisionalHold(user_id=pl.user_id, recording_mbid=mbid, playlist_id=pl.id)
             s.add(hold)
             s.flush()
+        elif hold.expired_at is not None:  # picked again after it expired: a fresh hold
+            hold.expired_at = hold.expires_at = hold.kept_at = hold.keep_reason = None
+            hold.provisional_track_id = None
+            hold.playlist_id = pl.id
         return hold
 
     async def push(self, job: JobRecord) -> None:

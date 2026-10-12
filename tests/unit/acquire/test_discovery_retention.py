@@ -1,10 +1,14 @@
 """Discovery retention: keep (star, plays, manual), promote, expire, trash, push."""
 
 import shutil
+from collections.abc import Callable
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import select
 
+from mixsync.acquire.requests import hold_imports
+from mixsync.core.errors import AuthError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db import canonical as canonical_db
 from mixsync.db.auth import create_user
@@ -15,6 +19,7 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import enqueue_in
 from mixsync.discovery import retention
+from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
 
@@ -32,22 +37,31 @@ class RetLib(FakeLib):
         self.stars: set[str] = set()
         self.plays: dict[str, int] = {}
         self.calls: list[str] = []
+        self.song: str | None = SONG  # what resolve finds
+        self.gone: set[str] = set()  # ids Navidrome no longer knows
+        self.resolved: list[tuple[str, str]] = []
+        self.error: Exception | None = None
+        self.during_stars: Callable[[], None] = lambda: None
 
     async def starred_song_ids(self) -> set[str]:
         self.calls.append("stars")
+        if self.error:
+            raise self.error
+        self.during_stars()
         return self.stars
 
     async def play_counts(
         self, song_ids: list[str], playlist_id: str | None = None
     ) -> dict[str, int]:
         self.calls.append("plays")
-        return {i: self.plays.get(i, 0) for i in song_ids}
+        return {i: self.plays.get(i, 0) for i in song_ids if i not in self.gone}
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
     ) -> str | None:
         assert music_folder_id == DISCOVER_FOLDER
-        return SONG
+        self.resolved.append((title, artist))
+        return self.song
 
 
 class RRig(Rig):
@@ -272,3 +286,171 @@ async def test_a_failed_promote_stays_kept_and_the_file_stays(env: Env) -> None:
     pt = r.track()
     assert pt.status == "active" and (env.data_dir / "discover" / pt.path).is_file()
     assert r.holds()[0].kept_at is not None
+
+
+def set_song_id(r: RRig, song_id: str | None) -> None:
+    with r.env.sessions.begin() as s:
+        s.scalars(select(ProvisionalTrack)).one().navidrome_song_id = song_id
+
+
+async def test_an_unknown_song_is_never_expired(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.song = None
+    env.clock.advance(timedelta(days=40))
+    await r.retain(env.user_id)
+    pt = r.track()
+    assert pt.status == "active" and (env.data_dir / "discover" / pt.path).is_file()
+    assert r.holds()[0].expired_at is None
+    with env.sessions() as s:
+        err = s.scalars(select(DiscoveryPlaylist)).one().last_error or ""
+    assert "1 discovery tracks not found in Navidrome" in err
+    assert env.jobs(JobKind.DISCOVERY_PUSH) == []
+
+
+async def test_title_and_artist_come_from_the_track_not_the_playlist(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    with env.sessions.begin() as s:
+        s.scalars(select(DiscoveryPlaylist)).one().entries = []  # a newer week's build
+        pt = s.scalars(select(ProvisionalTrack)).one()
+        pt.title, pt.artist = "Song One", "Alpha Band"
+    await r.retain(env.user_id)
+    assert r.lib.resolved == [("Song One", "Alpha Band")]
+
+
+async def test_a_keep_made_during_the_run_wins(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    env.clock.advance(timedelta(days=40))  # due to expire
+
+    def keep_now() -> None:
+        with env.sessions.begin() as s:
+            assert retention.keep(s, env.clock.now(), env.user_id, MBID)
+
+    r.lib.during_stars = keep_now
+    await r.retain(env.user_id)
+    assert r.holds()[0].expired_at is None
+    assert_promoted(r, "manual")
+
+
+async def test_trash_never_takes_a_file_with_a_kept_hold(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    with env.sessions.begin() as s:
+        h = s.scalars(select(ProvisionalHold)).one()
+        h.expired_at = h.kept_at = env.clock.now()
+    assert r.ret._trash_unwanted({MBID}) == 0  # pyright: ignore[reportPrivateUsage]
+    assert r.track().status == "active"
+
+
+async def test_a_song_id_navidrome_forgot_is_looked_up_again(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    set_song_id(r, "old")
+    r.lib.gone = {"old"}
+    r.lib.plays = {SONG: 3}
+    await r.retain(env.user_id)
+    assert_promoted(r, "plays")
+    assert r.track().navidrome_song_id == SONG
+
+
+async def test_a_forgotten_song_that_cannot_be_found_is_not_expired(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    set_song_id(r, "old")
+    r.lib.gone, r.lib.song = {"old"}, None
+    env.clock.advance(timedelta(days=40))
+    await r.retain(env.user_id)
+    assert r.track().status == "active" and r.track().navidrome_song_id is None
+    assert r.holds()[0].expired_at is None
+
+
+async def test_a_trash_failure_after_import_is_finished_by_the_next_run(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.stars = {SONG}
+    real = env.ops.trash
+    boom = {"n": 0}
+
+    def flaky(rel: str, batch: str, root: str = "library") -> str:
+        boom["n"] += 1
+        if boom["n"] == 1:
+            raise OSError("disk went away")
+        return real(rel, batch, root)
+
+    monkeypatch.setattr(env.ops, "trash", flaky)
+    await r.retain(env.user_id)
+    assert r.track().status == "active" and len(library(env)) == 1  # imported, not yet promoted
+    assert (env.data_dir / "discover" / r.track().path).is_file()
+    await r.retain(env.user_id)
+    assert_promoted(r, "star")  # one library row: no second import
+
+
+@pytest.mark.parametrize("error", [TransientError("down"), AuthError("bad password")])
+async def test_a_navidrome_failure_expires_and_trashes_nothing(env: Env, error: Exception) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.error = error
+    env.clock.advance(timedelta(days=40))
+    if isinstance(error, TransientError):
+        with pytest.raises(TransientError):
+            await r.retain(env.user_id)
+    else:
+        await r.retain(env.user_id)
+    pt = r.track()
+    assert pt.status == "active" and (env.data_dir / "discover" / pt.path).is_file()
+    assert r.holds()[0].expired_at is None
+    assert [j.status for j in env.jobs(JobKind.DISCOVERY_RETAIN)].count("queued") == 1
+
+
+async def test_one_user_keeps_while_the_other_expires(env: Env) -> None:
+    r = RRig(env)
+    with env.sessions.begin() as s:
+        bob = create_user(s, "bob", "pw").id
+    r.hold(env.user_id, days=30)
+    r.hold(bob, days=60)
+    env.clock.advance(timedelta(days=31))
+    await r.retain(env.user_id)  # alice's hold expires, bob's still stands
+    assert r.track().status == "active" and (env.data_dir / "discover" / r.track().path).is_file()
+    r.lib.stars = {SONG}
+    await r.retain(bob)
+    assert [t.recording_mbid for t in library(env)] == [MBID]
+    assert r.track().status == "promoted"
+    alice, bobs = r.holds()
+    assert alice.kept_at is None and alice.expired_at is not None and bobs.keep_reason == "star"
+
+
+async def test_a_pick_after_expiry_is_retained_again(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id, days=30)
+    env.clock.advance(timedelta(days=31))
+    await r.retain(env.user_id)
+    assert r.track().status == "trashed" and r.holds()[0].expired_at is not None
+    with env.sessions.begin() as s:  # a later build picks it again, and it is imported again
+        pl = s.scalars(select(DiscoveryPlaylist)).one()
+        hold = Discovery._hold(s, pl, MBID)  # pyright: ignore[reportPrivateUsage]
+        assert hold.expired_at is None and hold.provisional_track_id is None
+        assert hold.expires_at is None and hold.kept_at is None
+        s.add(
+            ProvisionalTrack(
+                path="Alpha Band/y.mp3",
+                recording_mbid=MBID,
+                release_mbid=ALBUM_B.release_id,
+                release_group_mbid=ALBUM.release_group_id,
+                batch_id="pb2",
+                imported_at=env.clock.now(),
+            )
+        )
+        s.flush()
+        hold_imports(s, env.clock.now(), "pb2")
+    shutil.copy(AUDIO / "cc0-tone-01.mp3", env.data_dir / "discover" / "Alpha Band/y.mp3")
+    with env.sessions() as s:
+        assert (
+            len(retention.expiring_soon(s, env.clock.now(), env.user_id, timedelta(days=31))) == 1
+        )
+    r.lib.stars = {SONG}
+    await r.retain(env.user_id)
+    assert [t.recording_mbid for t in library(env)] == [MBID]

@@ -612,6 +612,8 @@ class Pipeline:
                         acoustid_id=acoustid,
                         batch_id=batch,
                         imported_at=self.clock.now(),
+                        title=track.title,
+                        artist=track.artist or album.artist,
                     )
                 )
         await self._finish(job, cand, results, batch, root="discover", note=note)

@@ -43,6 +43,8 @@ class ProvisionalTrack(TimestampMixin, Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), default="active")  # active/promoted/trashed
     navidrome_song_id: Mapped[str | None] = mapped_column(String(64))
+    title: Mapped[str | None] = mapped_column(Text)  # to find it in Navidrome later
+    artist: Mapped[str | None] = mapped_column(Text)
     promoted_path: Mapped[str | None] = mapped_column(Text)
     trash_path: Mapped[str | None] = mapped_column(Text)
 

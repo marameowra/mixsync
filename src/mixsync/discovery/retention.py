@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.pipeline import Handler
@@ -16,7 +16,7 @@ from mixsync.acquire.requests import LATE_PUSH, RESCAN_DELAY, enqueue_rescan
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo
-from mixsync.core.protocols import MetadataProvider
+from mixsync.core.protocols import MetadataProvider, UserLibrary
 from mixsync.db import canonical as canonical_db
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
@@ -162,8 +162,8 @@ class Retention:
                     h.expires_at and h.expires_at.replace(tzinfo=UTC),
                     h.kept_at is not None,
                     pt.navidrome_song_id,
-                    e.get("title", ""),
-                    e.get("artist", ""),
+                    pt.title or e.get("title", ""),  # old rows: what the playlist says
+                    pt.artist or e.get("artist", ""),
                 )
             )
         return out
@@ -186,17 +186,17 @@ class Retention:
             )  # nothing is expired or trashed without a look at Navidrome
         lib = self.d.library_for(*links["navidrome"])
         reasons: dict[int, str] = {}  # hold id -> why it is kept
-        songs: dict[int, str] = {}  # track id -> its Navidrome song id
         try:
             folder = await lib.music_folder_id(self.d.discover_library)
             starred = await lib.starred_song_ids()  # once per user per run, like the counts
             for r in rows:
                 if r.song_id is None and not r.kept:
                     r.song_id = await lib.resolve(r.mbid, r.title, r.artist, folder)
-                if r.song_id:
-                    songs[r.track_id] = r.song_id
-            ids = sorted({r.song_id for r in rows if r.song_id and not r.kept})
-            counts = await lib.play_counts(ids) if ids else {}
+            counts = await self._counts(lib, rows)
+            for r in rows:  # a cached id Navidrome no longer knows: look the song up again
+                if r.song_id and not r.kept and r.song_id not in counts:
+                    r.song_id = await lib.resolve(r.mbid, r.title, r.artist, folder)
+                    counts |= await self._counts(lib, [r])
         except PermanentError as e:
             return self._note(rows, f"Navidrome: {e}")
         for r in rows:
@@ -209,20 +209,31 @@ class Retention:
         now = self.d.clock.now()
         promote: set[int] = set()
         changed: set[str] = set()  # recordings whose holds just changed
+        unknown: dict[int, int] = {}  # playlist id -> holds left alone for want of a song id
         with self.d.sessions.begin() as s:
             for r in rows:
-                hold = s.get_one(ProvisionalHold, r.hold_id)
-                if r.hold_id in reasons:
+                hold = s.get_one(ProvisionalHold, r.hold_id)  # fresh: a Keep may have come since
+                if hold.expired_at is not None:
+                    continue
+                why = reasons.get(r.hold_id) or (
+                    "manual" if hold.kept_at or hold.keep_reason else None
+                )
+                if why:
                     hold.kept_at = hold.kept_at or now
-                    hold.keep_reason = hold.keep_reason or reasons[r.hold_id]
+                    hold.keep_reason = hold.keep_reason or why
                     promote.add(r.track_id)
                     changed.add(r.mbid)
-                elif r.expires_at and now >= r.expires_at:
+                elif r.song_id is None:  # could be starred; never expire what cannot be checked
+                    unknown[r.playlist_id] = unknown.get(r.playlist_id, 0) + 1
+                elif hold.expires_at and now >= hold.expires_at.replace(tzinfo=UTC):
                     hold.expired_at = now
                     changed.add(r.mbid)
-            for tid, song in songs.items():
-                pt = s.get_one(ProvisionalTrack, tid)
-                pt.navidrome_song_id = pt.navidrome_song_id or song
+                pt = s.get_one(ProvisionalTrack, r.track_id)
+                pt.navidrome_song_id = r.song_id
+            for pid, n in unknown.items():
+                s.get_one(
+                    DiscoveryPlaylist, pid
+                ).last_error = f"{n} discovery tracks not found in Navidrome; not expiring them"
         for tid in promote:
             try:
                 await self._promote(tid)
@@ -232,6 +243,11 @@ class Retention:
         if changed:
             self._push_after(changed, job.id)
         log.info("discovery retention: user %s kept %s, trashed %s", uid, len(promote), trashed)
+
+    @staticmethod
+    async def _counts(lib: UserLibrary, rows: list[Row]) -> dict[str, int]:
+        ids = sorted({r.song_id for r in rows if r.song_id and not r.kept})
+        return await lib.play_counts(ids) if ids else {}
 
     def _trash_unwanted(self, mbids: set[str]) -> int:
         """Trash the discover copy of each still-active track whose every hold is expired."""
@@ -246,11 +262,14 @@ class Retention:
                 live = s.scalar(
                     select(ProvisionalHold.id).where(
                         ProvisionalHold.recording_mbid == mbid,
-                        ProvisionalHold.expired_at.is_(None),
+                        or_(
+                            ProvisionalHold.expired_at.is_(None),
+                            ProvisionalHold.kept_at.is_not(None),
+                        ),
                     )
                 )
                 if pt is None or live is not None:
-                    continue  # a kept hold has no expired_at either, so it blocks too
+                    continue  # a hold still waiting or kept wants the file
                 if self.fileops.has(pt.path, "discover"):
                     pt.trash_path = self.fileops.trash(pt.path, f"expire-{pt.id}", "discover")
                 pt.status = "trashed"
@@ -272,17 +291,24 @@ class Retention:
             rel = await self._import(
                 self.fileops.roots["discover"] / path, mbid, release, acoustid, batch
             )
+        # The copy goes before the status flips: a failure here leaves the row active, and the
+        # next run finds the tracks row, skips the import and trashes again (has() is idempotent).
+        trash = (
+            self.fileops.trash(path, batch, "discover")
+            if self.fileops.has(path, "discover")
+            else None
+        )
         with self.d.sessions.begin() as s:
             pt = s.get_one(ProvisionalTrack, track_id)
-            pt.status, pt.promoted_path = "promoted", rel
-            holds = s.scalars(select(ProvisionalHold).where(ProvisionalHold.recording_mbid == mbid))
+            pt.status, pt.promoted_path, pt.trash_path = "promoted", rel, trash
+            holds = s.scalars(
+                select(ProvisionalHold).where(
+                    ProvisionalHold.recording_mbid == mbid, ProvisionalHold.expired_at.is_(None)
+                )
+            )
             for h in holds:  # every user's playlist now resolves it in the main library
                 h.kept_at = h.kept_at or self.d.clock.now()
                 h.keep_reason = h.keep_reason or "promoted"
-        if self.fileops.has(path, "discover"):  # the copy is in the library: trash the original
-            trash = self.fileops.trash(path, batch, "discover")
-            with self.d.sessions.begin() as s:
-                s.get_one(ProvisionalTrack, track_id).trash_path = trash
 
     async def _import(
         self, src: Path, mbid: str, release: str, acoustid: str | None, batch: str
@@ -300,6 +326,9 @@ class Retention:
                 mapped, _ = canonical.split([file], canon.tracks)
                 if mapped:
                     album, file = canon, mapped[0]
+        with self.d.sessions() as s:  # the worker runs jobs one at a time; this covers awaits
+            if have := s.scalar(select(Track.path).where(Track.recording_mbid == mbid)):
+                return have
         (result,) = await asyncio.to_thread(
             self.importer.import_release, [file], album, "verified", batch
         )
