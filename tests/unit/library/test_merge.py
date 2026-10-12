@@ -74,10 +74,10 @@ class World:
     metadata: FakeMetadata
     importer: Importer
 
-    def imp(self, src: Path, release: str, rec: str) -> str:
+    def imp(self, src: Path, release: str, rec: str, batch: str = "seed") -> str:
         a = OLD_ALBUM if release == OLD else CANON_ALBUM
         track = next(t for t in a.tracks if t.recording_id == rec)
-        (r,) = self.importer.import_release([(src, track, "ac-" + rec)], a, "verified", "seed")
+        (r,) = self.importer.import_release([(src, track, "ac-" + rec)], a, "verified", batch)
         assert r.rel
         return r.rel
 
@@ -819,7 +819,7 @@ def test_import_after_a_failed_move_does_not_take_the_trashed_path_so_undo_works
     with pytest.raises(Boom):
         world.merger.execute(pid)  # r3's original is trashed, its row still points at it
     assert not (world.ops.library / old["r3"][0]).exists()
-    other = world.imp(make_src("flac", "again"), OLD, "r3")
+    other = world.imp(make_src("flac", "again"), OLD, "r3", "later")
     assert other == old["r3"][0].replace(".flac", " (2).flac")
     world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undone"

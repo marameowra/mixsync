@@ -133,7 +133,7 @@ class Importer:
                 return ImportResult(src, done)
             rel = paths.unique(
                 render_path(self._template, tagset, (encoded or src).suffix),
-                lambda r: self._taken(root, r),
+                lambda r: self._taken(root, r, batch_id),
             )
             write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
             self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
@@ -143,12 +143,16 @@ class Importer:
             return ImportResult(src, None, repr(e))
         return ImportResult(src, rel)
 
-    def _taken(self, root: str, rel: str) -> bool:
+    def _taken(self, root: str, rel: str, batch_id: str) -> bool:
         if (self._fileops.roots[root] / rel).exists():
             return True
         with self._sessions() as s:  # a row holds its path even if the file is gone
             if root == "library":
-                return s.scalar(select(Track.id).where(Track.path == rel)) is not None
+                # this batch's own row is reused on a retry, not a reason to rename
+                return (
+                    s.scalar(select(Track.id).where(Track.path == rel, Track.batch_id != batch_id))
+                    is not None
+                )
             return (
                 s.scalar(
                     select(ProvisionalTrack.id).where(
