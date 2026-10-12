@@ -512,14 +512,15 @@ class Pipeline:
                 "no release was found for these files; pick one or mark unverified"
             )
         album = await self.metadata.get_release(mbid)
-        by_rec = {t.recording_id: t for t in album.tracks}
+        by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
         files: list[tuple[Path, TrackInfo, str | None]] = []
         for a in assignment:
             track: TrackInfo | None
             if "recording_id" in a:
                 track = by_rec.get(a["recording_id"])
             else:  # decided before recording ids were stored: the position is all there is
-                track = album.tracks[a["track"]] if a["track"] < len(album.tracks) else None
+                pos: int = a["track"]
+                track = album.tracks[pos] if pos < len(album.tracks) else None
             if track is None:  # the release changed since verify: match the files again
                 with self.sessions.begin() as s:
                     enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
