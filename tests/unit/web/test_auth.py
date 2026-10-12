@@ -6,6 +6,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from mixsync.app import create_app
 from mixsync.core.capabilities import Capability
@@ -148,3 +149,30 @@ def test_failure_dict_is_capped(
     assert {k[1] for k in auth_routes._failures} == {"u3", "u4", "u5"}
     _login(client, "u6", "bad")
     assert len(auth_routes._failures) == 3
+
+
+def test_login_cookie_secure_behind_trusted_proxy(sf: sessionmaker[Session]) -> None:
+    with sf() as s, s.begin():
+        create_user(s, "alice", "pw-alice")
+    app = ProxyHeadersMiddleware(create_app(sf), trusted_hosts="testclient")
+    with TestClient(app, follow_redirects=False) as c:
+        r = c.post(
+            "/login",
+            data={"username": "alice", "password": "pw-alice"},
+            headers={"X-Forwarded-Proto": "https"},
+        )
+    assert "secure" in r.headers["set-cookie"].lower()
+
+
+@pytest.mark.parametrize("trusted", ["testclient", "203.0.113.9"])
+def test_login_cookie_not_secure_without_trusted_forwarded_https(
+    sf: sessionmaker[Session], trusted: str
+) -> None:
+    with sf() as s, s.begin():
+        create_user(s, "alice", "pw-alice")
+    app = ProxyHeadersMiddleware(create_app(sf), trusted_hosts=trusted)
+    # trusted proxy but no X-Forwarded-Proto, then an untrusted peer sending it
+    headers = {} if trusted == "testclient" else {"X-Forwarded-Proto": "https"}
+    with TestClient(app, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": "alice", "password": "pw-alice"}, headers=headers)
+    assert "secure" not in r.headers["set-cookie"].lower()
