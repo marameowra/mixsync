@@ -26,3 +26,13 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
 - Releases are human-only. Never create or push `v*` tags, create GitHub releases, or approve
   deployments to the `release` environment. Pushing a `v*` tag runs `release.yml`, which
   waits for the user's approval before publishing `:<tag>` and `:latest`.
+
+## Delegation
+- Hand all implementation (features, fixes, tests, refactors) to the `implementer`
+  subagent. The main session plans, writes the brief, reviews, re-runs checks,
+  and opens PRs. It does not write the code itself.
+- Run independent pieces of work as parallel implementers. Launch each with
+  `isolation: "worktree"`, branched from the pushed base branch, so they never
+  share a checkout.
+- Brief each implementer like the earlier slices: files to read, deliverables,
+  out of scope, the full check list, and the report format.
