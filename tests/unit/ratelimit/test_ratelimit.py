@@ -11,7 +11,7 @@ from mixsync.db.models import infra  # noqa: F401
 from mixsync.db.models.infra import RateBucket
 from mixsync.ratelimit.bucket import Bucket, aware
 from mixsync.ratelimit.client import _BACKOFF_CAP, PoliteClient, polite_client
-from mixsync.ratelimit.services import limits
+from mixsync.ratelimit.services import ServiceLimits, limits
 
 
 class FakeClock:
@@ -280,3 +280,17 @@ def test_two_engines_never_grant_inside_one_window(
             clock.t += wait
         grants.append(clock.now())
     assert all(b - a >= timedelta(seconds=1) for a, b in zip(grants, grants[1:], strict=False))
+
+
+def test_bucket_picks_up_changed_rate(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    fast = limits("acoustid", settings)  # 3/s
+    old = Bucket("acoustid", fast, sessions, clock)
+    assert [old.reserve() for _ in range(3)] == [timedelta(0)] * 3
+    slow = Bucket("acoustid", ServiceLimits(rate=0.5), sessions, clock)
+    assert slow.reserve() == pytest.approx(timedelta(seconds=2), abs=timedelta(milliseconds=1))
+    with sessions() as s:
+        row = s.get(RateBucket, "acoustid")
+        assert row is not None
+        assert row.refill_per_sec == 0.5
