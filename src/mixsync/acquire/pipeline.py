@@ -28,6 +28,7 @@ from mixsync.acquire.requests import (
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
+    enqueue_verify,
     hold_imports,
     profile_for,
     retry_search,
@@ -370,7 +371,8 @@ class Pipeline:
         assignment = [
             {
                 "local_path": str(paths[index[id(f)]]),
-                "track": track_no[id(t)],
+                "track": track_no[id(t)],  # old decisions have only this
+                "recording_id": t.recording_id,
                 "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
@@ -496,6 +498,7 @@ class Pipeline:
                 raise LookupError(f"decision {did} does not exist")
             cand = candidate_from_dict(d.evidence["candidate"])
             edits = d.evidence.get("unverified")
+            evidence = d.evidence
             mbid = d.chosen_release_mbid or d.release_mbid
             assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
             switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
@@ -509,9 +512,19 @@ class Pipeline:
                 "no release was found for these files; pick one or mark unverified"
             )
         album = await self.metadata.get_release(mbid)
-        files: list[tuple[Path, TrackInfo, str | None]] = [
-            (Path(a["local_path"]), album.tracks[a["track"]], a["acoustid_id"]) for a in assignment
-        ]
+        by_rec = {t.recording_id: t for t in album.tracks}
+        files: list[tuple[Path, TrackInfo, str | None]] = []
+        for a in assignment:
+            track: TrackInfo | None
+            if "recording_id" in a:
+                track = by_rec.get(a["recording_id"])
+            else:  # decided before recording ids were stored: the position is all there is
+                track = album.tracks[a["track"]] if a["track"] < len(album.tracks) else None
+            if track is None:  # the release changed since verify: match the files again
+                with self.sessions.begin() as s:
+                    enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
+                return
+            files.append((Path(a["local_path"]), track, a["acoustid_id"]))
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
         if wanted is not None:

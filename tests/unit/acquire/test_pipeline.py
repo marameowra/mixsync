@@ -285,6 +285,73 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert env.target.rescans == 1
 
 
+async def _held_for_review(env: Env, web: TestClient) -> tuple[int, int, str]:
+    """Verify the album with one vetoed file; return the request, decision and csrf token."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    return rid, d.id, login(web, "alice")
+
+
+def _release_changed(monkeypatch: pytest.MonkeyPatch, tracks: tuple[TrackInfo, ...]) -> None:
+    monkeypatch.setitem(CATALOG, str(ALBUM.release_id), replace(ALBUM, tracks=tracks))
+
+
+def _imported(env: Env) -> set[tuple[str, str]]:
+    """(recording id, title) of every file in the library."""
+    lib = env.data_dir / "library"
+    found = set()
+    for rel in library(env):
+        t = tags.read_all(lib / rel)["tags"]
+        found.add((t["UFID:http://musicbrainz.org"][0], t["TIT2"][0]))
+    return found
+
+
+async def test_accept_keeps_each_file_on_its_recording_when_the_track_list_shifts(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    intro = replace(ALBUM.tracks[0], title="Intro", recording_id="Alpha-rec-0")
+    _release_changed(monkeypatch, (intro, *ALBUM.tracks))  # one earlier: every position moves
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported"
+    assert _imported(env) == {("Alpha-rec-1", "Song One"), ("Alpha-rec-2", "Song Two")}
+
+
+async def test_accept_verifies_again_when_an_assigned_recording_left_the_release(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    _release_changed(monkeypatch, ALBUM.tracks[:1])  # Song Two was removed
+    verifies = len(env.jobs(JobKind.VERIFY))
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.step()  # the import
+    assert library(env) == [] and env.jobs(JobKind.IMPORT)[0].status is JobState.SUCCEEDED
+    assert status(env, rid) == "verifying" and len(env.jobs(JobKind.VERIFY)) == verifies + 1
+
+
+async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        d = decisions.get(s, did)
+        assert d
+        d.evidence = {
+            **d.evidence,
+            "assignment": [
+                {k: v for k, v in a.items() if k != "recording_id"}
+                for a in d.evidence["assignment"]
+            ],
+        }
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
+
+
 async def test_no_results_backs_off_then_caps(env: Env) -> None:
     rid = request(env)
     t0 = env.clock.now()

@@ -136,6 +136,26 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
     )
 
 
+def enqueue_verify(
+    s: Session, now: datetime, req: Request, release_mbid: str | None, evidence: dict[str, Any]
+) -> None:
+    """Verify the downloaded files again, against `release_mbid` (a repick, or a release that
+    changed under a stored assignment)."""
+    req.status = "verifying"
+    enqueue_in(
+        s,
+        now,
+        JobKind.VERIFY,
+        {
+            "request_id": req.id,
+            "release_mbid": release_mbid,
+            "candidate": evidence["candidate"],
+            "paths": [f["local_path"] for f in evidence["source"]["files"]],
+        },
+        max_attempts=VERIFY_ATTEMPTS,
+    )
+
+
 def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
     d = decisions.get(s, decision_id)
@@ -146,19 +166,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
         enqueue_import(s, now, req, d.id)
     elif d.final_action == "repick":
-        req.status = "verifying"
-        enqueue_in(
-            s,
-            now,
-            JobKind.VERIFY,
-            {
-                "request_id": req.id,
-                "release_mbid": d.chosen_release_mbid,
-                "candidate": d.evidence["candidate"],
-                "paths": [f["local_path"] for f in src["files"]],
-            },
-            max_attempts=VERIFY_ATTEMPTS,
-        )
+        enqueue_verify(s, now, req, d.chosen_release_mbid, d.evidence)
     elif req.migration_id is not None:  # no other candidate to look for: the album stays out
         req.status, req.last_error = "skipped", "rejected in review"
     else:
