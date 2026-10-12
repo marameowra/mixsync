@@ -324,8 +324,11 @@ async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
     seen: list[httpx.Request] = []
 
     def rel(i: int, date: str, group: int, *secondary: str) -> dict[str, object]:
-        # the release-group shape a live label search returns (checked 2026-10-11, #43)
-        rg = {"id": rid(group), "primary-type": "Album", "secondary-types": list(secondary)}
+        # the release-group shape a live label search returns (checked 2026-10-11, #43):
+        # "secondary-types" is left out when there are none
+        rg: dict[str, object] = {"id": rid(group), "primary-type": "Album"}
+        if secondary:
+            rg["secondary-types"] = list(secondary)
         return {
             "id": rid(i),
             "title": f"R{i}",
