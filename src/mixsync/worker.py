@@ -23,6 +23,7 @@ from mixsync.core.jobs import DEFAULT_LEASE, JobKind
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
+from mixsync.db.secretbox import load_box
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
@@ -155,6 +156,7 @@ def _pipeline(
 
 def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], None]]:
     settings = Settings()
+    load_box(settings)  # refuse a bad key file at startup (serve_all too), not at first use
     engine = make_engine(settings)
     clock = SystemClock()
     sessions = make_session_factory(engine)

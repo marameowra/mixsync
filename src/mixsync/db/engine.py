@@ -16,7 +16,10 @@ _PRAGMAS = (
 
 
 def make_engine(settings: Settings | None = None) -> Engine:
-    engine = create_engine((settings or Settings()).database_url)
+    engine = create_engine(
+        (settings or Settings()).database_url,
+        hide_parameters=True,  # a failed statement must not put bound secrets in its traceback
+    )
     if engine.dialect.name == "sqlite":
 
         @event.listens_for(engine, "connect")
