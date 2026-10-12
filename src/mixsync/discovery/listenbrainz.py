@@ -1,3 +1,5 @@
+from typing import Any
+
 import httpx
 from pydantic import BaseModel, RootModel, ValidationError
 
@@ -21,10 +23,20 @@ class _Recs(BaseModel):
     payload: Payload
 
 
+_PLAYLIST_EXT = "https://musicbrainz.org/doc/jspf#playlist"
+_TRACK_EXT = "https://musicbrainz.org/doc/jspf#track"
+
+
 class _Track(BaseModel):
     identifier: str | list[str] = ""
     title: str = ""
     creator: str = ""
+    extension: dict[str, dict[str, Any]] = {}
+
+    def release_hint(self) -> str | None:
+        meta: dict[str, Any] = self.extension.get(_TRACK_EXT, {}).get("additional_metadata") or {}
+        mbid: str | None = meta.get("caa_release_mbid")
+        return mbid
 
 
 class _Playlist(BaseModel):
@@ -32,6 +44,15 @@ class _Playlist(BaseModel):
     title: str = ""
     date: str = ""
     track: list[_Track] = []
+    extension: dict[str, dict[str, Any]] = {}
+
+    def is_weekly_exploration(self) -> bool:
+        meta: dict[str, Any] = (
+            self.extension.get(_PLAYLIST_EXT, {}).get("additional_metadata") or {}
+        )
+        algo: dict[str, Any] = meta.get("algorithm_metadata") or {}
+        patch: str | None = algo.get("source_patch")
+        return patch == "weekly-exploration" or (patch is None and self.title.startswith(_WEEKLY))
 
 
 class _PlaylistDoc(BaseModel):
@@ -81,7 +102,7 @@ def _refs(playlist: _Playlist) -> list[RecordingRef]:
     for t in playlist.track:
         ident = t.identifier if isinstance(t.identifier, str) else next(iter(t.identifier), "")
         if ident:
-            refs.append(RecordingRef(_mbid(ident), None, t.creator, t.title))
+            refs.append(RecordingRef(_mbid(ident), t.release_hint(), t.creator, t.title))
     return refs
 
 
@@ -106,6 +127,8 @@ class ListenBrainzClient:
             raise AuthError("ListenBrainz rejected the user token; check it in the user's links")
         if code == 204:
             return None
+        if 300 <= code < 400:
+            raise PermanentError(f"ListenBrainz {path} redirected ({code}); the path is wrong")
         if code == 429 or code >= 500:
             raise TransientError(f"ListenBrainz {path} returned {code}")
         if code != 200:
@@ -120,7 +143,7 @@ class ListenBrainzClient:
         for i in range(0, len(mbids), BATCH):
             body = await self._get(
                 _MetaMap,
-                "/1/metadata/recording",
+                "/1/metadata/recording/",  # without the slash the server redirects
                 recording_mbids=",".join(mbids[i : i + BATCH]),
                 inc="release artist",
             )
@@ -141,7 +164,7 @@ class ListenBrainzClient:
         weekly = [
             d.playlist
             for d in (listing.playlists if listing else [])
-            if d.playlist.title.startswith(_WEEKLY)
+            if d.playlist.is_weekly_exploration()
         ]
         if not weekly:
             return []
