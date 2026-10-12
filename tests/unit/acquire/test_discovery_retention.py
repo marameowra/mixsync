@@ -433,9 +433,9 @@ async def test_a_pick_after_expiry_is_retained_again(env: Env) -> None:
     assert r.track().status == "trashed" and r.holds()[0].expired_at is not None
     with env.sessions.begin() as s:  # a later build picks it again, and it is imported again
         pl = s.scalars(select(DiscoveryPlaylist)).one()
-        hold = Discovery._hold(s, env.clock.now(), pl, MBID)  # pyright: ignore[reportPrivateUsage]
+        hold = Discovery._hold(s, env.clock.now(), pl, MBID, download=True)  # pyright: ignore[reportPrivateUsage]
         assert hold.expired_at is None and hold.provisional_track_id is None
-        assert hold.expires_at is not None and hold.kept_at is None
+        assert hold.expires_at is None and hold.kept_at is None  # the import starts the clock
         s.add(
             ProvisionalTrack(
                 path="Alpha Band/y.mp3",
@@ -458,6 +458,36 @@ async def test_a_pick_after_expiry_is_retained_again(env: Env) -> None:
     assert [t.recording_mbid for t in library(env)] == [MBID]
 
 
+async def test_a_slow_redownload_after_a_repick_gets_its_window_from_the_import(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id, days=30)
+    env.clock.advance(timedelta(days=31))
+    await r.retain(env.user_id)
+    with env.sessions.begin() as s:
+        pl = s.scalars(select(DiscoveryPlaylist)).one()
+        Discovery._hold(s, env.clock.now(), pl, MBID, download=True)  # pyright: ignore[reportPrivateUsage]
+    env.clock.advance(timedelta(days=35))  # the download takes longer than the retention
+    with env.sessions.begin() as s:
+        s.add(
+            ProvisionalTrack(
+                path="Alpha Band/y.mp3",
+                recording_mbid=MBID,
+                release_mbid=ALBUM_B.release_id,
+                release_group_mbid=ALBUM.release_group_id,
+                batch_id="pb2",
+                imported_at=env.clock.now(),
+            )
+        )
+        s.flush()
+        hold_imports(s, env.clock.now(), "pb2")
+    shutil.copy(AUDIO / "cc0-tone-01.mp3", env.data_dir / "discover" / "Alpha Band/y.mp3")
+    await r.retain(env.user_id)
+    hold = r.holds()[0]
+    assert hold.expired_at is None and hold.expires_at == (
+        env.clock.now() + timedelta(days=30)
+    ).replace(tzinfo=None)
+
+
 async def test_a_repick_on_a_track_another_user_keeps_gets_a_fresh_window(env: Env) -> None:
     r = RRig(env)
     with env.sessions.begin() as s:
@@ -473,6 +503,9 @@ async def test_a_repick_on_a_track_another_user_keeps_gets_a_fresh_window(env: E
     await r.run(JobKind.DISCOVERY_BUILD)
     alice = r.holds()[0]
     assert alice.expired_at is None and alice.provisional_track_id == r.track().id
+    assert alice.expires_at == (env.clock.now() + timedelta(days=30)).replace(
+        tzinfo=None
+    )  # clock from the pick
     await r.retain(env.user_id)
     assert r.holds()[0].expired_at is None and r.track().status == "active"
 
