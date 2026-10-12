@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -10,6 +10,7 @@ from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
+from mixsync.db.models.work import Request as WorkRequest
 from mixsync.discovery import playlists, retention
 from mixsync.web.deps import Db, require
 from mixsync.web.templating import templates
@@ -27,7 +28,7 @@ def _own(db: Db, user: AuthUser, playlist_id: int) -> DiscoveryPlaylist:
     return pl
 
 
-def _status(h: ProvisionalHold | None, owned: bool) -> str:
+def _status(h: ProvisionalHold | None, owned: bool, request_status: str | None) -> str:
     if h is not None and h.kept_at is not None:
         return "kept"
     if owned:
@@ -36,7 +37,10 @@ def _status(h: ProvisionalHold | None, owned: bool) -> str:
         return "-"
     if h.expired_at is not None:
         return "expired"
-    return "in discover" if h.provisional_track_id else "waiting for download"
+    if h.provisional_track_id:
+        return "in discover"
+    # a request that ended without a file (playlists.DONE minus imported/owned) found nothing
+    return "not found" if request_status in ("failed", "skipped") else "waiting for download"
 
 
 @router.get("")
@@ -51,24 +55,50 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         h.recording_mbid: h
         for h in db.scalars(select(ProvisionalHold).where(ProvisionalHold.user_id == user.id))
     }
+    req_ids = [h.request_id for h in holds.values() if h.request_id]
+    req_status = {
+        i: st
+        for i, st in db.execute(
+            select(WorkRequest.id, WorkRequest.status).where(WorkRequest.id.in_(req_ids))
+        )
+    }
     mbids = [e["recording_mbid"] for p in rows for e in p.entries]
     owned = set(db.scalars(select(Track.recording_mbid).where(Track.recording_mbid.in_(mbids))))
-    tracks = {
-        p.id: [
-            {
-                **e,
-                "status": _status(holds.get(e["recording_mbid"]), e["recording_mbid"] in owned),
-                "hold": holds.get(e["recording_mbid"]),
-            }
-            for e in p.entries
-        ]
-        for p in rows
+    tracks: dict[int, list[dict[str, Any]]] = {}
+    for p in rows:
+        tracks[p.id] = []
+        for e in p.entries:
+            m = e["recording_mbid"]
+            h = holds.get(m)
+            rs = req_status.get(h.request_id) if h and h.request_id else None
+            tracks[p.id].append({**e, "status": _status(h, m in owned, rs), "hold": h})
+    now = datetime.now(UTC)
+    due = retention.expiring_soon(db, now, user.id)
+    pts = {
+        t.id: t
+        for t in db.scalars(
+            select(ProvisionalTrack).where(
+                ProvisionalTrack.id.in_(
+                    [h.provisional_track_id for h in due if h.provisional_track_id]
+                )
+            )
+        )
     }
-    soon = [
-        (h, db.get(ProvisionalTrack, h.provisional_track_id))
-        for h in retention.expiring_soon(db, datetime.now(UTC), user.id)
-    ]
-    ctx = {
+    names = {e["recording_mbid"]: e for p in rows for e in p.entries}  # old rows lack a title
+    soon: list[dict[str, Any]] = []
+    for h in due:
+        t, e = pts.get(h.provisional_track_id or 0), names.get(h.recording_mbid, {})
+        title = (t and t.title) or e.get("title") or h.recording_mbid
+        artist = (t and t.artist) or e.get("artist")
+        soon.append(
+            {
+                "mbid": h.recording_mbid,
+                "name": f"{artist} - {title}" if artist else title,
+                "expires": h.expires_at,
+                "overdue": bool(h.expires_at and h.expires_at.replace(tzinfo=UTC) <= now),
+            }
+        )
+    ctx: dict[str, Any] = {
         "user": user,
         "rows": rows,
         "tracks": tracks,

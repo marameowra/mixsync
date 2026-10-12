@@ -12,11 +12,11 @@
 <table>
   <thead><tr><th>Track</th><th>Expires</th><th></th></tr></thead>
   <tbody>
-  {% for h, t in soon %}
+  {% for h in soon %}
   <tr>
-    <td>{{ t.artist }} - {{ t.title }}</td>
-    <td>{{ h.expires_at.date() }}</td>
-    <td><form method="post" action="/discover/keep/{{ h.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form></td>
+    <td>{{ h.name }}</td>
+    <td>{% if h.overdue %}overdue (was {{ h.expires.date() }}){% else %}{{ h.expires.date() }}{% endif %}</td>
+    <td><form method="post" action="/discover/keep/{{ h.mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form></td>
   </tr>
   {% endfor %}
   </tbody>

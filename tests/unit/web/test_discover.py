@@ -18,6 +18,7 @@ from mixsync.db.models.auth import User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job
+from mixsync.db.models.work import Request as WorkRequest
 
 NOW = datetime.now(UTC)
 KEYS = ("owned", "waiting", "indiscover", "kept", "expired", "soon")
@@ -206,3 +207,81 @@ def test_unauthenticated_redirects_to_login(client: TestClient) -> None:
     r = client.get("/discover")
     assert r.status_code == 303 and r.headers["location"].startswith("/login")
     assert client.post(f"/discover/keep/{M['kept']}").status_code == 403  # no session, no CSRF
+
+
+def _extra(sf: sessionmaker[Session], pid: int, mbid: str, **hold: object) -> None:
+    with sf() as s, s.begin():
+        uid = s.scalars(select(User.id).where(User.username == "alice")).one()
+        pl = s.get_one(DiscoveryPlaylist, pid)
+        entry = {"recording_mbid": mbid, "artist": "Art", "title": f"T-{mbid[:8]}"}
+        pl.entries = [*pl.entries, entry]
+        s.add(ProvisionalHold(user_id=uid, recording_mbid=mbid, playlist_id=pid, **hold))
+
+
+def test_overdue_hold_is_labelled_and_missing_names_fall_back(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _seed(sf)
+    old = "0000000a-0000-0000-0000-000000000000"
+    with sf() as s, s.begin():
+        pt = ProvisionalTrack(path="old.mp3", recording_mbid=old, batch_id="b", imported_at=NOW)
+        s.add(pt)
+        s.flush()
+        pt_id = pt.id  # no title or artist, like an old row
+    _extra(sf, pid, old, provisional_track_id=pt_id, expires_at=NOW - timedelta(days=5))
+    _login(client, "alice")
+    text = client.get("/discover").text
+    soon = text.split("Expiring in the next 7 days")[1].split("<h2>Discovery")[0]
+    assert "overdue" in soon and "None" not in soon and "Art - T-0000000a" in soon
+    assert soon.count("overdue") == 1  # the one 3 days out is not overdue
+
+
+def test_finished_request_without_a_file_is_not_found(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _seed(sf)
+    failed, live, bare = (f"0000000{c}-0000-0000-0000-000000000000" for c in "bcd")
+    with sf() as s, s.begin():
+        uid = s.scalars(select(User.id).where(User.username == "alice")).one()
+        reqs = {
+            m: WorkRequest(user_id=uid, release_mbid="r", status=st, provisional=True)
+            for m, st in ((failed, "failed"), (live, "searching"))
+        }
+        s.add_all(reqs.values())
+        s.flush()
+        ids = {m: r.id for m, r in reqs.items()}
+    _extra(sf, pid, failed, request_id=ids[failed])
+    _extra(sf, pid, live, request_id=ids[live])
+    _extra(sf, pid, bare)  # a reset hold: no request yet
+    _login(client, "alice")
+    text = client.get("/discover").text.split("<h2>Discovery")[1]
+    assert [_status(text, m[:8]) for m in (failed, live, bare)] == [
+        "not found",
+        "waiting for download",
+        "waiting for download",
+    ]
+
+
+def test_last_error_is_escaped(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _seed(sf)
+    with sf() as s, s.begin():
+        s.get_one(DiscoveryPlaylist, pid).last_error = "<script>alert(1)</script>"
+    _login(client, "alice")
+    text = client.get("/discover").text
+    assert "<script>alert(1)" not in text and "&lt;script&gt;" in text
+
+
+def test_posts_without_a_session_are_refused(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _seed(sf)
+    for path in (f"/discover/{pid}/settings", f"/discover/{pid}/build"):
+        assert client.post(path, data={"size": "5"}).status_code in (303, 403)
+    with sf() as s:
+        assert s.get_one(DiscoveryPlaylist, pid).size == 50
+        assert s.scalars(select(Job).where(Job.kind == JobKind.DISCOVERY_BUILD)).first() is None
+
+
+def test_keeping_an_expired_hold_is_404(client: TestClient, sf: sessionmaker[Session]) -> None:
+    _seed(sf)
+    tok = _login(client, "alice")
+    r = client.post(f"/discover/keep/{M['expired']}", data={"csrf_token": tok})
+    assert r.status_code == 404
