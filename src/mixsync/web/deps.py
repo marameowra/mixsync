@@ -14,9 +14,10 @@ from mixsync.db import decisions
 from mixsync.db.auth import AuthUser, user_for_session
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.secretbox import SecretBox, load_box
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
-from mixsync.ratelimit.client import polite_client
+from mixsync.ratelimit.client import PoliteClient, polite_client
 
 SESSION_COOKIE = "mixsync_session"
 
@@ -68,6 +69,28 @@ def get_watch(request: Request) -> ReleaseWatch:
 
 
 Watch = Annotated[ReleaseWatch, Depends(get_watch)]
+
+
+def get_box(request: Request) -> SecretBox:
+    """Loaded on first use; a key file with loose permissions fails here, before any secret is
+    read or written."""
+    state = request.app.state
+    if getattr(state, "secret_box", None) is None:
+        state.secret_box = load_box(state.settings)
+    box: SecretBox = state.secret_box
+    return box
+
+
+Box = Annotated[SecretBox, Depends(get_box)]
+
+
+def get_navidrome_http(request: Request) -> PoliteClient:
+    """One client for the app's life; account links ping Navidrome as the user through it."""
+    state = request.app.state
+    if getattr(state, "navidrome_http", None) is None:
+        state.navidrome_http = polite_client("navidrome", state.settings, state.session_factory)
+    http: PoliteClient = state.navidrome_http
+    return http
 
 
 def current_user(request: Request, db: Db) -> AuthUser:
