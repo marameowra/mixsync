@@ -14,11 +14,11 @@ from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
+from mixsync.db.undo import UNDOABLE_STATUSES, undoable
 from mixsync.library.fileops import FileOps
 
 INTERVAL = timedelta(days=1)
 LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
-UNDOABLE = ("running", "done", "failed", "undoing")  # undo restores these plans' files from trash
 Rng = Callable[[float, float], float]
 
 
@@ -52,9 +52,13 @@ class TrashPurger:
                 enqueue_in(s, self.clock.now(), JobKind.TRASH_PURGE, {})
 
     def protected(self) -> set[str]:
-        """Trash paths an undoable plan's undo would restore."""
+        """Trash paths a plan that can still be undone would restore."""
+        now = self.clock.now()
         with self.sessions() as s:
-            batches = select(Plan.batch_id).where(Plan.status.in_(UNDOABLE), Plan.batch_id != "")
+            plans = s.scalars(
+                select(Plan).where(Plan.status.in_(UNDOABLE_STATUSES), Plan.batch_id != "")
+            )
+            batches = [p.batch_id for p in plans if undoable(p, now, self.days)]
             return set(
                 s.scalars(
                     select(FileOp.dst).where(FileOp.kind == "trash", FileOp.batch_id.in_(batches))

@@ -174,6 +174,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         settings.path_template,
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
+        settings.trash_days,
     )
     pipeline = _pipeline(settings, fileops, sessions, clock)
     rechecker = Rechecker(

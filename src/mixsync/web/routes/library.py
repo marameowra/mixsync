@@ -17,6 +17,7 @@ from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan
+from mixsync.db.undo import undoable
 from mixsync.library import fragmentation, tags
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -48,7 +49,12 @@ def _plan(db: Db, plan_id: int) -> Plan:
     return plan
 
 
-def _allowed(db: Session, plan: Plan) -> set[str]:
+def _days(request: Request) -> int:
+    days: int = request.app.state.settings.trash_days
+    return days
+
+
+def _allowed(db: Session, plan: Plan, days: int) -> set[str]:
     """The actions this plan's state allows. Resume and undo also need no live job on the plan,
     or a second worker would race the first."""
     if plan.status == "draft":  # a confirmed draft (its job waits) can still be confirmed again
@@ -56,8 +62,8 @@ def _allowed(db: Session, plan: Plan) -> set[str]:
     if live_job(db, plan.id):
         return set()
     if plan.status == "failed" and not (plan.error or "").startswith(("undo:", "blocked:")):
-        return {"resume", "undo"}
-    return {"undo"} if plan.status in ("done", "failed", "running", "undoing") else set()
+        return {"resume", "undo"} if undoable(plan, datetime.now(UTC), days) else {"resume"}
+    return {"undo"} if undoable(plan, datetime.now(UTC), days) else set()
 
 
 def _check_count(plan: Plan, count: str) -> None:
@@ -80,7 +86,7 @@ def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
             "user": user,
             "items": fragmentation.find(db),
             "plans": plans,
-            "allowed": {p.id: _allowed(db, p) for p in plans},
+            "allowed": {p.id: _allowed(db, p, _days(request)) for p in plans},
         },
     )
 
@@ -219,11 +225,17 @@ async def build_plan(
 def plan_detail(plan_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
     plan = _plan(db, plan_id)
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
-    ctx = {"user": user, "plan": plan, "counts": counts, "allowed": _allowed(db, plan)}
+    ctx = {
+        "user": user,
+        "plan": plan,
+        "counts": counts,
+        "allowed": _allowed(db, plan, _days(request)),
+    }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
 
 def _act(
+    request: Request,
     plan_id: int,
     action: str,
     db: Session,
@@ -231,7 +243,7 @@ def _act(
     enqueue: Callable[[Session, datetime, int], None],
 ) -> RedirectResponse:
     plan = _plan(db, plan_id)
-    if action not in _allowed(db, plan):
+    if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)
     enqueue(db, datetime.now(UTC), plan.id)
@@ -240,15 +252,15 @@ def _act(
 
 @router.post("/plans/{plan_id}/confirm")
 def confirm(
-    plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(plan_id, "confirm", db, count, enqueue_merge)
+    return _act(request, plan_id, "confirm", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/discard")
-def discard(plan_id: int, user: User, db: Db) -> RedirectResponse:
+def discard(plan_id: int, request: Request, user: User, db: Db) -> RedirectResponse:
     plan = _plan(db, plan_id)
-    if "discard" not in _allowed(db, plan):
+    if "discard" not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     plan.status = "discarded"  # a preview that never ran: DB only
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
@@ -256,11 +268,13 @@ def discard(plan_id: int, user: User, db: Db) -> RedirectResponse:
 
 @router.post("/plans/{plan_id}/resume")
 def resume(
-    plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(plan_id, "resume", db, count, enqueue_merge)
+    return _act(request, plan_id, "resume", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/undo")
-def undo(plan_id: int, user: User, db: Db, count: Annotated[str, Form()] = "") -> RedirectResponse:
-    return _act(plan_id, "undo", db, count, enqueue_undo)
+def undo(
+    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+) -> RedirectResponse:
+    return _act(request, plan_id, "undo", db, count, enqueue_undo)

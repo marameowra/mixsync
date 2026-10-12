@@ -28,6 +28,7 @@ from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
+from mixsync.db.undo import undoable
 from mixsync.library import canonical, fragmentation
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
@@ -85,6 +86,7 @@ class Merger:
     template: str
     canonical_media: tuple[str, ...] = ("Digital Media", "CD")
     canonical_countries: tuple[str, ...] = ("XW",)
+    trash_days: int = 30  # an undo is possible this long after the plan finished
 
     def handlers(self) -> dict[JobKind, Callable[[JobRecord], Any]]:
         return {JobKind.MERGE: self.merge, JobKind.UNDO_MERGE: self.undo}
@@ -318,6 +320,8 @@ class Merger:
             # shortcut: "running" is accepted to clean up after a crash; see execute.
             if plan.status not in ("done", "failed", "running", "undoing"):
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
+            if not undoable(plan, self.clock.now(), self.trash_days):
+                raise SafetyError(f"undo window of {self.trash_days} days has passed")
             plan.status = "undoing"
             batch, ops, kind = plan.batch_id, plan.ops, plan.kind
         try:

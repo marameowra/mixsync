@@ -158,6 +158,24 @@ def test_trash_needed_by_an_undoable_plan_survives_until_it_is_undone(
     assert not (fo.trash_dir / rel).exists()
 
 
+def test_trash_of_a_plan_past_its_undo_window_is_purged(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    src = fo.library / "A/b.mp3"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"orig")
+    clock.t = NOW - timedelta(days=40)
+    rel = fo.trash("A/b.mp3", "merge-1")
+    clock.t = NOW
+    _plan(sessions, "done")
+    with sessions.begin() as s:
+        s.execute(select(Plan)).scalar_one().updated_at = NOW - timedelta(days=30)  # at the edge
+    purger = TrashPurger(sessions, clock, fo, 30)
+    assert purger.protected() == set()
+    asyncio.run(purger.purge(_job(1)))
+    assert not (fo.trash_dir / rel).exists()
+
+
 def _job(i: int) -> JobRecord:
     return JobRecord(
         id=i,
