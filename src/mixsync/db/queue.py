@@ -259,8 +259,10 @@ def enqueue_in(
     changes. With an existing idempotency_key, adds nothing."""
     if idempotency_key and s.scalar(select(Job.id).where(Job.idempotency_key == idempotency_key)):
         return
-    if s.info.get("user"):  # a web request's session, see db.engine.user_sessions
-        priority = min(priority, USER_PRIORITY)
+    # a web request's session (db.engine.user_sessions); an explicit priority, like a
+    # migration's bulk VERIFY jobs, is kept so a big confirm can't jump the queue
+    if s.info.get("user") and priority == 0:
+        priority = USER_PRIORITY
     s.add(
         Job(
             kind=kind,
