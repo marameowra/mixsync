@@ -41,7 +41,8 @@ class NavidromeUser:
     async def play_counts(
         self, song_ids: list[str], playlist_id: str | None = None
     ) -> dict[str, int]:
-        """Counts for song_ids; 0 when unreported. One getPlaylist call covers our own playlist."""
+        """Counts for song_ids; 0 when unreported, and absent when Navidrome no longer knows the
+        song (a reset or rescan changed its id). One getPlaylist call covers our own playlist."""
         known: dict[str, int] = {}
         if playlist_id:
             try:
@@ -57,7 +58,7 @@ class NavidromeUser:
                 try:
                     known[i] = int((await self._subsonic.get_song(i)).get("playCount") or 0)
                 except NotFoundError:
-                    known[i] = 0  # deleted, or rescanned under a new id
+                    continue  # deleted, or rescanned under a new id: not the same as 0 plays
             counts[i] = known[i]
         return counts
 
@@ -74,8 +75,8 @@ class NavidromeUser:
         """Song id whose musicBrainzId is `recording_mbid`, else None (never guesses).
 
         Not path matching: Navidrome reports a made-up Subsonic `path` unless real paths are
-        enabled. Unverified on a live server: assumes MixSync-written recording ids reach the
-        Subsonic `musicBrainzId` field.
+        enabled. Navidrome's song `musicBrainzId` is the recording MBID (verified on a live
+        server, 2026-10-12).
         """
         for song in await self._subsonic.search3(
             f"{artist} {title}", music_folder_id=music_folder_id

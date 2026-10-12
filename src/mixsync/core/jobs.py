@@ -21,6 +21,7 @@ class JobKind(StrEnum):
     TRASH_PURGE = "trash_purge"
     DISCOVERY_BUILD = "discovery_build"
     DISCOVERY_PUSH = "discovery_push"
+    DISCOVERY_RETAIN = "discovery_retain"
 
 
 class JobState(StrEnum):

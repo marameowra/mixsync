@@ -286,4 +286,4 @@ async def test_play_counts_falls_back_to_get_song_and_tolerates_missing_songs(
         return ok(song={"id": "s1", "playCount": 2})
 
     counts = await user(make_client, handler).play_counts(["s1", "gone"], "p1")
-    assert counts == {"s1": 2, "gone": 0}
+    assert counts == {"s1": 2}  # a vanished song is absent, not 0 plays
