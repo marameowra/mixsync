@@ -1,5 +1,5 @@
-"""WAV and AIFF downloads: verify reads a FLAC conversion made in a scratch dir, import still
-starts from the untouched download."""
+"""WAV and AIFF downloads: verify reads them directly (ID3 tags, ffprobe check), import encodes
+the untouched download to FLAC."""
 
 import subprocess
 from dataclasses import replace

@@ -112,7 +112,7 @@ def _kind(f: object) -> str | None:
         return "flac"
     if isinstance(f, OggVorbis):
         return "ogg"
-    if isinstance(f, MP3 | WAVE | AIFF):  # WAV/AIFF carry ID3; import encodes them to FLAC
+    if isinstance(f, MP3 | WAVE | AIFF):  # WAV/AIFF get ID3 chunks if imported unencoded
         return "mp3"
     return "m4a" if isinstance(f, MP4) else None
 
