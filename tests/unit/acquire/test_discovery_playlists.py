@@ -725,3 +725,23 @@ async def test_a_recording_missing_from_an_imported_release_is_not_asked_for_aga
     await rig.run(JobKind.DISCOVERY_BUILD)
     rs = requests(rig.env)[1:]
     assert [(r.release_mbid, r.recording_mbids) for r in rs] == [(REL_A, [rec(3)])]
+
+
+async def test_a_good_push_keeps_a_build_error(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main = {rec(1): "s1"}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)  # entries now exist
+
+    async def refused(user: str, token: str) -> list[RecordingRef]:
+        raise AuthError("ListenBrainz rejected the user token")
+
+    rig.history.weekly_exploration = refused  # type: ignore[method-assign]
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    assert "rejected the token" in (rig.pl(pid).last_error or "")
+    await rig.disc.push(_record(rig, pid))  # an import-triggered push
+    assert "rejected the token" in (rig.pl(pid).last_error or "")
+    assert rig.lib.playlists == {"pl1": ["s1"]}

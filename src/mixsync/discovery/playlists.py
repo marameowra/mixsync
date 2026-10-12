@@ -33,6 +33,8 @@ BUILD_NOW_GAP = timedelta(hours=1)  # a button must not turn into a ListenBrainz
 NO_LINKS = "link ListenBrainz/Navidrome on /account"
 JITTER_CAP = timedelta(hours=6)  # "weekly" stays weekly: up to 10% of the cadence, this at most
 LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
+# last_error prefixes a push writes; a good push clears only these, never a build's error
+PUSH_ERRORS = ("Navidrome: ", "Navidrome needs relinking", "the '")
 PARTIAL_RELEASE = "not on this release"  # an imported request's last_error (pipeline)
 NOT_ON_RELEASE = "none of the wanted recordings"  # a failed request's last_error (pipeline)
 DONE = ("imported", "owned", "failed", "skipped")  # requests that will not bring a file
@@ -394,5 +396,6 @@ class Discovery:
             return self._note(pid, f"Navidrome: {e}")
         with self.sessions.begin() as s:
             if (pl := s.get(DiscoveryPlaylist, pid)) is not None:
-                pl.last_error = note  # a good push clears what an earlier one reported
+                if note or (pl.last_error or "").startswith(PUSH_ERRORS):
+                    pl.last_error = note  # a good push clears what an earlier one reported
                 pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id
