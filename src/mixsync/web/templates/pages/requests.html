@@ -16,7 +16,7 @@
   <tr>
     <td>{{ r.id }}</td>
     <td>{% if r.album %}{{ r.artist }} - {{ r.album }}{% else %}{{ r.release_mbid }}{% endif %}</td>
-    <td>{% if r.status == "review" %}<a href="/review">review</a>{% else %}{{ r.status }}{% endif %}</td>
+    <td>{% if r.status == "review" %}<a href="/review">review</a>{% elif r.id in queued %}queued ({{ r.status }}){% else %}{{ r.status }}{% endif %}</td>
     <td>{{ r.last_error or "" }}</td>
     <td>{% if r.id in deletable %}<form method="post" action="/requests/{{ r.id }}/delete" onsubmit="return confirm('Delete this request? Files are kept.')">{{ forms.csrf() }}<button type="submit">Delete</button></form>{% endif %}</td>
   </tr>
