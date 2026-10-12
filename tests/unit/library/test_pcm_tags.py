@@ -1,6 +1,5 @@
 """Tagging WAV/AIFF (only when imported unencoded) must never touch the audio."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -8,8 +7,6 @@ import pytest
 
 from mixsync.library import tags
 from mixsync.library.encode import _pcm_md5  # pyright: ignore[reportPrivateUsage]
-
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
 
 CASES = [
     ("a.wav", "pcm_s16le", "2"),
