@@ -22,7 +22,12 @@ from mixsync.db.queue import enqueue_in
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient, polite_client
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import Watcher, interval_for, jitter
+from mixsync.watchlist.poller import (
+    Watcher,
+    _date_ok,  # pyright: ignore[reportPrivateUsage]
+    interval_for,
+    jitter,
+)
 
 from .conftest import Env, login
 
@@ -128,6 +133,15 @@ def test_jitter_stays_in_range() -> None:
         assert all(base / 2 <= j <= base * 1.5 for j in samples)
         assert len(set(samples)) > 100  # random, not a fixed point
     assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # the roadmap's bound
+
+
+def test_year_only_dates_pass_a_cutoff_in_their_year() -> None:
+    # Live MB (2026-10-11, #44): a year-only "1995" matches firstreleasedate:[1995-12-31 TO *]
+    # but not [1996-01-01 TO *], so the floor must keep it for the rest of its year too.
+    assert _date_ok("2026", "2026-06-01")
+    assert _date_ok("2026-06", "2026-06-15")
+    assert not _date_ok("2025", "2026-01-01")
+    assert not _date_ok("2026-05", "2026-06-01")
 
 
 async def test_new_release_becomes_a_request(env: Env) -> None:
@@ -325,17 +339,26 @@ async def test_artist_search_is_one_date_range_request(make_client: Make) -> Non
 async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
     seen: list[httpx.Request] = []
 
-    def rel(i: int, date: str, group: int) -> dict[str, object]:
+    def rel(i: int, date: str, group: int, *secondary: str) -> dict[str, object]:
+        # the release-group shape a live label search returns (checked 2026-10-11, #43):
+        # "secondary-types" is left out when there are none
+        rg: dict[str, object] = {"id": rid(group), "primary-type": "Album"}
+        if secondary:
+            rg["secondary-types"] = list(secondary)
         return {
             "id": rid(i),
             "title": f"R{i}",
             "date": date,
             "artist-credit": [{"name": "A", "artist": {"id": ARTIST}}],
-            "release-group": {"id": rid(group), "primary-type": "Album"},
+            "release-group": rg,
         }
 
     body = {
-        "releases": [rel(1, "2026-06-02", 50), rel(2, "2026-05-30", 50), rel(3, "2026-06-01", 51)]
+        "releases": [
+            rel(1, "2026-06-02", 50),
+            rel(2, "2026-05-30", 50),
+            rel(3, "2026-06-01", 51, "Compilation"),
+        ]
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -347,9 +370,9 @@ async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
     (req,) = seen
     assert req.url.path == "/ws/2/release"
     assert req.url.params["query"] == f"laid:{LABEL}"
-    assert [(h.group_id, h.release_ids, h.date) for h in hits] == [
-        (rid(50), (rid(1), rid(2)), "2026-05-30"),
-        (rid(51), (rid(3),), "2026-06-01"),
+    assert [(h.group_id, h.release_ids, h.date, h.type) for h in hits] == [
+        (rid(50), (rid(1), rid(2)), "2026-05-30", "album"),
+        (rid(51), (rid(3),), "2026-06-01", "compilation"),
     ]
 
 

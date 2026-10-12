@@ -27,6 +27,9 @@ uv run pytest -n auto --db=postgres
 docker stop mixsync-pg-test
 ```
 CI runs the same thing in the `postgres` job. SQLite-only tests (pragmas, single-writer lock) skip themselves.
+The `postgres` job also runs `-m crash --db=postgres` (the SIGKILL workers inherit the schema-scoped URL).
+
+`-m integration` runs on SQLite only: it exercises slskd/Navidrome behaviour, not the database, and the DB layer is already covered by the Postgres unit and crash runs.
 
 ## Rules
 - Unit tests never touch the network. A pytest fixture blocks sockets; cassettes or fakes only.
