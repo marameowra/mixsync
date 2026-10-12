@@ -25,7 +25,7 @@ def _split(path: str) -> tuple[str, str]:
 
 
 def _safe(path: str) -> bool:
-    """Peer-supplied names are untrusted: `_local` joins the last two parts onto our downloads dir."""
+    """Peer names are untrusted: `_local` joins the last two parts onto our downloads dir."""
     return all(p not in ("", ".", "..") and "/" not in p for p in path.split("\\")[-2:])
 
 
