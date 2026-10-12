@@ -2,6 +2,7 @@
 marking candidates tried, coalescing rescans and applying a reviewer's decision."""
 
 import random
+from collections.abc import Iterable
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,6 +43,11 @@ def profile_for(s: Session, user_id: int) -> Profile:
     return Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
 
 
+def search_priority(req: Request) -> int:
+    """Lower runs first: discovery searches wait behind manual and watchlist ones."""
+    return 1 if req.provisional else 0
+
+
 def create_request(
     s: Session,
     now: datetime,
@@ -49,16 +55,20 @@ def create_request(
     release_mbid: str,
     source: str = "manual",
     release_group_mbid: str | None = None,
+    provisional: bool = False,
+    recordings: Iterable[str] = (),
 ) -> Request:
     req = Request(
         user_id=user_id,
         release_mbid=release_mbid,
         source=source,
         release_group_mbid=release_group_mbid,
+        provisional=provisional,
+        recording_mbids=list(recordings),
     )
     s.add(req)
     s.flush()
-    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id})
+    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
     return req
 
 
@@ -67,7 +77,7 @@ def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str
     req.tried = [*req.tried, [peer, folder]]
     req.status = "searching"
     req.last_error = why
-    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id})
+    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
 
 def enqueue_rescan(s: Session, now: datetime) -> None:

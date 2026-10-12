@@ -28,6 +28,7 @@ slskd:       /downloads (rw) /data/library (ro, shared folder)
 navidrome:   /data/library (ro)  /data/discover (ro)
 ```
 - **`/data` is one mount**, so `rename` between `library/`, `discover/`, `.trash/`, and `.incoming/` stays atomic. Never split it into separate mounts ([architecture](../docs/architecture.md#deployment)).
+- **Discovery library:** needs Navidrome 0.58+ (multiple libraries). Create `${DATA_DIR}/discover` on the same filesystem as `data/.incoming` and `data/.trash`, add `/data/discover` as Library 2 in Navidrome, and grant users access to it.
 - `/import-source` is read-only at the OS level during [migration](../docs/design/migration.md).
 - **File ownership:** run all containers with the same `PUID`/`PGID` so files written by MixSync are readable by Navidrome and slskd.
 

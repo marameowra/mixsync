@@ -111,5 +111,7 @@ Every folder has a `README.md` with implementation guidance: purpose, boundaries
 
 **Why one `/data` mount:** moving a file between library, discover, trash, and incoming must be an atomic `rename`, and `rename` fails across Docker mount points (`EXDEV`). Keeping `discover/` as a sibling of `library/`, not nested inside it, also stops Navidrome's main library from indexing provisional tracks. Navidrome mounts only `/data/library` and `/data/discover`.
 
-> [!question] Navidrome multi-library
-> Confirm that the deployed Navidrome version supports multiple libraries (added in 0.58). If it doesn't, fall back to one library with discovery tracks identified by a tag or playlist.
+**Navidrome 0.58 or newer is required** (the first release with multiple libraries). Discovery (provisional) requests import only their wanted recordings into `/data/discover`; the rest of the downloaded album stays in `/downloads`. Setup:
+1. Create `${DATA_DIR}/discover` on the same filesystem as `data/.incoming` and `data/.trash` (all under the one `/data` mount; MixSync refuses a cross-device move).
+2. In Navidrome, add `/data/discover` as Library 2 (admin settings).
+3. Grant the users who should hear discovery tracks access to Library 2.

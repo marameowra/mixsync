@@ -41,7 +41,7 @@ class FixedClock:
         self.t += d
 
 
-def make_album(prefix: str, release_id: str, titles: tuple[str, str]) -> AlbumInfo:
+def make_album(prefix: str, release_id: str, titles: tuple[str, ...]) -> AlbumInfo:
     tracks = tuple(
         TrackInfo(
             title,
@@ -70,8 +70,10 @@ ALBUM = make_album("Alpha", "11111111-1111-1111-1111-111111111111", ("Song One",
 # Same tracks, another release of the group: what a reviewer repicks to.
 ALBUM_B = replace(ALBUM, release_id="22222222-2222-2222-2222-222222222222", year=2021)
 OTHER = make_album("Beta", "33333333-3333-3333-3333-333333333333", ("Tune One", "Tune Two"))
-RECORDINGS = {t.title: t.recording_id or "" for a in (ALBUM, OTHER) for t in a.tracks}
-CATALOG = {a.release_id or "": a for a in (ALBUM, ALBUM_B, OTHER)}
+TEN = ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten")
+BIG = make_album("Gamma", "44444444-4444-4444-4444-444444444444", tuple(f"Gamma {n}" for n in TEN))
+RECORDINGS = {t.title: t.recording_id or "" for a in (ALBUM, OTHER, BIG) for t in a.tracks}
+CATALOG = {a.release_id or "": a for a in (ALBUM, ALBUM_B, OTHER, BIG)}
 
 
 class FakeMetadata:
