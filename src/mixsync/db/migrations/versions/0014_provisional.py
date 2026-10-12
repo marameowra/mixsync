@@ -1,9 +1,7 @@
 """provisional (discovery) requests and their tracks
 
-Rebase onto 0013_user_links at merge: set down_revision to it.
-
 Revision ID: 0014_provisional
-Revises: 0012_file_ops_root
+Revises: 0013_user_links
 """
 
 from datetime import datetime
@@ -12,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0014_provisional"
-down_revision: str | None = "0012_file_ops_root"
+down_revision: str | None = "0013_user_links"
 branch_labels = None
 depends_on = None
 
@@ -49,7 +47,14 @@ def upgrade() -> None:
         sa.Column("trash_path", sa.Text(), nullable=True),
         *_stamps(),
         sa.PrimaryKeyConstraint("id", name="pk_provisional_tracks"),
-        sa.UniqueConstraint("path", name="uq_provisional_tracks_path"),
+    )
+    op.create_index(
+        "uq_provisional_tracks_path",
+        "provisional_tracks",
+        ["path"],
+        unique=True,
+        sqlite_where=sa.text("status = 'active'"),
+        postgresql_where=sa.text("status = 'active'"),
     )
     op.create_index(
         "ix_provisional_tracks_recording_mbid", "provisional_tracks", ["recording_mbid"]

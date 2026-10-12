@@ -58,13 +58,16 @@ def create_request(
     provisional: bool = False,
     recordings: Iterable[str] = (),
 ) -> Request:
+    recordings = list(recordings)
+    if provisional and not recordings:
+        raise ValueError("a provisional request needs at least one wanted recording")
     req = Request(
         user_id=user_id,
         release_mbid=release_mbid,
         source=source,
         release_group_mbid=release_group_mbid,
         provisional=provisional,
-        recording_mbids=list(recordings),
+        recording_mbids=recordings,
     )
     s.add(req)
     s.flush()

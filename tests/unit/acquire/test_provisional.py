@@ -2,6 +2,7 @@
 recordings are imported, into /data/discover."""
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ from mixsync.db.models.work import Request
 
 from .conftest import Env
 from .fakes import ALBUM, BIG
-from .test_pipeline import decision_rows, library, request, status
+from .test_pipeline import decision_rows, library, request, status, tried
 
 WANTED = ("Gamma-rec-3", "Gamma-rec-7")
 FOLDER = "Music\\Gamma Band\\Gamma Album"
@@ -30,7 +31,7 @@ def discover(env: Env) -> list[str]:
     return sorted(str(p.relative_to(root)) for p in root.rglob("*.mp3")) if root.exists() else []
 
 
-def discovery(env: Env) -> int:
+def discovery(env: Env, wanted: tuple[str, ...] = WANTED) -> int:
     with env.sessions.begin() as s:
         return create_request(
             s,
@@ -38,7 +39,7 @@ def discovery(env: Env) -> int:
             env.user_id,
             str(BIG.release_id),
             provisional=True,
-            recordings=WANTED,
+            recordings=wanted,
         ).id
 
 
@@ -137,21 +138,98 @@ async def test_a_provisional_track_does_not_make_a_manual_request_skip(env: Env)
         assert canonical_db.get(s, str(ALBUM.release_group_id))
 
 
-async def test_a_review_band_match_fails_the_request_and_never_reaches_review(env: Env) -> None:
+async def test_a_review_band_match_tries_the_next_peer_and_never_reaches_review(env: Env) -> None:
     env.source.add("peer1", FOLDER, BIG)
     env.acoustid.override["Gamma Album/02 Gamma Two.mp3"] = [
         AcoustIdResult("aid-x", 0.95, ("somebody-elses-recording",))
     ]
     rid = discovery(env)
-    await env.drain(until=lambda: status(env, rid) == "failed")
+    await env.drain(until=lambda: bool(tried(env, rid)))
 
-    assert status(env, rid) == "failed"
+    assert tried(env, rid) == [["peer1", FOLDER]]
     with env.sessions() as s:
         req = s.get(Request, rid)
-        assert req and "review" in (req.last_error or "")
+        assert req and "discovery skips" in (req.last_error or "")
     assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto"]
     assert discover(env) == [] and rows(env) == []
     assert len(tree(env.downloads)) == 10
+
+
+async def test_a_trashed_track_can_be_imported_again_under_its_path(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    first = discovery(env)
+    await env.drain()
+    assert status(env, first) == "imported"
+    paths = {r.path for r in rows(env)}
+    with env.sessions.begin() as s:  # trashed: the file is gone, the row stays
+        for r in s.scalars(select(ProvisionalTrack)):
+            r.status = "trashed"
+    for p in paths:
+        (env.data_dir / "discover" / p).unlink()
+    env.source.add("peer2", FOLDER, BIG)
+
+    second = discovery(env)
+    await env.drain()
+    assert status(env, second) == "imported"
+    active = [r for r in rows(env) if r.status == "active"]
+    assert {r.path for r in active} == paths and len(active) == 2
+    assert {p for p in discover(env)} == paths
+
+
+async def test_an_owned_wanted_recording_is_not_imported_again(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    rid = discovery(env)
+    await env.drain(until=lambda: status(env, rid) == "importing")
+    own(env, WANTED[0])  # another user's import landed meanwhile
+    await env.drain()
+    assert status(env, rid) == "imported"
+    assert {r.recording_mbid for r in rows(env)} == {WANTED[1]} and len(discover(env)) == 1
+
+
+async def test_wanted_recordings_missing_from_the_release(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    none = discovery(env, ("not-on-it", "nor-this"))
+    await env.drain()
+    assert status(env, none) == "failed" and env.source.enqueued == []
+    with env.sessions() as s:
+        req = s.get(Request, none)
+        assert req and "none of the 2 wanted" in (req.last_error or "")
+
+    some = discovery(env, (WANTED[0], "not-on-it"))
+    await env.drain()
+    assert status(env, some) == "imported" and len(discover(env)) == 1
+    with env.sessions() as s:
+        req = s.get(Request, some)
+        assert req and req.last_error == "1 of 2 wanted recordings not on this release"
+
+
+async def test_a_recording_twice_on_a_release_is_imported_once(env: Env) -> None:
+    dup = replace(BIG, tracks=(*BIG.tracks, replace(BIG.tracks[2], index=11, medium_index=11)))
+    env.source.add("peer1", FOLDER, dup)
+    rid = discovery(env)
+    await env.drain()
+    assert status(env, rid) == "imported"
+    assert sorted(r.recording_mbid for r in rows(env)) == sorted(WANTED)
+
+
+async def test_one_failing_file_releases_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    real = env.ops.import_file
+
+    def flaky(src: Path, rel: str, write_tags: Any, batch: str, origin: Path, root: str) -> str:
+        if "Seven" in src.name:
+            raise OSError("disk full")
+        return real(src, rel, write_tags, batch, origin, root)
+
+    monkeypatch.setattr(env.ops, "import_file", flaky)
+    rid = discovery(env)
+    await env.drain()
+    assert status(env, rid) == "failed" and len(tree(env.downloads)) == 10
+
+
+def test_a_provisional_request_needs_recordings(env: Env) -> None:
+    with env.sessions.begin() as s, pytest.raises(ValueError):
+        create_request(s, env.clock.now(), env.user_id, "x", provisional=True)
 
 
 async def test_a_retried_import_does_not_duplicate_files_or_rows(

@@ -106,3 +106,22 @@ def test_resume_after_crash_window_makes_no_duplicates(
     importer.import_release(files, ALBUM, "verified", "batch")  # idempotent on rows
     with sessions() as s:
         assert len(s.scalars(select(Track)).all()) == 2
+
+
+def test_discover_import_writes_no_track_row_checks_discover_names_and_resumes(
+    importer: Importer, ops: FileOps, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    lib = importer.import_release([(make_src("flac", "a"), T1, None)], ALBUM, "x", "b0")
+    src = make_src("flac", "b")
+    (r,) = importer.import_release([(src, T1, None)], ALBUM, "verified", "b1", root="discover")
+    assert r.rel == lib[0].rel  # a library file of that name does not make discover rename
+    assert (ops.roots["discover"] / str(r.rel)).is_file()
+    assert importer.is_imported(src, "b1", "discover") and not importer.is_imported(src, "b1")
+    (again,) = importer.import_release([(src, T1, None)], ALBUM, "verified", "b1", root="discover")
+    assert again.rel == r.rel and len(list(ops.roots["discover"].rglob("*.flac"))) == 1
+    (r2,) = importer.import_release(
+        [(make_src("flac", "c"), T1, None)], ALBUM, "x", "b2", root="discover"
+    )
+    assert r2.rel == str(r.rel).replace(".flac", " (2).flac")
+    with sessions() as s:
+        assert [t.path for t in s.scalars(select(Track))] == [lib[0].rel]
