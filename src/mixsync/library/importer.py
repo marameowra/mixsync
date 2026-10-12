@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
 from mixsync.core.matching import AlbumInfo, TrackInfo
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import paths, tags
@@ -132,7 +133,7 @@ class Importer:
                 return ImportResult(src, done)
             rel = paths.unique(
                 render_path(self._template, tagset, (encoded or src).suffix),
-                lambda r: (self._fileops.roots[root] / r).exists(),
+                lambda r: self._taken(root, r),
             )
             write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
             self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
@@ -141,6 +142,21 @@ class Importer:
         except Exception as e:
             return ImportResult(src, None, repr(e))
         return ImportResult(src, rel)
+
+    def _taken(self, root: str, rel: str) -> bool:
+        if (self._fileops.roots[root] / rel).exists():
+            return True
+        if root == "library":
+            return False
+        with self._sessions() as s:  # an active row holds its path even if the file is gone
+            return (
+                s.scalar(
+                    select(ProvisionalTrack.id).where(
+                        ProvisionalTrack.path == rel, ProvisionalTrack.status == "active"
+                    )
+                )
+                is not None
+            )
 
     def _ensure_row(
         self, rel: str, t: tags.TagSet, acoustid_id: str | None, status: str, batch_id: str

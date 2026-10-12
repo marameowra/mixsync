@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import TransientError
@@ -140,19 +141,47 @@ async def test_a_provisional_track_does_not_make_a_manual_request_skip(env: Env)
 
 async def test_a_review_band_match_tries_the_next_peer_and_never_reaches_review(env: Env) -> None:
     env.source.add("peer1", FOLDER, BIG)
+    env.source.add("peer2", FOLDER + " (clean)", BIG)  # its own folder: no override applies
     env.acoustid.override["Gamma Album/02 Gamma Two.mp3"] = [
         AcoustIdResult("aid-x", 0.95, ("somebody-elses-recording",))
     ]
     rid = discovery(env)
-    await env.drain(until=lambda: bool(tried(env, rid)))
+    await env.drain()
 
+    assert status(env, rid) == "imported"
     assert tried(env, rid) == [["peer1", FOLDER]]
-    with env.sessions() as s:
-        req = s.get(Request, rid)
-        assert req and "discovery skips" in (req.last_error or "")
-    assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto"]
-    assert discover(env) == [] and rows(env) == []
-    assert len(tree(env.downloads)) == 10
+    assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto", "auto_accepted"]
+    assert len(discover(env)) == 2 and len(rows(env)) == 2
+    assert len(tree(env.downloads)) == 10 + 8  # peer1's whole folder stays, peer2's 2 released
+
+
+async def test_a_resume_records_a_copy_whose_recording_became_owned(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    rid = discovery(env)
+    await env.drain(until=lambda: status(env, rid) == "importing")
+    (d,) = decision_rows(env, 2)
+    # the worker copied file 3 and died before its row committed
+    (copied,) = env.pipeline.importer.import_release(
+        [(env.downloads / "Gamma Album" / "03 Gamma Three.mp3", BIG.tracks[2], None)],
+        BIG,
+        "verified",
+        f"request-{rid}-decision-{d.id}",
+        root="discover",
+    )
+    assert copied.rel and rows(env) == []
+    own(env, WANTED[0])  # and the recording arrived elsewhere meanwhile
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    assert sorted(r.recording_mbid for r in rows(env)) == sorted(WANTED)
+    assert copied.rel in {r.path for r in rows(env)} and len(discover(env)) == 2
+
+
+def test_the_active_path_index_ignores_trashed_rows_only(env: Env) -> None:
+    for state in ("trashed", "trashed", "active"):
+        provisional_row(env, "r", "same.mp3", state)
+    with pytest.raises(IntegrityError):
+        provisional_row(env, "r", "same.mp3", "active")
 
 
 async def test_a_trashed_track_can_be_imported_again_under_its_path(env: Env) -> None:

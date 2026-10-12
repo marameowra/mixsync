@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.matching import AlbumInfo, TrackInfo
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import fileops, tags
@@ -125,3 +126,19 @@ def test_discover_import_writes_no_track_row_checks_discover_names_and_resumes(
     assert r2.rel == str(r.rel).replace(".flac", " (2).flac")
     with sessions() as s:
         assert [t.path for t in s.scalars(select(Track))] == [lib[0].rel]
+
+
+def test_discover_path_held_by_an_active_row_is_taken_even_without_its_file(
+    importer: Importer, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    rel = "Radiohead/Kid A (2000)/01-01 Everything in Its Right Place.flac"
+    with sessions.begin() as s:  # the file was deleted by hand; the row remains
+        s.add(
+            ProvisionalTrack(
+                path=rel, recording_mbid="old", batch_id="b0", imported_at=SystemClock().now()
+            )
+        )
+    (r,) = importer.import_release(
+        [(make_src("flac", "a"), T1, None)], ALBUM, "verified", "b1", root="discover"
+    )
+    assert r.error is None and r.rel == rel.replace(".flac", " (2).flac")

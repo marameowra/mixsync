@@ -566,7 +566,13 @@ class Pipeline:
         seen: set[str | None] = set()
         picked: list[tuple[Path, TrackInfo, str | None]] = []
         for f in files:  # the first file of a recording that is on the release twice
-            if f[1].recording_id in todo and f[1].recording_id not in seen:
+            rec = f[1].recording_id
+            # a copy this batch already made is recorded even if the recording is owned by now
+            if (
+                rec in wanted
+                and rec not in seen
+                and (rec in todo or self.importer.is_imported(f[0], batch, "discover"))
+            ):
                 seen.add(f[1].recording_id)
                 picked.append(f)
         files = picked
