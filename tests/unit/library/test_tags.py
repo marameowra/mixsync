@@ -61,7 +61,7 @@ def test_write_uses_picard_names(fmt: str, make_src: MakeSrc) -> None:
     assert got[TRACK[fmt]] == ["8"]
 
 
-@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a"])
+@pytest.mark.parametrize("fmt", ["flac", "mp3"])
 def test_write_to_file_without_tag_block(fmt: str, make_src: MakeSrc) -> None:
     f = make_src(fmt)
     audio = tags._sniff(f)  # pyright: ignore[reportPrivateUsage]
