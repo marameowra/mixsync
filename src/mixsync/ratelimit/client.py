@@ -23,9 +23,10 @@ _MAX_ATTEMPTS = 5
 def _reset_in(response: httpx.Response) -> timedelta | None:
     """Seconds until the window resets (ListenBrainz-style `X-RateLimit-Reset-In`)."""
     try:
-        return timedelta(seconds=min(_BACKOFF_CAP, float(response.headers["X-RateLimit-Reset-In"])))
+        seconds = float(response.headers["X-RateLimit-Reset-In"])
     except (KeyError, ValueError):
         return None
+    return timedelta(seconds=min(_BACKOFF_CAP, seconds)) if seconds > 0 else None
 
 
 class PoliteClient:

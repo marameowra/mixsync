@@ -139,6 +139,45 @@ async def test_429_without_retry_after_uses_reset_in(
     assert calls[1] - calls[0] == timedelta(seconds=12)
 
 
+async def gap_after_429(
+    settings: Settings,
+    sessions: sessionmaker[Session],
+    clock: FakeClock,
+    headers: dict[str, str],
+) -> timedelta:
+    calls: list[datetime] = []
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        calls.append(clock.now())
+        return httpx.Response(429, headers=headers) if len(calls) == 1 else httpx.Response(200)
+
+    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/")
+    return calls[1] - calls[0]
+
+
+@pytest.mark.parametrize("value", ["-5", "0", "soon", ""])
+async def test_unusable_reset_in_falls_back_to_backoff(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock, value: str
+) -> None:
+    gap = await gap_after_429(settings, sessions, clock, {"X-RateLimit-Reset-In": value})
+    assert timedelta(seconds=0.5) <= gap <= timedelta(seconds=1)
+
+
+async def test_retry_after_wins_over_reset_in(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    headers = {"Retry-After": "3", "X-RateLimit-Reset-In": "9"}
+    assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=3)
+
+
+async def test_429_with_remaining_zero_waits_reset_in(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-In": "4"}
+    assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=4)
+
+
 async def test_503_without_header_backs_off(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:

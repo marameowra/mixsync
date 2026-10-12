@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, RootModel, ValidationError
@@ -71,7 +72,7 @@ class _Radio(BaseModel):
 
 
 class _Named(BaseModel):
-    name: str = ""
+    name: str | None = None
 
 
 class _Release(BaseModel):
@@ -79,9 +80,9 @@ class _Release(BaseModel):
 
 
 class _Meta(BaseModel):
-    recording: _Named = _Named()
-    release: _Release = _Release()
-    artist: _Named = _Named()
+    recording: _Named | None = None
+    release: _Release | None = None
+    artist: _Named | None = None
 
 
 class _MetaMap(RootModel[dict[str, _Meta]]):
@@ -148,23 +149,30 @@ class ListenBrainzClient:
                 inc="release artist",
             )
             for mbid, m in (body.root if body else {}).items():
-                out[mbid] = RecordingRef(mbid, m.release.mbid, m.artist.name, m.recording.name)
+                out[mbid] = RecordingRef(
+                    mbid,
+                    m.release.mbid if m.release else None,
+                    (m.artist.name if m.artist else None) or "",
+                    (m.recording.name if m.recording else None) or "",
+                )
         return out
 
     async def recommendations(self, user: str, token: str, count: int) -> list[RecordingRef]:
         body = await self._get(
-            _Recs, f"/1/cf/recommendation/user/{user}/recording", token, count=count
+            _Recs, f"/1/cf/recommendation/user/{quote(user, safe='')}/recording", token, count=count
         )
         mbids = [r.recording_mbid for r in body.payload.mbids] if body else []
         found = await self.recording_metadata(mbids)
         return [found[m] for m in mbids if m in found]
 
     async def weekly_exploration(self, user: str, token: str) -> list[RecordingRef]:
-        listing = await self._get(_CreatedFor, f"/1/user/{user}/playlists/createdfor", token)
+        listing = await self._get(
+            _CreatedFor, f"/1/user/{quote(user, safe='')}/playlists/createdfor", token, count=100
+        )
         weekly = [
             d.playlist
             for d in (listing.playlists if listing else [])
-            if d.playlist.is_weekly_exploration()
+            if d.playlist.identifier and d.playlist.is_weekly_exploration()
         ]
         if not weekly:
             return []

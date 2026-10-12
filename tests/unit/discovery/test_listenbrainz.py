@@ -94,6 +94,96 @@ async def test_weekly_exploration_falls_back_to_title(make_client: Make) -> None
     assert paths[-1] == "/1/playlist/p1"
 
 
+async def test_weekly_exploration_beyond_the_default_page(make_client: Make) -> None:
+    others = [
+        {
+            "playlist": {
+                "identifier": f"https://x/playlist/o{i}",
+                "title": "Daily Jams",
+                "date": "2026-10-11",
+            }
+        }
+        for i in range(12)
+    ]
+    weekly = {
+        "playlist": {
+            "identifier": "https://x/playlist/we",
+            "title": "Weekly Exploration for u",
+            "date": "2026-08-01",
+        }
+    }
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if "/playlist/we" in request.url.path:
+            return cassette("playlist")
+        return httpx.Response(200, json={"playlists": [*others, weekly]})
+
+    refs = await lb(make_client, handler).weekly_exploration("u", TOKEN)
+
+    assert seen[0].url.params["count"] == "100"
+    assert seen[1].url.path == "/1/playlist/we"
+    assert len(refs) == 3
+
+
+async def test_playlists_without_identifier_are_skipped(make_client: Make) -> None:
+    listing = {"playlists": [{"playlist": {"title": "Weekly Exploration for u"}}]}
+    client = lb(make_client, lambda _r: httpx.Response(200, json=listing))
+    assert await client.weekly_exploration("u", TOKEN) == []
+
+
+async def test_null_metadata_fields_do_not_fail_the_call(make_client: Make) -> None:
+    body = {
+        M1: {"recording": {"name": None}, "release": None, "artist": None},
+        M2: {"recording": None, "release": {"mbid": None}, "artist": {"name": None}},
+    }
+    found = await lb(make_client, lambda _r: httpx.Response(200, json=body)).recording_metadata(
+        [M1, M2]
+    )
+    assert found == {M1: RecordingRef(M1, None, "", ""), M2: RecordingRef(M2, None, "", "")}
+
+
+async def test_usernames_are_percent_encoded_in_paths(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(204)
+
+    client = lb(make_client, handler)
+    await client.recommendations("a/b?c", TOKEN, 1)
+    await client.weekly_exploration("a/b?c", TOKEN)
+
+    assert [r.url.raw_path.split(b"?")[0] for r in seen] == [
+        b"/1/cf/recommendation/user/a%2Fb%3Fc/recording",
+        b"/1/user/a%2Fb%3Fc/playlists/createdfor",
+    ]
+
+
+async def test_track_identifier_and_release_hint_edge_cases(make_client: Make) -> None:
+    track = {"title": "T", "creator": "A"}
+    body = {
+        "payload": {
+            "jspf": {
+                "playlist": {
+                    "track": [
+                        {
+                            **track,
+                            "identifier": ["https://musicbrainz.org/recording/" + M1, "x/" + M2],
+                        },
+                        {**track, "identifier": "https://musicbrainz.org/recording/" + M2},
+                    ]
+                }
+            }
+        }
+    }
+    refs = await lb(make_client, lambda _r: httpx.Response(200, json=body)).lb_radio(
+        "p", "easy", TOKEN
+    )
+    assert refs == [RecordingRef(M1, None, "A", "T"), RecordingRef(M2, None, "A", "T")]
+
+
 async def test_redirect_is_a_clear_permanent_error(make_client: Make) -> None:
     client = lb(make_client, lambda _r: httpx.Response(308, headers={"Location": "/x/"}))
     with pytest.raises(PermanentError, match="redirected"):
