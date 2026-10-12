@@ -13,13 +13,14 @@ class SqlJournal:
         self._sessions = sessions
         self._clock = clock
 
-    def begin(self, batch_id: str, kind: str, src: str, dst: str) -> int:
+    def begin(self, batch_id: str, kind: str, src: str, dst: str, root: str = "library") -> int:
         with self._sessions.begin() as s:
             op = FileOp(
                 batch_id=batch_id,
                 kind=kind,
                 src=src,
                 dst=dst,
+                root=root,
                 status="started",
                 started_at=self._clock.now(),
             )
@@ -86,4 +87,5 @@ def _to_op(r: FileOp) -> JournalOp:
         started_at=r.started_at,
         finished_at=r.finished_at,
         error=r.error,
+        root=r.root,
     )

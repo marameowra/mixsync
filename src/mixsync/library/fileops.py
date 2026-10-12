@@ -75,6 +75,7 @@ def _noreplace(src: Path, dst: Path) -> bool:
 class FileOps:
     def __init__(self, data_dir: Path, downloads_dir: Path, journal: Journal, clock: Clock) -> None:
         self.library = data_dir / "library"
+        self.roots = {"library": self.library, "discover": data_dir / "discover"}
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
         self.work = data_dir / ".work"  # scratch space for re-encoded copies of downloads
@@ -82,15 +83,21 @@ class FileOps:
         self._journal = journal
         self._clock = clock
 
+    def _root(self, root: str) -> Path:
+        if root not in self.roots:
+            raise SafetyError(f"unknown root: {root!r}")
+        return self.roots[root]
+
     def _under(self, root: Path, rel: str) -> Path:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts or not p.parts:
             raise SafetyError(f"path escapes {root}: {rel!r}")
         return root / p
 
-    def _trash_rel(self, rel: str) -> str:
+    def _trash_rel(self, rel: str, root: str = "library") -> str:
         day = self._clock.now().date().isoformat()
-        return unique(f"{day}/{rel}", lambda r: (self.trash_dir / r).exists())
+        sub = "" if root == "library" else f"{root}/"  # library trash keeps its layout
+        return unique(f"{day}/{sub}{rel}", lambda r: (self.trash_dir / r).exists())
 
     def _move_to_trash(self, src: Path, trash_rel: str) -> None:
         """Only fileops writes to the trash and trash_rel is a free name, so the plain-rename
@@ -128,11 +135,12 @@ class FileOps:
         batch_id: str,
         origin: Path
         | None = None,  # the download src was made from; journaled so it can be released
+        root: str = "library",
     ) -> str:
         """Copy src into the library at final_rel (verified, tagged, atomic, never replacing
         a file). Returns the sha256 of the imported file. src is never modified."""
-        final = self._under(self.library, final_rel)
-        op_id = self._journal.begin(batch_id, "copy", str(origin or src), final_rel)
+        final = self._under(self._root(root), final_rel)
+        op_id = self._journal.begin(batch_id, "copy", str(origin or src), final_rel, root=root)
         staging = self.incoming / str(op_id)
         published = False
         try:
@@ -167,15 +175,15 @@ class FileOps:
         self._journal.complete(op_id, digest)
         return digest
 
-    def has(self, rel: str) -> bool:
-        return self._under(self.library, rel).exists()
+    def has(self, rel: str, root: str = "library") -> bool:
+        return self._under(self._root(root), rel).exists()
 
-    def write_new(self, rel: str, data: bytes, batch_id: str) -> None:
+    def write_new(self, rel: str, data: bytes, batch_id: str, root: str = "library") -> None:
         """Create a library file from bytes (cover art). Same journal/staging/no-replace publish
         as import_file, so recover() treats it as a copy. Raises FileExistsError, leaving the
         existing file alone, if rel is taken."""
-        final = self._under(self.library, rel)
-        op_id = self._journal.begin(batch_id, "copy", "(generated)", rel)
+        final = self._under(self._root(root), rel)
+        op_id = self._journal.begin(batch_id, "copy", "(generated)", rel, root=root)
         staging = self.incoming / str(op_id)
         published = False
         try:
@@ -203,11 +211,11 @@ class FileOps:
             raise
         self._journal.complete(op_id, digest)
 
-    def find_imported(self, batch_id: str, src: Path) -> str | None:
-        """Library path of an earlier completed import of src in this batch, if the file is
-        still there and intact."""
+    def find_imported(self, batch_id: str, src: Path, root: str = "library") -> str | None:
+        """Path (relative to root) of an earlier completed import of src in this batch, if the
+        file is still there and intact."""
         op = self._journal.find_completed(batch_id, str(src))
-        if op and op.dst_hash and (f := self.library / op.dst).is_file():
+        if op and op.root == root and op.dst_hash and (f := self._root(root) / op.dst).is_file():
             return op.dst if _sha256(f) == op.dst_hash else None
         return None
 
@@ -240,11 +248,12 @@ class FileOps:
         if d.is_dir() and not d.is_symlink():
             shutil.rmtree(d, ignore_errors=True)  # noqa: TID251
 
-    def trash(self, rel: str, batch_id: str) -> str:
-        """Move a library file to `.trash/<day>/<rel>`. Returns the trash-relative path."""
-        src = self._under(self.library, rel)
-        trash_rel = self._trash_rel(rel)
-        op_id = self._journal.begin(batch_id, "trash", rel, trash_rel)
+    def trash(self, rel: str, batch_id: str, root: str = "library") -> str:
+        """Move a file to `.trash/<day>/<rel>` (`.trash/<day>/<root>/<rel>` for other roots).
+        Returns the trash-relative path."""
+        src = self._under(self._root(root), rel)
+        trash_rel = self._trash_rel(rel, root)
+        op_id = self._journal.begin(batch_id, "trash", rel, trash_rel, root=root)
         try:
             self._move_to_trash(src, trash_rel)
         except BaseException as e:
@@ -253,12 +262,12 @@ class FileOps:
         self._journal.complete(op_id, _sha256(self.trash_dir / trash_rel))
         return trash_rel
 
-    def restore(self, trash_rel: str, rel: str, batch_id: str) -> None:
-        """Move a trashed file back to library path rel. Never replaces a file: raises
+    def restore(self, trash_rel: str, rel: str, batch_id: str, root: str = "library") -> None:
+        """Move a trashed file back to path rel under root. Never replaces a file: raises
         FileExistsError if rel is taken, leaving both alone."""
         src = self._under(self.trash_dir, trash_rel)
-        dst = self._under(self.library, rel)
-        op_id = self._journal.begin(batch_id, "restore", trash_rel, rel)
+        dst = self._under(self._root(root), rel)
+        op_id = self._journal.begin(batch_id, "restore", trash_rel, rel, root=root)
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
             _hook("restore")
@@ -289,7 +298,7 @@ class FileOps:
                 self._recover_restore(op)
 
     def _recover_copy(self, op: JournalOp) -> None:
-        final = self.library / op.dst
+        final = self._root(op.root) / op.dst
         staging = self.incoming / str(op.id)
         if staging.exists():
             self._to_trash(staging, f".incoming/{op.id}")
@@ -301,7 +310,7 @@ class FileOps:
             log.warning("recovered copy op %s: rolled back", op.id)
 
     def _recover_trash(self, op: JournalOp) -> None:
-        src, dst = self.library / op.src, self.trash_dir / op.dst
+        src, dst = self._root(op.root) / op.src, self.trash_dir / op.dst
         if dst.is_file() and not src.exists():
             self._journal.complete(op.id, _sha256(dst))
         else:
@@ -314,7 +323,7 @@ class FileOps:
             self._journal.complete(op.id, op.dst_hash or "")
 
     def _recover_restore(self, op: JournalOp) -> None:
-        src, dst = self.trash_dir / op.src, self.library / op.dst
+        src, dst = self.trash_dir / op.src, self._root(op.root) / op.dst
         # The file is back if it is at dst and the trash name is gone (or is the same inode).
         if dst.is_file() and (not src.exists() or src.samefile(dst)):
             self._journal.complete(op.id, _sha256(dst))
