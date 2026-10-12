@@ -42,6 +42,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv python install 3.13
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run ruff format --check
@@ -72,6 +73,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv python install 3.13
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --frozen
       - run: uv run pytest -n auto --db=postgres
       - run: uv run pytest -m crash --db=postgres

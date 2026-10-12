@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
+    flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
     canonical_countries: list[str] = ["XW"]  # preferred release countries, best first
     timezone: str = "UTC"  # the zone report days are read in

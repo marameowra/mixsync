@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libchromaprint-tools \
+ && apt-get install -y --no-install-recommends ffmpeg libchromaprint-tools \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uv /usr/local/bin/uv
 
