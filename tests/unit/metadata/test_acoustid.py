@@ -1,5 +1,4 @@
 import asyncio
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -59,7 +58,6 @@ async def test_fingerprint_missing_binary(monkeypatch: pytest.MonkeyPatch) -> No
         await fingerprint(Path("a.flac"))
 
 
-@pytest.mark.skipif(shutil.which("fpcalc") is None, reason="fpcalc not installed")
 async def test_fingerprint_real_binary(tmp_path: Path) -> None:
     junk = tmp_path / "junk.mp3"
     junk.write_bytes(b"not audio")
