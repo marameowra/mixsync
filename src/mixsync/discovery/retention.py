@@ -30,6 +30,7 @@ from mixsync.library.importer import Importer
 log = logging.getLogger(__name__)
 
 EVERY = timedelta(days=1)
+UNKNOWN_NOTE = " discovery tracks not found in Navidrome; not expiring them"
 SOON = timedelta(days=7)
 
 
@@ -230,10 +231,13 @@ class Retention:
                     changed.add(r.mbid)
                 pt = s.get_one(ProvisionalTrack, r.track_id)
                 pt.navidrome_song_id = r.song_id
-            for pid, n in unknown.items():
-                s.get_one(
-                    DiscoveryPlaylist, pid
-                ).last_error = f"{n} discovery tracks not found in Navidrome; not expiring them"
+            for pid in {r.playlist_id for r in rows}:  # our note only; other errors stay
+                pl = s.get_one(DiscoveryPlaylist, pid)
+                ours = (pl.last_error or "").endswith(UNKNOWN_NOTE)
+                if pid in unknown and (pl.last_error is None or ours):
+                    pl.last_error = f"{unknown[pid]}{UNKNOWN_NOTE}"
+                elif pid not in unknown and ours:
+                    pl.last_error = None
         for tid in promote:
             try:
                 await self._promote(tid)

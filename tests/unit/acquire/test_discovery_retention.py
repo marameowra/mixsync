@@ -10,6 +10,8 @@ from sqlalchemy import select
 from mixsync.acquire.requests import hold_imports
 from mixsync.core.errors import AuthError, TransientError
 from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.matching import AlbumInfo
+from mixsync.core.types import RecordingRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db.auth import create_user
 from mixsync.db.models.accounts import UserLink
@@ -19,7 +21,7 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import enqueue_in
 from mixsync.discovery import retention
-from mixsync.discovery.playlists import Discovery
+from mixsync.discovery.playlists import Discovery, ensure_build
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
 
@@ -431,9 +433,9 @@ async def test_a_pick_after_expiry_is_retained_again(env: Env) -> None:
     assert r.track().status == "trashed" and r.holds()[0].expired_at is not None
     with env.sessions.begin() as s:  # a later build picks it again, and it is imported again
         pl = s.scalars(select(DiscoveryPlaylist)).one()
-        hold = Discovery._hold(s, pl, MBID)  # pyright: ignore[reportPrivateUsage]
+        hold = Discovery._hold(s, env.clock.now(), pl, MBID)  # pyright: ignore[reportPrivateUsage]
         assert hold.expired_at is None and hold.provisional_track_id is None
-        assert hold.expires_at is None and hold.kept_at is None
+        assert hold.expires_at is not None and hold.kept_at is None
         s.add(
             ProvisionalTrack(
                 path="Alpha Band/y.mp3",
@@ -454,3 +456,72 @@ async def test_a_pick_after_expiry_is_retained_again(env: Env) -> None:
     r.lib.stars = {SONG}
     await r.retain(env.user_id)
     assert [t.recording_mbid for t in library(env)] == [MBID]
+
+
+async def test_a_repick_on_a_track_another_user_keeps_gets_a_fresh_window(env: Env) -> None:
+    r = RRig(env)
+    with env.sessions.begin() as s:
+        bob = create_user(s, "bob", "pw").id
+    r.hold(env.user_id, days=30)
+    r.hold(bob, days=60)
+    env.clock.advance(timedelta(days=31))
+    await r.retain(env.user_id)  # alice expires; bob's hold keeps the track active
+    assert r.track().status == "active" and r.holds()[0].expired_at is not None
+    r.history.weekly = [RecordingRef(MBID, ALBUM_B.release_id, "A", "Song One")]
+    with env.sessions.begin() as s:
+        ensure_build(s, env.clock.now(), s.scalars(select(DiscoveryPlaylist)).first())  # type: ignore[arg-type]
+    await r.run(JobKind.DISCOVERY_BUILD)
+    alice = r.holds()[0]
+    assert alice.expired_at is None and alice.provisional_track_id == r.track().id
+    await r.retain(env.user_id)
+    assert r.holds()[0].expired_at is None and r.track().status == "active"
+
+
+async def test_a_build_error_survives_unknown_songs_and_the_note_clears(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    with env.sessions.begin() as s:
+        s.scalars(select(DiscoveryPlaylist)).one().last_error = "ListenBrainz rejected the token"
+
+    def error() -> str | None:
+        with env.sessions() as s:
+            return s.scalars(select(DiscoveryPlaylist)).one().last_error
+
+    r.lib.song = None
+    await r.retain(env.user_id)
+    assert error() == "ListenBrainz rejected the token"
+    with env.sessions.begin() as s:
+        s.scalars(select(DiscoveryPlaylist)).one().last_error = None
+    await r.retain(env.user_id)
+    assert "not found in Navidrome" in (error() or "")
+    await r.retain(env.user_id)  # the note is ours: it is rewritten, not stacked
+    assert (error() or "").count("not found in Navidrome") == 1
+    r.lib.song = SONG
+    await r.retain(env.user_id)
+    assert error() is None
+
+
+async def test_a_recording_imported_meanwhile_is_not_imported_again(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.stars = {SONG}
+    real = env.metadata.get_release
+
+    async def racing(mbid: str) -> AlbumInfo:
+        with env.sessions.begin() as s:  # another import lands while we await MusicBrainz
+            if s.scalar(select(Track.id).where(Track.recording_mbid == MBID)) is None:
+                s.add(
+                    Track(
+                        path="raced.mp3",
+                        recording_mbid=MBID,
+                        status="verified",
+                        batch_id="other",
+                        imported_at=env.clock.now(),
+                    )
+                )
+        return await real(mbid)
+
+    env.metadata.get_release = racing  # type: ignore[method-assign]
+    await r.retain(env.user_id)
+    assert [t.path for t in library(env)] == ["raced.mp3"]
+    assert r.track().status == "promoted" and r.track().promoted_path == "raced.mp3"
