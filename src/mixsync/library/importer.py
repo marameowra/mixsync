@@ -146,9 +146,9 @@ class Importer:
     def _taken(self, root: str, rel: str) -> bool:
         if (self._fileops.roots[root] / rel).exists():
             return True
-        if root == "library":
-            return False
-        with self._sessions() as s:  # an active row holds its path even if the file is gone
+        with self._sessions() as s:  # a row holds its path even if the file is gone
+            if root == "library":
+                return s.scalar(select(Track.id).where(Track.path == rel)) is not None
             return (
                 s.scalar(
                     select(ProvisionalTrack.id).where(

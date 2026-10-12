@@ -808,3 +808,19 @@ def test_undo_refuses_up_front_when_only_some_trashed_originals_are_gone(world: 
     with pytest.raises(SafetyError, match="is gone"):
         world.merger.undo_plan(pid)
     assert world.lib() == lib and world.plan(pid).status != "undoing"
+
+
+def test_import_after_a_failed_move_does_not_take_the_trashed_path_so_undo_works(
+    world: World, make_src: MakeSrc, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = world.tracks()
+    pid = build(world)
+    crash_once(monkeypatch, "_commit_op")
+    with pytest.raises(Boom):
+        world.merger.execute(pid)  # r3's original is trashed, its row still points at it
+    assert not (world.ops.library / old["r3"][0]).exists()
+    other = world.imp(make_src("flac", "again"), OLD, "r3")
+    assert other == old["r3"][0].replace(".flac", " (2).flac")
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone"
+    assert (world.ops.library / old["r3"][0]).exists()
