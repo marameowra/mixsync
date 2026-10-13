@@ -67,3 +67,18 @@ def test_trash_op_never_completed_is_still_protected(
     ops.recover()  # the worker settles the row, then puts the original back
     tag_undo.recover(sessions, ops)
     assert ops.has(REL) and purger.protected() == set()
+
+
+def test_rolled_back_restore_is_not_redone_after_the_track_moved(
+    ops: FileOps, data_dir: Path, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    # a failed restore put the original back; later the track moved off REL
+    ops.import_file(make_src(), REL, lambda p, _op: None, "import")
+    batch = f"{tag_undo.BATCH}y"
+    trashed = ops.trash(REL, batch)
+    ops.restore(trashed, REL, batch)
+    (data_dir / "library" / REL).unlink()
+    assert not ops.has(REL)
+
+    tag_undo.recover(sessions, ops)  # must not raise
+    assert not ops.has(REL)
