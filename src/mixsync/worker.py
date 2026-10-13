@@ -161,7 +161,7 @@ def _pipeline(
             settings.slow_download_share,
         ),
         queries=queries,
-        metadata=MusicBrainzProvider(client("musicbrainz")),
+        metadata=MusicBrainzProvider(client("musicbrainz"), settings.mb_base_url),
         fingerprint=fingerprint,
         acoustid=AcoustIdClient(client("acoustid"), settings),
         importer=Importer(fileops, sessions, clock, settings.path_template),
@@ -194,7 +194,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
     merger = Merger(
         sessions,
         clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions)),
+        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
         fileops,
         settings.path_template,
         tuple(settings.canonical_media),
@@ -230,7 +230,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
     watcher = Watcher(
         sessions,
         clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions)),
+        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
