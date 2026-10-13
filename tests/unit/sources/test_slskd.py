@@ -283,3 +283,27 @@ async def test_active_downloads_counts_only_transfers_moving_data(make_client: M
         f["id"] = f"id-{n}"  # the fixture reuses one id; slskd's are distinct
     src = source(make_client, lambda r: httpx.Response(200, json=[body]))
     assert await src.active_downloads() == {"id-1": 1000}  # InProgress only; no queued/done
+
+
+async def test_done_uses_slskds_deduplicated_name_beside_a_leftover(
+    make_client: Make, tmp_path: Path
+) -> None:
+    cand = Candidate("p", "Album", (CandidateFile("x\\Album\\01.flac", 4, "flac"),))
+    album = tmp_path / "Album"
+    album.mkdir()
+    (album / "01.flac").write_bytes(b"old")  # rejected earlier download
+    (album / "01_638000000000000001.flac").write_bytes(b"new!")
+    (album / "01_notticks.flac").write_bytes(b"xxxx")
+    done = {"state": "Completed, Succeeded", "bytesTransferred": 4}
+    files = [{"filename": "x\\Album\\01.flac", **done}]
+    body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
+    src = SlskdSource(
+        make_client("slskd", lambda r: httpx.Response(200, json=body)),
+        BASE,
+        "key-123",
+        downloads_dir=tmp_path,
+        sleep=_no_sleep,
+    )
+    info = await src.status(cand)
+    assert info.local_paths == (str(album / "01_638000000000000001.flac"),)
+    assert (album / "01.flac").read_bytes() == b"old"
