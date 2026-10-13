@@ -179,20 +179,20 @@ class SlskdSource:
         """slskd saves to <downloads>/<the file's own parent folder name>/<file name> (default
         `Transfers.Download.Destination.Subdirectory` = ${SOURCE_DIRECTORY}; see
         DownloadService.DeriveDestination). A disc subfolder is therefore its own directory.
-        A name slskd had to sanitize will not exist here; callers check. When a leftover file of
-        another size holds the name, slskd saved this one as `<stem>_<UTC ticks><ext>`
-        (FileService.MoveFile): that sibling is used instead."""
+        A name slskd had to sanitize will not exist here; callers check. When a leftover holds the
+        name, slskd saved this one as `<stem>_<UTC ticks><ext>` (FileService.MoveFile): of the
+        original and such siblings, the newest one of the expected size is used."""
         if not _safe(f.path):  # candidates stored before the map_responses filter existed
             raise PermanentError(f"unsafe slskd path from peer: {f.path!r}")
         parts = f.path.split("\\")
         path = self._downloads.joinpath(*parts[-2:])
-        if path.is_file() and path.stat().st_size != f.size:
-            dup = re.compile(rf"{re.escape(path.stem)}_\d+{re.escape(path.suffix)}")
-            renamed = sorted(
+        if path.parent.is_dir():
+            dup = re.compile(rf"{re.escape(path.stem)}(?:_\d+)?{re.escape(path.suffix)}")
+            fits = [
                 c
                 for c in path.parent.iterdir()
                 if dup.fullmatch(c.name) and c.is_file() and c.stat().st_size == f.size
-            )
-            if renamed:
-                return str(renamed[-1])  # newest: ticks grow
+            ]
+            if fits:  # the newest write is this download, whatever name slskd gave it
+                return str(max(fits, key=lambda c: c.stat().st_mtime_ns))
         return str(path)

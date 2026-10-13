@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -285,15 +286,8 @@ async def test_active_downloads_counts_only_transfers_moving_data(make_client: M
     assert await src.active_downloads() == {"id-1": 1000}  # InProgress only; no queued/done
 
 
-async def test_done_uses_slskds_deduplicated_name_beside_a_leftover(
-    make_client: Make, tmp_path: Path
-) -> None:
+async def done_path(make_client: Make, root: Path) -> str:
     cand = Candidate("p", "Album", (CandidateFile("x\\Album\\01.flac", 4, "flac"),))
-    album = tmp_path / "Album"
-    album.mkdir()
-    (album / "01.flac").write_bytes(b"old")  # rejected earlier download
-    (album / "01_638000000000000001.flac").write_bytes(b"new!")
-    (album / "01_notticks.flac").write_bytes(b"xxxx")
     done = {"state": "Completed, Succeeded", "bytesTransferred": 4}
     files = [{"filename": "x\\Album\\01.flac", **done}]
     body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
@@ -301,9 +295,57 @@ async def test_done_uses_slskds_deduplicated_name_beside_a_leftover(
         make_client("slskd", lambda r: httpx.Response(200, json=body)),
         BASE,
         "key-123",
-        downloads_dir=tmp_path,
+        downloads_dir=root,
         sleep=_no_sleep,
     )
-    info = await src.status(cand)
-    assert info.local_paths == (str(album / "01_638000000000000001.flac"),)
-    assert (album / "01.flac").read_bytes() == b"old"
+    (path,) = (await src.status(cand)).local_paths
+    return path
+
+
+def put(root: Path, name: str, data: bytes, mtime: int) -> Path:
+    p = root / "Album" / name
+    p.parent.mkdir(exist_ok=True)
+    p.write_bytes(data)
+    os.utime(p, (mtime, mtime))
+    return p
+
+
+async def test_done_uses_deduplicated_name_beside_a_leftover(
+    make_client: Make, tmp_path: Path
+) -> None:
+    old = put(tmp_path, "01.flac", b"old", 1)  # rejected earlier download
+    new = put(tmp_path, "01_638000000000000001.flac", b"new!", 3)
+    put(tmp_path, "01_notticks.flac", b"xxxx", 9)
+    assert await done_path(make_client, tmp_path) == str(new)
+    assert old.read_bytes() == b"old"
+
+
+async def test_done_prefers_newer_renamed_file_over_same_size_leftover(
+    make_client: Make, tmp_path: Path
+) -> None:
+    put(tmp_path, "01.flac", b"aaaa", 1)
+    new = put(tmp_path, "01_638000000000000001.flac", b"bbbb", 2)
+    assert await done_path(make_client, tmp_path) == str(new)
+
+
+async def test_done_finds_renamed_file_when_original_is_gone(
+    make_client: Make, tmp_path: Path
+) -> None:
+    new = put(tmp_path, "01_638000000000000001.flac", b"bbbb", 2)
+    assert await done_path(make_client, tmp_path) == str(new)
+
+
+async def test_done_keeps_original_when_it_is_the_only_match(
+    make_client: Make, tmp_path: Path
+) -> None:
+    orig = put(tmp_path, "01.flac", b"aaaa", 1)
+    assert await done_path(make_client, tmp_path) == str(orig)
+
+
+async def test_done_picks_newest_of_several_renamed_files(
+    make_client: Make, tmp_path: Path
+) -> None:
+    put(tmp_path, "01_638000000000000001.flac", b"aaaa", 1)
+    new = put(tmp_path, "01_638000000000000002.flac", b"bbbb", 5)
+    put(tmp_path, "01_638000000000000003.flac", b"cccc", 2)
+    assert await done_path(make_client, tmp_path) == str(new)
