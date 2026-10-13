@@ -6,7 +6,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from mixsync.core.errors import TransientError
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets import subsonic
 from mixsync.targets.navidrome import NavidromeTarget
@@ -70,6 +70,18 @@ async def test_full_scan_and_ping(make_client: Make) -> None:
     await client.start_scan(full=True)
     await client.ping()
     assert paths == [("/rest/startScan", "true"), ("/rest/ping", None)]
+
+
+@pytest.mark.parametrize(
+    ("name", "needle"),
+    [("error_40", "check MIXSYNC_NAVIDROME_USER"), ("error_50", "must be an admin")],
+)
+async def test_failed_status_is_permanent(make_client: Make, name: str, needle: str) -> None:
+    client = subsonic_client(make_client, lambda _r: fixture(name))
+    with pytest.raises(PermanentError, match="MIXSYNC_NAVIDROME_USER") as exc:
+        await client.start_scan()
+    assert needle in str(exc.value)
+    assert PASSWORD not in str(exc.value)
 
 
 async def test_5xx_is_transient(make_client: Make) -> None:
