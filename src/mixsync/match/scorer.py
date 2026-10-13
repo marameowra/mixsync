@@ -26,7 +26,6 @@
 """Distance between a batch of files and a MusicBrainz release."""
 
 import datetime
-import re
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
@@ -121,23 +120,14 @@ class Distance:
         self,
         key: str,
         value: str | None,
-        options: str | re.Pattern[str] | Sequence[str] | None,
+        options: str | Sequence[str] | None,
         reason: str,
     ) -> None:
-        """Penalty 1.0 unless `value` equals `options` (or any of them, if a list or tuple).
-        A compiled regex option matches against `value`."""
+        """Penalty 1.0 unless `value` equals `options` (or any of them, if a list or tuple)."""
         opts = (
             options if isinstance(options, Sequence) and not isinstance(options, str) else [options]
         )
-        for opt in opts:
-            if isinstance(opt, re.Pattern):
-                hit = value is not None and bool(opt.match(value))
-            else:
-                hit = opt == value
-            if hit:
-                self.add(key, 0.0, reason)
-                return
-        self.add(key, 1.0, reason)
+        self.add(key, 0.0 if value in opts else 1.0, reason)
 
     def add_expr(self, key: str, expr: bool, reason: str) -> None:
         self.add(key, 1.0 if expr else 0.0, reason)
