@@ -7,7 +7,6 @@ from mixsync.core.protocols import Journal
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.migrate import downgrade, upgrade
-from mixsync.db.models.safety import FileOp
 
 
 class FakeClock:
@@ -59,13 +58,14 @@ def test_migration_downgrade(settings: Settings) -> None:
     assert "file_ops" not in inspect(make_engine(settings)).get_table_names()
 
 
-def test_finished_op_is_not_overwritten(settings: Settings) -> None:
+def test_settled_op_is_only_overridden_by_done(settings: Settings) -> None:
     j = _journal(settings)
-    op = j.begin("b", "restore", "s", "d")
-    j.rolled_back(op)  # another process's recovery got there first
-    j.fail(op, "late")
-    j.complete(op, "h")
-    assert j.pending() == []
-    with j._sessions() as s:  # noqa: SLF001
-        row = s.get_one(FileOp, op)
-        assert (row.status, row.error, row.dst_hash) == ("rolled_back", None, None)
+    failed = j.begin("b", "copy", "s", "d")
+    j.rolled_back(failed)  # another process's recovery got there first
+    j.fail(failed, "late")
+    assert j.find_completed("b", "s") is None
+    done = j.begin("b", "copy", "s", "d")
+    j.rolled_back(done)
+    j.complete(done, "h")  # the work did finish: done wins
+    found = j.find_completed("b", "s")
+    assert found is not None and found.id == done

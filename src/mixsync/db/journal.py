@@ -67,7 +67,7 @@ class SqlJournal:
     ) -> None:
         with self._sessions.begin() as s:
             op = s.get_one(FileOp, op_id)
-            if op.status != "started":  # another process already settled it; keep that
+            if op.status != "started" and status != "done":  # settled elsewhere; done still wins
                 return
             op.status = status
             op.finished_at = self._clock.now()
