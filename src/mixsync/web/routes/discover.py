@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import aware
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
@@ -95,7 +96,7 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
                 "mbid": h.recording_mbid,
                 "name": f"{artist} - {title}" if artist else title,
                 "expires": h.expires_at,
-                "overdue": bool(h.expires_at and h.expires_at.replace(tzinfo=UTC) <= now),
+                "overdue": bool(h.expires_at and aware(h.expires_at) <= now),
             }
         )
     ctx: dict[str, Any] = {

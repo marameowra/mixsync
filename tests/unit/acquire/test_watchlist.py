@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import Callable
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, timedelta, timezone
 
 import httpx
 import pytest
@@ -810,6 +810,15 @@ async def test_a_running_poll_elsewhere_does_not_stop_the_successor(env: Env) ->
         )
     await poll(env, FakeWatch(), eid)
     assert len([j for j in env.jobs(JobKind.WATCHLIST_POLL) if j.status == "queued"]) == 1
+
+
+async def test_check_now_gap_uses_real_elapsed_time_for_non_utc_values(env: Env) -> None:
+    """Postgres hands back aware values in the session zone; they must not be relabelled."""
+    now = env.clock.now()
+    west = timezone(timedelta(hours=-5))
+    e = WatchedEntity(last_checked_at=(now - timedelta(minutes=10)).astimezone(west))
+    with env.sessions.begin() as s:
+        assert not follows.check_now(s, now, e)
 
 
 async def test_check_now_runs_before_a_backlog_of_searches(env: Env) -> None:

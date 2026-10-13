@@ -6,6 +6,7 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, Select, delete, select, update
 from sqlalchemy.orm import Session
 
+from mixsync.core.clock import aware
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job
@@ -90,7 +91,7 @@ def remove_follow(s: Session, follow: Follow) -> None:
 
 def check_now(s: Session, now: datetime, e: WatchedEntity) -> bool:
     """Bring the entity's next check forward to now. False if it was checked within the gap."""
-    if e.last_checked_at and now - e.last_checked_at.replace(tzinfo=now.tzinfo) < CHECK_NOW_GAP:
+    if e.last_checked_at and now - aware(e.last_checked_at) < CHECK_NOW_GAP:
         return False
     _run_now(s, now, e)
     return True

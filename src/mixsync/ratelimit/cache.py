@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 import httpx
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.clock import aware
 from mixsync.db.models.infra import HttpCache
-from mixsync.ratelimit.bucket import aware
 
 _SKIP_HEADERS = {"content-encoding", "content-length", "transfer-encoding"}
 

@@ -4,7 +4,7 @@ owned, and push what is to the user's Navidrome. Retention of the provisional tr
 import logging
 import random
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, Select, select, update
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.protocols import HistorySource, UserLibrary
@@ -53,7 +53,7 @@ def waiting(playlist_id: int) -> Select[Any]:
 def ensure_build(s: Session, now: datetime, pl: DiscoveryPlaylist) -> None:
     """Make sure a build is queued, due at the playlist's next_build_at (or now)."""
     if s.scalar(waiting(pl.id).limit(1)) is None:
-        due = pl.next_build_at.replace(tzinfo=UTC) if pl.next_build_at else now
+        due = aware(pl.next_build_at) if pl.next_build_at else now
         pl.next_build_at = due
         enqueue_in(s, now, JobKind.DISCOVERY_BUILD, {"playlist_id": pl.id}, run_after=due)
 
@@ -81,7 +81,7 @@ def _has_playlist(s: Session, user_id: int) -> bool:
 
 def build_now(s: Session, now: datetime, pl: DiscoveryPlaylist) -> bool:
     """Bring the queued build forward to now. False if built within the gap."""
-    if pl.last_built_at and now - pl.last_built_at.replace(tzinfo=UTC) < BUILD_NOW_GAP:
+    if pl.last_built_at and now - aware(pl.last_built_at) < BUILD_NOW_GAP:
         return False
     pl.next_build_at = now
     moved = cast(
@@ -298,7 +298,7 @@ class Discovery:
                     hold = self._hold(s, now, pl, c.recording_mbid)
                     hold.provisional_track_id = pt.id
                     if hold.expires_at is None:
-                        imported = pt.imported_at.replace(tzinfo=UTC)
+                        imported = aware(pt.imported_at)
                         hold.expires_at = imported + timedelta(days=pl.retention_days)
             pl.entries = [
                 {"recording_mbid": c.recording_mbid, "artist": c.artist, "title": c.title}

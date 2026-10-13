@@ -4,7 +4,7 @@ the main library, expire the rest, trash a file only once no user's hold wants i
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import LATE_PUSH, RESCAN_DELAY, enqueue_rescan
+from mixsync.core.clock import aware
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo
@@ -160,7 +161,7 @@ class Retention:
                     h.recording_mbid,
                     pl.id,
                     pl.keep_plays,
-                    h.expires_at and h.expires_at.replace(tzinfo=UTC),
+                    h.expires_at and aware(h.expires_at),
                     h.kept_at is not None,
                     pt.navidrome_song_id,
                     pt.title or e.get("title", ""),  # old rows: what the playlist says
@@ -226,7 +227,7 @@ class Retention:
                     changed.add(r.mbid)
                 elif r.song_id is None:  # could be starred; never expire what cannot be checked
                     unknown[r.playlist_id] = unknown.get(r.playlist_id, 0) + 1
-                elif hold.expires_at and now >= hold.expires_at.replace(tzinfo=UTC):
+                elif hold.expires_at and now >= aware(hold.expires_at):
                     hold.expired_at = now
                     changed.add(r.mbid)
                 pt = s.get_one(ProvisionalTrack, r.track_id)
