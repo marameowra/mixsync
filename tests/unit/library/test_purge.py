@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.core.jobs import JobKind
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
@@ -15,7 +15,7 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
 from mixsync.library.fileops import FileOps
-from mixsync.library.purge import INTERVAL, TrashPurger
+from mixsync.library.purge import INTERVAL, MONITOR_KEEP, TrashPurger
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -360,3 +360,34 @@ def test_a_failing_cache_delete_neither_skips_the_file_purge_nor_the_chain(
     assert not old.exists()
     with sessions() as s:
         assert len(list(s.scalars(select(Job).where(Job.kind == JobKind.TRASH_PURGE)))) == 1
+
+
+def test_purge_deletes_old_succeeded_monitor_rows_and_keeps_everything_else(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    old, recent = NOW - MONITOR_KEEP - timedelta(hours=1), NOW - MONITOR_KEEP + timedelta(hours=1)
+    rows = {
+        "monitor:old": (JobKind.DOWNLOAD, JobState.SUCCEEDED, old),
+        "monitor:recent": (JobKind.DOWNLOAD, JobState.SUCCEEDED, recent),
+        "monitor:failed": (JobKind.DOWNLOAD, JobState.FAILED, old),
+        "monitor:queued": (JobKind.DOWNLOAD, JobState.QUEUED, old),
+        "download:old": (JobKind.DOWNLOAD, JobState.SUCCEEDED, old),
+        "import:old": (JobKind.VERIFY, JobState.SUCCEEDED, old),
+        "monitor:verify": (JobKind.VERIFY, JobState.SUCCEEDED, old),
+    }
+    with sessions.begin() as s:
+        for key, (kind, state, at) in rows.items():
+            s.add(
+                Job(
+                    kind=kind,
+                    status=state,
+                    run_after=at,
+                    idempotency_key=key,
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    with sessions() as s:
+        keys = set(s.scalars(select(Job.idempotency_key).where(Job.kind != JobKind.TRASH_PURGE)))
+    assert keys == set(rows) - {"monitor:old"}

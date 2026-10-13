@@ -21,6 +21,7 @@ from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 
 INTERVAL = timedelta(days=1)
+MONITOR_KEEP = timedelta(days=7)  # finished download-monitor rows; nothing reads them again
 LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 Rng = Callable[[float, float], float]
 
@@ -99,6 +100,14 @@ class TrashPurger:
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
                 s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
+                s.execute(  # one per 30 s per transfer; only their dedup key names them
+                    delete(Job).where(
+                        Job.kind == JobKind.DOWNLOAD,
+                        Job.status == JobState.SUCCEEDED,
+                        Job.idempotency_key.like("monitor:%"),
+                        Job.updated_at < self.clock.now() - MONITOR_KEEP,
+                    )
+                )
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:

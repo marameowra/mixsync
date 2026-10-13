@@ -17,11 +17,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0016_provisional_title"
+    assert _version(settings) == "0017_jobs_status_index"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0016_provisional_title"
+    assert _version(settings) == "0017_jobs_status_index"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
