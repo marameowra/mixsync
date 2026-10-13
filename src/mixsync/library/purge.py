@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.core.clock import Clock
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
@@ -23,7 +23,6 @@ from mixsync.library.fileops import FileOps
 MONITOR_BATCH = 10_000
 INTERVAL = timedelta(days=1)
 MONITOR_KEEP = timedelta(days=7)  # finished download-monitor rows; nothing reads them again
-LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 Rng = Callable[[float, float], float]
 
 

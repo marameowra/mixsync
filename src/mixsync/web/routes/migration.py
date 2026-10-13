@@ -9,9 +9,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import CursorResult, select, update
 
 from mixsync.acquire import migration as mig
-from mixsync.acquire.requests import LIVE
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import JobKind
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest

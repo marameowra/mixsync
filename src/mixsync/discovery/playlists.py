@@ -15,7 +15,7 @@ from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.protocols import HistorySource, UserLibrary
 from mixsync.core.types import RecordingRef
 from mixsync.db.models.accounts import UserLink
@@ -61,7 +61,7 @@ def waiting(playlist_id: int) -> Select[Any]:
     """Builds queued, leased, running or waiting to retry."""
     return select(Job).where(
         Job.kind == JobKind.DISCOVERY_BUILD,
-        Job.status.in_((JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)),
+        Job.status.in_(LIVE),
         Job.payload["playlist_id"].as_integer() == playlist_id,
     )
 

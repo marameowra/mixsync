@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db import decisions
 from mixsync.db.models.auth import MatchingProfile, User
@@ -25,7 +25,6 @@ from mixsync.match.profiles import BALANCED
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
-LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
 
 

@@ -8,9 +8,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import LIVE, create_request
+from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
-from mixsync.core.jobs import JobKind
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.protocols import ReleaseWatch
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db import canonical as canonical_db
