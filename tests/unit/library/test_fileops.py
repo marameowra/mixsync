@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.clock import SystemClock
 from mixsync.core.errors import SafetyError
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.safety import FileOp
@@ -425,3 +426,177 @@ def test_recover_clears_work_and_never_follows_a_symlink(ops: FileOps, tmp_path:
     ops.recover()
     assert not (ops.work / "b1").exists()
     assert (keep / "x").read_bytes() == b"x"
+
+
+@pytest.mark.parametrize("root", ["library", "discover"])
+@pytest.mark.parametrize("link_kind", ["parent", "leaf", "dangling", "root", "internal"])
+def test_managed_operations_refuse_symlinks(
+    ops: FileOps, tmp_path: Path, make_src: MakeSrc, root: str, link_kind: str
+) -> None:
+    managed = ops.roots[root]
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "precious.flac"
+    precious.write_bytes(b"precious")
+    if link_kind == "root":
+        if managed.exists():
+            managed.rename(tmp_path / "old-root")
+        managed.symlink_to(outside, target_is_directory=True)
+        rel = "precious.flac"
+    else:
+        managed.mkdir(exist_ok=True)
+        if link_kind == "leaf":
+            (managed / "link").symlink_to(precious)
+            rel = "link"
+        else:
+            target = outside
+            if link_kind == "internal":
+                target = managed / "real"
+                target.mkdir()
+                (target / "precious.flac").write_bytes(b"precious")
+            elif link_kind == "dangling":
+                target = outside / "missing"
+            (managed / "link").symlink_to(target, target_is_directory=True)
+            rel = "link/precious.flac"
+    src = make_src()
+    before = src.read_bytes()
+    for operation in (
+        lambda: ops.import_file(src, rel, noop_tags, "copy", root=root),
+        lambda: ops.write_new(rel, b"generated", "cover", root=root),
+        lambda: ops.trash(rel, "trash", root=root),
+        lambda: ops.has(rel, root=root),
+    ):
+        with pytest.raises(SafetyError, match="symlink"):
+            operation()
+    assert precious.read_bytes() == b"precious"
+    assert src.read_bytes() == before
+    assert sorted(p.name for p in outside.iterdir()) == ["precious.flac"]
+    assert not ops.trash_dir.exists() and not ops.incoming.exists()
+
+
+@pytest.mark.parametrize("side", ["source", "destination"])
+def test_restore_refuses_symlinked_paths(ops: FileOps, tmp_path: Path, side: str) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "precious.flac"
+    precious.write_bytes(b"precious")
+    trash_rel, rel = "2026-01-01/precious.flac", "Artist/precious.flac"
+    ops.trash_dir.mkdir()
+    if side == "source":
+        (ops.trash_dir / "2026-01-01").symlink_to(outside, target_is_directory=True)
+    else:
+        src = ops.trash_dir / trash_rel
+        src.parent.mkdir()
+        src.write_bytes(b"trashed")
+        (ops.library / "Artist").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(SafetyError, match="symlink"):
+        ops.restore(trash_rel, rel, "restore")
+    assert precious.read_bytes() == b"precious"
+    assert (ops.trash_dir / trash_rel).read_bytes() == (
+        b"precious" if side == "source" else b"trashed"
+    )
+    assert sorted(p.name for p in outside.iterdir()) == ["precious.flac"]
+
+
+def test_trash_refuses_symlinked_destination(ops: FileOps, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (ops.library / "precious.flac").write_bytes(b"precious")
+    ops.trash_dir.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(SafetyError, match="symlink"):
+        ops.trash("precious.flac", "trash")
+    assert (ops.library / "precious.flac").read_bytes() == b"precious"
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("kind", ["copy", "trash", "restore"])
+def test_recovery_refuses_symlinked_journal_paths(
+    ops: FileOps, tmp_path: Path, journal: SqlJournal, kind: str
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "precious.flac"
+    precious.write_bytes(b"precious")
+    (ops.library / "Artist").symlink_to(outside, target_is_directory=True)
+    rel, trash_rel = "Artist/precious.flac", "2026-01-01/Artist/precious.flac"
+    src, dst = (rel, trash_rel) if kind == "trash" else (trash_rel, rel)
+    op = journal.begin("b", kind, src, dst)
+    journal.set_dst_hash(op, sha(precious))
+    with pytest.raises(SafetyError, match="symlink"):
+        ops.recover()
+    assert precious.read_bytes() == b"precious"
+    assert [pending.id for pending in journal.pending()] == [op]
+    assert not ops.trash_dir.exists()
+
+
+def test_release_refuses_a_verified_import_redirected_by_symlink(
+    ops: FileOps, tmp_path: Path, make_src: MakeSrc
+) -> None:
+    src = make_src()
+    ops.import_file(src, "Artist/song.flac", noop_tags, "b")
+    original = tmp_path / "original"
+    (ops.library / "Artist").rename(original)
+    (ops.library / "Artist").symlink_to(original, target_is_directory=True)
+    with pytest.raises(SafetyError, match="symlink"):
+        ops.release(src, "b")
+    assert src.read_bytes() == (original / "song.flac").read_bytes()
+
+
+def test_data_directory_can_have_a_symlinked_ancestor(
+    ops: FileOps, data_dir: Path, tmp_path: Path, journal: SqlJournal, make_src: MakeSrc
+) -> None:
+    alias = tmp_path / "data-alias"
+    alias.symlink_to(data_dir, target_is_directory=True)
+    linked = FileOps(alias, tmp_path / "downloads", journal, SystemClock())
+    src = make_src()
+    linked.import_file(src, REL, noop_tags, "b")
+    trashed = linked.trash(REL, "b")
+    linked.restore(trashed, REL, "b")
+    assert (data_dir / "library" / REL).read_bytes() == src.read_bytes()
+    assert linked.has(REL)
+
+
+@pytest.mark.parametrize("operation", ["import", "write"])
+def test_staging_refuses_a_symlinked_root(
+    ops: FileOps, tmp_path: Path, make_src: MakeSrc, operation: str
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    ops.incoming.symlink_to(outside, target_is_directory=True)
+    src = make_src()
+    before = src.read_bytes()
+    with pytest.raises(SafetyError, match="symlink"):
+        if operation == "import":
+            ops.import_file(src, REL, noop_tags, "b")
+        else:
+            ops.write_new(REL, b"cover", "b")
+    assert src.read_bytes() == before
+    assert list(outside.iterdir()) == []
+    assert files(ops.library) == []
+
+
+@pytest.mark.parametrize("link_kind", ["parent", "leaf"])
+def test_recovery_skips_a_symlinked_pending_purge(
+    ops: FileOps,
+    tmp_path: Path,
+    journal: SqlJournal,
+    sessions: sessionmaker[Session],
+    link_kind: str,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "precious.flac"
+    precious.write_bytes(b"precious")
+    day = ops.trash_dir / "2026-01-01"
+    day.mkdir(parents=True)
+    if link_kind == "parent":
+        (day / "link").symlink_to(outside, target_is_directory=True)
+        rel = "2026-01-01/link/precious.flac"
+    else:
+        (day / "link").symlink_to(precious)
+        rel = "2026-01-01/link"
+    journal.begin("b", "purge", rel, "")
+    ops.recover()
+    assert precious.read_bytes() == b"precious"
+    assert statuses(sessions) == ["rolled_back"]
+    assert journal.pending() == []

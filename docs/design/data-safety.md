@@ -10,6 +10,11 @@ Non-negotiable rules. Any code that touches files or the library goes through `l
 - Purging early from the UI requires a typed confirmation.
 - One exception: a **released download**. After an import with zero errors, `fileops.release()` hard-deletes each source file from `/downloads` (journaled, and refused unless the path is strictly inside the downloads dir with no symlink or `..` escape). `/downloads` is staging, not library data; the library copy is hash-verified first; and `/downloads` and `/data` are separate mounts, so a "trash" move would be a second full copy.
 
+## Managed paths
+- Library, discover, staging, trash and scratch paths reject absolute paths, `..`, and symlinked components, including the managed root itself. Resolved destinations must stay under that root; missing destination directories are allowed. Ancestor symlinks above a configured root (for example a data mount) are allowed.
+- Recovery and verification apply the same checks to journaled paths. A rejected pending operation stays pending for inspection; files are not moved or deleted through it.
+- These checks reject existing symlinks; they do not protect against another process replacing a directory between validation and the filesystem operation.
+
 ## 2. Atomic, verified imports
 1. Copy the source to a temp file **on the same filesystem as the destination** (`/data/.incoming/`).
 2. `fsync` the file and its directory.
