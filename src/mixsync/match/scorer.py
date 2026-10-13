@@ -43,7 +43,7 @@ from mixsync.match.features import string_dist
 from mixsync.match.profiles import band
 from mixsync.match.vetoes import find_vetoes
 
-SCORER_VERSION = 2  # 2: stage-1 candidate scoring
+SCORER_VERSION = 3  # 3: penalize year mismatches for current-year releases
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -311,7 +311,7 @@ def album_distance(
             dist.add_ratio(
                 "year",
                 abs(original.year - album.year),
-                abs(this_year - album.original_year),
+                max(abs(this_year - album.original_year), 1),
                 reason,
             )
         else:

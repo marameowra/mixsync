@@ -27,6 +27,7 @@ The best-scoring candidate is downloaded. The runners-up are kept as fallbacks i
 
 ## Scoring and bands
 - Each feature yields a penalty in `[0, 1]` multiplied by a weight. The total is a **distance**, where 0 is a perfect match.
+- Year tags matching either the release year or original release year have no penalty. When the original release year is known, other year differences are divided by the absolute span from that year to the current year, with a minimum span of one year, and clamped to `[0, 1]`. Without an original release year, a mismatch has penalty 1.
 - The **requesting user's profile** sets two thresholds:
 
 | Profile | Auto-accept if distance ≤ | Review if ≤ | Otherwise |

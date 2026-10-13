@@ -185,6 +185,36 @@ def test_year_rules() -> None:
     assert year_penalty(Likelies(year=1995), no_orig) == 1.0
 
 
+@pytest.mark.parametrize(
+    ("tag_year", "release_year", "original_year", "expected"),
+    [
+        (2019, 2020, 2020, 1.0),
+        (2021, 2020, 2020, 1.0),
+        (2020, 2020, 2020, 0.0),
+        (2021, 2021, 2020, 0.0),
+        (2020, 2021, 2020, 0.0),
+        (2019, 2020, 2018, 0.5),
+        (2021, 2022, 2022, 0.5),
+    ],
+)
+def test_year_penalty_at_current_year_boundary(
+    tag_year: int, release_year: int, original_year: int, expected: float
+) -> None:
+    a = AlbumInfo("artist", "album", (), year=release_year, original_year=original_year)
+    original = Likelies(artist="artist", album="album", year=tag_year)
+
+    d = album_distance(original, a, [], 0, this_year=2020)
+
+    if expected:
+        (penalty,) = d.breakdown()
+        assert penalty.key == "year"
+        assert penalty.penalty == pytest.approx(expected)
+        assert penalty.reason == f"year {tag_year} vs {release_year}"
+    else:
+        assert d.breakdown() == ()
+    assert d.distance == pytest.approx(expected / 7)
+
+
 def test_release_id_mismatch() -> None:
     a = AlbumInfo("artist", "album", (), release_id="r1")
 
