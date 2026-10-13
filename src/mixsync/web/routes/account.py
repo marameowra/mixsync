@@ -23,6 +23,7 @@ from mixsync.web.deps import (
     get_listenbrainz_http,
     get_navidrome_http,
 )
+from mixsync.web.routes.auth import admit, forget
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
@@ -97,11 +98,12 @@ def _page(
     s: Session,
     box: SecretBox,
     error: tuple[str, str] | None = None,
+    status: int = 400,
 ) -> HTMLResponse:
     by_service = {link.service: link for link in user_links(s, box, user.id)}
     ctx = {"user": user, "links": by_service, "error": error}
     return templates.TemplateResponse(
-        request, "pages/account.html", ctx, status_code=400 if error else 200
+        request, "pages/account.html", ctx, status_code=status if error else 200
     )
 
 
@@ -122,13 +124,11 @@ async def save(
     username: Annotated[str, Form()] = "",
 ) -> Response:
     _service(service)
-    # shortcut: no attempt limit on Navidrome logins; a logged-in user can guess their own
-    # Navidrome password via this form. Accepted: Navidrome rate-limits itself; add one if abused.
     # a Navidrome password may legitimately start or end with spaces; the rest are identifiers
     secret = secret if service == "navidrome" else secret.strip()
     username = username.strip()
     db.commit()  # don't hold the SQLite write lock across the outbound call
-    name, msg = "", "That is too long."
+    name, msg, status = "", "That is too long.", 400
     if len(secret) <= MAX_LEN and len(username) <= MAX_LEN:
         if service == "listenbrainz":
             msg = "ListenBrainz did not accept that token."
@@ -138,10 +138,16 @@ async def save(
                 name, msg = "", "Couldn't reach ListenBrainz; try again."
         else:
             name, msg = "", "Navidrome did not accept that username and password."
-            if username and secret:
+            keys = (("navidrome-user", str(user.id)), ("navidrome-target", username.lower()))
+            # shortcut: shares the login limiter's in-process state and 10 per 15 minutes policy;
+            # a failure counts against the user and the target username until one link succeeds.
+            if username and secret and not all([admit(k) for k in keys]):
+                msg, status = "Too many attempts, try again later.", 429
+            elif username and secret:
                 match await validator.navidrome_ping(username, secret):
                     case Ping.ok:
                         name = username
+                        forget(*keys)
                     case Ping.unreachable:
                         msg = "Couldn't reach Navidrome; try again."
                     case Ping.rejected:
@@ -150,7 +156,7 @@ async def save(
         try:
             with request.app.state.session_factory.begin() as s:  # db is spent after the commit
                 if not name:
-                    return _page(request, user, s, box, (service, msg))
+                    return _page(request, user, s, box, (service, msg), status)
                 link = get_link(s, user.id, service)
                 if link is None:
                     link = UserLink(user_id=user.id, service=service)

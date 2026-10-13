@@ -22,7 +22,7 @@ _lock = threading.Lock()
 _now = time.monotonic  # tests replace this to advance time
 
 
-def _admit(key: tuple[str, str]) -> bool:
+def admit(key: tuple[str, str]) -> bool:
     """Prune, check and record the attempt in one step so parallel requests can't all slip past."""
     with _lock:
         now = _now()
@@ -39,6 +39,12 @@ def _admit(key: tuple[str, str]) -> bool:
         return True
 
 
+def forget(*keys: tuple[str, str]) -> None:
+    with _lock:
+        for k in keys:
+            _failures.pop(k, None)
+
+
 @router.get("/login")
 def login_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "pages/login.html", {"error": None})
@@ -49,7 +55,7 @@ def login(
     request: Request, db: Db, username: Annotated[str, Form()], password: Annotated[str, Form()]
 ) -> Response:
     key = (request.client.host if request.client else "", username.lower())
-    if not _admit(key):
+    if not admit(key):
         return templates.TemplateResponse(
             request, "pages/login.html", {"error": "locked"}, status_code=429
         )
@@ -58,8 +64,7 @@ def login(
         return templates.TemplateResponse(
             request, "pages/login.html", {"error": "invalid"}, status_code=401
         )
-    with _lock:
-        _failures.pop(key, None)
+    forget(key)
     token = create_session(
         db, user.id, datetime.now(UTC), SESSION_TTL, request.headers.get("user-agent")
     )
