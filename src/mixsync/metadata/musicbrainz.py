@@ -175,7 +175,7 @@ class MusicBrainzProvider:
     ) -> list[ReleaseGroupHit]:
         """A paged search, one request per page. `mbid` must be a UUID (the caller parses it).
         An artist is a release-group search on `firstreleasedate`; a label a release search on
-        `date`, mapped to release groups. Pages are read while the search `count` says more remain."""
+        `date`, mapped to release groups. Pages are read while `count` says more remain."""
         artist = kind == "artist"
         field, date_field = ("arid", "firstreleasedate") if artist else ("laid", "date")
         query = f"{field}:{mbid}" + (f" AND {date_field}:[{since} TO *]" if since else "")
