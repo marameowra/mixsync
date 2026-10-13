@@ -140,7 +140,7 @@ class JobQueue:
         with self._engine.begin() as c:
             # A job that keeps killing its worker must not be requeued forever.
             dead = (
-                _J.c.status == JobState.RUNNING,
+                _J.c.status.in_((JobState.LEASED, JobState.RUNNING)),  # attempts count at claim
                 _J.c.lease_expires_at < now,
                 _J.c.attempts >= _J.c.max_attempts,
             )
@@ -150,7 +150,9 @@ class JobQueue:
                 update(_J)
                 .where(*dead)
                 .values(
-                    status=transition(JobState.RUNNING, JobState.FAILED),
+                    status=transition(
+                        JobState.RUNNING, transition(JobState.LEASED, JobState.FAILED)
+                    ),
                     locked_by=None,
                     lease_expires_at=None,
                     last_error="lease expired with no attempts left",

@@ -410,3 +410,15 @@ def test_web_sessions_raise_only_default_priority(engine: Engine, clock: FakeClo
     with plain() as s:
         got = {j.payload["tag"]: j.priority for j in s.scalars(select(Job))}
     assert got == {"worker": 0, "click": USER_PRIORITY, "migration": 1}
+
+
+def test_job_whose_lease_expires_while_leased_fails_after_max_attempts(
+    q: JobQueue, clock: FakeClock
+) -> None:
+    j = enq(q, JobKind.NOOP, max_attempts=2)
+    for _ in range(2):  # the worker dies between claim and start, every time
+        assert q.claim("w", LEASE) is not None
+        clock.advance(LEASE + timedelta(seconds=1))
+        q.reap()
+    assert q.get(j.id).status is JobState.FAILED
+    assert q.claim("w", LEASE) is None
