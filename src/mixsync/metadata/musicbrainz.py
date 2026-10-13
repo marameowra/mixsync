@@ -19,7 +19,9 @@ from mixsync.ratelimit.client import PoliteClient
 log = logging.getLogger(__name__)
 
 DISCOGRAPHY_PAGES = 5  # the picker reads at most this many pages of 100
-WATCH_LIMIT = 100  # a watch check is one search; this is the most it reads
+WATCH_LIMIT = 100  # rows per page of a watch search
+# shortcut: a watch search reads at most 10 pages (1000 rows); raise it if a label outgrows that.
+WATCH_MAX_PAGES = 10
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 _INC = "recordings artist-credits media labels release-groups genres"  # httpx sends spaces as +
 
@@ -171,43 +173,48 @@ class MusicBrainzProvider:
     async def new_release_groups(
         self, kind: str, mbid: str, since: str | None, *, fresh: bool = False
     ) -> list[ReleaseGroupHit]:
-        """One search request. `mbid` must be a UUID (the caller parses it). An artist is a
-        release-group search on `firstreleasedate`; a label a release search on `date`, mapped
-        to release groups. A full page is taken as it is (and logged), never paged through."""
+        """A paged search, one request per page. `mbid` must be a UUID (the caller parses it).
+        An artist is a release-group search on `firstreleasedate`; a label a release search on
+        `date`, mapped to release groups. Pages are read while `count` says more remain."""
         artist = kind == "artist"
         field, date_field = ("arid", "firstreleasedate") if artist else ("laid", "date")
         query = f"{field}:{mbid}" + (f" AND {date_field}:[{since} TO *]" if since else "")
-        data = await get_json(
-            self._client,
-            f"{self._base}/{'release-group' if artist else 'release'}",
-            {"query": query, "limit": WATCH_LIMIT, "fmt": "json"},
-            **_fresh(fresh),
-        )
         by_group: dict[str, ReleaseGroupHit] = {}
-        if artist:
-            rgs = MbRgSearch.model_validate(data).release_groups
-            n = len(rgs)
-            for g in rgs:
-                if g.id:
-                    by_group[g.id] = _hit(
-                        g,
-                        g.title,
-                        g.first_release_date,
-                        [r.id for r in g.releases],
-                        g.artist_credit,
-                    )
+        offset = 0
+        for _ in range(WATCH_MAX_PAGES):
+            data = await get_json(
+                self._client,
+                f"{self._base}/{'release-group' if artist else 'release'}",
+                {"query": query, "limit": WATCH_LIMIT, "offset": offset, "fmt": "json"},
+                **_fresh(fresh),
+            )
+            if artist:
+                rows: list[Any] = MbRgSearch.model_validate(data).release_groups
+                for g in rows:
+                    if g.id:
+                        by_group[g.id] = _hit(
+                            g,
+                            g.title,
+                            g.first_release_date,
+                            [r.id for r in g.releases],
+                            g.artist_credit,
+                        )
+            else:
+                rows = MbSearch.model_validate(data).releases
+                for r in rows:
+                    if (g := r.release_group) is None or not g.id:
+                        continue
+                    old = by_group.get(g.id)
+                    ids = [*(old.release_ids if old else ()), r.id]
+                    date = min((d for d in (old and old.date, r.date) if d), default="")
+                    by_group[g.id] = _hit(g, g.title or r.title, date, ids, r.artist_credit)
+            offset += len(rows)
+            if not rows or offset >= data.get("count", 0):
+                break
         else:
-            rels = MbSearch.model_validate(data).releases
-            n = len(rels)
-            for r in rels:
-                if (g := r.release_group) is None or not g.id:
-                    continue
-                old = by_group.get(g.id)
-                ids = [*(old.release_ids if old else ()), r.id]
-                date = min((d for d in (old and old.date, r.date) if d), default="")
-                by_group[g.id] = _hit(g, g.title or r.title, date, ids, r.artist_credit)
-        if n >= WATCH_LIMIT:
-            log.warning("watch search for %s %s filled a page; older hits are unread", kind, mbid)
+            log.warning(
+                "watch search for %s %s hit the page cap; older hits are unread", kind, mbid
+            )
         hits = list(by_group.values())
         return [h for h in hits if h.date]
 

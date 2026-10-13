@@ -31,6 +31,7 @@ class FakeValidator:
         self.ok = True
         self.ping = Ping.ok
         self.lb_down = False
+        self.pings = 0
 
     async def listenbrainz_username(self, token: str) -> str | None:
         if self.lb_down:
@@ -38,6 +39,7 @@ class FakeValidator:
         return "lb-real-name" if self.ok else None
 
     async def navidrome_ping(self, username: str, password: str) -> Ping:
+        self.pings += 1
         return self.ping if self.ok else Ping.rejected
 
 
@@ -259,6 +261,82 @@ def test_navidrome_unreachable_message_and_password_not_stripped(
     assert _link(sf, box, "alice", "navidrome") == ("ali", " pw ")
 
 
+def _guess(c: TestClient, tok: str, username: str = "victim") -> httpx.Response:
+    data = {"username": username, "secret": "guess", "csrf_token": tok}
+    return c.post("/account/navidrome", data=data)
+
+
+def test_navidrome_link_locks_after_ten_failures_without_calling_navidrome(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    fake.ok = False
+    tok = _login(client, "alice")
+    for _ in range(10):
+        assert _guess(client, tok, f"target{_}").status_code == 400
+    assert fake.pings == 10
+    r = _guess(client, tok, "another")
+    assert r.status_code == 429 and "Too many attempts" in r.text
+    assert fake.pings == 10  # refused before asking Navidrome
+
+
+def test_navidrome_link_failures_are_counted_per_user_and_per_target(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    fake.ok = False
+    tok = _login(client, "alice")
+    for _ in range(10):
+        _guess(client, tok)
+    assert _guess(client, tok).status_code == 429
+    tok = _login(client, "bob")  # alice's failures do not lock bob out of another account
+    assert _guess(client, tok, "bobs-own").status_code == 400
+    assert _guess(client, tok).status_code == 429  # but the guessed target is locked for everyone
+
+
+def test_navidrome_link_success_is_not_blocked_by_other_successes(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    tok = _login(client, "alice")
+    for i in range(12):
+        assert _guess(client, tok, f"ok{i}").status_code == 303
+    assert _guess(client, tok, "ok0").status_code == 303
+
+
+def test_navidrome_refused_attempts_do_not_count_against_the_target(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    fake.ok = False
+    tok = _login(client, "alice")
+    for i in range(10):
+        _guess(client, tok, f"t{i}")
+    for _ in range(12):  # locked by the user key; none of these may lock carol
+        assert _guess(client, tok, "carol").status_code == 429
+    fake.ok = True
+    tok = _login(client, "bob")
+    assert _guess(client, tok, "carol").status_code == 303
+
+
+def test_navidrome_own_success_does_not_reset_earlier_failures(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    tok = _login(client, "alice")
+    fake.ok = False
+    for i in range(9):
+        _guess(client, tok, f"t{i}")
+    fake.ok = True
+    assert _guess(client, tok, "mine").status_code == 303
+    fake.ok = False
+    assert _guess(client, tok, "t9").status_code == 400
+    assert _guess(client, tok, "t10").status_code == 429
+
+
+def test_navidrome_unreachable_does_not_count(client: TestClient, fake: FakeValidator) -> None:
+    fake.ping = Ping.unreachable
+    tok = _login(client, "alice")
+    for _ in range(12):
+        assert _guess(client, tok).status_code == 400
+    assert fake.pings == 12
+
+
 def _subsonic(status: str, code: int = 0) -> httpx.Response:
     body: dict[str, object] = {"status": status}
     if code:
@@ -335,3 +413,10 @@ async def test_default_validator_listenbrainz(
 
     with pytest.raises(TransientError):
         await _ping(settings, sf, boom).listenbrainz_username("x")
+
+
+def test_a_successful_link_leaves_no_empty_entry_in_the_limiter(client: TestClient) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    assert _guess(client, _login(client, "alice")).status_code == 303
+    assert all(auth_routes._failures.values())
