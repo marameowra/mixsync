@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from mixsync.acquire.merge import Merger, PlanInProgress
 from mixsync.acquire.recheck import Rechecker, statuses
@@ -20,7 +21,7 @@ from mixsync.acquire.requests import (
     group,
     read_unverified,
 )
-from mixsync.core.errors import SafetyError, TransientError
+from mixsync.core.errors import PermanentError, SafetyError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
@@ -56,8 +57,14 @@ class Meta(FakeMetadata):
 class Lookup:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.fail: Exception | None = None
+        self.broken: set[str] = set()  # fingerprints whose reply is malformed
 
     async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]:
+        if fp.fingerprint in self.broken:
+            raise ValueError("malformed reply")
+        if self.fail:
+            raise self.fail
         self.calls.append(fp.fingerprint)
         return [AcoustIdResult("aid-" + fp.fingerprint, 0.97, (RECORDINGS[fp.fingerprint],))]
 
@@ -68,7 +75,7 @@ BAD: set[str] = set()  # titles whose files cannot be fingerprinted
 async def _fingerprint(path: Path) -> Fingerprint:
     title = tags.read_fields(path)["title"]
     if title in BAD:
-        raise RuntimeError("fpcalc failed")
+        raise PermanentError("fpcalc failed")
     return Fingerprint(1.0, title)
 
 
@@ -355,10 +362,57 @@ async def test_no_file_to_fingerprint_is_no_match_and_the_chain_goes_on(env: Env
     assert rig.plans("draft") == [] and [a for a, _ in rig.queued()] == [1]
 
 
+async def test_an_outage_that_clears_leaves_no_next_check_queued(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.fail = TransientError("acoustid is down")
+    rig.schedule()
+    await env.step()
+    assert rig.queued() == []  # no continuation while the job can still retry
+    rig.lookup.fail = None
+    await env.step()  # the retry finds the match
+    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
+    assert len(rig.plans("draft")) == 1 and rig.queued() == []
+
+
+async def test_an_outage_that_exhausts_retries_queues_one_check_at_the_same_attempt(
+    env: Env,
+) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.fail = TransientError("acoustid is down")
+    rig.schedule()
+    while (await env.step()) and env.jobs(JobKind.RECHECK)[0].status is not JobState.FAILED:
+        assert rig.queued() == []
+    ((attempt, due),) = rig.queued()
+    assert attempt == 0 and _in_window(due, env.clock.now(), RECHECK_INTERVALS[0])
+
+
+async def test_a_transient_failure_that_retries_to_no_match_backs_off_as_usual(env: Env) -> None:
+    rig = _rig(env, match=False)
+    rig.seed()
+    rig.meta.fail = TransientError("musicbrainz is down")
+    rig.schedule()
+    await env.step()
+    rig.meta.fail = None
+    await env.step()
+    assert [a for a, _ in rig.queued()] == [1]
+
+
+async def test_a_file_that_fails_to_read_is_skipped_and_the_rest_match(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed()
+    rig.lookup.broken.add("Song Two")
+    rig.schedule()
+    await env.step()
+    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
+    assert rig.lookup.calls == ["Song One"] and rig.queued() != []
+
+
 async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:
     rig = _rig(env)
     rig.seed()
-    rig.meta.fail = TransientError("musicbrainz is down")
+    rig.meta.fail = OperationalError("x", None, Exception())  # the worker retries it
     rig.schedule()
     await env.step()  # fails, retry_wait
     assert [a for a, _ in rig.queued()] == [1]

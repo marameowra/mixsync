@@ -26,6 +26,7 @@ from mixsync.acquire.requests import (
     read_unverified,
 )
 from mixsync.core.clock import Clock
+from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, Band, FileTrack, Profile
 from mixsync.core.protocols import AcoustIdLookup, Fingerprinter, MetadataProvider
@@ -98,14 +99,14 @@ class Rechecker:
         key: AlbumKey = (*job.payload["album"],)  # pyright: ignore[reportAssignmentType]
         uid, attempt = job.payload["user_id"], job.payload["attempt"]
 
-        def next_check() -> None:
+        def next_check(step: int = 1) -> None:
             # A user's check leaves the background schedule alone. The key makes a retry of
             # this job (or this call after a failure) add nothing.
             if uid is None:
                 with self.sessions.begin() as s:
                     chain = f"recheck:next:{job.id}"
                     now = self.clock.now()
-                    enqueue_recheck(s, now, key, None, attempt=attempt + 1, chain_key=chain)
+                    enqueue_recheck(s, now, key, None, attempt=attempt + step, chain_key=chain)
 
         try:
             with self.sessions() as s:
@@ -119,8 +120,11 @@ class Rechecker:
             if found:
                 with self.sessions.begin() as s:
                     done = self._draft(s, items, *found)
-        except BaseException:  # a failing run must not end the background chain
-            next_check()
+        except BaseException as e:  # a failing run must not end the background chain
+            if not isinstance(e, TransientError):
+                next_check()
+            elif job.attempts >= job.max_attempts:  # an outage is no "no match": same interval
+                next_check(0)
             raise
         if not done:  # no match, or some files stay unverified: look again later
             next_check()
@@ -129,7 +133,8 @@ class Rechecker:
         self, key: AlbumKey, items: list[Item], profile: Profile
     ) -> tuple[AlbumInfo, dict[int, FileTrack]] | None:
         """The best of the top releases, if it is confident enough to promote to. A file that
-        cannot be fingerprinted or looked up is skipped; none left means no match."""
+        cannot be fingerprinted or looked up is skipped (an outage retries the job); none left
+        means no match."""
         refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT)
         albums = [await self.metadata.get_release(r.release_id) for r in refs[:MAX_RELEASES]]
         if not albums:
@@ -140,7 +145,9 @@ class Rechecker:
             try:
                 fp = await self.fingerprint(path)
                 files[t.id] = file_track(path, fp.duration, tuple(await self.acoustid.lookup(fp)))
-            except Exception:
+            except Exception as e:  # a bad file is skipped; an outage must retry the job
+                if isinstance(e, TransientError):
+                    raise
                 log.warning("re-check of %s skipped", t.path, exc_info=True)
         if not files:
             return None
