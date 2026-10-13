@@ -91,12 +91,10 @@ def _dedupe(parsed: Sequence[_Parsed]) -> list[_Parsed]:
     """One file per track, keeping the preferred format (SK-F06)."""
     best: dict[object, _Parsed] = {}
     for p in parsed:
-        # the title tells disc 1 track 1 from disc 2 track 1 in a flat folder with no disc info
-        key = (
-            (p.disc, p.track, normalize(p.title))
-            if p.track is not None
-            else normalize(p.title) or p.file.path
-        )
+        # the title tells disc 1 track 1 from disc 2 track 1 in a flat folder with no disc info;
+        # the tail skips an "Artist - " prefix, as the scorer does. No title: the file stem.
+        title = normalize(p.title.rpartition(" - ")[2]) or p.name.rpartition(".")[0].lower()
+        key = (p.disc, p.track, title) if p.track is not None else normalize(p.title) or p.file.path
         if key not in best or _quality_key(p.file) > _quality_key(best[key].file):
             best[key] = p
     kept = {id(p) for p in best.values()}
