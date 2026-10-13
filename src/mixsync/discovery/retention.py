@@ -15,7 +15,7 @@ from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import LATE_PUSH, RESCAN_DELAY, enqueue_rescan
 from mixsync.core.clock import aware
 from mixsync.core.errors import PermanentError
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.matching import AlbumInfo
 from mixsync.core.protocols import MetadataProvider, UserLibrary
 from mixsync.db import canonical as canonical_db
@@ -86,7 +86,7 @@ class Row:
 def waiting(user_id: int) -> Select[Any]:
     return select(Job).where(
         Job.kind == JobKind.DISCOVERY_RETAIN,
-        Job.status.in_((JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)),
+        Job.status.in_(LIVE),
         Job.payload["user_id"].as_integer() == user_id,
     )
 

@@ -36,6 +36,7 @@ class JobState(StrEnum):
 
 S = JobState
 TERMINAL = frozenset({S.SUCCEEDED, S.FAILED, S.CANCELLED})
+LIVE = (S.QUEUED, S.LEASED, S.RUNNING, S.RETRY_WAIT)
 # Expired leases (leased/running) return to queued; that is the reaper's transition.
 TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     S.QUEUED: frozenset({S.LEASED, S.CANCELLED}),

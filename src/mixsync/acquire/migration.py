@@ -16,7 +16,7 @@ import stat
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.library import Track
@@ -300,10 +300,6 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     return None
 
 
-def _utc(d: datetime) -> datetime:
-    return d if d.tzinfo else d.replace(tzinfo=UTC)  # SQLite hands back naive UTC
-
-
 def report(
     s: Session, m: Migration, start: datetime | None = None, end: datetime | None = None
 ) -> list[dict[str, Any]]:
@@ -312,7 +308,7 @@ def report(
     Albums changed (updated_at) within [start, end] are listed; start defaults to when the
     migration began, end to no limit. Unreadable files have no time, so they show only when
     the window reaches back to the migration's start."""
-    began = _utc(m.created_at)
+    began = aware(m.created_at)
     start = start or began
     reqs = list(
         s.scalars(

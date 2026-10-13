@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import aware
 from mixsync.db.models.auth import Role, RoleCapability, User, UserRole
 from mixsync.db.models.auth import Session as SessionRow
 
@@ -79,7 +80,7 @@ def user_for_session(s: Session, token: str, now: datetime) -> AuthUser | None:
     row = s.get(SessionRow, _hash_token(token))
     if row is None:
         return None
-    expires = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
+    expires = aware(row.expires_at)
     if expires <= now:  # SQLite drops tzinfo; stored values are UTC
         s.delete(row)  # expired sessions are ephemeral rows
         return None

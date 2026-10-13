@@ -19,6 +19,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
@@ -144,13 +145,13 @@ def test_actions(client: TestClient, sf: sessionmaker[Session], action: str, sta
     r = client.post(f"/review/{i}/{action}", data={"csrf_token": tok, "release": MBID})
     assert r.status_code == 303 and r.headers["location"] == "/review"
     with sf() as s:
-        d = decisions.get(s, i)
+        d = s.get(MatchDecision, i)
         assert d and d.status == status
     # double submit: error, state unchanged
     r = client.post(f"/review/{i}/reject", data={"csrf_token": tok})
     assert r.status_code == 409
     with sf() as s:
-        d = decisions.get(s, i)
+        d = s.get(MatchDecision, i)
         assert d and d.status == status
 
 
@@ -206,7 +207,7 @@ def test_repick_rejects_junk(client: TestClient, sf: sessionmaker[Session], text
     r = client.post(f"/review/{i}/repick", data={"csrf_token": tok, "release": text})
     assert r.status_code in (400, 422)
     with sf() as s:
-        d = decisions.get(s, i)
+        d = s.get(MatchDecision, i)
         assert d and d.status == "pending_review"
 
 
@@ -294,7 +295,7 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
     rid = _req(sf, "alice", "failed", JobState.FAILED)
     did = _make_decision(sf, "alice", "/x")
     with sf() as s, s.begin():
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d
         d.evidence = {**d.evidence, "request_id": rid}
     tok = _login(client, "alice")
@@ -303,7 +304,7 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
     assert r.status_code == 303
     with sf() as s:
         assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d and d.status == "rejected"  # kept for the record, off the review queue
 
 
@@ -313,7 +314,7 @@ def test_delete_request_with_stage1_pending_decision(
     rid = _req(sf, "alice", "failed", JobState.FAILED)
     did = _make_decision(sf, "alice", "/x")
     with sf() as s, s.begin():
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d
         d.stage = 1  # the pipeline's download pick, not a file review
         d.evidence = {**d.evidence, "request_id": rid}
@@ -363,7 +364,7 @@ def test_delete_request_409_when_review_acts_first(
     rid = _req(sf, "alice", "failed", JobState.FAILED)
     did = _make_decision(sf, "alice", "/x")
     with sf() as s, s.begin():
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d
         d.evidence = {**d.evidence, "request_id": rid}
 
@@ -396,7 +397,7 @@ def test_delete_request_409_rolls_back_decision_rejects(
     dids = [_make_decision(sf, "alice", "/x"), _make_decision(sf, "alice", "/y")]
     with sf() as s, s.begin():
         for did in dids:
-            d = decisions.get(s, did)
+            d = s.get(MatchDecision, did)
             assert d
             d.evidence = {**d.evidence, "request_id": rid}
     real, calls = decisions.act, []
@@ -411,7 +412,7 @@ def test_delete_request_409_rolls_back_decision_rejects(
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
-        assert [decisions.get(s, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
+        assert [s.get(MatchDecision, i).status for i in dids] == [decisions.PENDING] * 2  # type: ignore[union-attr]
 
 
 GOOD = {
@@ -459,7 +460,7 @@ def test_unverified_rejects_bad_input(
     assert r.status_code == 400 and "text/html" in r.headers["content-type"]
     assert 'role="alert"' in r.text
     with sf() as s:
-        d = decisions.get(s, i)
+        d = s.get(MatchDecision, i)
         assert d and d.status == "pending_review" and "unverified" not in d.evidence
 
 
@@ -491,7 +492,7 @@ def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[S
     assert client.post(url, data=GOOD).status_code == 403  # no CSRF token
     assert client.post(url, data={**GOOD, "csrf_token": tok}).status_code == 303
     with sf() as s:
-        d = decisions.get(s, i)
+        d = s.get(MatchDecision, i)
         assert (
             d
             and d.status == "unverified"
@@ -535,10 +536,10 @@ def test_unverified_409_for_stage_one_and_missing_paths(
     stage1 = _make_decision(sf, "alice", "/x")
     nopath = _make_decision(sf, "alice", "")
     with sf() as s, s.begin():
-        d = decisions.get(s, stage1)
+        d = s.get(MatchDecision, stage1)
         assert d
         d.stage = 1
-        d = decisions.get(s, nopath)
+        d = s.get(MatchDecision, nopath)
         assert d
         d.evidence = {**d.evidence, "source": {"files": [{"name": "a.mp3"}]}}
     tok = _login(client, "alice")
@@ -619,7 +620,7 @@ def test_clear_imported(
     for rid in (mine, leased, mine2):
         dec[rid] = _make_decision(sf, "alice", "/x")
         with sf() as s, s.begin():
-            d = decisions.get(s, dec[rid])
+            d = s.get(MatchDecision, dec[rid])
             assert d
             d.evidence = {**d.evidence, "request_id": rid}
     tok = _login(client, "alice")
@@ -634,7 +635,7 @@ def test_clear_imported(
             [JobState.LEASED, JobState.FAILED]
         )
         for rid, want in dec.items():
-            d = decisions.get(s, want)
+            d = s.get(MatchDecision, want)
             assert d
             assert d.status == (decisions.PENDING if rid == leased else "rejected")
 

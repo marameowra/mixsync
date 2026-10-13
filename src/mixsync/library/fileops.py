@@ -235,13 +235,18 @@ class FileOps:
             raise
         self._journal.complete(op_id, digest)
 
+    def _verified_op(self, batch_id: str, src: Path, root: str) -> JournalOp | None:
+        """The completed import of src in this batch, if its file is still there and intact."""
+        op = self._journal.find_completed(batch_id, str(src), root)
+        if op and op.dst_hash and (f := self._root(root) / op.dst).is_file():
+            return op if _sha256(f) == op.dst_hash else None
+        return None
+
     def find_imported(self, batch_id: str, src: Path, root: str = "library") -> str | None:
         """Path (relative to root) of an earlier completed import of src in this batch, if the
         file is still there and intact."""
-        op = self._journal.find_completed(batch_id, str(src), root)
-        if op and op.root == root and op.dst_hash and (f := self._root(root) / op.dst).is_file():
-            return op.dst if _sha256(f) == op.dst_hash else None
-        return None
+        op = self._verified_op(batch_id, src, root)
+        return op.dst if op else None
 
     def release(self, src: Path, batch_id: str, root: str = "library") -> None:
         """Delete a download once its copy under root from this batch is verified. Refuses
@@ -249,11 +254,10 @@ class FileOps:
         dl = self._downloads.resolve()
         if ".." in src.parts or src.is_symlink() or dl not in src.resolve().parents:
             raise SafetyError(f"{src} is not inside {dl}")
-        rel = self.find_imported(batch_id, src, root)
-        op = self._journal.find_completed(batch_id, str(src), root)
-        if rel is None or op is None or op.dst_hash is None:
+        op = self._verified_op(batch_id, src, root)
+        if op is None or op.dst_hash is None:
             raise SafetyError(f"{src} has no verified import in batch {batch_id}")
-        op_id = self._journal.begin(batch_id, "release", str(src), rel, root=root)
+        op_id = self._journal.begin(batch_id, "release", str(src), op.dst, root=root)
         self._journal.set_dst_hash(op_id, op.dst_hash)
         try:
             _hook("release")

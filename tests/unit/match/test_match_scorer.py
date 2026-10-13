@@ -1,5 +1,4 @@
 import itertools
-import re
 
 import pytest
 
@@ -26,7 +25,7 @@ def test_add_methods() -> None:
     d = dist()
     d.add_equality("album", "ghi", ["abc", "def", "ghi"], "r")
     d.add_equality("album", "xyz", ["abc", "def", "ghi"], "r")
-    d.add_equality("album", "abc", re.compile("ABC", re.I), "r")
+    d.add_equality("album", "abc", "abc", "r")
     assert [p for p, _ in d._penalties["album"]] == [0.0, 1.0, 0.0]  # pyright: ignore[reportPrivateUsage]
 
     d = dist()

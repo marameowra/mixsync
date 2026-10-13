@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, select
@@ -48,16 +49,33 @@ def q(engine: Engine, clock: FakeClock) -> JobQueue:
     return JobQueue(engine, clock)
 
 
+def enq(q: JobQueue, kind: JobKind, payload: dict[str, Any] | None = None, **kw: Any) -> JobRecord:
+    """Enqueue through the production enqueue_in and return the job (newest or keyed)."""
+    engine, clock = q._engine, q._clock  # pyright: ignore[reportPrivateUsage]
+    with Session(engine) as s, s.begin():
+        enqueue_in(s, clock.now(), kind, payload or {}, **kw)
+    with Session(engine) as s:
+        key = kw.get("idempotency_key")
+        stmt = (
+            select(Job.id).where(Job.idempotency_key == key)
+            if key
+            else select(Job.id).order_by(Job.id.desc())
+        )
+        return q.get(s.scalars(stmt).first() or 0)
+
+
 def test_idempotency_key_blocks_duplicate(q: JobQueue) -> None:
-    a = q.enqueue(JobKind.NOOP, idempotency_key="k")
-    b = q.enqueue(JobKind.NOOP, idempotency_key="k")
+    a = enq(q, JobKind.NOOP, idempotency_key="k")
+    b = enq(q, JobKind.NOOP, idempotency_key="k")
     assert a.id == b.id
-    assert q.enqueue(JobKind.NOOP).id != a.id
+    assert enq(q, JobKind.NOOP).id != a.id
+    with Session(q._engine) as s:  # pyright: ignore[reportPrivateUsage]
+        assert len(s.scalars(select(Job).where(Job.idempotency_key == "k")).all()) == 1
 
 
 def test_claim_race_has_one_winner(engine: Engine, clock: FakeClock) -> None:
     q1, q2 = JobQueue(engine, clock), JobQueue(make_engine(), clock)  # two connections, file DB
-    q1.enqueue(JobKind.NOOP)
+    enq(q1, JobKind.NOOP)
     barrier = threading.Barrier(2)
     won: list[JobRecord | None] = []
 
@@ -74,16 +92,16 @@ def test_claim_race_has_one_winner(engine: Engine, clock: FakeClock) -> None:
 
 
 def test_claim_respects_run_after_and_priority(q: JobQueue, clock: FakeClock) -> None:
-    q.enqueue(JobKind.NOOP, run_after=clock.now() + timedelta(hours=1))
-    low = q.enqueue(JobKind.NOOP, priority=5)
-    high = q.enqueue(JobKind.NOOP, priority=1)
+    enq(q, JobKind.NOOP, run_after=clock.now() + timedelta(hours=1))
+    low = enq(q, JobKind.NOOP, priority=5)
+    high = enq(q, JobKind.NOOP, priority=1)
     first, second = q.claim("w", LEASE), q.claim("w", LEASE)
     assert first and second and (first.id, second.id) == (high.id, low.id)
     assert q.claim("w", LEASE) is None
 
 
 def test_expired_lease_is_reclaimed(q: JobQueue, clock: FakeClock) -> None:
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     q.claim("w1", LEASE)
     assert q.reap() == 0
     clock.advance(LEASE + timedelta(seconds=1))
@@ -93,7 +111,7 @@ def test_expired_lease_is_reclaimed(q: JobQueue, clock: FakeClock) -> None:
 
 
 def test_heartbeat_extends_lease(q: JobQueue, clock: FakeClock) -> None:
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     q.claim("w1", LEASE)
     clock.advance(timedelta(seconds=20))
     assert q.heartbeat(j.id, "w1", LEASE)
@@ -103,7 +121,7 @@ def test_heartbeat_extends_lease(q: JobQueue, clock: FakeClock) -> None:
 
 
 def test_phase1_exit_dead_worker_job_completed_by_another(q: JobQueue, clock: FakeClock) -> None:
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     q.claim("w1", LEASE)
     q.start(j.id, "w1")  # w1 dies here
     clock.advance(LEASE + timedelta(seconds=1))
@@ -128,7 +146,7 @@ def _run(q: JobQueue, exc: Exception) -> JobRecord:
 
 
 def test_transient_error_retries_then_requeues(q: JobQueue, clock: FakeClock) -> None:
-    q.enqueue(JobKind.NOOP)
+    enq(q, JobKind.NOOP)
     j = _run(q, TransientError("later"))
     assert j.status is JobState.RETRY_WAIT and j.last_error == "later"
     assert q.reap() == 0
@@ -138,12 +156,12 @@ def test_transient_error_retries_then_requeues(q: JobQueue, clock: FakeClock) ->
 
 
 def test_transient_error_fails_when_attempts_exhausted(q: JobQueue) -> None:
-    q.enqueue(JobKind.NOOP, max_attempts=1)
+    enq(q, JobKind.NOOP, max_attempts=1)
     assert _run(q, TransientError("x")).status is JobState.FAILED
 
 
 def test_permanent_error_fails(q: JobQueue) -> None:
-    q.enqueue(JobKind.NOOP)
+    enq(q, JobKind.NOOP)
     assert _run(q, PermanentError("no")).status is JobState.FAILED
 
 
@@ -151,7 +169,7 @@ def test_permanent_error_fails(q: JobQueue) -> None:
 def test_handler_error_after_job_deleted_does_not_raise(
     q: JobQueue, engine: Engine, exc: Exception
 ) -> None:
-    q.enqueue(JobKind.NOOP)
+    enq(q, JobKind.NOOP)
 
     async def delete_then_boom(j: JobRecord) -> None:
         with Session(engine) as s, s.begin():
@@ -164,7 +182,7 @@ def test_handler_error_after_job_deleted_does_not_raise(
 
 
 def test_job_that_keeps_killing_its_worker_fails(q: JobQueue, clock: FakeClock) -> None:
-    j = q.enqueue(JobKind.NOOP, max_attempts=1)
+    j = enq(q, JobKind.NOOP, max_attempts=1)
     q.claim("w1", LEASE)
     q.start(j.id, "w1")  # w1 dies here, and no attempts are left
     clock.advance(LEASE + timedelta(seconds=1))
@@ -191,21 +209,21 @@ def _status(engine: Engine, req_id: int) -> tuple[str, str | None]:
 
 def test_permanent_failure_fails_the_request(q: JobQueue, engine: Engine) -> None:
     rid = _request(engine, "searching")
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("404"))
     assert _status(engine, rid) == ("failed", "PermanentError('404')")
 
 
 def test_failure_leaves_a_request_that_moved_on(q: JobQueue, engine: Engine) -> None:
     rid = _request(engine, "imported")
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("stale"))
     assert _status(engine, rid) == ("imported", None)
 
 
 def test_reaped_dead_job_fails_the_request(q: JobQueue, engine: Engine, clock: FakeClock) -> None:
     rid = _request(engine, "verifying")
-    j = q.enqueue(JobKind.NOOP, {"request_id": rid}, max_attempts=1)
+    j = enq(q, JobKind.NOOP, {"request_id": rid}, max_attempts=1)
     q.claim("w1", LEASE)
     q.start(j.id, "w1")
     clock.advance(LEASE + timedelta(seconds=1))
@@ -215,15 +233,15 @@ def test_reaped_dead_job_fails_the_request(q: JobQueue, engine: Engine, clock: F
 
 def test_permanent_failure_fails_a_no_results_request(q: JobQueue, engine: Engine) -> None:
     rid = _request(engine, "no_results")
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("gone"))
     assert _status(engine, rid)[0] == "failed"
 
 
 def test_failure_of_a_superseded_job_leaves_the_request(q: JobQueue, engine: Engine) -> None:
     rid = _request(engine, "no_results")
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
-    q.enqueue(JobKind.NOOP, {"request_id": rid})  # the newer job now drives the request
+    enq(q, JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid})  # the newer job now drives the request
     _run(q, PermanentError("stale"))  # fails the older job
     assert _status(engine, rid) == ("no_results", None)
 
@@ -232,8 +250,8 @@ def test_reaped_superseded_job_leaves_the_request(
     q: JobQueue, engine: Engine, clock: FakeClock
 ) -> None:
     rid = _request(engine, "no_results")
-    j = q.enqueue(JobKind.NOOP, {"request_id": rid}, max_attempts=1)
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    j = enq(q, JobKind.NOOP, {"request_id": rid}, max_attempts=1)
+    enq(q, JobKind.NOOP, {"request_id": rid})
     q.claim("w1", LEASE)
     q.start(j.id, "w1")
     clock.advance(LEASE + timedelta(seconds=1))
@@ -246,9 +264,9 @@ def test_newer_jobs_of_other_requests_do_not_shield_the_request(
     q: JobQueue, engine: Engine
 ) -> None:
     rid = _request(engine, "searching")
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
-    q.enqueue(JobKind.NOOP, {"request_id": rid + 1})
-    q.enqueue(JobKind.NOOP, {})
+    enq(q, JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid + 1})
+    enq(q, JobKind.NOOP, {})
     _run(q, PermanentError("boom"))  # claims the first job
     assert _status(engine, rid)[0] == "failed"
 
@@ -257,8 +275,8 @@ def test_newest_job_failing_fails_despite_an_older_one(
     q: JobQueue, engine: Engine, clock: FakeClock
 ) -> None:
     rid = _request(engine, "searching")
-    q.enqueue(JobKind.NOOP, {"request_id": rid}, run_after=clock.now() + timedelta(hours=1))
-    q.enqueue(JobKind.NOOP, {"request_id": rid})
+    enq(q, JobKind.NOOP, {"request_id": rid}, run_after=clock.now() + timedelta(hours=1))
+    enq(q, JobKind.NOOP, {"request_id": rid})
     _run(q, PermanentError("boom"))  # claims the newer, runnable job
     assert _status(engine, rid)[0] == "failed"
 
@@ -268,14 +286,14 @@ def _locked() -> OperationalError:
 
 
 def test_a_locked_database_in_a_handler_retries_instead_of_failing(q: JobQueue) -> None:
-    q.enqueue(JobKind.NOOP)
+    enq(q, JobKind.NOOP)
     assert _run(q, _locked()).status is JobState.RETRY_WAIT
 
 
 def test_a_locked_database_while_recording_the_outcome_leaves_the_job_for_reap(
     q: JobQueue, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     job = q.claim("w", LEASE)
     assert job is not None
 
@@ -293,7 +311,7 @@ def test_a_locked_database_while_recording_the_outcome_leaves_the_job_for_reap(
 def test_a_locked_database_while_completing_never_reruns_finished_work(
     q: JobQueue, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     job = q.claim("w", LEASE)
     assert job is not None
     runs: list[int] = []
@@ -320,7 +338,7 @@ def _complete_raises(
     q: JobQueue, monkeypatch: pytest.MonkeyPatch, exc: Exception
 ) -> tuple[int, list[int]]:
     """Claim a job, make complete() raise `exc`, and fail the test if it is retried or failed."""
-    j = q.enqueue(JobKind.NOOP)
+    j = enq(q, JobKind.NOOP)
     job = q.claim("w", LEASE)
     assert job is not None
     calls: list[int] = []

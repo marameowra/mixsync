@@ -11,7 +11,6 @@ from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
 from mixsync.core.clock import SystemClock
 from mixsync.core.protocols import ReleaseWatch
-from mixsync.db import decisions
 from mixsync.db.auth import AuthUser, user_for_session
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
@@ -138,7 +137,7 @@ CurrentUser = Annotated[AuthUser, Depends(current_user)]
 
 def decision_for(db: Session, user: AuthUser, decision_id: int) -> MatchDecision:
     """Own items need `request`; anyone's need `approve`."""
-    d = decisions.get(db, decision_id)
+    d = db.get(MatchDecision, decision_id)
     if d is None:
         raise HTTPException(404, "no such decision")
     if d.user_id != user.id and Capability.approve not in user.capabilities:

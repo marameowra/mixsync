@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import create_request
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import JobState
+from mixsync.core.jobs import LIVE, JobState
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.discovery import ProvisionalHold
@@ -29,7 +29,6 @@ User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 
 _BUSY = ("downloading", "verifying", "importing")
-_LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 
 
 def _of(req_id: int) -> ColumnElement[bool]:
@@ -47,7 +46,7 @@ def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
     rid = Job.payload["request_id"].as_integer()
     states: dict[int, set[JobState]] = {}
     for req_id, status in db.execute(
-        select(rid, Job.status).where(rid.in_(ids), Job.status.in_(_LIVE))
+        select(rid, Job.status).where(rid.in_(ids), Job.status.in_(LIVE))
     ):
         states.setdefault(req_id, set()).add(status)
     return states
@@ -57,7 +56,7 @@ def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
     """A no_results request always has a queued repeat search, which delete removes with it."""
     if req.status in _BUSY or is_dead_end(req):
         return False
-    blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(_LIVE)
+    blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(LIVE)
     return not (live.get(req.id, set()) & blocking)
 
 

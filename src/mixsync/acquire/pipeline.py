@@ -34,7 +34,7 @@ from mixsync.acquire.requests import (
     retry_search,
     search_priority,
 )
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
@@ -129,7 +129,7 @@ class Pipeline:
             req = self._request(s, job)
             if req.status not in ("searching", "no_results") or req.migration_id is not None:
                 return  # superseded: another job already moved this request on
-            wait = req.next_search_at and _aware(req.next_search_at, now)
+            wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
             busy = s.scalar(
                 select(func.count(Job.id)).where(
@@ -499,7 +499,7 @@ class Pipeline:
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
         with self.sessions() as s:
-            d = decisions.get(s, did)
+            d = s.get(MatchDecision, did)
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
             cand = candidate_from_dict(d.evidence["candidate"])
@@ -558,7 +558,7 @@ class Pipeline:
             with self.sessions.begin() as s:
                 if canonical_db.switch(s, group, cid, own) == own:
                     # Same transaction: a retry must not mistake this for a plain canonical import.
-                    row = decisions.get(s, did)
+                    row = s.get(MatchDecision, did)
                     if row:
                         row.evidence = {**row.evidence, "canonical_switched_from": cid}
                     switched = True
@@ -815,11 +815,6 @@ def _stale(s: Session, job: JobRecord, req: Request) -> bool:
         .limit(1)
     )
     return req.status != "verifying" or newer is not None
-
-
-def _aware(t: datetime, now: datetime) -> datetime:
-    """SQLite hands back naive datetimes; they were stored in UTC."""
-    return t if t.tzinfo else t.replace(tzinfo=now.tzinfo)
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:

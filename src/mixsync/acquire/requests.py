@@ -11,12 +11,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
-from mixsync.db import decisions
 from mixsync.db.models.auth import MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -25,7 +25,6 @@ from mixsync.match.profiles import BALANCED
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
-LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
 
 
@@ -158,7 +157,7 @@ def enqueue_verify(
 
 def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
-    d = decisions.get(s, decision_id)
+    d = s.get(MatchDecision, decision_id)
     req = s.get(Request, d.evidence.get("request_id", 0)) if d else None
     if d is None or req is None:  # a decision that did not come from a request
         return

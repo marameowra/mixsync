@@ -21,7 +21,7 @@ from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unver
 from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock
 from mixsync.core.errors import SafetyError
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.protocols import MetadataProvider
 from mixsync.db import canonical as canonical_db
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
@@ -32,8 +32,6 @@ from mixsync.db.undo import undoable
 from mixsync.library import canonical, fragmentation
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
-
-LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 
 
 def live_job(s: Session, plan_id: int) -> bool:
