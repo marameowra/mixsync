@@ -27,7 +27,7 @@ active_downloads() -> {transfer id: bytes}  # every download moving data now (sl
 - **At most 3 concurrent downloads** (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`), counting transfers (files), not albums, and only `InProgress` transfers; ones slow for a whole window stop counting (see [etiquette](../../../docs/design/services-etiquette.md#soulseek)). `active_downloads()` feeds `acquire.gate.DownloadGate`, which keeps the `bytesTransferred` samples in the worker's memory (only the worker starts downloads) and derives the window average from them. A full cap defers the `download` job (re-queued with a short `run_after`, no attempt spent). It is checked only when a job would start a transfer, and a just-started transfer still waiting in the peer's queue is not counted, so the cap can briefly overshoot.
 - Never queue more than one album folder per peer at a time.
 - Downloads land in `/downloads` (slskd's folder). This module never writes to `/data`.
-- slskd API key comes from `Settings`; talk to slskd through `ratelimit.polite_client("slskd")` (no limit, but uniform retries and logging).
+- slskd API key comes from `Settings`; talk to slskd through `ratelimit.PoliteClient("slskd", ...)` (no limit, but uniform retries and logging).
 
 - **Not built yet:** the search concurrency cap, the debounce, the no-results backoff (they need per-request DB state), and `release()`. (`TransferInfo.local_path` is always `None`: slskd's API does not report it.) Transfer monitoring is just the `download` job's own status poll plus the cap's rate samples.
 - **Client library:** `slskd-api` on PyPI is a sync, untyped `requests` wrapper, so `slskd.py` is a thin httpx client over `PoliteClient`.

@@ -75,7 +75,7 @@ class Importer:
     def __init__(
         self, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock, template: str
     ) -> None:
-        self._fileops = fileops
+        self.fileops = fileops
         self._sessions = sessions
         self._clock = clock
         self._template = template
@@ -94,26 +94,6 @@ class Importer:
         enc = encoded or {}
         return [self._one(f, album, status, batch_id, enc.get(f[0]), root) for f in files]
 
-    def release(self, srcs: list[Path], batch_id: str, root: str = "library") -> None:
-        for src in srcs:
-            self._fileops.release(src, batch_id, root)
-
-    @property
-    def work_dir(self) -> Path:
-        return self._fileops.work
-
-    def is_imported(self, src: Path, batch_id: str, root: str = "library") -> bool:
-        return self._fileops.find_imported(batch_id, src, root) is not None
-
-    def clear_work(self, batch_id: str) -> None:
-        self._fileops.clear_work(batch_id)
-
-    def has_file(self, rel: str) -> bool:
-        return self._fileops.has(rel)
-
-    def write_file(self, rel: str, data: bytes, batch_id: str) -> None:
-        self._fileops.write_new(rel, data, batch_id)
-
     def _one(
         self,
         file: tuple[Path, TrackInfo, str | None],
@@ -127,7 +107,7 @@ class Importer:
         tagset = tagset_for(track, album, acoustid_id, status)
         try:
             main = root == "library"
-            if done := self._fileops.find_imported(batch_id, src, root):
+            if done := self.fileops.find_imported(batch_id, src, root):
                 if main:
                     self._ensure_row(done, tagset, acoustid_id, status, batch_id)
                 return ImportResult(src, done)
@@ -136,7 +116,7 @@ class Importer:
                 lambda r: self._taken(root, r, batch_id),
             )
             write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
-            self._fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
+            self.fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
             if main:
                 self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
         except Exception as e:
@@ -144,7 +124,7 @@ class Importer:
         return ImportResult(src, rel)
 
     def _taken(self, root: str, rel: str, batch_id: str) -> bool:
-        if (self._fileops.roots[root] / rel).exists():
+        if (self.fileops.roots[root] / rel).exists():
             return True
         with self._sessions() as s:  # a row holds its path even if the file is gone
             if root == "library":

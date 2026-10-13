@@ -1,4 +1,4 @@
-from typing import Any, Self
+from typing import Any
 
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import NotAuthorizedError, NotFoundError, SubsonicClient
@@ -19,10 +19,6 @@ class NavidromeUser:
 
     def __init__(self, client: PoliteClient, base_url: str, user: str, password: str) -> None:
         self._subsonic = SubsonicClient(client, base_url, user, password, _USER_HINT, _USER_HINT)
-
-    @classmethod
-    def for_user(cls, client: PoliteClient, base_url: str, username: str, password: str) -> Self:
-        return cls(client, base_url, username, password)
 
     async def push_playlist(self, name: str, song_ids: list[str], existing_id: str | None) -> str:
         if existing_id:

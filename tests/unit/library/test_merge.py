@@ -411,17 +411,19 @@ def _status(w: World, op_id: int) -> str:
         return s.get_one(FileOp, op_id).status
 
 
-def crash_once(monkeypatch: pytest.MonkeyPatch, name: str, nth: int = 1) -> None:
-    """Make the nth call of a Merger method die like a killed process."""
-    real, calls = getattr(Merger, name), []
+def crash_once(
+    monkeypatch: pytest.MonkeyPatch, name: str, nth: int = 1, cls: type = Merger
+) -> None:
+    """Make the nth call of a Merger (or `cls`) method die like a killed process."""
+    real, calls = getattr(cls, name), []
 
-    def crash(self: Merger, *a: Any, **k: Any) -> Any:
+    def crash(self: Any, *a: Any, **k: Any) -> Any:
         calls.append(1)
         if len(calls) == nth:
             raise Boom
         return real(self, *a, **k)
 
-    monkeypatch.setattr(Merger, name, crash)
+    monkeypatch.setattr(cls, name, crash)
 
 
 def snapshot(w: World) -> tuple[dict[str, str], list[dict[str, Any]]]:
@@ -575,7 +577,7 @@ def test_undo_resumes_after_a_crash_between_restore_and_trashing_the_copy(
     before = snapshot(world)
     pid = build(world)
     world.merger.execute(pid)
-    crash_once(monkeypatch, "_trash_new")
+    crash_once(monkeypatch, "trash", cls=FileOps)
     with pytest.raises(Boom):
         world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undoing"

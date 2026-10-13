@@ -10,7 +10,7 @@ The only way MixSync talks HTTP to the outside world. It provides per-service ra
 ## Proposed files
 | File | Contents |
 |---|---|
-| `client.py` | `polite_client(service) -> PoliteClient`, an httpx wrapper that acquires a token, checks the cache, sends, and backs off |
+| `client.py` | `PoliteClient(service, settings, sessions)`, the entry point: an httpx wrapper that acquires a token, checks the cache, sends, and backs off |
 | `bucket.py` | Token bucket with state in the `rate_buckets` table, shared across worker processes |
 | `cache.py` | Response cache (hishel with SQLite storage, or the `http_cache` table) with per-service TTLs |
 | `services.py` | The limits and TTL table (below), plus User-Agent construction |

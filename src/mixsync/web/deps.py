@@ -18,7 +18,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.secretbox import SecretBox, load_box
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
-from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.ratelimit.client import PoliteClient
 
 SESSION_COOKIE = "mixsync_session"
 
@@ -45,7 +45,7 @@ def get_merger(request: Request) -> Merger:
         state.merger = Merger(
             sessions,
             clock,
-            MusicBrainzProvider(polite_client("musicbrainz", st, sessions)),
+            MusicBrainzProvider(PoliteClient("musicbrainz", st, sessions)),
             fileops,
             st.path_template,
             tuple(st.canonical_media),
@@ -64,7 +64,7 @@ def get_watch(request: Request) -> ReleaseWatch:
     state = request.app.state
     if getattr(state, "watch", None) is None:
         state.watch = MusicBrainzProvider(
-            polite_client("musicbrainz", state.settings, state.session_factory)
+            PoliteClient("musicbrainz", state.settings, state.session_factory)
         )
     watch: ReleaseWatch = state.watch
     return watch
@@ -94,7 +94,7 @@ def get_navidrome_http(request: Request) -> PoliteClient:
     """One client for the app's life; account links ping Navidrome as the user through it."""
     state = request.app.state
     if getattr(state, "navidrome_http", None) is None:
-        state.navidrome_http = polite_client("navidrome", state.settings, state.session_factory)
+        state.navidrome_http = PoliteClient("navidrome", state.settings, state.session_factory)
     http: PoliteClient = state.navidrome_http
     return http
 
@@ -102,7 +102,7 @@ def get_navidrome_http(request: Request) -> PoliteClient:
 def get_listenbrainz_http(request: Request) -> PoliteClient:
     state = request.app.state
     if getattr(state, "listenbrainz_http", None) is None:
-        state.listenbrainz_http = polite_client(
+        state.listenbrainz_http = PoliteClient(
             "listenbrainz", state.settings, state.session_factory
         )
     http: PoliteClient = state.listenbrainz_http

@@ -33,7 +33,7 @@ from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
-from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.query import queries
 from mixsync.sources.slskd import SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
@@ -122,7 +122,7 @@ def _pipeline(
     settings: Settings, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock
 ) -> Pipeline:
     def client(service: str) -> PoliteClient:
-        return polite_client(service, settings, sessions)
+        return PoliteClient(service, settings, sessions)
 
     return Pipeline(
         sessions=sessions,
@@ -172,7 +172,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
     merger = Merger(
         sessions,
         clock,
-        MusicBrainzProvider(polite_client("musicbrainz", settings, sessions)),
+        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions)),
         fileops,
         settings.path_template,
         tuple(settings.canonical_media),
@@ -194,7 +194,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         clock,
         fileops,
         fingerprint,
-        AcoustIdClient(polite_client("acoustid", settings, sessions), settings),
+        AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings),
         bool(settings.acoustid_app_key and settings.acoustid_user_key),
     )
     migrator = Migrator(
@@ -208,17 +208,17 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
     watcher = Watcher(
         sessions,
         clock,
-        MusicBrainzProvider(polite_client("musicbrainz", settings, sessions)),
+        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions)),
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
-    navidrome_http = polite_client("navidrome", settings, sessions)
+    navidrome_http = PoliteClient("navidrome", settings, sessions)
     discovery = Discovery(
         sessions,
         clock,
-        ListenBrainzClient(polite_client("listenbrainz", settings, sessions)),
-        lambda user, password: NavidromeUser.for_user(
+        ListenBrainzClient(PoliteClient("listenbrainz", settings, sessions)),
+        lambda user, password: NavidromeUser(
             navidrome_http, settings.navidrome_url, user, password
         ),
         load_box(settings),
