@@ -289,6 +289,32 @@ def test_a_locked_database_while_recording_the_outcome_leaves_the_job_for_reap(
     assert q.reap() == 1 and q.get(j.id).status is JobState.QUEUED
 
 
+def test_a_locked_database_while_completing_never_reruns_finished_work(
+    q: JobQueue, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    j = q.enqueue(JobKind.NOOP)
+    job = q.claim("w", LEASE)
+    assert job is not None
+    runs: list[int] = []
+    real, locks = q.complete, [_locked()]
+
+    async def handler(_job: object) -> None:
+        runs.append(1)
+
+    def complete(*a: object, **k: object) -> None:
+        if locks:
+            raise locks.pop()
+        real(*a, **k)  # type: ignore[arg-type]
+
+    def retry(*_a: object, **_k: object) -> None:
+        raise AssertionError("finished work must not be retried")
+
+    monkeypatch.setattr(q, "complete", complete)
+    monkeypatch.setattr(q, "retry", retry)
+    asyncio.run(run_job(q, job, "w", {JobKind.NOOP: handler}, LEASE))
+    assert runs == [1] and q.get(j.id).status is JobState.SUCCEEDED
+
+
 def test_a_failed_heartbeat_keeps_beating() -> None:
     beats: list[int] = []
 

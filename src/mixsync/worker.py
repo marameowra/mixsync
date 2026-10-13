@@ -42,6 +42,9 @@ from mixsync.watchlist.poller import Watcher
 
 log = logging.getLogger(__name__)
 
+COMPLETE_TRIES = 4
+COMPLETE_PAUSE = 0.2  # seconds, times the attempt number
+
 Handler = Callable[[JobRecord], Awaitable[None]]
 
 
@@ -62,6 +65,22 @@ async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta
             log.exception("heartbeat for job %s failed; trying again", job_id)
 
 
+async def _complete(queue: JobQueue, job_id: int, worker: str) -> None:
+    """The work is done: a locked database must never send it to retry (it would run twice)."""
+    for attempt in range(COMPLETE_TRIES):
+        try:
+            queue.complete(job_id, worker)
+            return
+        except LeaseLostError:
+            log.warning("lost lease on job %s", job_id)
+            return
+        except OperationalError:
+            if attempt == COMPLETE_TRIES - 1:  # reap() requeues it once the lease expires
+                log.exception("could not complete job %s", job_id)
+                return
+            await asyncio.sleep(COMPLETE_PAUSE * (attempt + 1))
+
+
 async def run_job(
     queue: JobQueue, job: JobRecord, worker: str, handlers: dict[JobKind, Handler], lease: timedelta
 ) -> None:
@@ -69,7 +88,6 @@ async def run_job(
     try:
         queue.start(job.id, worker)
         await handlers[job.kind](job)
-        queue.complete(job.id, worker)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
     except Exception as e:
@@ -84,6 +102,8 @@ async def run_job(
             log.warning("lost lease on job %s", job.id)
         except Exception:  # the bookkeeping failed too: reap() requeues it once the lease expires
             log.exception("could not record the outcome of job %s", job.id)
+    else:
+        await _complete(queue, job.id, worker)
     finally:
         hb.cancel()
 
