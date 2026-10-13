@@ -6,6 +6,8 @@ SEGMENT_MAX_BYTES = 180  # leaves room for a collision suffix under the common 2
 _ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]')
 _RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])$")
 _EXT = ".{ext}"
+_YEAR = re.compile(r"\{year[^}]*\}")
+_EMPTY = re.compile(r"\(\s*\)|\[\s*\]")
 
 
 def sanitize(s: str, max_bytes: int = SEGMENT_MAX_BYTES) -> str:
@@ -41,6 +43,10 @@ def render(
     out: list[str] = []
     for i, part in enumerate(parts):
         end = suffix if i == len(parts) - 1 else ""
+        if year is None and "{year" in part:  # no stray "()", "[]" or " -" where the year was
+            part = _EMPTY.sub("", _YEAR.sub("", part)).strip(" -_")
+            if not part and not end:
+                continue
         text = part.format(
             albumartist=sanitize(albumartist),
             album=sanitize(album),

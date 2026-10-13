@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 from rapidfuzz import fuzz
@@ -91,7 +91,10 @@ def _dedupe(parsed: Sequence[_Parsed]) -> list[_Parsed]:
     """One file per track, keeping the preferred format (SK-F06)."""
     best: dict[object, _Parsed] = {}
     for p in parsed:
-        key = (p.disc, p.track) if p.track is not None else normalize(p.title) or p.file.path
+        # the title tells disc 1 track 1 from disc 2 track 1 in a flat folder with no disc info;
+        # no title: the file stem
+        title = normalize(p.title) or p.name.rpartition(".")[0].lower()
+        key = (p.disc, p.track, title) if p.track is not None else normalize(p.title) or p.file.path
         if key not in best or _quality_key(p.file) > _quality_key(best[key].file):
             best[key] = p
     kept = {id(p) for p in best.values()}
@@ -230,5 +233,7 @@ def rank(
     for c, r in scored:
         if c.username not in seen:
             seen.add(c.username)
-            out.append((c, r))
+            # only the files that were scored, so the rest is never downloaded
+            kept = tuple(p.file for p in _dedupe([_parse(f) for f in c.files]))
+            out.append((replace(c, files=kept), r))
     return out

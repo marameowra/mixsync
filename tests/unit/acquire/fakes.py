@@ -170,8 +170,10 @@ class FakeSource:
         d = self._dir(candidate)
         d.mkdir(parents=True, exist_ok=True)
         if not self.write_nothing:
-            for name, data in self.blobs[(candidate.username, candidate.folder)].items():
-                (d / name).write_bytes(data)
+            blobs = self.blobs[(candidate.username, candidate.folder)]
+            for f in candidate.files:  # only what was asked for
+                name = f.path.rsplit("\\", 1)[-1]
+                (d / name).write_bytes(blobs[name])
 
     async def status(self, candidate: Candidate) -> TransferInfo:
         state = self.state.get(candidate.username, TransferStatus.DONE)
