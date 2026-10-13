@@ -949,3 +949,25 @@ async def test_label_search_within_one_page_is_one_request(make_client: Make) ->
     mb = MusicBrainzProvider(make_client("musicbrainz", _label_pages(100, seen)))
     assert len(await mb.new_release_groups("label", LABEL, None)) == 100
     assert len(seen) == 1
+
+
+async def test_artist_search_pages_through_every_release_group(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        offset = int(request.url.params.get("offset", 0))
+        groups = [
+            {
+                "id": rid(i),
+                "title": f"G{i}",
+                "primary-type": "Album",
+                "first-release-date": "2026-05",
+            }
+            for i in range(offset, min(offset + 100, 250))
+        ]
+        return httpx.Response(200, text=json.dumps({"count": 250, "release-groups": groups}))
+
+    mb = MusicBrainzProvider(make_client("musicbrainz", handler))
+    assert len(await mb.new_release_groups("artist", ARTIST, None)) == 250
+    assert [r.url.params.get("offset") for r in seen] == ["0", "100", "200"]

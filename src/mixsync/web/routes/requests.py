@@ -85,6 +85,7 @@ def new_request(user: User, db: Db, release: Annotated[str, Form()]) -> Redirect
         AlbumRequest.release_mbid == mbid,
         AlbumRequest.status.not_in(DONE),
         AlbumRequest.provisional.is_(False),
+        AlbumRequest.migration_id.is_(None),  # /requests hides these
     )
     if db.scalar(again.limit(1)) is None:
         create_request(db, datetime.now(UTC), user.id, mbid)

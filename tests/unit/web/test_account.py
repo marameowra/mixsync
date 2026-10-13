@@ -301,6 +301,42 @@ def test_navidrome_link_success_is_not_blocked_by_other_successes(
     assert _guess(client, tok, "ok0").status_code == 303
 
 
+def test_navidrome_refused_attempts_do_not_count_against_the_target(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    fake.ok = False
+    tok = _login(client, "alice")
+    for i in range(10):
+        _guess(client, tok, f"t{i}")
+    for _ in range(12):  # locked by the user key; none of these may lock carol
+        assert _guess(client, tok, "carol").status_code == 429
+    fake.ok = True
+    tok = _login(client, "bob")
+    assert _guess(client, tok, "carol").status_code == 303
+
+
+def test_navidrome_own_success_does_not_reset_earlier_failures(
+    client: TestClient, fake: FakeValidator
+) -> None:
+    tok = _login(client, "alice")
+    fake.ok = False
+    for i in range(9):
+        _guess(client, tok, f"t{i}")
+    fake.ok = True
+    assert _guess(client, tok, "mine").status_code == 303
+    fake.ok = False
+    assert _guess(client, tok, "t9").status_code == 400
+    assert _guess(client, tok, "t10").status_code == 429
+
+
+def test_navidrome_unreachable_does_not_count(client: TestClient, fake: FakeValidator) -> None:
+    fake.ping = Ping.unreachable
+    tok = _login(client, "alice")
+    for _ in range(12):
+        assert _guess(client, tok).status_code == 400
+    assert fake.pings == 12
+
+
 def _subsonic(status: str, code: int = 0) -> httpx.Response:
     body: dict[str, object] = {"status": status}
     if code:

@@ -318,6 +318,23 @@ def test_posting_a_release_again_after_it_failed_makes_a_new_request(
         assert len(s.scalars(select(AlbumRequest).where(AlbumRequest.id != rid)).all()) == 1
 
 
+def test_a_hidden_migration_request_does_not_block_a_manual_one(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    migr = _req(sf, "alice", "review", None)
+    with sf() as s, s.begin():
+        m = Migration(user_id=s.query(User).filter_by(username="alice").one().id, summary={})
+        s.add(m)
+        s.flush()
+        req = s.get(AlbumRequest, migr)
+        assert req
+        req.migration_id = m.id
+    tok = _login(client, "alice")
+    client.post("/requests", data={"csrf_token": tok, "release": MBID})
+    with sf() as s:
+        assert len(s.scalars(select(AlbumRequest).where(AlbumRequest.id != migr)).all()) == 1
+
+
 def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Session]) -> None:
     rid = _req(sf, "alice", "failed", JobState.FAILED)
     did = _make_decision(sf, "alice", "/x")

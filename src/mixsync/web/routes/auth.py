@@ -22,21 +22,33 @@ _lock = threading.Lock()
 _now = time.monotonic  # tests replace this to advance time
 
 
-def admit(key: tuple[str, str]) -> bool:
-    """Prune, check and record the attempt in one step so parallel requests can't all slip past."""
+def admit(*keys: tuple[str, str]) -> bool:
+    """Prune, check and record the attempt on every key in one step so parallel requests can't
+    all slip past. If any key is full nothing is recorded."""
     with _lock:
         now = _now()
-        recent = [t for t in _failures.get(key, []) if t > now - WINDOW]
-        if len(recent) >= MAX_FAILURES:
-            _failures[key] = recent
+        recent = {k: [t for t in _failures.get(k, []) if t > now - WINDOW] for k in keys}
+        if any(len(r) >= MAX_FAILURES for r in recent.values()):
+            for k, r in recent.items():
+                if k in _failures:
+                    _failures[k] = r
             return False
-        if key not in _failures and len(_failures) >= MAX_KEYS:
-            for k in [k for k, v in _failures.items() if v[-1] <= now - WINDOW]:
-                del _failures[k]
-            if len(_failures) >= MAX_KEYS:
-                del _failures[next(iter(_failures))]
-        _failures[key] = [*recent, now]
+        for key, r in recent.items():
+            if key not in _failures and len(_failures) >= MAX_KEYS:
+                for k in [k for k, v in _failures.items() if v[-1] <= now - WINDOW]:
+                    del _failures[k]
+                if len(_failures) >= MAX_KEYS:
+                    del _failures[next(iter(_failures))]
+            _failures[key] = [*r, now]
         return True
+
+
+def refund(*keys: tuple[str, str]) -> None:
+    """Take back the newest attempt on each key (it was not a failed guess)."""
+    with _lock:
+        for k in keys:
+            if _failures.get(k):
+                _failures[k].pop()
 
 
 def forget(*keys: tuple[str, str]) -> None:

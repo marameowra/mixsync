@@ -23,7 +23,7 @@ from mixsync.web.deps import (
     get_listenbrainz_http,
     get_navidrome_http,
 )
-from mixsync.web.routes.auth import admit, forget
+from mixsync.web.routes.auth import admit, forget, refund
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
@@ -140,16 +140,18 @@ async def save(
             name, msg = "", "Navidrome did not accept that username and password."
             keys = (("navidrome-user", str(user.id)), ("navidrome-target", username.lower()))
             # shortcut: shares the login limiter's in-process state and 10 per 15 minutes policy;
-            # a failure counts against the user and the target username until one link succeeds.
-            if username and secret and not all([admit(k) for k in keys]):
+            # a rejected guess counts against the user and the target; a link clears the target.
+            if username and secret and not admit(*keys):
                 msg, status = "Too many attempts, try again later.", 429
             elif username and secret:
                 match await validator.navidrome_ping(username, secret):
                     case Ping.ok:
                         name = username
-                        forget(*keys)
+                        refund(keys[0])  # a success is not a failed guess
+                        forget(keys[1])
                     case Ping.unreachable:
                         msg = "Couldn't reach Navidrome; try again."
+                        refund(*keys)
                     case Ping.rejected:
                         pass
     for attempt in (1, 2):  # a double submit can lose the insert race; retry as an update
