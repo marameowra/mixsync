@@ -291,6 +291,33 @@ def _req(sf: sessionmaker[Session], user: str, status: str, job: JobState | None
         return req.id
 
 
+def test_posting_the_same_release_twice_makes_one_request(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = _login(client, "alice")
+    form = {"csrf_token": tok, "release": f"https://musicbrainz.org/release/{MBID}"}
+    for _ in range(2):
+        assert client.post("/requests", data=form).headers["location"] == "/requests"
+    with sf() as s:
+        assert len(s.scalars(select(AlbumRequest)).all()) == 1
+        assert len(s.scalars(select(Job)).all()) == 1
+    tok = _login(client, "bob")  # another user's request is their own
+    client.post("/requests", data={**form, "csrf_token": tok})
+    with sf() as s:
+        assert len(s.scalars(select(AlbumRequest)).all()) == 2
+
+
+def test_posting_a_release_again_after_it_failed_makes_a_new_request(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    tok = _login(client, "alice")
+    form = {"csrf_token": tok, "release": MBID}
+    assert client.post("/requests", data=form).status_code == 303
+    with sf() as s:
+        assert len(s.scalars(select(AlbumRequest).where(AlbumRequest.id != rid)).all()) == 1
+
+
 def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Session]) -> None:
     rid = _req(sf, "alice", "failed", JobState.FAILED)
     did = _make_decision(sf, "alice", "/x")

@@ -18,7 +18,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.discovery.playlists import is_dead_end
+from mixsync.discovery.playlists import DONE, is_dead_end
 from mixsync.web.deps import Db, require
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import templates
@@ -79,7 +79,15 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
 
 @router.post("")
 def new_request(user: User, db: Db, release: Annotated[str, Form()]) -> RedirectResponse:
-    create_request(db, datetime.now(UTC), user.id, parse_release_mbid(release))
+    mbid = parse_release_mbid(release)
+    again = select(AlbumRequest.id).where(  # a double submit: the first one is still in progress
+        AlbumRequest.user_id == user.id,
+        AlbumRequest.release_mbid == mbid,
+        AlbumRequest.status.not_in(DONE),
+        AlbumRequest.provisional.is_(False),
+    )
+    if db.scalar(again.limit(1)) is None:
+        create_request(db, datetime.now(UTC), user.id, mbid)
     return RedirectResponse("/requests", status_code=303)
 
 
