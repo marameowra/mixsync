@@ -367,10 +367,31 @@ def test_rank_prefers_the_higher_bitrate_between_lossy_copies() -> None:
     assert _ranked_names([poor, good, *rest])[0] == "01 Opening.mp3"
 
 
-def test_rank_keeps_both_copies_when_one_name_has_an_artist_prefix() -> None:
-    files = [flac("01 - Test Artist - Opening", 200.0), mp3("01 Opening", 200.0, 320)]
+def test_rank_merges_copies_when_one_name_has_the_album_artist_as_prefix() -> None:
+    files = [mp3("01 Opening", 200.0, 320), flac("01 - Test Artist - Opening", 200.0)]
     kept = _ranked_names(files, replace(ALBUM, tracks=ALBUM.tracks[:1]))
-    assert sorted(kept) == ["01 - Test Artist - Opening.flac", "01 Opening.mp3"]
+    assert kept == ["01 - Test Artist - Opening.flac"]
+
+
+def test_rank_keeps_both_copies_when_the_prefix_is_another_artist() -> None:
+    files = [flac("01 - Other Artist - Opening", 200.0), mp3("01 Opening", 200.0, 320)]
+    kept = _ranked_names(files, replace(ALBUM, tracks=ALBUM.tracks[:1]))
+    assert sorted(kept) == ["01 - Other Artist - Opening.flac", "01 Opening.mp3"]
+
+
+def test_rank_does_not_merge_artist_prefixed_copies_of_a_va_release() -> None:
+    files = [flac("01 - Test Artist - Opening", 200.0), mp3("01 Opening", 200.0, 320)]
+    album = replace(ALBUM, tracks=ALBUM.tracks[:1], va=True, artist="Various Artists")
+    assert sorted(_ranked_names(files, album)) == [
+        "01 - Test Artist - Opening.flac",
+        "01 Opening.mp3",
+    ]
+
+
+def test_rank_keeps_a_same_format_reprise_that_only_lacks_the_artist_prefix() -> None:
+    files = [flac("01 - Test Artist - Opening", 200.0), flac("01 Opening", 200.0)]
+    kept = _ranked_names(files, replace(ALBUM, tracks=ALBUM.tracks[:1]))
+    assert sorted(kept) == ["01 - Test Artist - Opening.flac", "01 Opening.flac"]
 
 
 def test_rank_keeps_all_files_of_a_flat_two_disc_folder_with_shared_suffixes() -> None:
