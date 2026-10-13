@@ -88,20 +88,25 @@ def _quality_key(f: CandidateFile) -> tuple[bool, int, int]:
 
 
 def _dedupe(parsed: Sequence[_Parsed], album: AlbumInfo) -> list[_Parsed]:
-    """One file per track, keeping the preferred format (SK-F06). Names that differ only by the
-    album artist as a prefix count as the same track; a VA release has no such prefix."""
+    """One file per track, keeping the preferred format (SK-F06). A copy in another format whose
+    name differs only by the album artist as a prefix is the same track; a VA release has none."""
     artist = "" if album.va else normalize(album.artist)
     best: dict[object, _Parsed] = {}
     for p in parsed:
         # the title tells disc 1 track 1 from disc 2 track 1 in a flat folder with no disc info;
         # no title: the file stem
         title = normalize(p.title) or p.name.rpartition(".")[0].lower()
-        head, sep, rest = p.title.partition(" - ")
-        if artist and sep and normalize(head) == artist and normalize(rest):
-            title = normalize(rest)
         key = (p.disc, p.track, title) if p.track is not None else normalize(p.title) or p.file.path
         if key not in best or _quality_key(p.file) > _quality_key(best[key].file):
             best[key] = p
+    for key, p in list(best.items()):
+        head, sep, rest = p.title.partition(" - ")
+        if not (artist and sep and normalize(head) == artist and normalize(rest)):
+            continue
+        other = best.get((p.disc, p.track, normalize(rest)))
+        if other and other.file.extension != p.file.extension and key in best:
+            drop = p if _quality_key(other.file) > _quality_key(p.file) else other
+            best = {k: v for k, v in best.items() if v is not drop}
     kept = {id(p) for p in best.values()}
     return [p for p in parsed if id(p) in kept]
 
