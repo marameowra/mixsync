@@ -1,15 +1,18 @@
-from datetime import UTC, datetime, timedelta
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.clock import aware
 from mixsync.core.config import Settings
 from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
 from mixsync.db.models.infra import RateBucket
-from mixsync.ratelimit.bucket import Bucket, aware
+from mixsync.ratelimit.bucket import Bucket
 from mixsync.ratelimit.client import _BACKOFF_CAP, PoliteClient, polite_client
 from mixsync.ratelimit.services import ServiceLimits, limits
 
@@ -294,3 +297,26 @@ def test_bucket_picks_up_changed_rate(
         row = s.get(RateBucket, "acoustid")
         assert row is not None
         assert row.refill_per_sec == 0.5
+
+
+def test_aware_converts_to_same_instant() -> None:
+    plus2 = datetime(2026, 1, 1, 12, tzinfo=timezone(timedelta(hours=2)))
+    assert aware(plus2) == plus2 and aware(plus2).utcoffset() == timedelta(0)
+    assert aware(datetime(2026, 1, 1, 10)) == datetime(2026, 1, 1, 10, tzinfo=UTC)
+
+
+def test_first_use_race_does_not_raise(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    """Concurrent first reserves on a missing row: on Postgres FOR UPDATE locks nothing."""
+    n = 3  # acoustid capacity
+    barrier = threading.Barrier(n)
+
+    def go() -> timedelta:
+        b = Bucket("acoustid", limits("acoustid", settings), sessions, clock)
+        barrier.wait()
+        return b.reserve()
+
+    with ThreadPoolExecutor(n) as pool:
+        waits = [f.result() for f in [pool.submit(go) for _ in range(n)]]
+    assert waits == [timedelta(0)] * n

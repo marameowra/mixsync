@@ -1,16 +1,12 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.db.models.infra import RateBucket
 from mixsync.ratelimit.services import ServiceLimits
-
-
-def aware(dt: datetime) -> datetime:
-    """SQLite returns naive datetimes; everything stored is UTC."""
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 class Bucket:
@@ -33,9 +29,22 @@ class Bucket:
         if s.get_bind().dialect.name == "sqlite":
             # first statement of the transaction: pysqlite does not autobegin for non-DML
             s.execute(text("BEGIN IMMEDIATE"))
+        cap = max(1.0, rate)
+        if s.get_bind().dialect.name != "sqlite":
+            # FOR UPDATE locks nothing on a missing row: the loser of a first-use race no-ops
+            s.execute(
+                pg_insert(RateBucket)
+                .values(
+                    service=self.service,
+                    tokens=cap,
+                    capacity=cap,
+                    refill_per_sec=rate,
+                    updated_at=now,
+                )
+                .on_conflict_do_nothing()
+            )
         row = s.get(RateBucket, self.service, with_for_update=True)
         if row is None:
-            cap = max(1.0, rate)
             row = RateBucket(
                 service=self.service,
                 tokens=cap,
@@ -46,7 +55,7 @@ class Bucket:
             s.add(row)
         else:  # pick up rate changes from config; reserve() clamps tokens to the new capacity
             row.refill_per_sec = rate
-            row.capacity = max(1.0, rate)
+            row.capacity = cap
         return row
 
     def reserve(self) -> timedelta:

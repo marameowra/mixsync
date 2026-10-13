@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from mixsync.acquire.requests import hold_imports
+from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo
@@ -24,7 +25,6 @@ from mixsync.discovery import retention
 from mixsync.discovery.playlists import Discovery, ensure_build
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
-from mixsync.ratelimit.bucket import aware
 
 from .conftest import Env
 from .fakes import ALBUM, ALBUM_B, AUDIO
