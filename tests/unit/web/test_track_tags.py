@@ -16,7 +16,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.migrate import upgrade
-from mixsync.db.models.library import Track
+from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import tags
 from mixsync.library.fileops import FileOps
@@ -127,7 +127,7 @@ def test_snapshot_of_another_path_refused(client: TestClient, env: Env) -> None:
         s.flush()
         bad = other.id
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": bad})
-    assert r.status_code == 404 and env.title() == "Imported"
+    assert r.status_code == 409 and env.title() == "Imported"
 
 
 def test_nothing_to_restore(client: TestClient, env: Env) -> None:
@@ -146,3 +146,42 @@ def test_csrf_and_role(client: TestClient, env: Env) -> None:
     assert client.get(env.url).status_code == 403
     assert client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap}).status_code == 403
     assert env.title() == "Imported" and env.snapshots() == 1
+
+
+def test_snapshot_of_a_replaced_file_refused(client: TestClient, env: Env) -> None:
+    # another recording ended up at this path (merge, trash, undo): the path's snapshot is not its
+    tok = _login(client)
+    snap = _snap(client, env)
+    tags.write(env.file, tags.TagSet("Other recording", "Z", "Z", "Z", 1, 1))
+    assert client.get(env.url).status_code == 409
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409 and env.title() == "Other recording"
+
+
+def test_stale_second_post_is_refused(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    stale = _snap(client, env)  # both clicks carry the same preview
+    assert client.post(env.url, data={"csrf_token": tok, "snapshot_id": stale}).status_code == 303
+    snapshots = env.snapshots()
+    assert client.post(env.url, data={"csrf_token": tok, "snapshot_id": stale}).status_code == 409
+    assert env.title() == "Original" and env.snapshots() == snapshots
+
+
+@pytest.mark.parametrize("status", ["running", "undoing"])
+def test_refused_while_a_plan_is_changing_the_track(
+    client: TestClient, env: Env, status: str
+) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    with env.sf() as s, s.begin():
+        s.add(
+            Plan(
+                kind="merge",
+                release_group_mbid="g",
+                canonical_release_mbid="r",
+                status=status,
+                ops=[{"op": "move", "track_id": env.track, "old": {"path": "x"}, "new_path": "y"}],
+            )
+        )
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409 and env.title() == "Imported"

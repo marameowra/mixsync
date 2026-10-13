@@ -17,6 +17,7 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import UNDOABLE_STATUSES, undoable
+from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 
 INTERVAL = timedelta(days=1)
@@ -84,6 +85,7 @@ class TrashPurger:
                                 )
                             )
                         )
+            keep.update(op.dst for op in tag_undo.unfinished(self.sessions, self.fileops))
             return keep
 
     async def purge(self, job: JobRecord) -> None:

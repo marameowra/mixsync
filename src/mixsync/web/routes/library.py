@@ -1,4 +1,5 @@
-import uuid
+import hashlib
+import threading
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -21,9 +22,8 @@ from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.undo import undoable
-from mixsync.library import fragmentation, tags
+from mixsync.library import fragmentation, tag_undo, tags
 from mixsync.library.fileops import FileOps
-from mixsync.library.importer import snapshotting
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
     SEED_URL,
@@ -285,30 +285,49 @@ def undo(
     return _act(request, plan_id, "undo", db, count, enqueue_undo)
 
 
+_tag_lock = threading.Lock()  # one restore at a time: a double click must not run twice
+
+
+def _sha256(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
 def _tag_target(
     db: Session, fo: FileOps, track_id: int, snapshot_id: int | None = None
 ) -> tuple[Track, TagSnapshot, tags.Snapshot]:
-    """The track, the snapshot to restore (the newest for its path unless named) and the file's
-    current tags. A snapshot belongs to a track when it was taken for the track's current path
-    by a finished library import; anything else is refused."""
+    """The track, the snapshot to restore and the file's current tags. The snapshot must come
+    from the import that produced the file now at the path (its journaled hash matches the
+    file), so a different recording that once had this path, or a file changed since, has none."""
     track = db.get(Track, track_id)
     if track is None:
         raise HTTPException(404, "no such track")
+    if not fo.has(track.path):
+        raise HTTPException(409, "the file is missing from the library")
+    for plan in db.scalars(select(Plan).where(Plan.status.in_(("running", "undoing")))):
+        for op in plan.ops:
+            if track.id == op.get("track_id") or track.path in (
+                op.get("old", {}).get("path"),
+                op.get("new_path"),
+            ):
+                raise HTTPException(409, f"plan {plan.id} is changing this track")
+    path = fo.library / track.path
     q = (
         select(TagSnapshot)
         .join(FileOp, FileOp.id == TagSnapshot.op_id)
         .where(
-            TagSnapshot.file_path == track.path, FileOp.root == "library", FileOp.status == "done"
+            TagSnapshot.file_path == track.path,
+            FileOp.root == "library",
+            FileOp.status == "done",
+            FileOp.dst_hash == _sha256(path),
         )
         .order_by(TagSnapshot.id.desc())
     )
     snap = db.scalars(q if snapshot_id is None else q.where(TagSnapshot.id == snapshot_id)).first()
     if snap is None:
-        raise HTTPException(404, "no tag snapshot for this track")
-    if not fo.has(track.path):
-        raise HTTPException(409, "the file is missing from the library")
+        raise HTTPException(409, "no undo available for this file")
     try:
-        current = tags.read_all(fo.library / track.path)
+        current = tags.read_all(path)
     except Exception:
         raise HTTPException(409, "the file's tags cannot be read") from None
     if current["format"] != snap.tags["format"]:
@@ -337,26 +356,11 @@ def restore_track_tags(
     fo: Files,
     snapshot_id: Annotated[int, Form()],
 ) -> RedirectResponse:
-    track, snap, current = _tag_target(db, fo, track_id, snapshot_id)
-    if not tags.changes(current, snap.tags):
-        raise HTTPException(409, "the file already has these tags")
-    rel, old, tid = track.path, snap.tags, track.id
-    db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
-    # The file is trashed, then copied back from the trash with the old tags written to the
-    # copy (snapshotted first), exactly as a merge retags: journaled, verified, never in place.
-    batch = f"tag-undo-{uuid.uuid4().hex}"
-    trashed = fo.trash(rel, batch)
-    restore = snapshotting(
-        request.app.state.session_factory,
-        SystemClock(),
-        rel,
-        lambda staging: tags.restore(staging, old),
-        tid,
-    )
-    try:
-        fo.import_file(fo.trash_dir / trashed, rel, restore, batch)
-    except BaseException:
-        if not fo.has(rel):  # failed before publishing: put the original back
-            fo.restore(trashed, rel, batch)
-        raise
+    with _tag_lock:
+        track, snap, current = _tag_target(db, fo, track_id, snapshot_id)
+        if not tags.changes(current, snap.tags):
+            raise HTTPException(409, "the file already has these tags")
+        rel, old, tid = track.path, snap.tags, track.id
+        db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
+        tag_undo.restore_tags(fo, request.app.state.session_factory, SystemClock(), tid, rel, old)
     return RedirectResponse(f"/library/tracks/{tid}/tags", status_code=303)
