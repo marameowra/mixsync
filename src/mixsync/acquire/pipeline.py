@@ -564,7 +564,7 @@ class Pipeline:
                     switched = True
                     break
             # lost a race to another switch: decide again against the stored choice
-        if cid and cid == album.release_id and not switched:
+        if album.release_group_id and target is album and not switched:  # else already filtered
             # shortcut: two workers importing the same release at once can still duplicate (rows
             # not yet committed); the fragmentation merge cleans that up.
             files = await self._unowned(album, files, batch)

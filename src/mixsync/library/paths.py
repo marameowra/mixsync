@@ -44,7 +44,7 @@ def render(
         text = part.format(
             albumartist=sanitize(albumartist),
             album=sanitize(album),
-            year=year,
+            year="" if year is None else year,
             disc=disc,
             track=track,
             title=sanitize(title),

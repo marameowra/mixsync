@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 from rapidfuzz import fuzz
@@ -230,5 +230,7 @@ def rank(
     for c, r in scored:
         if c.username not in seen:
             seen.add(c.username)
-            out.append((c, r))
+            # only the files that were scored, so the rest is never downloaded
+            kept = tuple(p.file for p in _dedupe([_parse(f) for f in c.files]))
+            out.append((replace(c, files=kept), r))
     return out

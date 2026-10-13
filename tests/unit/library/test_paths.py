@@ -32,6 +32,21 @@ def test_missing_year_is_omitted_cleanly() -> None:
     assert r(year=None) == "A/B/01-02 T.flac"
 
 
+def test_missing_year_is_not_rendered_as_none_in_a_custom_template() -> None:
+    out = render(
+        "{albumartist}/{year} - {album}/{track:02d} {title}.{ext}",
+        albumartist="A",
+        album="B",
+        year=None,
+        disc=1,
+        track=2,
+        title="T",
+        ext="flac",
+    )
+    assert "None" not in out
+    assert out == "A/- B/02 T.flac"
+
+
 def test_awkward_values() -> None:
     assert r(title="AC/DC: Who?", album="CON", albumartist="..") == (
         "_/_CON (2000)/01-02 ACDC Who.flac"

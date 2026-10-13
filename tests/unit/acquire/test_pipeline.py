@@ -724,6 +724,26 @@ async def test_import_skips_owned_recordings_when_own_release_is_canonical(env: 
     assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
 
 
+async def test_mixed_format_folder_downloads_and_imports_one_file_per_track(env: Env) -> None:
+    """The same album as FLAC and MP3 in one folder: the preferred format only (SK-F06)."""
+    folder = "Music\\Alpha Band\\Alpha Album"
+    mp3 = env.source.add("peer1", folder)
+    mp3_blobs = env.source.blobs[("peer1", folder)]
+    flac = env.source.add("peer1", folder, ext="flac")
+    env.source.blobs[("peer1", folder)] = {**mp3_blobs, **env.source.blobs[("peer1", folder)]}
+    env.source.catalog["alpha album"] = [replace(mp3, files=mp3.files + flac.files)]
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    assert [d.status for d in decision_rows(env, 2)] == ["auto_accepted"]
+    lib = env.data_dir / "library"
+    assert sorted(p.suffix for p in lib.rglob("*") if p.suffix in {".mp3", ".flac"}) == [
+        ".flac",
+        ".flac",
+    ]
+
+
 async def test_canonical_choice_is_stored_and_reused(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
     request(env, str(ALBUM_B.release_id))
@@ -811,6 +831,30 @@ async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     assert library(env) == [FIRST.replace("(2020)", "(2021)"), SECOND.replace("(2020)", "(2021)")]
     with env.sessions() as s:
         assert canonical_db.get(s, str(ALBUM.release_group_id)) is None
+
+
+async def test_owned_recordings_are_skipped_when_the_group_has_no_canonical(env: Env) -> None:
+    async def nothing(_group: str) -> list[ReleaseRef]:
+        return []
+
+    env.metadata.browse_group_releases = nothing  # type: ignore[method-assign]
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path="elsewhere.mp3",
+                recording_mbid="Alpha-rec-1",
+                release_group_mbid=ALBUM.release_group_id,
+                status="verified",
+                batch_id="old",
+                imported_at=env.clock.now(),
+            )
+        )
+    rid = request(env, str(ALBUM_B.release_id))
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
 
 
 def test_store_keeps_an_existing_choice(env: Env) -> None:
