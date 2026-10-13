@@ -87,13 +87,18 @@ def _quality_key(f: CandidateFile) -> tuple[bool, int, int]:
     return f.extension in LOSSLESS, f.bitrate or 0, f.size
 
 
-def _dedupe(parsed: Sequence[_Parsed]) -> list[_Parsed]:
-    """One file per track, keeping the preferred format (SK-F06)."""
+def _dedupe(parsed: Sequence[_Parsed], album: AlbumInfo) -> list[_Parsed]:
+    """One file per track, keeping the preferred format (SK-F06). Names that differ only by the
+    album artist as a prefix count as the same track; a VA release has no such prefix."""
+    artist = "" if album.va else normalize(album.artist)
     best: dict[object, _Parsed] = {}
     for p in parsed:
         # the title tells disc 1 track 1 from disc 2 track 1 in a flat folder with no disc info;
         # no title: the file stem
         title = normalize(p.title) or p.name.rpartition(".")[0].lower()
+        head, sep, rest = p.title.partition(" - ")
+        if artist and sep and normalize(head) == artist and normalize(rest):
+            title = normalize(rest)
         key = (p.disc, p.track, title) if p.track is not None else normalize(p.title) or p.file.path
         if key not in best or _quality_key(p.file) > _quality_key(best[key].file):
             best[key] = p
@@ -139,7 +144,7 @@ def score_candidate(
     if candidate.has_cue and len(candidate.files) == 1 and len(album.tracks) > 1:
         return reject("single-file album rip with a .cue sheet is not supported")
 
-    parsed = _dedupe([_parse(f) for f in candidate.files])
+    parsed = _dedupe([_parse(f) for f in candidate.files], album)
     tracks = [FileTrack(p.title, "", p.file.duration, p.track, p.disc) for p in parsed]
     by_id = {id(t): p for t, p in zip(tracks, parsed, strict=True)}
     pairs, extras, missing = assign_tracks(tracks, album.tracks)
@@ -234,6 +239,6 @@ def rank(
         if c.username not in seen:
             seen.add(c.username)
             # only the files that were scored, so the rest is never downloaded
-            kept = tuple(p.file for p in _dedupe([_parse(f) for f in c.files]))
+            kept = tuple(p.file for p in _dedupe([_parse(f) for f in c.files], album))
             out.append((replace(c, files=kept), r))
     return out
