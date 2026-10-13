@@ -174,6 +174,21 @@ def test_trash_refuses_symlinked_parent_outside_library(
     assert files(data_dir / ".trash") == []
 
 
+def test_trash_refuses_symlinked_library_root(ops: FileOps, data_dir: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "song.flac"
+    precious.write_bytes(b"precious music")
+    ops.library.rmdir()
+    ops.library.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(SafetyError):
+        ops.trash("song.flac", "b1")
+
+    assert precious.read_bytes() == b"precious music"
+    assert files(data_dir / ".trash") == []
+
+
 def test_has_refuses_symlinked_parent_inside_library(ops: FileOps) -> None:
     target = ops.library / "Artist" / "Album"
     target.mkdir(parents=True)

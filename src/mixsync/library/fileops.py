@@ -113,6 +113,8 @@ class FileOps:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts or not p.parts:
             raise SafetyError(f"path escapes {root}: {rel!r}")
+        if root.is_symlink():
+            raise SafetyError(f"path escapes {root}: {rel!r}")
         path = root / p
         component = root
         for part in p.parts:
