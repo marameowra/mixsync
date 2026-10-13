@@ -30,15 +30,17 @@ def admit(*keys: tuple[str, str]) -> bool:
         recent = {k: [t for t in _failures.get(k, []) if t > now - WINDOW] for k in keys}
         if any(len(r) >= MAX_FAILURES for r in recent.values()):
             for k, r in recent.items():
-                if k in _failures:
+                if r:
                     _failures[k] = r
+                else:
+                    _failures.pop(k, None)
             return False
         for key, r in recent.items():
             if key not in _failures and len(_failures) >= MAX_KEYS:
-                for k in [k for k, v in _failures.items() if v[-1] <= now - WINDOW]:
+                for k in [k for k, v in _failures.items() if not v or v[-1] <= now - WINDOW]:
                     del _failures[k]
-                if len(_failures) >= MAX_KEYS:
-                    del _failures[next(iter(_failures))]
+                if len(_failures) >= MAX_KEYS:  # oldest first, but never this call's own keys
+                    del _failures[next(k for k in _failures if k not in keys)]
             _failures[key] = [*r, now]
         return True
 
@@ -49,6 +51,8 @@ def refund(*keys: tuple[str, str]) -> None:
         for k in keys:
             if _failures.get(k):
                 _failures[k].pop()
+            if not _failures.get(k, True):
+                del _failures[k]
 
 
 def forget(*keys: tuple[str, str]) -> None:

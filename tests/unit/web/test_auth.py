@@ -176,3 +176,41 @@ def test_login_cookie_not_secure_without_trusted_forwarded_https(
     with TestClient(app, follow_redirects=False) as c:
         r = c.post("/login", data={"username": "alice", "password": "pw-alice"}, headers=headers)
     assert "secure" not in r.headers["set-cookie"].lower()
+
+
+def test_admit_survives_an_empty_entry_in_a_full_store(
+    monkeypatch: pytest.MonkeyPatch, clock: list[float]
+) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "MAX_KEYS", 3)
+    auth_routes._failures.update({("a", "x"): [], ("b", "x"): [clock[0]], ("c", "x"): [clock[0]]})
+    assert auth_routes.admit(("d", "x"))
+    assert ("d", "x") in auth_routes._failures
+
+
+def test_refund_and_a_refused_admit_leave_no_empty_entries(clock: list[float]) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    first, second = ("1", "u"), ("2", "u")
+    assert auth_routes.admit(first)
+    auth_routes.refund(first)
+    assert first not in auth_routes._failures
+    assert auth_routes.admit(second)
+    clock[0] += auth_routes.WINDOW + 1  # second's entry expires
+    for _ in range(auth_routes.MAX_FAILURES):
+        assert auth_routes.admit(first)
+    assert not auth_routes.admit(first, second)
+    assert all(auth_routes._failures.values())
+
+
+def test_multi_key_admit_in_a_full_store_keeps_its_own_keys(
+    monkeypatch: pytest.MonkeyPatch, clock: list[float]
+) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "MAX_KEYS", 3)
+    mine, new = ("m", "x"), ("n", "x")
+    auth_routes._failures.update({mine: [clock[0]], ("o", "x"): [clock[0]], ("p", "x"): [clock[0]]})
+    assert auth_routes.admit(mine, new)
+    assert mine in auth_routes._failures and new in auth_routes._failures

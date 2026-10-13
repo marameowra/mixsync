@@ -413,3 +413,10 @@ async def test_default_validator_listenbrainz(
 
     with pytest.raises(TransientError):
         await _ping(settings, sf, boom).listenbrainz_username("x")
+
+
+def test_a_successful_link_leaves_no_empty_entry_in_the_limiter(client: TestClient) -> None:
+    from mixsync.web.routes import auth as auth_routes
+
+    assert _guess(client, _login(client, "alice")).status_code == 303
+    assert all(auth_routes._failures.values())
