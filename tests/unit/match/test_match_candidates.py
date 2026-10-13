@@ -367,11 +367,21 @@ def test_rank_prefers_the_higher_bitrate_between_lossy_copies() -> None:
     assert _ranked_names([poor, good, *rest])[0] == "01 Opening.mp3"
 
 
-def test_rank_merges_copies_when_one_name_has_an_artist_prefix() -> None:
+def test_rank_keeps_both_copies_when_one_name_has_an_artist_prefix() -> None:
     files = [flac("01 - Test Artist - Opening", 200.0), mp3("01 Opening", 200.0, 320)]
-    assert _ranked_names(files, replace(ALBUM, tracks=ALBUM.tracks[:1])) == [
-        "01 - Test Artist - Opening.flac"
+    kept = _ranked_names(files, replace(ALBUM, tracks=ALBUM.tracks[:1]))
+    assert sorted(kept) == ["01 - Test Artist - Opening.flac", "01 Opening.mp3"]
+
+
+def test_rank_keeps_all_files_of_a_flat_two_disc_folder_with_shared_suffixes() -> None:
+    names = [
+        "01 Opening - Remastered 2011",
+        "02 Second Song - Remastered 2011",
+        "01 Third Song - Remastered 2011",
+        "02 Closing - Remastered 2011",
     ]
+    files = [flac(n, ln) for n, ln in zip(names, LENGTHS, strict=True)]
+    assert _ranked_names(files, TWO_DISCS) == [f"{n}.flac" for n in names]
 
 
 def test_rank_untitled_copies_merge_but_differently_named_files_stay() -> None:
