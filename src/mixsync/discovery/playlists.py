@@ -279,7 +279,9 @@ class Discovery:
                 )
                 live.update({m: req.id for m in wanted})
             for c, _ in asks:
-                self._hold(s, now, pl, c.recording_mbid).request_id = live[c.recording_mbid]
+                self._hold(s, now, pl, c.recording_mbid, download=True).request_id = live[
+                    c.recording_mbid
+                ]
             for c in fill:  # a track another user's request imported still needs this user's hold
                 pt = provisional.get(c.recording_mbid)
                 if pt and c.recording_mbid not in in_library:
@@ -324,7 +326,9 @@ class Discovery:
         return live
 
     @staticmethod
-    def _hold(s: Session, now: datetime, pl: DiscoveryPlaylist, mbid: str) -> ProvisionalHold:
+    def _hold(
+        s: Session, now: datetime, pl: DiscoveryPlaylist, mbid: str, download: bool = False
+    ) -> ProvisionalHold:
         hold = s.scalar(
             select(ProvisionalHold).where(
                 ProvisionalHold.user_id == pl.user_id, ProvisionalHold.recording_mbid == mbid
@@ -336,7 +340,8 @@ class Discovery:
             s.flush()
         elif hold.expired_at is not None:  # picked again after it expired: a fresh hold
             hold.expired_at = hold.kept_at = hold.keep_reason = None
-            hold.expires_at = now + timedelta(days=pl.retention_days)  # even on a shared track
+            # a download starts its clock at import (hold_imports); a track on disk, now
+            hold.expires_at = None if download else now + timedelta(days=pl.retention_days)
             hold.provisional_track_id = None
             hold.playlist_id = pl.id
         return hold
