@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import SystemClock
 from mixsync.db.journal import SqlJournal
+from mixsync.db.models.safety import FileOp
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.purge import TrashPurger
@@ -50,3 +52,18 @@ def test_crash_mid_restore_is_recovered(
     assert hashlib.sha256((data_dir / "library" / REL).read_bytes()).hexdigest() == original
     assert purger.protected() == set()
     assert journal.pending() == []
+
+
+def test_trash_op_never_completed_is_still_protected(
+    ops: FileOps, make_src: MakeSrc, sessions: sessionmaker[Session]
+) -> None:
+    # the web process died inside the trash, before its journal row was completed
+    ops.import_file(make_src(), REL, lambda p, _op: None, "import")
+    ops.trash(REL, f"{tag_undo.BATCH}x")
+    with sessions.begin() as s:
+        s.execute(update(FileOp).where(FileOp.kind == "trash").values(status="started"))
+    purger = TrashPurger(sessions, SystemClock(), ops, 0)
+    assert len(purger.protected()) == 1
+    ops.recover()  # the worker settles the row, then puts the original back
+    tag_undo.recover(sessions, ops)
+    assert ops.has(REL) and purger.protected() == set()

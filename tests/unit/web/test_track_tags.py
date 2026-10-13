@@ -12,12 +12,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import TagSnapshot
+from mixsync.db.models.work import Job
 from mixsync.library import tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
@@ -167,13 +169,22 @@ def test_stale_second_post_is_refused(client: TestClient, env: Env) -> None:
     assert env.title() == "Original" and env.snapshots() == snapshots
 
 
-@pytest.mark.parametrize("status", ["running", "undoing"])
+@pytest.mark.parametrize("status", ["running", "undoing", "draft"])
 def test_refused_while_a_plan_is_changing_the_track(
     client: TestClient, env: Env, status: str
 ) -> None:
     tok = _login(client)
     snap = _snap(client, env)
     with env.sf() as s, s.begin():
+        if status == "draft":  # a confirmed draft: its MERGE job is waiting
+            s.add(
+                Job(
+                    kind=JobKind.MERGE,
+                    payload={"plan_id": 1},
+                    status=JobState.QUEUED,
+                    run_after=datetime.now(UTC),
+                )
+            )
         s.add(
             Plan(
                 kind="merge",

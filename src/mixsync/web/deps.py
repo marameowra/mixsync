@@ -2,7 +2,7 @@ import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -33,8 +33,7 @@ def get_db(request: Request) -> Iterator[Session]:
 Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
-def get_fileops(request: Request) -> FileOps:
-    state = request.app.state
+def fileops_for(state: Any) -> FileOps:
     if getattr(state, "fileops", None) is None:
         st, clock = state.settings, SystemClock()
         state.fileops = FileOps(
@@ -45,6 +44,10 @@ def get_fileops(request: Request) -> FileOps:
         )
     fileops: FileOps = state.fileops
     return fileops
+
+
+def get_fileops(request: Request) -> FileOps:
+    return fileops_for(request.app.state)
 
 
 def get_merger(request: Request) -> Merger:

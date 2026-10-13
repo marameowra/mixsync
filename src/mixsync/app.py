@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -8,7 +10,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mixsync.core.config import Settings
 from mixsync.db.engine import make_engine, make_session_factory, user_sessions
+from mixsync.library import tag_undo
 from mixsync.web.csrf import check_csrf
+from mixsync.web.deps import fileops_for
 from mixsync.web.routes import (
     account,
     auth,
@@ -27,7 +31,13 @@ from mixsync.web.templating import templates
 def create_app(
     session_factory: sessionmaker[Session] | None = None, settings: Settings | None = None
 ) -> FastAPI:
-    app = FastAPI(title="mixsync", dependencies=[Depends(check_csrf)])
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        # a tag restore killed with the web process leaves its track missing until this puts it back
+        tag_undo.recover(app.state.session_factory, fileops_for(app.state))
+        yield
+
+    app = FastAPI(title="mixsync", dependencies=[Depends(check_csrf)], lifespan=lifespan)
     app.state.settings = settings or Settings()
     app.state.session_factory = user_sessions(
         session_factory or make_session_factory(make_engine())

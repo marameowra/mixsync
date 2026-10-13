@@ -304,7 +304,9 @@ def _tag_target(
         raise HTTPException(404, "no such track")
     if not fo.has(track.path):
         raise HTTPException(409, "the file is missing from the library")
-    for plan in db.scalars(select(Plan).where(Plan.status.in_(("running", "undoing")))):
+    for plan in db.scalars(select(Plan).where(Plan.status.in_(("draft", "running", "undoing")))):
+        if plan.status == "draft" and not live_job(db, plan.id):
+            continue  # an unconfirmed preview changes nothing
         for op in plan.ops:
             if track.id == op.get("track_id") or track.path in (
                 op.get("old", {}).get("path"),
@@ -362,5 +364,12 @@ def restore_track_tags(
             raise HTTPException(409, "the file already has these tags")
         rel, old, tid = track.path, snap.tags, track.id
         db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
-        tag_undo.restore_tags(fo, request.app.state.session_factory, SystemClock(), tid, rel, old)
+        try:
+            tag_undo.restore_tags(
+                fo, request.app.state.session_factory, SystemClock(), tid, rel, old
+            )
+        except FileExistsError:
+            raise HTTPException(
+                409, "the file changed while restoring; reload and try again"
+            ) from None
     return RedirectResponse(f"/library/tracks/{tid}/tags", status_code=303)

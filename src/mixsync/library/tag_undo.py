@@ -50,7 +50,9 @@ def unfinished(sessions: sessionmaker[Session], fo: FileOps) -> list[FileOp]:
     with sessions() as s:
         trashed = s.scalars(
             select(FileOp).where(
-                FileOp.kind == "trash", FileOp.status == "done", FileOp.batch_id.like(f"{BATCH}%")
+                FileOp.kind == "trash",
+                FileOp.status.in_(("done", "started")),  # the web process may die before complete
+                FileOp.batch_id.like(f"{BATCH}%"),
             )
         )
         done = set(
