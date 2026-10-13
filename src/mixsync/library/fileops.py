@@ -241,7 +241,7 @@ class FileOps:
         """Path (relative to root) of an earlier completed import of src in this batch, if the
         file is still there and intact."""
         op = self._journal.find_completed(batch_id, str(src), root)
-        if op and op.root == root and op.dst_hash and (f := self._root(root) / op.dst).is_file():
+        if op and op.dst_hash and (f := self._root(root) / op.dst).is_file():
             return op.dst if _sha256(f) == op.dst_hash else None
         return None
 
@@ -251,11 +251,11 @@ class FileOps:
         dl = self._downloads.resolve()
         if ".." in src.parts or src.is_symlink() or dl not in src.resolve().parents:
             raise SafetyError(f"{src} is not inside {dl}")
-        rel = self.find_imported(batch_id, src, root)
         op = self._journal.find_completed(batch_id, str(src), root)
-        if rel is None or op is None or op.dst_hash is None:
+        f = op and self._root(root) / op.dst
+        if not (op and op.dst_hash and f and f.is_file() and _sha256(f) == op.dst_hash):
             raise SafetyError(f"{src} has no verified import in batch {batch_id}")
-        op_id = self._journal.begin(batch_id, "release", str(src), rel, root=root)
+        op_id = self._journal.begin(batch_id, "release", str(src), op.dst, root=root)
         self._journal.set_dst_hash(op_id, op.dst_hash)
         try:
             _hook("release")
