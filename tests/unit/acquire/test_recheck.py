@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.exc import OperationalError
 
 from mixsync.acquire.merge import Merger, PlanInProgress
@@ -636,6 +636,28 @@ def test_start_chains_covers_every_unverified_album_once(env: Env) -> None:
     rig.rechecker.start_chains()
     ((attempt, due),) = rig.queued()
     assert attempt == 0 and _in_window(due, env.clock.now(), RECHECK_INTERVALS[0])
+
+
+def test_start_chains_reads_the_live_rechecks_once_not_per_album(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed(2020)
+    rig.seed(2021)
+    rig.rechecker.start_chains()
+    assert len(rig.env.jobs(JobKind.RECHECK)) == 2
+    job_reads: list[str] = []
+
+    def count(conn: Any, cur: Any, stmt: str, *a: Any) -> None:
+        if "FROM jobs" in stmt:
+            job_reads.append(stmt)
+
+    engine = env.sessions.kw["bind"]
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        rig.rechecker.start_chains()
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert len(rig.env.jobs(JobKind.RECHECK)) == 2
+    assert len(job_reads) == 1
 
 
 async def test_discard_a_draft_plan(env: Env, web: TestClient) -> None:

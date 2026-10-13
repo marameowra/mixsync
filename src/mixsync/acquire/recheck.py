@@ -20,6 +20,8 @@ from mixsync.acquire.pipeline import Handler, acoustid_id, file_track, likelies
 from mixsync.acquire.requests import (
     AlbumKey,
     Item,
+    add_recheck,
+    all_live_rechecks,
     enqueue_recheck,
     group,
     profile_for,
@@ -233,6 +235,11 @@ class Rechecker:
     def start_chains(self) -> None:
         """On startup: every unverified album without a waiting background check gets one."""
         with self.sessions.begin() as s:
+            waiting = {  # read once: enqueue_recheck would reload every live job per album
+                tuple(j.payload["album"])
+                for j in all_live_rechecks(s)
+                if j.payload["user_id"] is None
+            }
             for key in group(read_unverified(s, self.fileops.library)):
-                if key[1]:
-                    enqueue_recheck(s, self.clock.now(), key, None)
+                if key[1] and key not in waiting:
+                    add_recheck(s, self.clock.now(), key, None)
