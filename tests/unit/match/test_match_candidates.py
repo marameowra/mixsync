@@ -337,3 +337,31 @@ def test_empty_tracklist_rejects_under_every_profile() -> None:
     for profile in (STRICT, BALANCED, LOOSE):
         r = score_candidate(cand(album_files()), empty, profile)
         assert r.band == Band.REJECT and r.vetoes == ("release has no tracklist",)
+
+
+def _ranked_names(files: list[CandidateFile], album: AlbumInfo = ALBUM) -> list[str]:
+    ((c, _),) = rank([cand(files)], album, BALANCED)
+    return [f.path.rpartition("\\")[2] for f in c.files]
+
+
+def test_rank_keeps_every_file_of_a_flat_two_disc_folder() -> None:
+    names = ["01 Opening", "02 Second Song", "01 Third Song", "02 Closing"]
+    files = [flac(n, ln) for n, ln in zip(names, LENGTHS, strict=True)]
+    assert _ranked_names(files, TWO_DISCS) == [f"{n}.flac" for n in names]
+
+
+def test_rank_merges_format_copies_of_a_track_despite_name_variants() -> None:
+    files = album_files() + [
+        mp3(f"{i + 1:02d} - {t}", ln, 320)
+        for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+    ]
+    assert _ranked_names(files) == [f"{i + 1:02d} {t}.flac" for i, t in enumerate(TITLES)]
+
+
+def test_rank_prefers_the_higher_bitrate_between_lossy_copies() -> None:
+    good, poor = mp3("01 Opening", 200.0, 320), mp3("01 - Opening", 200.0, 128)
+    rest = [
+        mp3(f"{i + 2:02d} {t}", ln, 320)
+        for i, (t, ln) in enumerate(zip(TITLES[1:], LENGTHS[1:], strict=True))
+    ]
+    assert _ranked_names([poor, good, *rest])[0] == "01 Opening.mp3"

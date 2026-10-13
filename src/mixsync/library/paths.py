@@ -6,6 +6,7 @@ SEGMENT_MAX_BYTES = 180  # leaves room for a collision suffix under the common 2
 _ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]')
 _RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])$")
 _EXT = ".{ext}"
+_EMPTY = re.compile(r"\(\s*\)|\[\s*\]")
 
 
 def sanitize(s: str, max_bytes: int = SEGMENT_MAX_BYTES) -> str:
@@ -50,6 +51,10 @@ def render(
             title=sanitize(title),
             genre=sanitize(genre),
         )
+        if year is None and "{year}" in part:  # no stray "()", "[]" or " -" where the year was
+            text = _EMPTY.sub("", text).strip(" -_")
+            if not text and end == "":
+                continue
         out.append(sanitize(text, SEGMENT_MAX_BYTES - len(end)) + end)
     return "/".join(out)
 

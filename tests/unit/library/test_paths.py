@@ -32,9 +32,9 @@ def test_missing_year_is_omitted_cleanly() -> None:
     assert r(year=None) == "A/B/01-02 T.flac"
 
 
-def test_missing_year_is_not_rendered_as_none_in_a_custom_template() -> None:
-    out = render(
-        "{albumartist}/{year} - {album}/{track:02d} {title}.{ext}",
+def _year_none(template: str) -> str:
+    return render(
+        template,
         albumartist="A",
         album="B",
         year=None,
@@ -43,8 +43,14 @@ def test_missing_year_is_not_rendered_as_none_in_a_custom_template() -> None:
         title="T",
         ext="flac",
     )
-    assert "None" not in out
-    assert out == "A/- B/02 T.flac"
+
+
+def test_missing_year_leaves_no_stray_separators_in_custom_templates() -> None:
+    tail = "{track:02d} {title}.{ext}"
+    assert _year_none("{albumartist}/{year} - {album}/" + tail) == "A/B/02 T.flac"
+    assert _year_none("{albumartist}/{album} - {year}/" + tail) == "A/B/02 T.flac"
+    assert _year_none("{albumartist}/[{year}] {album}/" + tail) == "A/B/02 T.flac"
+    assert _year_none("{albumartist}/{year}/{album}/" + tail) == "A/B/02 T.flac"
 
 
 def test_awkward_values() -> None:

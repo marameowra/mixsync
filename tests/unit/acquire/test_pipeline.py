@@ -819,6 +819,36 @@ async def test_canonical_without_shared_recordings_is_ignored(
     assert release_tags(env, rels[0])["TXXX:MusicBrainz Album Id"] == [ALBUM_B.release_id]
 
 
+async def test_owned_recordings_are_skipped_when_the_canonical_shares_none(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    foreign = replace(
+        ALBUM,
+        release_id="55555555-5555-5555-5555-555555555555",
+        year=1999,
+        tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
+    )
+    monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+    with env.sessions.begin() as s:
+        canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))
+        s.add(
+            Track(
+                path="elsewhere.mp3",
+                recording_mbid="Alpha-rec-1",
+                release_group_mbid=ALBUM.release_group_id,
+                status="verified",
+                batch_id="old",
+                imported_at=env.clock.now(),
+            )
+        )
+    rid = request(env, str(ALBUM_B.release_id))
+    await env.drain()
+
+    assert status(env, rid) == "imported"
+    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
+
+
 async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     async def nothing(_group: str) -> list[ReleaseRef]:
         return []
