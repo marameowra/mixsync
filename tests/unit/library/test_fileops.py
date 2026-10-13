@@ -115,6 +115,30 @@ def test_hash_mismatch_fails_and_leaves_source(
     assert statuses(sessions) == ["failed"]
 
 
+def test_source_changed_during_copy_fails_and_keeps_source(
+    ops: FileOps,
+    data_dir: Path,
+    make_src: MakeSrc,
+    monkeypatch: pytest.MonkeyPatch,
+    sessions: sessionmaker[Session],
+) -> None:
+    src = make_src()
+    real = fileops._hook
+
+    def grow(step: str) -> None:
+        if step == "copy":  # a download still being written
+            with src.open("ab") as f:
+                f.write(b"more bytes arrived")
+        real(step)
+
+    monkeypatch.setattr(fileops, "_hook", grow)
+    with pytest.raises(SafetyError, match="hash mismatch"):
+        ops.import_file(src, REL, noop_tags, "b1")
+    assert src.read_bytes().endswith(b"more bytes arrived")
+    assert files(data_dir / "library") == [] and files(data_dir / ".incoming") == []
+    assert statuses(sessions) == ["failed"]
+
+
 def test_exdev_is_a_safety_error_not_a_copy_fallback(
     ops: FileOps, data_dir: Path, make_src: MakeSrc, monkeypatch: pytest.MonkeyPatch
 ) -> None:
