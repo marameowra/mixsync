@@ -1,9 +1,11 @@
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import ColumnElement, delete, select
+from sqlalchemy import ColumnElement, delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import create_request
@@ -11,13 +13,17 @@ from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import JobState
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
+from mixsync.db.models.discovery import ProvisionalHold
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.discovery.playlists import is_dead_end
 from mixsync.web.deps import Db, require
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import templates
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/requests")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
 
@@ -49,7 +55,7 @@ def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
 
 def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
     """A no_results request always has a queued repeat search, which delete removes with it."""
-    if req.status in _BUSY:
+    if req.status in _BUSY or is_dead_end(req):
         return False
     blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(_LIVE)
     return not (live.get(req.id, set()) & blocking)
@@ -83,6 +89,8 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
     Raises HTTPException(409) when the request cannot be deleted; the caller rolls back."""
     if req.migration_id is not None:
         raise HTTPException(409, "a migration album cannot be deleted")
+    if is_dead_end(req):
+        raise HTTPException(409, "discovery keeps this as a dead end")
     if not _deletable(req, _live_states(db, [req.id])):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.
@@ -101,6 +109,9 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
     db.execute(delete(Job).where(_of(req.id), Job.status.not_in(held)))
     if db.scalar(select(Job.id).where(_of(req.id)).limit(1)) is not None:
         raise HTTPException(409, "request is in progress")  # get_db rolls the whole delete back
+    # Keep the hit (its status still stops the watchlist re-requesting) and the hold; drop the link.
+    for model in (FollowHit, ProvisionalHold):
+        db.execute(update(model).where(model.request_id == req.id).values(request_id=None))
     db.delete(req)
 
 
@@ -119,6 +130,8 @@ def delete_imported(user: User, db: Db) -> RedirectResponse:
                 _delete(db, req, user.id)
         except HTTPException:
             continue
+        except IntegrityError as e:
+            log.warning("clear imported: kept request %s: %s", req.id, e)
     return RedirectResponse("/requests", status_code=303)
 
 

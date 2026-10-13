@@ -18,6 +18,8 @@ from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Role, User, UserRole
+from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold
+from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.routes import requests as requests_route
@@ -643,3 +645,75 @@ def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]
     assert client.post("/requests/delete-imported").status_code == 403
     with sf() as s:
         assert s.get(AlbumRequest, rid) is not None
+
+
+def _link_hit_and_hold(sf: sessionmaker[Session], username: str, rid: int) -> tuple[int, int]:
+    """A watchlist hit and a discovery hold that both point at request `rid`."""
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username=username).one().id
+        e = WatchedEntity(kind="artist", mbid="a" * 36)
+        pl = DiscoveryPlaylist(user_id=uid, name="p")
+        s.add_all([e, pl])
+        s.flush()
+        f = Follow(user_id=uid, entity_id=e.id, name="F")
+        s.add(f)
+        s.flush()
+        hit = FollowHit(
+            follow_id=f.id,
+            release_group_mbid="b" * 36,
+            release_mbid="c" * 36,
+            status="requested",
+            request_id=rid,
+        )
+        hold = ProvisionalHold(
+            user_id=uid, recording_mbid="d" * 36, playlist_id=pl.id, request_id=rid
+        )
+        s.add_all([hit, hold])
+        s.flush()
+        return hit.id, hold.id
+
+
+def test_delete_request_referenced_by_hit_and_hold(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    rid = _req(sf, "alice", "failed", JobState.FAILED)
+    hit_id, hold_id = _link_hit_and_hold(sf, "alice", rid)
+    tok = _login(client, "alice")
+    r = client.post(f"/requests/{rid}/delete", data={"csrf_token": tok})
+    assert r.status_code == 303
+    with sf() as s:
+        assert s.get(AlbumRequest, rid) is None
+        hit, hold = s.get(FollowHit, hit_id), s.get(ProvisionalHold, hold_id)
+        assert hit and hit.request_id is None and hit.status == "requested"  # still deduped
+        assert hold and hold.request_id is None
+
+
+def test_clear_imported_with_hit_and_hold_references(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    plain = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    linked = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    _link_hit_and_hold(sf, "alice", linked)
+    tok = _login(client, "alice")
+    r = client.post("/requests/delete-imported", data={"csrf_token": tok})
+    assert r.status_code == 303
+    with sf() as s:
+        assert not {plain, linked} & set(s.scalars(select(AlbumRequest.id)))
+
+
+def test_discovery_dead_end_request_is_kept(client: TestClient, sf: sessionmaker[Session]) -> None:
+    dead = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    plain = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    with sf() as s, s.begin():
+        r = s.get(AlbumRequest, dead)
+        assert r
+        r.provisional = True
+        r.last_error = "1 of 2 wanted recordings not on this release"
+    tok = _login(client, "alice")
+    assert f"/requests/{dead}/delete" not in client.get("/requests").text
+    r = client.post(f"/requests/{dead}/delete", data={"csrf_token": tok})
+    assert r.status_code == 409 and "dead end" in r.text
+    assert client.post("/requests/delete-imported", data={"csrf_token": tok}).status_code == 303
+    with sf() as s:
+        assert set(s.scalars(select(AlbumRequest.id))) == {dead}
+        assert plain not in set(s.scalars(select(AlbumRequest.id)))
