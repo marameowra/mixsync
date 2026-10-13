@@ -27,7 +27,7 @@ browse_release_groups(artist_mbid) -> list[ReleaseGroupRef]                  # f
 ```
 
 ## Rules
-- Every call goes through `ratelimit.polite_client(...)`; MusicBrainz is at 1 req/s.
+- Every call goes through `ratelimit.PoliteClient(...)`; MusicBrainz is at 1 req/s.
 - Genres come from MusicBrainz's curated genres (`inc=genres`) on release groups, releases, and artists. Folksonomy `tags` are never used for paths ([library design](../../../docs/design/library.md#path-templates)).
 - Request only the `inc=` parameters actually needed. Big includes are slow for MusicBrainz too.
 - Always send `fmt=json`.

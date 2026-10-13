@@ -132,7 +132,7 @@ def err(code: int) -> httpx.Response:
 
 
 def user(make: Make, handler: Callable[[httpx.Request], httpx.Response]) -> NavidromeUser:
-    return NavidromeUser.for_user(make("navidrome", handler), "http://nd:4533", "ann", PASSWORD)
+    return NavidromeUser(make("navidrome", handler), "http://nd:4533", "ann", PASSWORD)
 
 
 async def test_starred_and_play_counts(make_client: Make) -> None:

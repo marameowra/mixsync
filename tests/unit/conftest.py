@@ -8,7 +8,7 @@ from mixsync.core.config import Settings
 from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
-from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.routes import auth as auth_routes
 
 
@@ -35,7 +35,7 @@ def make_client(
     settings: Settings, sessions: sessionmaker[Session]
 ) -> Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]:
     def make(service: str, handler: Callable[[httpx.Request], httpx.Response]) -> PoliteClient:
-        return polite_client(
+        return PoliteClient(
             service, settings, sessions, transport=httpx.MockTransport(handler), sleep=_no_sleep
         )
 

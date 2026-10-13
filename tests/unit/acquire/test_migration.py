@@ -220,7 +220,7 @@ async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
     def boom(*_a: Any) -> None:
         raise AssertionError("the source must not be released")
 
-    monkeypatch.setattr(rig.env.pipeline.importer, "release", boom)
+    monkeypatch.setattr(rig.env.pipeline.importer.fileops, "release", boom)
     mid = await rig.preflight()
     rig.confirm(mid)
     await rig.env.drain()

@@ -396,7 +396,7 @@ class Merger:
         if not restored:  # refuses, touching nothing, if the old path is taken
             fo.restore(trashed.dst, path, ubatch)
         if trash_new and new != path:
-            self._trash_new(ubatch, str(new))
+            fo.trash(str(new), ubatch)
 
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
@@ -410,6 +410,3 @@ class Merger:
             with self.sessions.begin() as s:
                 s.add(Track(**{**old, "imported_at": datetime.fromisoformat(old["imported_at"])}))
         self._commit_op(plan_id, i, op, apply, done=False)
-
-    def _trash_new(self, ubatch: str, new: str) -> None:
-        self.fileops.trash(new, ubatch)

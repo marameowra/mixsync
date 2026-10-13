@@ -20,7 +20,7 @@ from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
-from mixsync.ratelimit.client import PoliteClient, polite_client
+from mixsync.ratelimit.client import PoliteClient
 from mixsync.watchlist import follows
 from mixsync.watchlist.poller import (
     Watcher,
@@ -629,7 +629,7 @@ def test_mb_routes_work_on_a_real_sqlite_file_with_the_db_bucket(env: Env, web: 
             200, json={"artists": [{"id": ARTIST, "name": "Real Name", "disambiguation": ""}]}
         )
 
-    client = polite_client(
+    client = PoliteClient(
         "musicbrainz", env.settings, env.sessions, transport=httpx.MockTransport(handler)
     )
     web.app.state.watch = MusicBrainzProvider(client)  # type: ignore[attr-defined]

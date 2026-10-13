@@ -109,9 +109,3 @@ class PoliteClient:
         if reset := _reset_in(response):
             return reset
         return timedelta(seconds=min(_BACKOFF_CAP, 2.0**attempt) * random.uniform(0.5, 1.0))
-
-
-def polite_client(
-    service: str, settings: Settings, sessions: sessionmaker[Session], **kwargs: Any
-) -> PoliteClient:
-    return PoliteClient(service, settings, sessions, **kwargs)

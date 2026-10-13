@@ -13,7 +13,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
 from mixsync.db.models.infra import RateBucket
 from mixsync.ratelimit.bucket import Bucket
-from mixsync.ratelimit.client import _BACKOFF_CAP, PoliteClient, polite_client
+from mixsync.ratelimit.client import _BACKOFF_CAP, PoliteClient
 from mixsync.ratelimit.services import ServiceLimits, limits
 
 
@@ -47,7 +47,7 @@ def client(
     clock: FakeClock,
     handler: httpx.MockTransport,
 ) -> PoliteClient:
-    return polite_client(
+    return PoliteClient(
         service, settings, sessions, clock=clock, transport=handler, sleep=clock.sleep
     )
 
