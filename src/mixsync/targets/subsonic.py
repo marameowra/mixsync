@@ -1,6 +1,5 @@
 import hashlib
 import secrets
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -27,12 +26,6 @@ class NotAuthorizedError(PermanentError):
 def _dig(body: dict[str, Any], key: str) -> dict[str, Any]:
     value: dict[str, Any] = body.get(key) or {}
     return value
-
-
-@dataclass(frozen=True)
-class ScanStatus:
-    scanning: bool
-    count: int | None
 
 
 class SubsonicClient:
@@ -98,10 +91,6 @@ class SubsonicClient:
     async def start_scan(self, full: bool = False) -> None:
         await self._call("startScan", fullScan="true" if full else "false")
 
-    async def get_scan_status(self) -> ScanStatus:
-        status: dict[str, Any] = (await self._call("getScanStatus")).get("scanStatus") or {}
-        return ScanStatus(bool(status.get("scanning")), status.get("count"))
-
     async def create_playlist(
         self, name: str, song_ids: list[str], playlist_id: str | None = None
     ) -> str:
@@ -116,9 +105,6 @@ class SubsonicClient:
 
     async def get_starred2(self) -> dict[str, Any]:
         return _dig(await self._call("getStarred2"), "starred2")
-
-    async def get_playlist(self, playlist_id: str) -> dict[str, Any]:
-        return _dig(await self._call("getPlaylist", id=playlist_id), "playlist")
 
     async def get_song(self, song_id: str) -> dict[str, Any]:
         return _dig(await self._call("getSong", id=song_id), "song")

@@ -53,9 +53,7 @@ class RetLib(FakeLib):
         self.during_stars()
         return self.stars
 
-    async def play_counts(
-        self, song_ids: list[str], playlist_id: str | None = None
-    ) -> dict[str, int]:
+    async def play_counts(self, song_ids: list[str]) -> dict[str, int]:
         self.calls.append("plays")
         return {i: self.plays.get(i, 0) for i in song_ids if i not in self.gone}
 

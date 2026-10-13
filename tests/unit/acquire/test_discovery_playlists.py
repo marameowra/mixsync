@@ -90,9 +90,7 @@ class FakeLib:
     async def starred_song_ids(self) -> set[str]:
         return set()
 
-    async def play_counts(
-        self, song_ids: list[str], playlist_id: str | None = None
-    ) -> dict[str, int]:
+    async def play_counts(self, song_ids: list[str]) -> dict[str, int]:
         return {}
 
     async def music_folder_id(self, name: str) -> str | None:
