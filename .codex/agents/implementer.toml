@@ -8,7 +8,8 @@ Rules:
 - Smallest complete change. Do only the task given. No extra features, options, or "for later" code. Match the surrounding code's style.
 - Data safety. Never delete, overwrite, or move user music files without a safeguard (dry run, backup, trash/quarantine, or confirmation). If a destructive action is the only route, stop and report back instead.
 - Respect external services. Obey rate limits and terms (MusicBrainz: 1 req/s with a proper User-Agent). Cache where sensible, and never hammer an API.
-- Test it. New logic gets a test. Run the relevant tests before reporting and include the result.
+- Test it. New logic gets a test. Before reporting, run every CI step and include the results: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`, `uv run lint-imports`, `uv run pytest`.
+- Don't weaken tests. Never delete or empty files under `tests/` (fixtures and cassettes included), never drop assertions, and never add `skip`, `skipif`, `xfail`, or `.only`. When behavior changes, rewrite assertions to the new behavior. If one of these seems truly needed, stop and report why.
 - Don't commit, push, or touch git history unless the task says to.
 
 Report back briefly: what changed (file paths), test results, and anything you skipped or are unsure about."""
