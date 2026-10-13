@@ -465,6 +465,38 @@ async def test_partial_match_keeps_files_and_the_chain_goes_on(env: Env) -> None
     assert second.id != plan.id and [a for a, _ in rig.queued()] == [2]
 
 
+async def test_a_library_row_at_the_target_path_gets_the_next_free_name(env: Env) -> None:
+    rig = _rig(env)
+    rig.seed(None)  # unverified files sit under a different (no-year) folder
+    _verified(env, "Alpha Band/Alpha Album (2020)/01-01 Song One.mp3", "unrelated-recording")
+    with env.sessions.begin() as s:
+        enqueue_recheck(s, env.clock.now(), (*KEY[:2], ""), None)
+    await env.step()
+    (plan,) = rig.plans()
+    assert [o["new_path"] for o in plan.ops] == [
+        "Alpha Band/Alpha Album (2020)/01-01 Song One (2).mp3",
+        "Alpha Band/Alpha Album (2020)/01-02 Song Two.mp3",
+    ]
+
+
+def test_statuses_read_each_albums_own_checks(env: Env) -> None:
+    other = ("Beta Band", "Beta Album", "2021")
+    now = env.clock.now()
+    with env.sessions.begin() as s:
+        for key, uid in ((KEY, None), (KEY, 1), (other, None)):
+            enqueue_recheck(s, now, key, uid, chain_key=f"{key[0]}-{uid}")
+        s.flush()
+        a_bg, a_user, b_bg = s.scalars(select(Job).order_by(Job.id))
+        a_user.status, b_bg.status = JobState.SUCCEEDED, JobState.FAILED
+        a_bg.run_after = now + WEEK
+    with env.sessions() as s:
+        out = statuses(s, {KEY: [], other: [], ("Gamma", "G", ""): []})
+    assert out[KEY].next == (now + WEEK).replace(tzinfo=None) and out[KEY].last is not None
+    assert out[other].next is None and out[other].last is None  # its job failed
+    assert out[("Gamma", "G", "")].last is None
+    assert out[("Gamma", "G", "")].next is None
+
+
 async def test_nothing_to_promote_makes_no_plan(env: Env) -> None:
     rig = _rig(env)
     rig.seed()

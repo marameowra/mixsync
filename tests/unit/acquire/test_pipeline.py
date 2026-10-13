@@ -24,7 +24,7 @@ from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Request
+from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
@@ -554,6 +554,34 @@ def test_new_request_form(env: Env, web: TestClient) -> None:
     r = web.post("/requests", data={"csrf_token": tok, "release": url})
     assert r.status_code == 403 and web.get("/requests").status_code == 403
     assert len(env.jobs(JobKind.SEARCH)) == 1
+
+
+def test_request_list_offers_delete_by_each_requests_own_jobs(env: Env, web: TestClient) -> None:
+    cases = [  # (status, job state, deletable)
+        ("failed", JobState.QUEUED, False),
+        ("failed", JobState.SUCCEEDED, True),
+        ("no_results", JobState.QUEUED, True),  # the repeat search goes with it
+        ("no_results", JobState.RUNNING, False),
+        ("downloading", None, False),
+        ("imported", None, True),
+    ]
+    now = env.clock.now()
+    with env.sessions.begin() as s:
+        for n, (status, _, _) in enumerate(cases):
+            s.add(Request(user_id=env.user_id, release_mbid=f"r{n}", status=status))
+        s.flush()
+        ids = list(s.scalars(select(Request.id).order_by(Request.id)))
+        for rid_, (_, state, _) in zip(ids, cases, strict=True):
+            if state:
+                enqueue_in(s, now, JobKind.SEARCH, {"request_id": rid_})
+        s.flush()
+        jobs = list(s.scalars(select(Job).order_by(Job.id)))
+        for job, state in zip(jobs, [c[1] for c in cases if c[1]], strict=True):
+            job.status = state
+    login(web, "alice")
+    page = web.get("/requests").text
+    for rid_, (_, _, ok) in zip(ids, cases, strict=True):
+        assert (f"/requests/{rid_}/delete" in page) is ok
 
 
 def release_tags(env: Env, rel: str) -> dict[str, list[str]]:
