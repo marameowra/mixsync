@@ -53,6 +53,12 @@ def test_missing_year_leaves_no_stray_separators_in_custom_templates() -> None:
     assert _year_none("{albumartist}/{year}/{album}/" + tail) == "A/B/02 T.flac"
 
 
+def test_missing_year_collapses_the_separators_it_leaves_behind() -> None:
+    tail = "/{track:02d} {title}.{ext}"
+    assert _year_none("{album} - {year} - {genre}" + tail) == "B - Unknown Genre/02 T.flac"
+    assert _year_none("{year} - {album}" + tail) == "B/02 T.flac"
+
+
 def test_missing_year_keeps_album_characters_and_handles_format_specs() -> None:
     tail = "{track:02d} {title}.{ext}"
     t = "{albumartist}/{year} - {album}/" + tail

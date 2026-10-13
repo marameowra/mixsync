@@ -8,6 +8,7 @@ _RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])$")
 _EXT = ".{ext}"
 _YEAR = re.compile(r"\{year[^}]*\}")
 _EMPTY = re.compile(r"\(\s*\)|\[\s*\]")
+_SEPARATORS = re.compile(r"[ -]{2,}")
 
 
 def sanitize(s: str, max_bytes: int = SEGMENT_MAX_BYTES) -> str:
@@ -44,7 +45,8 @@ def render(
     for i, part in enumerate(parts):
         end = suffix if i == len(parts) - 1 else ""
         if year is None and "{year" in part:  # no stray "()", "[]" or " -" where the year was
-            part = _EMPTY.sub("", _YEAR.sub("", part)).strip(" -_")
+            part = _EMPTY.sub("", _YEAR.sub("", part))
+            part = _SEPARATORS.sub(lambda m: " - " if "-" in m[0] else " ", part).strip(" -_")
             if not part and not end:
                 continue
         text = part.format(
