@@ -82,11 +82,13 @@ class FakeMetadata:
         self.browsed: list[str] = []
         self.group: dict[str, ReleaseRef] = {}  # by release id; overrides the catalog's refs
 
-    async def get_release(self, mbid: str) -> AlbumInfo:
+    async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         self.calls.append(mbid)
         return CATALOG[mbid]
 
-    async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
+    async def search_releases(
+        self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
+    ) -> list[ReleaseRef]:
         return []
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:

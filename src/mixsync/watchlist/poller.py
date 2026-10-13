@@ -279,7 +279,7 @@ class Watcher:
             kind, mbid, last = e.kind, e.mbid, e.last_checked_at
         # The first check looks back a year, which is enough to tell how active the entity is.
         since = ((last - OVERLAP) if last else (now - FIRST_WINDOW)).date().isoformat()
-        hits = await self.watch.new_release_groups(kind, mbid, since)
+        hits = await self.watch.new_release_groups(kind, mbid, since, fresh=True)
         now = self.clock.now()
         with self.sessions.begin() as s:
             e = s.get(WatchedEntity, eid)

@@ -48,7 +48,10 @@ class Meta(FakeMetadata):
         self.searches: list[tuple[str, str, int]] = []
         self.fail: Exception | None = None
 
-    async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
+    async def search_releases(
+        self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
+    ) -> list[ReleaseRef]:
+        assert fresh, "a re-check must not be answered from the cache"
         self.searches.append((artist, album, limit))
         if self.fail:
             raise self.fail
