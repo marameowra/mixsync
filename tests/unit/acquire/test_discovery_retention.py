@@ -1,12 +1,15 @@
 """Discovery retention: keep (star, plays, manual), promote, expire, trash, push."""
 
+import asyncio
 import shutil
 from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
+from mixsync import worker
 from mixsync.acquire.requests import hold_imports
 from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, TransientError
@@ -301,6 +304,61 @@ async def test_start_chains_queues_one_run_per_user(env: Env) -> None:
     r.ret.start_chains()
     r.ret.start_chains()
     assert [j.payload for j in env.jobs(JobKind.DISCOVERY_RETAIN)] == [{"user_id": env.user_id}]
+
+
+async def test_startup_recovery_creates_default_playlist_and_retention_chain(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = RRig(env)
+    r.link(env.user_id)
+    settings = env.settings.model_copy(
+        update={
+            "config_dir": str(env.data_dir.parent / "config"),
+            "data_dir": str(env.data_dir),
+            "downloads_dir": str(env.downloads),
+        }
+    )
+    monkeypatch.setattr(worker, "Settings", lambda: settings)
+    start = Discovery.start_chains
+    attempts = 0
+
+    def fail_once(discovery: Discovery) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OperationalError("startup", {}, RuntimeError("database is locked"))
+        start(discovery)
+
+    monkeypatch.setattr(Discovery, "start_chains", fail_once)
+    _, _, _, startup = worker._new_queue()
+    stop = asyncio.Event()
+    claims = 0
+
+    class Queue:
+        def reap(self) -> None:
+            pass
+
+        def claim(self, *_a: object) -> None:
+            nonlocal claims
+            claims += 1
+            if claims == 3:
+                stop.set()
+
+    await worker.run_worker(
+        Queue(),  # type: ignore[arg-type] -- idle queue leaves startup jobs available to inspect
+        "w",
+        stop,
+        {},
+        poll=0,
+        startup=startup,
+    )
+    assert attempts == 2
+    assert claims == 3
+    with env.sessions() as s:
+        playlist = s.scalars(select(DiscoveryPlaylist)).one()
+        assert playlist.user_id == env.user_id
+    assert [j.payload for j in env.jobs(JobKind.DISCOVERY_RETAIN)] == [{"user_id": env.user_id}]
+    assert [j.payload for j in env.jobs(JobKind.DISCOVERY_BUILD)] == [{"playlist_id": playlist.id}]
 
 
 async def test_a_failed_promote_stays_kept_and_the_file_stays(env: Env) -> None:

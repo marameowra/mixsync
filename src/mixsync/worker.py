@@ -290,12 +290,15 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         | retention.handlers()
     )
 
+    def discovery_startup() -> None:
+        discovery.start_chains()  # creates the default playlists retention must scan
+        retention.start_chains()
+
     startup = (
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
-        discovery.start_chains,
-        retention.start_chains,
+        discovery_startup,
     )
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
