@@ -10,6 +10,7 @@ from sqlalchemy import CursorResult, select, update
 
 from mixsync.acquire import migration as mig
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import aware
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.work import Job, Migration
@@ -112,7 +113,7 @@ def _window(start_s: str, end_s: str, tz: tzinfo) -> tuple[datetime | None, date
 
 def _local_day(t: datetime, tz: tzinfo) -> str:
     """SQLite hands back naive UTC; Postgres an aware time, maybe in another zone."""
-    return (t if t.tzinfo else t.replace(tzinfo=UTC)).astimezone(tz).date().isoformat()
+    return aware(t).astimezone(tz).date().isoformat()
 
 
 def _zone(request: Request) -> ZoneInfo:

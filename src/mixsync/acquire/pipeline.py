@@ -34,7 +34,7 @@ from mixsync.acquire.requests import (
     retry_search,
     search_priority,
 )
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
@@ -129,7 +129,7 @@ class Pipeline:
             req = self._request(s, job)
             if req.status not in ("searching", "no_results") or req.migration_id is not None:
                 return  # superseded: another job already moved this request on
-            wait = req.next_search_at and _aware(req.next_search_at, now)
+            wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
             busy = s.scalar(
                 select(func.count(Job.id)).where(
@@ -815,11 +815,6 @@ def _stale(s: Session, job: JobRecord, req: Request) -> bool:
         .limit(1)
     )
     return req.status != "verifying" or newer is not None
-
-
-def _aware(t: datetime, now: datetime) -> datetime:
-    """SQLite hands back naive datetimes; they were stored in UTC."""
-    return t if t.tzinfo else t.replace(tzinfo=now.tzinfo)
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
