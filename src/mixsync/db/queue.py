@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import Connection, Engine, Row, Table, exists, select, update
-from sqlalchemy.exc import IntegrityError, NoResultFound
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from mixsync.core.clock import Clock
@@ -66,45 +66,6 @@ class JobQueue:
     def get(self, job_id: int) -> JobRecord:
         with self._engine.connect() as c:
             return _record(c.execute(select(_J).where(_J.c.id == job_id)).one())
-
-    def enqueue(
-        self,
-        kind: JobKind,
-        payload: dict[str, Any] | None = None,
-        *,
-        priority: int = 0,
-        max_attempts: int = 5,
-        run_after: datetime | None = None,
-        idempotency_key: str | None = None,
-        parent_job_id: int | None = None,
-    ) -> JobRecord:
-        """Insert a job; with an existing idempotency_key, return the existing job instead."""
-        now = self._clock.now()
-        try:
-            with self._engine.begin() as c:
-                row = c.execute(
-                    _J.insert()
-                    .values(
-                        kind=kind,
-                        payload=payload or {},
-                        status=JobState.QUEUED,
-                        priority=priority,
-                        attempts=0,
-                        max_attempts=max_attempts,
-                        run_after=run_after or now,
-                        idempotency_key=idempotency_key,
-                        parent_job_id=parent_job_id,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                    .returning(*_J.c)
-                ).one()
-        except IntegrityError:
-            if idempotency_key is None:
-                raise
-            with self._engine.connect() as c:
-                row = c.execute(select(_J).where(_J.c.idempotency_key == idempotency_key)).one()
-        return _record(row)
 
     def claim(self, worker: str, lease: timedelta = DEFAULT_LEASE) -> JobRecord | None:
         """Lease the next due queued job. Expired leases are returned to queued by reap()."""
