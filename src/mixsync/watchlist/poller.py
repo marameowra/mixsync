@@ -60,13 +60,12 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
     promoted = select(ProvisionalTrack.promoted_path).where(
         ProvisionalTrack.promoted_path.is_not(None)
     )
-    return set(
-        s.scalars(
-            select(Track.release_group_mbid).where(
-                Track.release_group_mbid.in_(group_ids), Track.path.not_in(promoted)
-            )
+    rows = s.scalars(
+        select(Track.release_group_mbid).where(
+            Track.release_group_mbid.in_(group_ids), Track.path.not_in(promoted)
         )
-    ) - {None}
+    )
+    return {g for g in rows if g}
 
 
 def is_owned(s: Session, group_id: str) -> bool:

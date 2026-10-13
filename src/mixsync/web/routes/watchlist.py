@@ -12,10 +12,15 @@ from sqlalchemy.orm import Session
 from mixsync.core.capabilities import Capability
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import is_owned, is_requested, queue_picks, request_hit
+from mixsync.watchlist.poller import (
+    is_owned,
+    is_requested,
+    owned_groups,
+    queue_picks,
+    request_hit,
+)
 from mixsync.web.deps import Db, Watch, require
 from mixsync.web.templating import templates
 

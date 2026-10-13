@@ -169,7 +169,7 @@ class Discovery:
         user_id: int,
         need: frozenset[str] = frozenset({"listenbrainz", "navidrome"}),
     ) -> tuple[dict[str, tuple[str, str]] | None, str]:
-        """(service -> (external username, secret), "") when the `need` links work, else (None, why)."""
+        """(service -> (external username, secret), "") when `need` links work, else (None, why)."""
         out: dict[str, tuple[str, str]] = {}
         relink: list[str] = []
         for link in s.scalars(select(UserLink).where(UserLink.user_id == user_id)):
