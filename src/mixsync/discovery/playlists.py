@@ -37,6 +37,22 @@ LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
 PUSH_ERRORS = ("Navidrome: ", "Navidrome needs relinking", "the '")
 PARTIAL_RELEASE = "not on this release"  # an imported request's last_error (pipeline)
 NOT_ON_RELEASE = "none of the wanted recordings"  # a failed request's last_error (pipeline)
+
+
+def is_dead_end(r: Request) -> bool:
+    """A provisional request whose release cannot give the wanted recording: asking again finds
+    the same, so the row itself is the record that stops a rebuild re-requesting it."""
+    err = r.last_error or ""
+    return (
+        r.provisional
+        and r.status in ("failed", "imported")
+        and (
+            err.startswith(NOT_ON_RELEASE)
+            or (r.status == "imported" and err.endswith(PARTIAL_RELEASE))
+        )
+    )
+
+
 DONE = ("imported", "owned", "failed", "skipped")  # requests that will not bring a file
 LibraryFor = Callable[[str, str], UserLibrary]  # (Navidrome username, password)
 
@@ -259,8 +275,7 @@ class Discovery:
                         Request.release_mbid.in_(releases),
                     )
                 )
-                if (r.last_error or "").startswith(NOT_ON_RELEASE)
-                or (r.status == "imported" and (r.last_error or "").endswith(PARTIAL_RELEASE))
+                if is_dead_end(r)
                 for m in r.recording_mbids
                 if r.status == "failed" or m not in ever
             }

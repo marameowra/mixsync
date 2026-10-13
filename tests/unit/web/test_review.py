@@ -699,3 +699,21 @@ def test_clear_imported_with_hit_and_hold_references(
     assert r.status_code == 303
     with sf() as s:
         assert not {plain, linked} & set(s.scalars(select(AlbumRequest.id)))
+
+
+def test_discovery_dead_end_request_is_kept(client: TestClient, sf: sessionmaker[Session]) -> None:
+    dead = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    plain = _req(sf, "alice", "imported", JobState.SUCCEEDED)
+    with sf() as s, s.begin():
+        r = s.get(AlbumRequest, dead)
+        assert r
+        r.provisional = True
+        r.last_error = "1 of 2 wanted recordings not on this release"
+    tok = _login(client, "alice")
+    assert f"/requests/{dead}/delete" not in client.get("/requests").text
+    r = client.post(f"/requests/{dead}/delete", data={"csrf_token": tok})
+    assert r.status_code == 409 and "dead end" in r.text
+    assert client.post("/requests/delete-imported", data={"csrf_token": tok}).status_code == 303
+    with sf() as s:
+        assert set(s.scalars(select(AlbumRequest.id))) == {dead}
+        assert plain not in set(s.scalars(select(AlbumRequest.id)))
