@@ -2,7 +2,7 @@ import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -33,20 +33,34 @@ def get_db(request: Request) -> Iterator[Session]:
 Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
+def fileops_for(state: Any) -> FileOps:
+    if getattr(state, "fileops", None) is None:
+        st, clock = state.settings, SystemClock()
+        state.fileops = FileOps(
+            Path(st.data_dir),
+            Path(st.downloads_dir),
+            SqlJournal(state.session_factory, clock),
+            clock,
+        )
+    fileops: FileOps = state.fileops
+    return fileops
+
+
+def get_fileops(request: Request) -> FileOps:
+    return fileops_for(request.app.state)
+
+
 def get_merger(request: Request) -> Merger:
     """Built on first use. MusicBrainz goes through the same DB-backed bucket and cache as the
     worker's, so the rate limit holds across both processes. No FileOps.recover() here."""
     state = request.app.state
     if getattr(state, "merger", None) is None:
         st, sessions, clock = state.settings, state.session_factory, SystemClock()
-        fileops = FileOps(
-            Path(st.data_dir), Path(st.downloads_dir), SqlJournal(sessions, clock), clock
-        )
         state.merger = Merger(
             sessions,
             clock,
             MusicBrainzProvider(PoliteClient("musicbrainz", st, sessions)),
-            fileops,
+            get_fileops(request),
             st.path_template,
             tuple(st.canonical_media),
             tuple(st.canonical_countries),
@@ -57,6 +71,7 @@ def get_merger(request: Request) -> Merger:
 
 
 Merge = Annotated[Merger, Depends(get_merger)]
+Files = Annotated[FileOps, Depends(get_fileops)]
 
 
 def get_watch(request: Request) -> ReleaseWatch:

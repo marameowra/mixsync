@@ -27,6 +27,7 @@ from mixsync.db.secretbox import load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.retention import Retention
+from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.purge import TrashPurger
@@ -168,6 +169,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         Path(settings.data_dir), Path(settings.downloads_dir), SqlJournal(sessions, clock), clock
     )
     fileops.recover()
+    tag_undo.recover(sessions, fileops)
     queue = JobQueue(engine, clock)
     merger = Merger(
         sessions,

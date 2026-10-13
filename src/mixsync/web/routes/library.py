@@ -1,3 +1,5 @@
+import hashlib
+import threading
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -14,11 +16,14 @@ from mixsync.acquire import recheck
 from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import SystemClock
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Plan
+from mixsync.db.models.library import Plan, Track
+from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.undo import undoable
-from mixsync.library import fragmentation, tags
+from mixsync.library import fragmentation, tag_undo, tags
+from mixsync.library.fileops import FileOps
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
     SEED_URL,
@@ -28,7 +33,7 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Merge, require
+from mixsync.web.deps import Db, Files, Merge, require
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/library")
@@ -278,3 +283,93 @@ def undo(
     plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
     return _act(request, plan_id, "undo", db, count, enqueue_undo)
+
+
+_tag_lock = threading.Lock()  # one restore at a time: a double click must not run twice
+
+
+def _sha256(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def _tag_target(
+    db: Session, fo: FileOps, track_id: int, snapshot_id: int | None = None
+) -> tuple[Track, TagSnapshot, tags.Snapshot]:
+    """The track, the snapshot to restore and the file's current tags. The snapshot must come
+    from the import that produced the file now at the path (its journaled hash matches the
+    file), so a different recording that once had this path, or a file changed since, has none."""
+    track = db.get(Track, track_id)
+    if track is None:
+        raise HTTPException(404, "no such track")
+    if not fo.has(track.path):
+        raise HTTPException(409, "the file is missing from the library")
+    for plan in db.scalars(select(Plan).where(Plan.status.in_(("draft", "running", "undoing")))):
+        if plan.status == "draft" and not live_job(db, plan.id):
+            continue  # an unconfirmed preview changes nothing
+        for op in plan.ops:
+            if track.id == op.get("track_id") or track.path in (
+                op.get("old", {}).get("path"),
+                op.get("new_path"),
+            ):
+                raise HTTPException(409, f"plan {plan.id} is changing this track")
+    path = fo.library / track.path
+    q = (
+        select(TagSnapshot)
+        .join(FileOp, FileOp.id == TagSnapshot.op_id)
+        .where(
+            TagSnapshot.file_path == track.path,
+            FileOp.root == "library",
+            FileOp.status == "done",
+            FileOp.dst_hash == _sha256(path),
+        )
+        .order_by(TagSnapshot.id.desc())
+    )
+    snap = db.scalars(q if snapshot_id is None else q.where(TagSnapshot.id == snapshot_id)).first()
+    if snap is None:
+        raise HTTPException(409, "no undo available for this file")
+    try:
+        current = tags.read_all(path)
+    except Exception:
+        raise HTTPException(409, "the file's tags cannot be read") from None
+    if current["format"] != snap.tags["format"]:
+        raise HTTPException(409, "the snapshot is of a different file format")
+    return track, snap, current
+
+
+@router.get("/tracks/{track_id}/tags")
+def track_tags(track_id: int, request: Request, user: User, db: Db, fo: Files) -> HTMLResponse:
+    track, snap, current = _tag_target(db, fo, track_id)
+    ctx = {
+        "user": user,
+        "track": track,
+        "snapshot": snap,
+        "changes": tags.changes(current, snap.tags),
+    }
+    return templates.TemplateResponse(request, "pages/track_tags.html", ctx)
+
+
+@router.post("/tracks/{track_id}/tags")
+def restore_track_tags(
+    track_id: int,
+    request: Request,
+    user: User,
+    db: Db,
+    fo: Files,
+    snapshot_id: Annotated[int, Form()],
+) -> RedirectResponse:
+    with _tag_lock:
+        track, snap, current = _tag_target(db, fo, track_id, snapshot_id)
+        if not tags.changes(current, snap.tags):
+            raise HTTPException(409, "the file already has these tags")
+        rel, old, tid = track.path, snap.tags, track.id
+        db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
+        try:
+            tag_undo.restore_tags(
+                fo, request.app.state.session_factory, SystemClock(), tid, rel, old
+            )
+        except FileExistsError:
+            raise HTTPException(
+                409, "the file changed while restoring; reload and try again"
+            ) from None
+    return RedirectResponse(f"/library/tracks/{tid}/tags", status_code=303)
