@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
@@ -106,18 +107,28 @@ def _hit(
     )
 
 
+def _fresh(fresh: bool) -> dict[str, Any]:
+    """Request kwargs that skip the response cache (a re-check or poll wants today's answer)."""
+    return {"headers": {"Cache-Control": "no-cache"}} if fresh else {}
+
+
 class MusicBrainzProvider:
     def __init__(self, client: PoliteClient, base_url: str = "https://musicbrainz.org") -> None:
         self._client = client
         self._base = base_url.rstrip("/") + "/ws/2"
 
-    async def get_release(self, mbid: str) -> AlbumInfo:
+    async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         data = await get_json(
-            self._client, f"{self._base}/release/{mbid}", {"inc": _INC, "fmt": "json"}
+            self._client,
+            f"{self._base}/release/{mbid}",
+            {"inc": _INC, "fmt": "json"},
+            **_fresh(fresh),
         )
         return _album(MbRelease.model_validate(data))
 
-    async def search_releases(self, artist: str, album: str, limit: int = 10) -> list[ReleaseRef]:
+    async def search_releases(
+        self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
+    ) -> list[ReleaseRef]:
         terms = [f"{k}:{_quote(v)}" for k, v in (("release", album), ("artist", artist)) if v]
         if not terms:  # an empty query is no question
             return []
@@ -129,6 +140,7 @@ class MusicBrainzProvider:
                 "limit": limit,
                 "fmt": "json",
             },
+            **_fresh(fresh),
         )
         return [
             ReleaseRef(r.id, r.title, _credit(r.artist_credit), r.date, r.country, r.track_count)
@@ -157,7 +169,7 @@ class MusicBrainzProvider:
         ]
 
     async def new_release_groups(
-        self, kind: str, mbid: str, since: str | None
+        self, kind: str, mbid: str, since: str | None, *, fresh: bool = False
     ) -> list[ReleaseGroupHit]:
         """One search request. `mbid` must be a UUID (the caller parses it). An artist is a
         release-group search on `firstreleasedate`; a label a release search on `date`, mapped
@@ -169,6 +181,7 @@ class MusicBrainzProvider:
             self._client,
             f"{self._base}/{'release-group' if artist else 'release'}",
             {"query": query, "limit": WATCH_LIMIT, "fmt": "json"},
+            **_fresh(fresh),
         )
         by_group: dict[str, ReleaseGroupHit] = {}
         if artist:

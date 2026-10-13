@@ -20,7 +20,9 @@ from mixsync.db.undo import UNDOABLE_STATUSES, undoable
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 
+MONITOR_BATCH = 10_000
 INTERVAL = timedelta(days=1)
+MONITOR_KEEP = timedelta(days=7)  # finished download-monitor rows; nothing reads them again
 LIVE = (JobState.QUEUED, JobState.LEASED, JobState.RUNNING, JobState.RETRY_WAIT)
 Rng = Callable[[float, float], float]
 
@@ -88,6 +90,21 @@ class TrashPurger:
             keep.update(op.dst for op in tag_undo.unfinished(self.sessions, self.fileops))
             return keep
 
+    def _purge_monitor_rows(self) -> None:
+        """One row per 30 s per transfer; only their dedup key names them. In batches, each in
+        its own transaction, so the first purge after a long gap never holds the write lock long."""
+        old = select(Job.id).where(
+            Job.kind == JobKind.DOWNLOAD,
+            Job.status == JobState.SUCCEEDED,
+            Job.idempotency_key.like("monitor:%"),
+            Job.updated_at < self.clock.now() - MONITOR_KEEP,
+        )
+        while True:
+            with self.sessions.begin() as s:
+                gone = delete(Job).where(Job.id.in_(old.limit(MONITOR_BATCH))).returning(Job.id)
+                if not s.scalars(gone).all():
+                    return
+
     async def purge(self, job: JobRecord) -> None:
         try:
             await asyncio.to_thread(
@@ -99,6 +116,7 @@ class TrashPurger:
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
                 s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
+            self._purge_monitor_rows()
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:

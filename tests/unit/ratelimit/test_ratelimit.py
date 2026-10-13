@@ -235,6 +235,24 @@ async def test_cache_hit_and_expiry(
         assert n == 4
 
 
+async def test_no_cache_skips_the_read_but_refreshes_the_cache(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    n = 0
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        nonlocal n
+        n += 1
+        return httpx.Response(200, json={"n": n})
+
+    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        assert (await c.get("https://x.test/a")).json() == {"n": 1}
+        fresh = await c.get("https://x.test/a", headers={"Cache-Control": "no-cache"})
+        assert fresh.json() == {"n": 2}  # not answered from the cache
+        assert (await c.get("https://x.test/a")).json() == {"n": 2}  # and the cache now holds it
+        assert n == 2
+
+
 async def test_musicbrainz_search_ttl_is_shorter(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:

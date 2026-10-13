@@ -59,7 +59,7 @@ def get_merger(request: Request) -> Merger:
         state.merger = Merger(
             sessions,
             clock,
-            MusicBrainzProvider(PoliteClient("musicbrainz", st, sessions)),
+            MusicBrainzProvider(PoliteClient("musicbrainz", st, sessions), st.mb_base_url),
             get_fileops(request),
             st.path_template,
             tuple(st.canonical_media),
@@ -79,7 +79,8 @@ def get_watch(request: Request) -> ReleaseWatch:
     state = request.app.state
     if getattr(state, "watch", None) is None:
         state.watch = MusicBrainzProvider(
-            PoliteClient("musicbrainz", state.settings, state.session_factory)
+            PoliteClient("musicbrainz", state.settings, state.session_factory),
+            state.settings.mb_base_url,
         )
     watch: ReleaseWatch = state.watch
     return watch

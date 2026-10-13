@@ -20,6 +20,8 @@ from mixsync.acquire.pipeline import Handler, acoustid_id, file_track, likelies
 from mixsync.acquire.requests import (
     AlbumKey,
     Item,
+    add_recheck,
+    all_live_rechecks,
     enqueue_recheck,
     group,
     profile_for,
@@ -143,8 +145,10 @@ class Rechecker:
         """The best of the top releases, if it is confident enough to promote to. A file that
         cannot be fingerprinted or looked up is skipped (an outage retries the job); none left
         means no match."""
-        refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT)
-        albums = [await self.metadata.get_release(r.release_id) for r in refs[:MAX_RELEASES]]
+        refs = await self.metadata.search_releases(key[0], key[1], limit=SEARCH_LIMIT, fresh=True)
+        albums = [
+            await self.metadata.get_release(r.release_id, fresh=True) for r in refs[:MAX_RELEASES]
+        ]
         if not albums:
             return None
         files: dict[int, FileTrack] = {}  # by track id
@@ -231,6 +235,11 @@ class Rechecker:
     def start_chains(self) -> None:
         """On startup: every unverified album without a waiting background check gets one."""
         with self.sessions.begin() as s:
+            waiting = {  # read once: enqueue_recheck would reload every live job per album
+                tuple(j.payload["album"])
+                for j in all_live_rechecks(s)
+                if j.payload["user_id"] is None
+            }
             for key in group(read_unverified(s, self.fileops.library)):
-                if key[1]:
-                    enqueue_recheck(s, self.clock.now(), key, None)
+                if key[1] and key not in waiting:
+                    add_recheck(s, self.clock.now(), key, None)

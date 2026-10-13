@@ -50,8 +50,9 @@ class FakeWatch:
         self.no_releases = False
 
     async def new_release_groups(
-        self, kind: str, mbid: str, since: str | None
+        self, kind: str, mbid: str, since: str | None, *, fresh: bool = False
     ) -> list[ReleaseGroupHit]:
+        assert fresh, "a poll must not be answered from the cache"
         self.calls.append((kind, mbid, since))
         return self.hits
 
@@ -507,7 +508,7 @@ async def test_failed_check_still_queues_the_next(env: Env) -> None:
 
     class Down(FakeWatch):
         async def new_release_groups(
-            self, kind: str, mbid: str, since: str | None
+            self, kind: str, mbid: str, since: str | None, *, fresh: bool = False
         ) -> list[ReleaseGroupHit]:
             raise RuntimeError("MusicBrainz is down")
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, String, false
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.core.jobs import JobKind, JobState
@@ -18,6 +18,7 @@ def _enum(cls: type[StrEnum]) -> Enum:
 
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
+    __table_args__ = (Index("ix_jobs_status_run_after", "status", "run_after"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     kind: Mapped[JobKind] = mapped_column(_enum(JobKind))

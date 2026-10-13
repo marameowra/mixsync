@@ -138,3 +138,28 @@ async def test_browse_group_releases_one_request_and_mapping(make_client: Make) 
     assert (digital.date, digital.country) == ("2016-04-01", "XW")
     assert vinyl.formats == ('12" Vinyl', '12" Vinyl') and vinyl.track_count == 10
     assert vinyl.date is None  # MB's "" means unknown
+
+
+async def test_fresh_requests_skip_the_response_cache(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    body = (MB / "release_multi_disc.json").read_text()
+    provider = MusicBrainzProvider(make_client("musicbrainz", serve(body, seen)))
+    await provider.get_release(MULTI)
+    await provider.get_release(MULTI)
+    assert len(seen) == 1  # the second answer came from the cache
+    await provider.get_release(MULTI, fresh=True)
+    assert len(seen) == 2
+
+
+async def test_fresh_search_and_watch_skip_the_cache_read_but_refresh_it(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    provider = MusicBrainzProvider(
+        make_client("musicbrainz", serve('{"releases": [], "release-groups": []}', seen))
+    )
+    for _ in range(2):
+        await provider.search_releases("Band", "Album", fresh=True)
+        await provider.new_release_groups("artist", KID_A, "2020-01-01", fresh=True)
+    assert len(seen) == 4
+    await provider.search_releases("Band", "Album")  # answered by what the fresh call stored
+    await provider.search_releases("Band", "Album")
+    assert len(seen) == 4

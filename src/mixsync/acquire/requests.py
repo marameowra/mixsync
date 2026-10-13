@@ -185,12 +185,12 @@ def album_key(tg: dict[str, str]) -> AlbumKey:
     return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), year_of(tg)
 
 
+def all_live_rechecks(s: Session) -> list[Job]:
+    return list(s.scalars(select(Job).where(Job.kind == JobKind.RECHECK, Job.status.in_(LIVE))))
+
+
 def live_rechecks(s: Session, key: AlbumKey) -> list[Job]:
-    return [
-        j
-        for j in s.scalars(select(Job).where(Job.kind == JobKind.RECHECK, Job.status.in_(LIVE)))
-        if tuple(j.payload["album"]) == key
-    ]
+    return [j for j in all_live_rechecks(s) if tuple(j.payload["album"]) == key]
 
 
 def enqueue_recheck(
@@ -211,6 +211,19 @@ def enqueue_recheck(
         (j.payload["user_id"] is None) == background for j in live_rechecks(s, key)
     ):
         return
+    add_recheck(s, now, key, user_id, attempt=attempt, chain_key=chain_key)
+
+
+def add_recheck(
+    s: Session,
+    now: datetime,
+    key: AlbumKey,
+    user_id: int | None,
+    *,
+    attempt: int = 0,
+    chain_key: str | None = None,
+) -> None:
+    background = user_id is None
     delay = RECHECK_INTERVALS[min(attempt, len(RECHECK_INTERVALS) - 1)]
     enqueue_in(
         s,
