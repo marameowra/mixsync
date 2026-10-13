@@ -727,6 +727,29 @@ async def test_a_recording_missing_from_an_imported_release_is_not_asked_for_aga
     assert [(r.release_mbid, r.recording_mbids) for r in rs] == [(REL_A, [rec(3)])]
 
 
+async def test_only_dead_pairs_for_the_asked_releases_block_a_request(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    with rig.env.sessions.begin() as s:
+        for rel, mbids in ((REL_A, [rec(1)]), (REL_B, [rec(2), rec(3)])):
+            s.add(
+                Request(
+                    user_id=rig.env.user_id,
+                    release_mbid=rel,
+                    provisional=True,
+                    recording_mbids=mbids,
+                    status="failed",
+                    last_error="none of the wanted recordings are on this release",
+                )
+            )
+    # (REL_A, rec1) and (REL_B, rec2) are dead; the same recordings on another release are not
+    rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(3, REL_A), ref(2, REL_B)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    rs = requests(rig.env)[2:]
+    assert [(r.release_mbid, r.recording_mbids) for r in rs] == [(REL_A, [rec(2), rec(3)])]
+
+
 async def test_a_good_push_keeps_a_build_error(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     pid = rig.playlist()

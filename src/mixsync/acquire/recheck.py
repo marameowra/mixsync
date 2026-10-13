@@ -62,11 +62,19 @@ def _has(plan: Plan, ids: set[int]) -> bool:
 
 
 def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, Status]:
-    jobs = list(s.scalars(select(Job).where(Job.kind == JobKind.RECHECK)))
+    # The album sits in a JSON payload with no portable equality (Postgres json has none), so
+    # filter by status in SQL and group by album once here.
+    by_album: dict[AlbumKey, list[Job]] = {}
+    for j in s.scalars(
+        select(Job).where(
+            Job.kind == JobKind.RECHECK, Job.status.in_((JobState.SUCCEEDED, JobState.QUEUED))
+        )
+    ):
+        by_album.setdefault(tuple(j.payload["album"]), []).append(j)
     drafts = promote_plans(s, "draft", "failed")  # a failed one still offers Resume / Undo
     out: dict[AlbumKey, Status] = {}
     for key, items in albums.items():
-        mine = [j for j in jobs if tuple(j.payload["album"]) == key]
+        mine = by_album.get(key, [])
         done = [j.updated_at for j in mine if j.status is JobState.SUCCEEDED]
         due = [
             j.run_after for j in mine if j.status is JobState.QUEUED and not j.payload["user_id"]
@@ -172,11 +180,16 @@ class Rechecker:
             return False  # a plan for this album is confirmed or running: leave it be
         pairs, _, _ = assign_tracks(list(files.values()), album.tracks)
         paired = {id(f): t for f, t in pairs}
-        in_db, taken = set(s.scalars(select(Track.path))), set[str]()
+        taken = set[str]()
+
+        def in_db(path: str) -> bool:
+            return s.scalar(select(Track.id).where(Track.path == path).limit(1)) is not None
+
         owned = set(
             s.scalars(
                 select(Track.recording_mbid).where(
-                    Track.status == "verified", Track.recording_mbid.is_not(None)
+                    Track.status == "verified",
+                    Track.recording_mbid.in_([t.recording_id for t in album.tracks]),
                 )
             )
         )
@@ -194,7 +207,7 @@ class Rechecker:
                         render_path(self.template, ts, Path(row.path).suffix),
                         # the track's own path frees up: its original is trashed first
                         lambda r, own=row.path: (
-                            r in taken or (r != own and (r in in_db or self.fileops.has(r)))
+                            r in taken or (r != own and (in_db(r) or self.fileops.has(r)))
                         ),
                     )
                     taken.add(new)

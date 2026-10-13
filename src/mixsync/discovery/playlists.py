@@ -234,11 +234,29 @@ class Discovery:
                     )
                 )
             )
+        owned = in_library | provisional.keys()
+        todo = [c for c in cands if c.recording_mbid not in owned]
+        missing = [c.recording_mbid for c in todo if not c.release_mbid]
+        found = await self.history.recording_metadata(missing) if missing else {}
+        # (pick, release): those with no known release can't be asked for, so they take no slot
+        ready: list[tuple[RecordingRef, str]] = []
+        for c in todo:
+            release = c.release_mbid or (
+                found[c.recording_mbid].release_mbid if c.recording_mbid in found else None
+            )
+            if release:
+                ready.append((c, release))
+            else:
+                log.info("discovery: %s has no usable release; not requested", c.recording_mbid)
+        releases = {release for _, release in ready}
+        with self.sessions() as s:
             dead = {  # a release the recording is not on: asking again finds the same
                 (r.release_mbid, m)
                 for r in s.scalars(
                     select(Request).where(
-                        Request.provisional, Request.status.in_(("failed", "imported"))
+                        Request.provisional,
+                        Request.status.in_(("failed", "imported")),
+                        Request.release_mbid.in_(releases),
                     )
                 )
                 if (r.last_error or "").startswith(NOT_ON_RELEASE)
@@ -246,20 +264,12 @@ class Discovery:
                 for m in r.recording_mbids
                 if r.status == "failed" or m not in ever
             }
-        owned = in_library | provisional.keys()
-        todo = [c for c in cands if c.recording_mbid not in owned]
-        missing = [c.recording_mbid for c in todo if not c.release_mbid]
-        found = await self.history.recording_metadata(missing) if missing else {}
-        # (pick, release): those with no known release can't be asked for, so they take no slot
         asks: list[tuple[RecordingRef, str]] = []
-        for c in todo:
-            release = c.release_mbid or (
-                found[c.recording_mbid].release_mbid if c.recording_mbid in found else None
-            )
-            if release and (release, c.recording_mbid) not in dead:
-                asks.append((c, release))
-            else:
+        for c, release in ready:
+            if (release, c.recording_mbid) in dead:
                 log.info("discovery: %s has no usable release; not requested", c.recording_mbid)
+            else:
+                asks.append((c, release))
         asks = asks[: round(size * ratio)]
         fill = [c for c in cands if c.recording_mbid in owned][: size - len(asks)]
         picked = {c.recording_mbid for c in (*(c for c, _ in asks), *fill)}

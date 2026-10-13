@@ -575,6 +575,26 @@ def test_picker_queues_and_the_job_requests(env: Env, web: TestClient) -> None:
     assert watch.browsed == [rid(1)]
 
 
+def test_another_users_hits_neither_disable_the_picker_nor_count(env: Env, web: TestClient) -> None:
+    _, _, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        bob = create_user(s, "bob", "pw").id
+        f = s.get(Follow, fid)
+        assert f
+        theirs = Follow(user_id=bob, entity_id=f.entity_id, name="Bob's")
+        s.add(theirs)
+        s.flush()
+        for n, st in ((1, "picked"), (2, "requested"), (7, "requested")):
+            s.add(
+                FollowHit(
+                    follow_id=theirs.id, release_group_mbid=rid(n), release_mbid=rid(9), status=st
+                )
+            )
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert page.count('" disabled>') == 2  # still only the owned and alice's own requested group
+    assert "<td>1</td>" in web.get("/watchlist").text  # alice's one hit, not bob's three
+
+
 def test_pick_skips_a_group_already_requested_by_hand(env: Env, web: TestClient) -> None:
     watch, tok, fid = _catalog_world(env, web)
     with env.sessions.begin() as s:

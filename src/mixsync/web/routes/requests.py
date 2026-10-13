@@ -37,12 +37,22 @@ def _waiting(db: Session, ids: list[int], now: datetime) -> set[int]:
     return set(db.scalars(due))
 
 
-def _deletable(db: Session, req: AlbumRequest) -> bool:
+def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
+    rid = Job.payload["request_id"].as_integer()
+    states: dict[int, set[JobState]] = {}
+    for req_id, status in db.execute(
+        select(rid, Job.status).where(rid.in_(ids), Job.status.in_(_LIVE))
+    ):
+        states.setdefault(req_id, set()).add(status)
+    return states
+
+
+def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
     """A no_results request always has a queued repeat search, which delete removes with it."""
     if req.status in _BUSY:
         return False
-    blocking = (JobState.LEASED, JobState.RUNNING) if req.status == "no_results" else _LIVE
-    return db.scalar(select(Job.id).where(_of(req.id), Job.status.in_(blocking)).limit(1)) is None
+    blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(_LIVE)
+    return not (live.get(req.id, set()) & blocking)
 
 
 @router.get("")
@@ -52,7 +62,8 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
         .where(AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None))
         .order_by(AlbumRequest.id.desc())
     ).all()
-    deletable = {r.id for r in items if _deletable(db, r)}
+    live = _live_states(db, [r.id for r in items])
+    deletable = {r.id for r in items if _deletable(r, live)}
     queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
     return templates.TemplateResponse(
         request,
@@ -72,7 +83,7 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
     Raises HTTPException(409) when the request cannot be deleted; the caller rolls back."""
     if req.migration_id is not None:
         raise HTTPException(409, "a migration album cannot be deleted")
-    if not _deletable(db, req):
+    if not _deletable(req, _live_states(db, [req.id])):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.
     # Stage 1 decisions are never in /review and decisions.act rejects them.

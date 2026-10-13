@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from mixsync.core.capabilities import Capability
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db.auth import AuthUser
+from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.watchlist import follows
 from mixsync.watchlist.poller import is_owned, is_requested, queue_picks, request_hit
@@ -51,7 +52,9 @@ def follow_list(request: Request, user: User, db: Db) -> HTMLResponse:
     found = {
         fid: n
         for fid, n in db.execute(
-            select(FollowHit.follow_id, func.count(FollowHit.id)).group_by(FollowHit.follow_id)
+            select(FollowHit.follow_id, func.count(FollowHit.id))
+            .where(FollowHit.follow_id.in_([f.id for f, _ in rows]))
+            .group_by(FollowHit.follow_id)
         )
     }
     ctx = {"user": user, "rows": rows, "found": found}
@@ -169,18 +172,23 @@ _DONE = {"queued": "Queued {n} for request.", "refused": "Already owned or reque
 _TYPES = ("album", "ep", "single")  # then the rest, as "other"
 
 
-def _disabled(db: Session, user_id: int, h: ReleaseGroupHit) -> str:
-    """Why a release group cannot be picked, or ""."""
-    if is_owned(db, h.group_id):
-        return "owned"
-    status = db.scalar(
-        select(FollowHit.status).where(
-            FollowHit.release_group_mbid == h.group_id,
+def _disabled(db: Session, user_id: int, hits: list[ReleaseGroupHit]) -> dict[str, str]:
+    """Why each release group cannot be picked: group id -> reason; absent when it can be."""
+    ids = [h.group_id for h in hits]
+    owned = set(
+        db.scalars(select(Track.release_group_mbid).where(Track.release_group_mbid.in_(ids)))
+    )
+    status: dict[str, str] = {}
+    for gid, st in db.execute(
+        select(FollowHit.release_group_mbid, FollowHit.status).where(
+            FollowHit.release_group_mbid.in_(ids),
             FollowHit.status.in_(("requested", "skipped_requested", "picked")),
             FollowHit.follow_id.in_(select(Follow.id).where(Follow.user_id == user_id)),
         )
-    )
-    return {None: "", "picked": "queued"}.get(status, "already requested")
+    ):
+        status.setdefault(gid, st)
+    out = {g: "queued" if st == "picked" else "already requested" for g, st in status.items()}
+    return out | {g: "owned" for g in owned if g}
 
 
 def _artist_follow(db: Db, user: AuthUser, follow_id: int) -> tuple[Follow, WatchedEntity]:
@@ -201,9 +209,10 @@ async def catalog(
     found, truncated = await watch.artist_discography(mbid)
     groups: dict[str, list[tuple[ReleaseGroupHit, str]]] = {}
     with request.app.state.session_factory() as s:
+        why = _disabled(s, user.id, found)
         for h in sorted(found, key=lambda h: h.date or "", reverse=True):  # undated last
             key = h.type if h.type in _TYPES else "other"
-            groups.setdefault(key, []).append((h, _disabled(s, user.id, h)))
+            groups.setdefault(key, []).append((h, why.get(h.group_id, "")))
     order = [(k, groups[k]) for k in (*_TYPES, "other") if k in groups]
     ctx = {"user": user, "f": follow_ref, "groups": order, "truncated": truncated}
     return templates.TemplateResponse(request, "pages/watchlist_catalog.html", ctx)
@@ -226,7 +235,8 @@ async def catalog_submit(
     found, _ = await watch.artist_discography(mbid)
     wanted = set(groups or [])
     with request.app.state.session_factory.begin() as s:
-        picks = [h for h in found if h.group_id in wanted and not _disabled(s, user.id, h)]
+        why = _disabled(s, user.id, found)
+        picks = [h for h in found if h.group_id in wanted and h.group_id not in why]
         if (fresh := s.get(Follow, fid)) is not None:
             queue_picks(s, datetime.now(UTC), fresh, picks)
     return RedirectResponse(f"/watchlist/{fid}?done=queued&n={len(picks)}", status_code=303)
