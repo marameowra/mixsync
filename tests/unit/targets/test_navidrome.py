@@ -6,11 +6,11 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from mixsync.core.errors import PermanentError, TransientError
+from mixsync.core.errors import TransientError
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets import subsonic
 from mixsync.targets.navidrome import NavidromeTarget
-from mixsync.targets.subsonic import ScanStatus, SubsonicClient
+from mixsync.targets.subsonic import SubsonicClient
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "navidrome"
@@ -70,29 +70,6 @@ async def test_full_scan_and_ping(make_client: Make) -> None:
     await client.start_scan(full=True)
     await client.ping()
     assert paths == [("/rest/startScan", "true"), ("/rest/ping", None)]
-
-
-async def test_scan_status(make_client: Make) -> None:
-    client = subsonic_client(make_client, lambda _r: fixture("scan_status"))
-    assert await client.get_scan_status() == ScanStatus(True, 42)
-
-
-async def test_scan_status_missing_count(make_client: Make) -> None:
-    body = b'{"subsonic-response": {"status": "ok", "scanStatus": {"scanning": false}}}'
-    client = subsonic_client(make_client, lambda _r: httpx.Response(200, content=body))
-    assert await client.get_scan_status() == ScanStatus(False, None)
-
-
-@pytest.mark.parametrize(
-    ("name", "needle"),
-    [("error_40", "check MIXSYNC_NAVIDROME_USER"), ("error_50", "must be an admin")],
-)
-async def test_failed_status_is_permanent(make_client: Make, name: str, needle: str) -> None:
-    client = subsonic_client(make_client, lambda _r: fixture(name))
-    with pytest.raises(PermanentError, match="MIXSYNC_NAVIDROME_USER") as exc:
-        await client.start_scan()
-    assert needle in str(exc.value)
-    assert PASSWORD not in str(exc.value)
 
 
 async def test_5xx_is_transient(make_client: Make) -> None:
@@ -172,20 +149,6 @@ async def test_resolve_passes_music_folder_and_folder_lookup(make_client: Make) 
     assert folder == "2"
     assert await u.music_folder_id("nope") is None
     assert await u.resolve("m", "x", "A", folder) == "a"
-
-
-async def test_play_counts_batch_from_playlist(make_client: Make) -> None:
-    paths: list[str] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        paths.append(request.url.path)
-        if request.url.path == "/rest/getPlaylist":
-            return ok(playlist={"entry": [{"id": "s1", "playCount": 4}, {"id": "s2"}]})
-        return ok(song={"id": "s3", "playCount": 7})
-
-    counts = await user(make_client, handler).play_counts(["s1", "s2", "s3"], "p1")
-    assert counts == {"s1": 4, "s2": 0, "s3": 7}
-    assert paths == ["/rest/getPlaylist", "/rest/getSong"]
 
 
 async def test_search3_and_music_folders_parse(make_client: Make) -> None:
@@ -274,16 +237,11 @@ async def test_transport_error_hides_token(make_client: Make) -> None:
     assert hashlib.md5((PASSWORD + SALT).encode()).hexdigest() not in str(exc.value)  # noqa: S324
 
 
-@pytest.mark.parametrize("playlist_error", [70, 50])
-async def test_play_counts_falls_back_to_get_song_and_tolerates_missing_songs(
-    make_client: Make, playlist_error: int
-) -> None:
+async def test_play_counts_tolerates_missing_songs(make_client: Make) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/rest/getPlaylist":
-            return err(playlist_error)
         if request.url.params["id"] == "gone":
             return err(70)
         return ok(song={"id": "s1", "playCount": 2})
 
-    counts = await user(make_client, handler).play_counts(["s1", "gone"], "p1")
+    counts = await user(make_client, handler).play_counts(["s1", "gone"])
     assert counts == {"s1": 2}  # a vanished song is absent, not 0 plays

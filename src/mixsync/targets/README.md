@@ -11,7 +11,7 @@ Adapters for the streaming servers that serve the library. v1 supports **Navidro
 | File | Contents |
 |---|---|
 | `navidrome.py` | `NavidromeTarget` implementing `LibraryTarget` via the Subsonic API (token + salt auth) |
-| `subsonic.py` | Minimal typed Subsonic client. Built: `ping`, `startScan`, `getScanStatus`. Later (phase 6): `createPlaylist`, `updatePlaylist`, `getStarred2`, `search3`, `getSong` |
+| `subsonic.py` | Minimal typed Subsonic client. Built: `ping`, `startScan`. Later (phase 6): `createPlaylist`, `updatePlaylist`, `getStarred2`, `search3`, `getSong` |
 
 ## Key interface (`core.protocols.LibraryTarget`)
 ```

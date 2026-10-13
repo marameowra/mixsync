@@ -1,1 +1,1 @@
-Hand-written from the Subsonic/OpenSubsonic docs (startScan, getScanStatus, error responses); not recorded from a live server.
+Hand-written from the Subsonic/OpenSubsonic docs (startScan, error responses); not recorded from a live server.

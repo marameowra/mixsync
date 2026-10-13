@@ -34,28 +34,15 @@ class NavidromeUser:
         songs: list[dict[str, Any]] = (await self._subsonic.get_starred2()).get("song") or []
         return {str(s["id"]) for s in songs}
 
-    async def play_counts(
-        self, song_ids: list[str], playlist_id: str | None = None
-    ) -> dict[str, int]:
+    async def play_counts(self, song_ids: list[str]) -> dict[str, int]:
         """Counts for song_ids; 0 when unreported, and absent when Navidrome no longer knows the
-        song (a reset or rescan changed its id). One getPlaylist call covers our own playlist."""
-        known: dict[str, int] = {}
-        if playlist_id:
-            try:
-                entries: list[dict[str, Any]] = (
-                    await self._subsonic.get_playlist(playlist_id)
-                ).get("entry") or []
-            except (NotFoundError, NotAuthorizedError):
-                entries = []  # fall back to getSong per id
-            known = {str(e["id"]): int(e.get("playCount") or 0) for e in entries}
+        song (a reset or rescan changed its id)."""
         counts: dict[str, int] = {}
         for i in song_ids:
-            if i not in known:
-                try:
-                    known[i] = int((await self._subsonic.get_song(i)).get("playCount") or 0)
-                except NotFoundError:
-                    continue  # deleted, or rescanned under a new id: not the same as 0 plays
-            counts[i] = known[i]
+            try:
+                counts[i] = int((await self._subsonic.get_song(i)).get("playCount") or 0)
+            except NotFoundError:
+                continue  # deleted, or rescanned under a new id: not the same as 0 plays
         return counts
 
     async def music_folder_id(self, name: str) -> str | None:
