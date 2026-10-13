@@ -31,6 +31,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, tags
 from mixsync.library.importer import Importer, tagset_for
+from mixsync.ratelimit.bucket import aware
 from mixsync.worker import run_worker
 
 from .conftest import Env, login
@@ -491,7 +492,8 @@ def test_statuses_read_each_albums_own_checks(env: Env) -> None:
         a_bg.run_after = now + WEEK
     with env.sessions() as s:
         out = statuses(s, {KEY: [], other: [], ("Gamma", "G", ""): []})
-    assert out[KEY].next == (now + WEEK).replace(tzinfo=None) and out[KEY].last is not None
+    assert out[KEY].next is not None and aware(out[KEY].next) == now + WEEK
+    assert out[KEY].last is not None
     assert out[other].next is None and out[other].last is None  # its job failed
     assert out[("Gamma", "G", "")].last is None
     assert out[("Gamma", "G", "")].next is None
