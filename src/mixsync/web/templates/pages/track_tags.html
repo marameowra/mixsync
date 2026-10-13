@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Track tags - MixSync{% endblock %}
+{% block content %}
+{% import "macros/forms.html" as forms with context %}
+<h1>Restore earlier tags</h1>
+<p>{{ track.path }}</p>
+<p>Snapshot {{ snapshot.id }}, taken {{ snapshot.taken_at.strftime("%Y-%m-%d %H:%M") }} before a retag. Only the tags MixSync manages are shown and restored; cover art and other tags are left alone.</p>
+{% if changes %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Tag</th><th>Now</th><th>After restore</th></tr></thead>
+  <tbody>
+  {% for key, (now, then) in changes.items() %}
+  <tr><td>{{ key }}</td><td>{{ now | join("; ") or "(none)" }}</td><td>{{ then | join("; ") or "(none)" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p>The file's name, location and MusicBrainz identification in the database are not changed, so the library may disagree with its own tags afterwards. The current tags are saved first: restoring again from this page brings them back. The original file is kept in the trash.</p>
+<form method="post" action="/library/tracks/{{ track.id }}/tags">{{ forms.csrf() }}<input type="hidden" name="snapshot_id" value="{{ snapshot.id }}"><button type="submit">Restore these tags</button></form>
+{% else %}
+<p>The file already has these tags.</p>
+{% endif %}
+{% endblock %}

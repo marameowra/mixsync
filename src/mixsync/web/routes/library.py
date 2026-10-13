@@ -1,3 +1,4 @@
+import uuid
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -14,11 +15,15 @@ from mixsync.acquire import recheck
 from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import SystemClock
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Plan
+from mixsync.db.models.library import Plan, Track
+from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.undo import undoable
 from mixsync.library import fragmentation, tags
+from mixsync.library.fileops import FileOps
+from mixsync.library.importer import snapshotting
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
     SEED_URL,
@@ -28,7 +33,7 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Merge, require
+from mixsync.web.deps import Db, Files, Merge, require
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/library")
@@ -278,3 +283,80 @@ def undo(
     plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
     return _act(request, plan_id, "undo", db, count, enqueue_undo)
+
+
+def _tag_target(
+    db: Session, fo: FileOps, track_id: int, snapshot_id: int | None = None
+) -> tuple[Track, TagSnapshot, tags.Snapshot]:
+    """The track, the snapshot to restore (the newest for its path unless named) and the file's
+    current tags. A snapshot belongs to a track when it was taken for the track's current path
+    by a finished library import; anything else is refused."""
+    track = db.get(Track, track_id)
+    if track is None:
+        raise HTTPException(404, "no such track")
+    q = (
+        select(TagSnapshot)
+        .join(FileOp, FileOp.id == TagSnapshot.op_id)
+        .where(
+            TagSnapshot.file_path == track.path, FileOp.root == "library", FileOp.status == "done"
+        )
+        .order_by(TagSnapshot.id.desc())
+    )
+    snap = db.scalars(q if snapshot_id is None else q.where(TagSnapshot.id == snapshot_id)).first()
+    if snap is None:
+        raise HTTPException(404, "no tag snapshot for this track")
+    if not fo.has(track.path):
+        raise HTTPException(409, "the file is missing from the library")
+    try:
+        current = tags.read_all(fo.library / track.path)
+    except Exception:
+        raise HTTPException(409, "the file's tags cannot be read") from None
+    if current["format"] != snap.tags["format"]:
+        raise HTTPException(409, "the snapshot is of a different file format")
+    return track, snap, current
+
+
+@router.get("/tracks/{track_id}/tags")
+def track_tags(track_id: int, request: Request, user: User, db: Db, fo: Files) -> HTMLResponse:
+    track, snap, current = _tag_target(db, fo, track_id)
+    ctx = {
+        "user": user,
+        "track": track,
+        "snapshot": snap,
+        "changes": tags.changes(current, snap.tags),
+    }
+    return templates.TemplateResponse(request, "pages/track_tags.html", ctx)
+
+
+@router.post("/tracks/{track_id}/tags")
+def restore_track_tags(
+    track_id: int,
+    request: Request,
+    user: User,
+    db: Db,
+    fo: Files,
+    snapshot_id: Annotated[int, Form()],
+) -> RedirectResponse:
+    track, snap, current = _tag_target(db, fo, track_id, snapshot_id)
+    if not tags.changes(current, snap.tags):
+        raise HTTPException(409, "the file already has these tags")
+    rel, old, tid = track.path, snap.tags, track.id
+    db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
+    # The file is trashed, then copied back from the trash with the old tags written to the
+    # copy (snapshotted first), exactly as a merge retags: journaled, verified, never in place.
+    batch = f"tag-undo-{uuid.uuid4().hex}"
+    trashed = fo.trash(rel, batch)
+    restore = snapshotting(
+        request.app.state.session_factory,
+        SystemClock(),
+        rel,
+        lambda staging: tags.restore(staging, old),
+        tid,
+    )
+    try:
+        fo.import_file(fo.trash_dir / trashed, rel, restore, batch)
+    except BaseException:
+        if not fo.has(rel):  # failed before publishing: put the original back
+            fo.restore(trashed, rel, batch)
+        raise
+    return RedirectResponse(f"/library/tracks/{tid}/tags", status_code=303)

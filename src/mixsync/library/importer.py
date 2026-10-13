@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,19 +57,35 @@ def render_path(template: str, t: tags.TagSet, ext: str) -> str:
     )
 
 
-def snapshotting_writer(
-    sessions: sessionmaker[Session], clock: Clock, rel: str, tagset: tags.TagSet
+def snapshotting(
+    sessions: sessionmaker[Session],
+    clock: Clock,
+    rel: str,
+    change: Callable[[Path], None],
+    track_id: int | None = None,
 ) -> WriteTags:
+    """A tag writer that commits a snapshot of the file's current tags before `change` runs."""
+
     def write_tags(staging: Path, op_id: int) -> None:
         with sessions.begin() as s:  # committed before the write touches the file
             s.add(
                 TagSnapshot(
-                    file_path=rel, op_id=op_id, tags=tags.read_all(staging), taken_at=clock.now()
+                    track_id=track_id,
+                    file_path=rel,
+                    op_id=op_id,
+                    tags=tags.read_all(staging),
+                    taken_at=clock.now(),
                 )
             )
-        tags.write(staging, tagset)
+        change(staging)
 
     return write_tags
+
+
+def snapshotting_writer(
+    sessions: sessionmaker[Session], clock: Clock, rel: str, tagset: tags.TagSet
+) -> WriteTags:
+    return snapshotting(sessions, clock, rel, lambda staging: tags.write(staging, tagset))
 
 
 class Importer:

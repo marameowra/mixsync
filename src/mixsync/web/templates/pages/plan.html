@@ -20,7 +20,7 @@
     <td>{{ op.op }}{% if op.done %} (done){% endif %}</td>
     {% if op.op == "move" %}
     <td>{{ op.old.path }} &rarr; {{ op.new_path }}</td>
-    <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; recording {{ op.tags.recording_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}</td>
+    <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; recording {{ op.tags.recording_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}{% if op.done %}; <a href="/library/tracks/{{ op.track_id }}/tags">restore earlier tags</a>{% endif %}</td>
     {% elif op.op == "trash" %}
     <td>{{ op.old.path }}</td>
     <td>duplicate; keeping {{ op.keeper }}</td>

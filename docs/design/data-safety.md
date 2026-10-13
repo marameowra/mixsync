@@ -22,7 +22,7 @@ A crash at any step leaves either the old state or the new state, never a partia
 
 ## 3. Tag snapshots
 - Before any tag write, the full original tag set is serialized and stored in the DB, keyed by file and operation.
-- Any retag can be undone from the UI.
+- Any retag can be undone from the UI: a track's "Restore earlier tags" page (reached from the unverified list and a done plan's moves) previews the managed tags against the newest snapshot for its path and, on confirm, trashes the file and copies it back with those tags (journaled, verified), after first snapshotting the current tags so the restore can itself be undone. File location and MusicBrainz ids in the database are not changed.
 
 ## 4. Operation journal
 - Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / release / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.

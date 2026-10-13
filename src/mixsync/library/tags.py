@@ -239,3 +239,11 @@ def restore(path: Path, snapshot: Snapshot) -> None:
         else:
             _del(fmt, f, native)
     f.save()
+
+
+def changes(current: Snapshot, snapshot: Snapshot) -> dict[str, tuple[list[str], list[str]]]:
+    """Managed keys where `restore(snapshot)` would change a file now tagged `current`, as
+    `{native key: (current values, snapshot values)}`."""
+    now, then = current["tags"], snapshot["tags"]
+    keys = _natives(snapshot["format"]).values()
+    return {k: (now.get(k, []), then.get(k, [])) for k in keys if now.get(k, []) != then.get(k, [])}
