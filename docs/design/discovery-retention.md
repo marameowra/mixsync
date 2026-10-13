@@ -21,7 +21,7 @@ Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendatio
 - They go through the same matching and import pipeline.
 
 ## Retention
-- Each provisional track has an `expires_at` (default import date + 30 days, configurable per user).
+- Each provisional track has an `expires_at` (default 30 days, configurable per user). A hold's clock starts when the track joins that user's playlist, or at import for the hold that triggered the download.
 - **Keep** if any of these is true before expiry:
   - the track is starred in Navidrome by its user
   - it has at least N plays (default 3)

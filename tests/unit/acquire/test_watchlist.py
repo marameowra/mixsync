@@ -263,6 +263,23 @@ async def test_a_discovery_track_does_not_make_the_album_owned_or_requested(env:
     assert history(env, fid) == {"Album 1": "requested", "Album 2": "requested"}
 
 
+async def test_a_kept_discovery_track_moved_by_a_merge_still_is_not_the_album(env: Env) -> None:
+    fid, watch = follow(env), FakeWatch()
+    with env.sessions.begin() as s:
+        s.add(  # path no longer matches any provisional row, as after a merge
+            Track(
+                path="Album 1/moved.mp3",
+                release_group_mbid=rid(1),
+                status="verified",
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+            )
+        )
+    watch.hits = [rg(1, today(env))]
+    await poll(env, watch, entity_id(env, fid))
+    assert history(env, fid) == {"Album 1": "requested"}
+
+
 async def test_label_cap_and_one_click_request(env: Env, web: TestClient) -> None:
     fid, watch = follow(env, "label", LABEL), FakeWatch()
     watch.hits = [rg(n, today(env)) for n in range(1, 8)]
@@ -571,6 +588,24 @@ def test_picker_marks_owned_and_requested(env: Env, web: TestClient) -> None:
     assert re.search(r"<input[^>]* checked", page) is None
     assert page.count('" disabled>') == 2 and "owned" in page and "already requested" in page
     assert web.app.state.watch.browsed == []  # type: ignore[attr-defined]
+
+
+def test_picker_does_not_disable_a_group_with_only_a_discovery_track(
+    env: Env, web: TestClient
+) -> None:
+    _, _, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path="kept.mp3",
+                release_group_mbid=rid(1),
+                status="verified",
+                batch_id="promote-7",
+                imported_at=env.clock.now(),
+            )
+        )
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert page.count('" disabled>') == 2  # still only Owned LP and Asked LP
 
 
 def test_label_follow_redirects_to_the_follow_page(env: Env, web: TestClient) -> None:

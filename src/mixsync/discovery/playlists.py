@@ -174,7 +174,8 @@ class Discovery:
         relink: list[str] = []
         for link in s.scalars(select(UserLink).where(UserLink.user_id == user_id)):
             if (secret := link_secret(self.box, link)) is None:
-                relink.append(LINK_NAMES.get(link.service, link.service))
+                if link.service in need:
+                    relink.append(LINK_NAMES.get(link.service, link.service))
             else:
                 out[link.service] = (link.external_username, secret)
         if need <= out.keys():

@@ -14,7 +14,6 @@ from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import ReleaseWatch
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db import canonical as canonical_db
-from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
@@ -57,12 +56,9 @@ def _filtered(f: Follow, h: ReleaseGroupHit) -> bool:
 def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
     """Release groups with a library track. A track kept from discovery is one song, not the
     album (the pipeline's all-tracks rule needs a tracklist the poller has not fetched)."""
-    promoted = select(ProvisionalTrack.promoted_path).where(
-        ProvisionalTrack.promoted_path.is_not(None)
-    )
-    rows = s.scalars(
+    rows = s.scalars(  # promote imports use batch "promote-<id>"; a merge moves the path, not it
         select(Track.release_group_mbid).where(
-            Track.release_group_mbid.in_(group_ids), Track.path.not_in(promoted)
+            Track.release_group_mbid.in_(group_ids), ~Track.batch_id.like("promote-%")
         )
     )
     return {g for g in rows if g}
