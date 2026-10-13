@@ -1,4 +1,4 @@
-import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -308,15 +308,14 @@ def test_aware_converts_to_same_instant() -> None:
 def test_first_use_race_does_not_raise(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:
-    """Concurrent first reserves on a missing row: on Postgres FOR UPDATE locks nothing."""
-    n = 3  # acoustid capacity
-    barrier = threading.Barrier(n)
-
-    def go() -> timedelta:
-        b = Bucket("acoustid", limits("acoustid", settings), sessions, clock)
-        barrier.wait()
-        return b.reserve()
-
-    with ThreadPoolExecutor(n) as pool:
-        waits = [f.result() for f in [pool.submit(go) for _ in range(n)]]
-    assert waits == [timedelta(0)] * n
+    """A second first-use blocked behind an uncommitted row insert must not hit IntegrityError."""
+    lim = limits("acoustid", settings)  # capacity 3
+    other = make_session_factory(make_engine(settings))  # separate connection pool
+    with ThreadPoolExecutor(1) as pool, sessions.begin() as s:
+        Bucket("acoustid", lim, sessions, clock)._row(s, lim.rate, clock.now())  # pyright: ignore[reportPrivateUsage]
+        s.flush()  # row inserted, not committed
+        fut = pool.submit(Bucket("acoustid", lim, other, clock).reserve)
+        time.sleep(0.5)  # let the thread reach the conflict (SQLite: wait on the write lock)
+    assert fut.result(timeout=10) == timedelta(0)
+    with sessions() as s:
+        assert s.get(RateBucket, "acoustid").tokens == 2  # type: ignore[union-attr]
