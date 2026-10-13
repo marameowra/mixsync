@@ -12,10 +12,15 @@ from sqlalchemy.orm import Session
 from mixsync.core.capabilities import Capability
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.watchlist import follows
-from mixsync.watchlist.poller import is_owned, is_requested, queue_picks, request_hit
+from mixsync.watchlist.poller import (
+    is_owned,
+    is_requested,
+    owned_groups,
+    queue_picks,
+    request_hit,
+)
 from mixsync.web.deps import Db, Watch, require
 from mixsync.web.templating import templates
 
@@ -175,9 +180,7 @@ _TYPES = ("album", "ep", "single")  # then the rest, as "other"
 def _disabled(db: Session, user_id: int, hits: list[ReleaseGroupHit]) -> dict[str, str]:
     """Why each release group cannot be picked: group id -> reason; absent when it can be."""
     ids = [h.group_id for h in hits]
-    owned = set(
-        db.scalars(select(Track.release_group_mbid).where(Track.release_group_mbid.in_(ids)))
-    )
+    owned = owned_groups(db, ids)
     status: dict[str, str] = {}
     for gid, st in db.execute(
         select(FollowHit.release_group_mbid, FollowHit.status).where(
@@ -188,7 +191,7 @@ def _disabled(db: Session, user_id: int, hits: list[ReleaseGroupHit]) -> dict[st
     ):
         status.setdefault(gid, st)
     out = {g: "queued" if st == "picked" else "already requested" for g, st in status.items()}
-    return out | {g: "owned" for g in owned if g}
+    return out | {g: "owned" for g in owned}
 
 
 def _artist_follow(db: Db, user: AuthUser, follow_id: int) -> tuple[Follow, WatchedEntity]:

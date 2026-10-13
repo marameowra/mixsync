@@ -15,6 +15,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.db.auth import create_user
 from mixsync.db.engine import user_sessions
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
@@ -223,6 +224,60 @@ async def test_owned_and_already_requested_are_skipped(env: Env) -> None:
         "Album 2": "skipped_requested",
         "Album 3": "requested",
     }
+
+
+async def test_a_discovery_track_does_not_make_the_album_owned_or_requested(env: Env) -> None:
+    fid, watch = follow(env), FakeWatch()
+    with env.sessions.begin() as s:
+        # discovery asked for one track of Album 1; Album 2's single track was kept (promoted)
+        s.add(
+            Request(
+                user_id=env.user_id,
+                release_mbid=rid(1001),
+                release_group_mbid=rid(1),
+                provisional=True,
+                source="discovery",
+            )
+        )
+        s.add(
+            Track(
+                path="kept.mp3",
+                release_group_mbid=rid(2),
+                status="verified",
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+            )
+        )
+        s.add(
+            ProvisionalTrack(
+                path="d.mp3",
+                recording_mbid=rid(50),
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+                status="promoted",
+                promoted_path="kept.mp3",
+            )
+        )
+    watch.hits = [rg(n, today(env)) for n in (1, 2)]
+    await poll(env, watch, entity_id(env, fid))
+    assert history(env, fid) == {"Album 1": "requested", "Album 2": "requested"}
+
+
+async def test_a_kept_discovery_track_moved_by_a_merge_still_is_not_the_album(env: Env) -> None:
+    fid, watch = follow(env), FakeWatch()
+    with env.sessions.begin() as s:
+        s.add(  # path no longer matches any provisional row, as after a merge
+            Track(
+                path="Album 1/moved.mp3",
+                release_group_mbid=rid(1),
+                status="verified",
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+            )
+        )
+    watch.hits = [rg(1, today(env))]
+    await poll(env, watch, entity_id(env, fid))
+    assert history(env, fid) == {"Album 1": "requested"}
 
 
 async def test_label_cap_and_one_click_request(env: Env, web: TestClient) -> None:
@@ -533,6 +588,24 @@ def test_picker_marks_owned_and_requested(env: Env, web: TestClient) -> None:
     assert re.search(r"<input[^>]* checked", page) is None
     assert page.count('" disabled>') == 2 and "owned" in page and "already requested" in page
     assert web.app.state.watch.browsed == []  # type: ignore[attr-defined]
+
+
+def test_picker_does_not_disable_a_group_with_only_a_discovery_track(
+    env: Env, web: TestClient
+) -> None:
+    _, _, fid = _catalog_world(env, web)
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path="kept.mp3",
+                release_group_mbid=rid(1),
+                status="verified",
+                batch_id="promote-7",
+                imported_at=env.clock.now(),
+            )
+        )
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert page.count('" disabled>') == 2  # still only Owned LP and Asked LP
 
 
 def test_label_follow_redirects_to_the_follow_page(env: Env, web: TestClient) -> None:

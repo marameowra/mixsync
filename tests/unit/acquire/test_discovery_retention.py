@@ -259,6 +259,32 @@ async def test_a_user_without_navidrome_is_skipped_with_a_note(env: Env) -> None
         assert "link" in (s.scalars(select(DiscoveryPlaylist)).one().last_error or "")
 
 
+async def test_retention_runs_after_listenbrainz_is_unlinked(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    with env.sessions.begin() as s:
+        for link in s.scalars(select(UserLink).where(UserLink.service == "listenbrainz")):
+            s.delete(link)
+    env.clock.advance(timedelta(days=40))
+    await r.retain(env.user_id)
+    assert r.holds()[0].expired_at is not None and r.track().status == "trashed"
+
+
+async def test_retention_does_not_ask_to_relink_a_service_it_does_not_need(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    with env.sessions.begin() as s:
+        for link in s.scalars(select(UserLink)):
+            if link.service == "navidrome":
+                s.delete(link)
+            else:
+                link.secret_encrypted = "not a token"
+    env.clock.advance(timedelta(days=40))
+    await r.retain(env.user_id)
+    with env.sessions() as s:
+        assert "relinking" not in (s.scalars(select(DiscoveryPlaylist)).one().last_error or "")
+
+
 async def test_expiring_soon(env: Env) -> None:
     r = RRig(env)
     r.hold(env.user_id, days=5)

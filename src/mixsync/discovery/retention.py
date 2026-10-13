@@ -179,7 +179,7 @@ class Retention:
     async def _retain(self, job: JobRecord, uid: int) -> None:
         with self.d.sessions() as s:
             rows = self._rows(s, uid)
-            links, why = self.d.links(s, uid)
+            links, why = self.d.links(s, uid, frozenset({"navidrome"}))
         if not rows:
             return
         if links is None:
