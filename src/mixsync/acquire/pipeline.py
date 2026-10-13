@@ -532,7 +532,7 @@ class Pipeline:
             if "recording_id" in a and (track is None or track.recording_id != a["recording_id"]):
                 track = by_rec.get(a["recording_id"])
             if track is None:  # the release changed since verify
-                if any(self.importer.is_imported(Path(x["local_path"]), batch) for x in assignment):
+                if any(self._imported(Path(x["local_path"]), batch) for x in assignment):
                     raise PermanentError(
                         "the release changed on MusicBrainz after part of this album was "
                         "imported; check it by hand"
@@ -599,7 +599,7 @@ class Pipeline:
             if (
                 rec in wanted
                 and rec not in seen
-                and (rec in todo or self.importer.is_imported(f[0], batch, "discover"))
+                and (rec in todo or self._imported(f[0], batch, "discover"))
             ):
                 seen.add(f[1].recording_id)
                 picked.append(f)
@@ -680,14 +680,14 @@ class Pipeline:
             return await asyncio.to_thread(
                 self.importer.import_release, files, album, status, batch, None, root
             )
-        batch_dir = self.importer.work_dir / batch
+        batch_dir = self.importer.fileops.work / batch
         batch_dir.mkdir(parents=True, exist_ok=True)
         # Its own dir per run: an overlapping run of the same job must not rewrite our files.
         work = Path(tempfile.mkdtemp(dir=batch_dir))
         try:
             encoded: dict[Path, Path] = {}
             for i, (src, _, _) in enumerate(files):
-                if await asyncio.to_thread(self.importer.is_imported, src, batch, root):
+                if await asyncio.to_thread(self._imported, src, batch, root):
                     continue  # a resumed batch: this file is already in
                 try:
                     out = await to_flac(src, work / str(i), self.flac_level)
@@ -700,7 +700,7 @@ class Pipeline:
                 self.importer.import_release, files, album, status, batch, encoded, root
             )
         finally:
-            await asyncio.to_thread(self.importer.clear_work, f"{batch}/{work.name}")
+            await asyncio.to_thread(self.importer.fileops.clear_work, f"{batch}/{work.name}")
 
     async def _finish(
         self,
@@ -769,13 +769,17 @@ class Pipeline:
         with self.sessions.begin() as s:
             return canonical_db.store(s, group, pick)
 
+    def _imported(self, src: Path, batch: str, root: str = "library") -> bool:
+        return self.importer.fileops.find_imported(batch, src, root) is not None
+
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
     ) -> None:
         """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is
         logged and the import still counts."""
         try:
-            await asyncio.to_thread(self.importer.release, srcs, batch, root)
+            for src in srcs:
+                await asyncio.to_thread(self.importer.fileops.release, src, batch, root)
             await self.source.clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)
@@ -788,10 +792,10 @@ class Pipeline:
             return
         cover = f"{rel.rpartition('/')[0]}/cover.jpg".removeprefix("/")
         try:
-            if self.importer.has_file(cover):
+            if self.importer.fileops.has(cover):
                 return
             if data := await self.coverart.front(album.release_id, album.release_group_id):
-                await asyncio.to_thread(self.importer.write_file, cover, data, batch)
+                await asyncio.to_thread(self.importer.fileops.write_new, cover, data, batch)
         except Exception:
             log.warning("cover art for %s skipped", album.release_id, exc_info=True)
 

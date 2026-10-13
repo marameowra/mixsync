@@ -117,7 +117,10 @@ def test_discover_import_writes_no_track_row_checks_discover_names_and_resumes(
     (r,) = importer.import_release([(src, T1, None)], ALBUM, "verified", "b1", root="discover")
     assert r.rel == lib[0].rel  # a library file of that name does not make discover rename
     assert (ops.roots["discover"] / str(r.rel)).is_file()
-    assert importer.is_imported(src, "b1", "discover") and not importer.is_imported(src, "b1")
+    assert (
+        ops.find_imported("b1", src, "discover") is not None
+        and ops.find_imported("b1", src) is None
+    )
     (again,) = importer.import_release([(src, T1, None)], ALBUM, "verified", "b1", root="discover")
     assert again.rel == r.rel and len(list(ops.roots["discover"].rglob("*.flac"))) == 1
     (r2,) = importer.import_release(

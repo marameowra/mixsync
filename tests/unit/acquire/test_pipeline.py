@@ -240,10 +240,10 @@ async def test_release_failure_does_not_fail_the_import(
 ) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
 
-    def boom(_srcs: list[Path], _batch: str) -> None:
+    def boom(_src: Path, _batch: str, _root: str) -> None:
         raise OSError("read-only")
 
-    monkeypatch.setattr(env.pipeline.importer, "release", boom)
+    monkeypatch.setattr(env.pipeline.importer.fileops, "release", boom)
     rid = request(env)
     await env.drain()
     assert status(env, rid) == "imported" and env.source.cleared == []
@@ -362,7 +362,7 @@ async def test_changed_release_after_a_partial_import_fails_instead_of_verifying
 ) -> None:
     rid, did, tok = await _held_for_review(env, web)
     _release_changed(monkeypatch, ALBUM.tracks[:1])  # Song Two was removed
-    monkeypatch.setattr(env.pipeline.importer, "is_imported", lambda *a: True)  # one is in
+    monkeypatch.setattr(env.pipeline.importer.fileops, "find_imported", lambda *a: "x")  # one is in
     verifies = len(env.jobs(JobKind.VERIFY))
     assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
     await env.drain()

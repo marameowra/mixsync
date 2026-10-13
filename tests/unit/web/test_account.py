@@ -19,7 +19,7 @@ from mixsync.db.models.auth import User
 from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
-from mixsync.ratelimit.client import polite_client
+from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.routes import account
 from mixsync.web.routes.account import DefaultValidator, Ping, get_link
 
@@ -269,9 +269,9 @@ def _subsonic(status: str, code: int = 0) -> httpx.Response:
 def _ping(settings: Settings, sf: sessionmaker[Session], handler: object) -> DefaultValidator:
     t = httpx.MockTransport(handler)  # type: ignore[arg-type]
     return DefaultValidator(
-        polite_client("navidrome", settings, sf, transport=t),
+        PoliteClient("navidrome", settings, sf, transport=t),
         "http://nd",
-        ListenBrainzClient(polite_client("listenbrainz", settings, sf, transport=t)),
+        ListenBrainzClient(PoliteClient("listenbrainz", settings, sf, transport=t)),
     )
 
 
