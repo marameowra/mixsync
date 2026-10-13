@@ -32,7 +32,7 @@ from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, tags
 from mixsync.library.importer import Importer, tagset_for
 from mixsync.ratelimit.bucket import aware
-from mixsync.worker import run_worker
+from mixsync.worker import _start_chains, run_worker
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, AUDIO, OTHER, RECORDINGS, FakeMetadata
@@ -746,6 +746,22 @@ async def test_a_failed_startup_scan_does_not_stop_the_worker() -> None:
     stop = asyncio.Event()
     await run_worker(Queue(), "w", stop, {}, startup=boom)  # type: ignore[arg-type]
     assert claimed == [True]
+
+
+def test_start_chains_retries_a_transient_failure_and_continues() -> None:
+    calls: list[str] = []
+
+    def first_chain() -> None:
+        calls.append("first")
+        if calls.count("first") == 1:
+            raise RuntimeError("temporary database error")
+
+    def second_chain() -> None:
+        calls.append("second")
+
+    _start_chains((first_chain, second_chain))
+
+    assert calls == ["first", "first", "second"]
 
 
 async def test_a_locked_database_while_polling_does_not_stop_the_worker() -> None:

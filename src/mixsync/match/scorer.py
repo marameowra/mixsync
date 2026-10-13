@@ -143,7 +143,7 @@ class Distance:
     def add_ratio(self, key: str, number1: float, number2: float, reason: str) -> None:
         """Penalty `number1 / number2`, with `number1` clamped to [0, number2]."""
         number = float(max(min(number1, number2), 0))
-        self.add(key, number / number2 if number2 else 0.0, reason)
+        self.add(key, number / number2 if number2 else float(number1 > 0), reason)
 
     def add_string(self, key: str, str1: str | None, str2: str | None, reason: str) -> None:
         self.add(key, string_dist(str1, str2), reason)

@@ -41,7 +41,7 @@ def test_add_methods() -> None:
     d.add_ratio("year", 10, 5, "r")
     d.add_ratio("year", -5, 5, "r")
     d.add_ratio("year", 5, 0, "r")
-    assert [p for p, _ in d._penalties["year"]] == [0.25, 1.0, 0.0, 0.0]  # pyright: ignore[reportPrivateUsage]
+    assert [p for p, _ in d._penalties["year"]] == [0.25, 1.0, 0.0, 1.0]  # pyright: ignore[reportPrivateUsage]
 
     d = dist()
     d.add_string("label", "abc", "bcd", "r")
@@ -183,6 +183,11 @@ def test_year_rules() -> None:
     assert year_penalty(Likelies(), a) is None
     no_orig = AlbumInfo("artist", "album", (), year=2000)
     assert year_penalty(Likelies(year=1995), no_orig) == 1.0
+
+
+def test_year_mismatch_is_penalized_when_album_is_from_this_year() -> None:
+    this_year = AlbumInfo("artist", "album", (), year=2020, original_year=2020)
+    assert year_penalty(Likelies(year=2019), this_year) == 1.0
 
 
 def test_release_id_mismatch() -> None:

@@ -113,7 +113,15 @@ class FileOps:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts or not p.parts:
             raise SafetyError(f"path escapes {root}: {rel!r}")
-        return root / p
+        path = root / p
+        component = root
+        for part in p.parts:
+            component /= part
+            if component.is_symlink():
+                raise SafetyError(f"path escapes {root}: {rel!r}")
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise SafetyError(f"path escapes {root}: {rel!r}")
+        return path
 
     def _trash_rel(self, rel: str, root: str = "library") -> str:
         day = self._clock.now().date().isoformat()
@@ -272,6 +280,8 @@ class FileOps:
 
     def clear_work(self, batch_id: str) -> None:
         """Delete the scratch files of one batch. Only ever acts inside the work dir."""
+        if (self.work / batch_id).is_symlink():
+            return
         d = self._under(self.work, batch_id)
         if d.is_dir() and not d.is_symlink():
             shutil.rmtree(d, ignore_errors=True)  # noqa: TID251

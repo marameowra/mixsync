@@ -158,6 +158,32 @@ def test_rejects_paths_outside_library(ops: FileOps, make_src: MakeSrc, rel: str
         ops.import_file(make_src(), rel, noop_tags, "b1")
 
 
+def test_trash_refuses_symlinked_parent_outside_library(
+    ops: FileOps, data_dir: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    precious = outside / "song.flac"
+    precious.write_bytes(b"precious music")
+    (ops.library / "Artist").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(SafetyError):
+        ops.trash("Artist/song.flac", "b1")
+
+    assert precious.read_bytes() == b"precious music"
+    assert files(data_dir / ".trash") == []
+
+
+def test_has_refuses_symlinked_parent_inside_library(ops: FileOps) -> None:
+    target = ops.library / "Artist" / "Album"
+    target.mkdir(parents=True)
+    (target / "song.flac").write_bytes(b"music")
+    (ops.library / "Alias").symlink_to(target.parent, target_is_directory=True)
+
+    with pytest.raises(SafetyError):
+        ops.has("Alias/Album/song.flac")
+
+
 def test_trash(ops: FileOps, data_dir: Path, make_src: MakeSrc) -> None:
     src = make_src()
     ops.import_file(src, REL, noop_tags, "b1")

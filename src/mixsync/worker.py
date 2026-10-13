@@ -55,6 +55,19 @@ async def _noop(_job: JobRecord) -> None:
 HANDLERS: dict[JobKind, Handler] = {JobKind.NOOP: _noop}
 
 
+def _start_chains(starters: tuple[Callable[[], None], ...]) -> None:
+    for start in starters:
+        for attempt in range(2):
+            try:
+                start()
+                break
+            except Exception:
+                if attempt:
+                    log.exception("startup chain failed twice; continuing with other chains")
+                else:
+                    log.exception("startup chain failed; retrying once")
+
+
 async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta) -> None:
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
@@ -280,11 +293,15 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
     )
 
     def startup() -> None:
-        rechecker.start_chains()
-        watcher.start_chains()
-        purger.start_chains()
-        discovery.start_chains()
-        retention.start_chains()
+        _start_chains(
+            (
+                rechecker.start_chains,
+                watcher.start_chains,
+                purger.start_chains,
+                discovery.start_chains,
+                retention.start_chains,
+            )
+        )
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
