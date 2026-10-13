@@ -169,13 +169,15 @@ class FileOps:
         published = False
         try:
             self.incoming.mkdir(parents=True, exist_ok=True)
+            src_hash = hashlib.sha256()  # hashed as read, so the source is read once
             with src.open("rb") as r, staging.open("xb") as w:
                 while chunk := r.read(1 << 20):
+                    src_hash.update(chunk)
                     w.write(chunk)
             _hook("copy")
             _fsync(staging)
             _fsync(self.incoming)
-            if _sha256(staging) != _sha256(src):
+            if _sha256(staging) != src_hash.hexdigest():
                 raise SafetyError(f"hash mismatch copying {src}")
             _hook("fsync")
             write_tags(staging, op_id)
