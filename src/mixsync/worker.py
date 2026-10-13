@@ -126,15 +126,26 @@ async def run_worker(
     handlers: dict[JobKind, Handler] = HANDLERS,
     lease: timedelta = DEFAULT_LEASE,
     poll: float = 1.0,
-    startup: Callable[[], None] | None = None,
+    startup: tuple[Callable[[], None], ...] = (),
 ) -> None:
-    if startup:  # once the worker is up, off the event loop and the web start
-        try:
-            await asyncio.to_thread(startup)
-        except Exception:  # a failed scan must never stop the worker
-            log.exception("startup scan failed; the worker runs without it")
+    pending = list(startup)
+    loop = asyncio.get_running_loop()
+    retry_at = loop.time()
     # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
+        if pending and loop.time() >= retry_at:
+            for initialize in pending.copy():
+                if stop.is_set():
+                    return
+                try:
+                    await asyncio.to_thread(initialize)
+                except Exception:  # one failed chain must not block polling or the other chains
+                    log.exception("startup scan %s failed; trying again", initialize)
+                else:
+                    pending.remove(initialize)
+            retry_at = loop.time() + poll
+        if stop.is_set():
+            return
         try:
             queue.reap()
             job = queue.claim(worker, lease)
@@ -190,7 +201,7 @@ def _pipeline(
     )
 
 
-def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], None]]:
+def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
     settings = Settings()
     load_box(settings)  # refuse a bad key file at startup (serve_all too), not at first use
     engine = make_engine(settings)
@@ -279,12 +290,16 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], Callable[[], No
         | retention.handlers()
     )
 
-    def startup() -> None:
-        rechecker.start_chains()
-        watcher.start_chains()
-        purger.start_chains()
-        discovery.start_chains()
+    def discovery_startup() -> None:
+        discovery.start_chains()  # creates the default playlists retention must scan
         retention.start_chains()
+
+    startup = (
+        rechecker.start_chains,
+        watcher.start_chains,
+        purger.start_chains,
+        discovery_startup,
+    )
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 

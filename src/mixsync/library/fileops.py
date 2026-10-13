@@ -113,7 +113,14 @@ class FileOps:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts or not p.parts:
             raise SafetyError(f"path escapes {root}: {rel!r}")
-        return root / p
+        target = root
+        for part in ("", *p.parts):
+            target /= part
+            if target.is_symlink():
+                raise SafetyError(f"symlink under {root}: {rel!r}")
+        if not target.resolve().is_relative_to(root.resolve()):
+            raise SafetyError(f"path escapes {root}: {rel!r}")
+        return target
 
     def _trash_rel(self, rel: str, root: str = "library") -> str:
         day = self._clock.now().date().isoformat()
@@ -126,7 +133,7 @@ class FileOps:
     def _move_to_trash(self, src: Path, trash_rel: str) -> None:
         """Only fileops writes to the trash and trash_rel is a free name, so the plain-rename
         fallback (no no-replace rename on this filesystem) cannot overwrite anything."""
-        dst = self.trash_dir / trash_rel
+        dst = self._under(self.trash_dir, trash_rel)
         dst.parent.mkdir(parents=True, exist_ok=True)
         try:
             if not _noreplace(src, dst):
@@ -165,7 +172,7 @@ class FileOps:
         a file). Returns the sha256 of the imported file. src is never modified."""
         final = self._under(self._root(root), final_rel)
         op_id = self._journal.begin(batch_id, "copy", str(origin or src), final_rel, root=root)
-        staging = self.incoming / str(op_id)
+        staging = self._under(self.incoming, str(op_id))
         published = False
         try:
             self.incoming.mkdir(parents=True, exist_ok=True)
@@ -208,7 +215,7 @@ class FileOps:
         existing file alone, if rel is taken."""
         final = self._under(self._root(root), rel)
         op_id = self._journal.begin(batch_id, "copy", "(generated)", rel, root=root)
-        staging = self.incoming / str(op_id)
+        staging = self._under(self.incoming, str(op_id))
         published = False
         try:
             self.incoming.mkdir(parents=True, exist_ok=True)
@@ -238,7 +245,7 @@ class FileOps:
     def _verified_op(self, batch_id: str, src: Path, root: str) -> JournalOp | None:
         """The completed import of src in this batch, if its file is still there and intact."""
         op = self._journal.find_completed(batch_id, str(src), root)
-        if op and op.dst_hash and (f := self._root(root) / op.dst).is_file():
+        if op and op.dst_hash and (f := self._under(self._root(root), op.dst)).is_file():
             return op if _sha256(f) == op.dst_hash else None
         return None
 
@@ -273,7 +280,7 @@ class FileOps:
     def clear_work(self, batch_id: str) -> None:
         """Delete the scratch files of one batch. Only ever acts inside the work dir."""
         d = self._under(self.work, batch_id)
-        if d.is_dir() and not d.is_symlink():
+        if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)  # noqa: TID251
 
     def trash(self, rel: str, batch_id: str, root: str = "library") -> str:
@@ -294,9 +301,12 @@ class FileOps:
         """The one place the purge deletes. Only a plain file inside a dated trash folder
         qualifies. False if the entry is not deletable (a symlink, say)."""
         parts = Path(rel).parts
-        if len(parts) < 2 or _day(parts[0]) is None:
+        if len(parts) < 2 or _day(parts[0]) is None or ".." in parts:
             raise SafetyError(f"{rel!r} is not in a dated trash folder")
-        p = self._under(self.trash_dir, rel)
+        try:
+            p = self._under(self.trash_dir, rel)
+        except SafetyError:
+            return False  # symlinks remain in the trash, including during recovery
         # the data dir may sit behind a symlinked mount, but .trash itself must be real
         real = self.trash_dir.parent.resolve() / self.trash_dir.name / rel
         if self.trash_dir.is_symlink() or p.is_symlink() or not p.is_file() or p.resolve() != real:
@@ -383,9 +393,10 @@ class FileOps:
 
     def recover(self) -> None:
         """Finish or roll back every op that was started and never finished."""
-        if self.work.is_dir():  # scratch of a crashed run
+        if self.work.is_dir() and not self.work.is_symlink():  # scratch of a crashed run
             for d in self.work.iterdir():
-                self.clear_work(d.name)
+                if not d.is_symlink():
+                    self.clear_work(d.name)
         for op in self._journal.pending():
             if op.kind == "copy":
                 self._recover_copy(op)
@@ -399,8 +410,8 @@ class FileOps:
                 self._recover_purge(op)
 
     def _recover_copy(self, op: JournalOp) -> None:
-        final = self._root(op.root) / op.dst
-        staging = self.incoming / str(op.id)
+        final = self._under(self._root(op.root), op.dst)
+        staging = self._under(self.incoming, str(op.id))
         if staging.exists():
             self._to_trash(staging, f".incoming/{op.id}")
         if op.dst_hash and final.is_file() and _sha256(final) == op.dst_hash:
@@ -411,7 +422,8 @@ class FileOps:
             log.warning("recovered copy op %s: rolled back", op.id)
 
     def _recover_trash(self, op: JournalOp) -> None:
-        src, dst = self._root(op.root) / op.src, self.trash_dir / op.dst
+        src = self._under(self._root(op.root), op.src)
+        dst = self._under(self.trash_dir, op.dst)
         if dst.is_file() and not src.exists():
             self._journal.complete(op.id, _sha256(dst))
         else:
@@ -424,7 +436,8 @@ class FileOps:
             self._journal.complete(op.id, op.dst_hash or "")
 
     def _recover_restore(self, op: JournalOp) -> None:
-        src, dst = self.trash_dir / op.src, self._root(op.root) / op.dst
+        src = self._under(self.trash_dir, op.src)
+        dst = self._under(self._root(op.root), op.dst)
         # The file is back if it is at dst and the trash name is gone (or is the same inode).
         if dst.is_file() and (not src.exists() or src.samefile(dst)):
             self._journal.complete(op.id, _sha256(dst))
