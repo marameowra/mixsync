@@ -7,6 +7,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from mixsync import worker
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState, backoff
@@ -313,6 +314,56 @@ def test_a_locked_database_while_completing_never_reruns_finished_work(
     monkeypatch.setattr(q, "retry", retry)
     asyncio.run(run_job(q, job, "w", {JobKind.NOOP: handler}, LEASE))
     assert runs == [1] and q.get(j.id).status is JobState.SUCCEEDED
+
+
+def _complete_raises(
+    q: JobQueue, monkeypatch: pytest.MonkeyPatch, exc: Exception
+) -> tuple[int, list[int]]:
+    """Claim a job, make complete() raise `exc`, and fail the test if it is retried or failed."""
+    j = q.enqueue(JobKind.NOOP)
+    job = q.claim("w", LEASE)
+    assert job is not None
+    calls: list[int] = []
+
+    async def handler(_job: object) -> None:
+        pass
+
+    def complete(*_a: object, **_k: object) -> None:
+        calls.append(1)
+        raise exc
+
+    def never(*_a: object, **_k: object) -> None:
+        raise AssertionError("finished work must not be retried or failed")
+
+    monkeypatch.setattr(worker, "COMPLETE_PAUSE", 0)
+    monkeypatch.setattr(q, "complete", complete)
+    monkeypatch.setattr(q, "retry", never)
+    monkeypatch.setattr(q, "fail", never)
+    asyncio.run(run_job(q, job, "w", {JobKind.NOOP: handler}, LEASE))  # must not raise
+    return j.id, calls
+
+
+def test_any_error_while_completing_leaves_the_job_for_reap(
+    q: JobQueue, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jid, calls = _complete_raises(q, monkeypatch, ValueError("bad transition"))
+    assert calls == [1] and q.get(jid).status is JobState.RUNNING
+
+
+def test_exhausted_completion_retries_say_the_job_will_run_again(
+    q: JobQueue, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    jid, calls = _complete_raises(q, monkeypatch, _locked())
+    assert len(calls) == worker.COMPLETE_TRIES and q.get(jid).status is JobState.RUNNING
+    assert "will run again after the lease expires" in caplog.text
+
+
+def test_a_lost_lease_while_completing_is_only_logged(
+    q: JobQueue, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    jid, calls = _complete_raises(q, monkeypatch, LeaseLostError())
+    assert calls == [1] and q.get(jid).status is JobState.RUNNING
+    assert "lost lease" in caplog.text
 
 
 def test_a_failed_heartbeat_keeps_beating() -> None:

@@ -151,7 +151,7 @@ async def test_fresh_requests_skip_the_response_cache(make_client: Make) -> None
     assert len(seen) == 2
 
 
-async def test_fresh_search_and_watch_skip_the_response_cache(make_client: Make) -> None:
+async def test_fresh_search_and_watch_skip_the_cache_read_but_refresh_it(make_client: Make) -> None:
     seen: list[httpx.Request] = []
     provider = MusicBrainzProvider(
         make_client("musicbrainz", serve('{"releases": [], "release-groups": []}', seen))
@@ -160,6 +160,6 @@ async def test_fresh_search_and_watch_skip_the_response_cache(make_client: Make)
         await provider.search_releases("Band", "Album", fresh=True)
         await provider.new_release_groups("artist", KID_A, "2020-01-01", fresh=True)
     assert len(seen) == 4
+    await provider.search_releases("Band", "Album")  # answered by what the fresh call stored
     await provider.search_releases("Band", "Album")
-    await provider.search_releases("Band", "Album")
-    assert len(seen) == 5
+    assert len(seen) == 4

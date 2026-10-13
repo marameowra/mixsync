@@ -76,9 +76,20 @@ async def _complete(queue: JobQueue, job_id: int, worker: str) -> None:
             return
         except OperationalError:
             if attempt == COMPLETE_TRIES - 1:  # reap() requeues it once the lease expires
-                log.exception("could not complete job %s", job_id)
+                log.exception(
+                    "job %s finished but its success was not recorded; "
+                    "it will run again after the lease expires",
+                    job_id,
+                )
                 return
             await asyncio.sleep(COMPLETE_PAUSE * (attempt + 1))
+        except Exception:  # never take the worker down; reap() requeues it after the lease
+            log.exception(
+                "job %s finished but its success was not recorded; "
+                "it will run again after the lease expires",
+                job_id,
+            )
+            return
 
 
 async def run_job(

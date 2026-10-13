@@ -14,6 +14,7 @@ from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
+from mixsync.library import purge
 from mixsync.library.fileops import FileOps
 from mixsync.library.purge import INTERVAL, MONITOR_KEEP, TrashPurger
 
@@ -391,3 +392,24 @@ def test_purge_deletes_old_succeeded_monitor_rows_and_keeps_everything_else(
     with sessions() as s:
         keys = set(s.scalars(select(Job.idempotency_key).where(Job.kind != JobKind.TRASH_PURGE)))
     assert keys == set(rows) - {"monitor:old"}
+
+
+def test_old_monitor_rows_beyond_one_batch_are_all_deleted(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(purge, "MONITOR_BATCH", 2)
+    old = NOW - MONITOR_KEEP - timedelta(hours=1)
+    with sessions.begin() as s:
+        s.add_all(
+            Job(
+                kind=JobKind.DOWNLOAD,
+                status=JobState.SUCCEEDED,
+                run_after=old,
+                idempotency_key=f"monitor:{i}",
+                updated_at=old,
+            )
+            for i in range(5)
+        )
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    with sessions() as s:
+        assert list(s.scalars(select(Job.id).where(Job.kind == JobKind.DOWNLOAD))) == []

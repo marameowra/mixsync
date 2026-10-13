@@ -77,7 +77,8 @@ class PoliteClient:
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         request = self._http.build_request(method, url, **kwargs)
         ttl = ttl_for(self.lim, request) if cacheable(request) else None
-        if ttl is not None and (hit := self.cache.get(request, self.clock.now())):
+        fresh = request.headers.get("cache-control") == "no-cache"  # skips the read, not the put
+        if ttl is not None and not fresh and (hit := self.cache.get(request, self.clock.now())):
             return hit
         for attempt in range(_MAX_ATTEMPTS):
             while (wait := self.bucket.reserve()) > timedelta(0):

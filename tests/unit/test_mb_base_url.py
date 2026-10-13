@@ -46,3 +46,15 @@ def test_web_builds_musicbrainz_on_the_configured_base_url(
     state = SimpleNamespace(settings=Settings(), session_factory=sessions)
     deps.get_watch(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
     assert Recorder.urls == [MIRROR]
+
+
+def test_web_merger_builds_musicbrainz_on_the_configured_base_url(
+    settings: Settings, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
+    Recorder.urls = []
+    monkeypatch.setattr(deps, "MusicBrainzProvider", Recorder)
+    monkeypatch.setattr(deps, "get_fileops", lambda _request: object())
+    state = SimpleNamespace(settings=Settings(), session_factory=sessions)
+    deps.get_merger(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
+    assert Recorder.urls == [MIRROR]

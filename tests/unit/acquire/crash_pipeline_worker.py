@@ -8,6 +8,7 @@ import asyncio
 import os
 import signal
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -55,6 +56,8 @@ def hook(step: str) -> None:
         renames += 1
         if renames == 2:
             os.kill(os.getpid(), signal.SIGKILL)
+            while True:  # macOS lets this thread run on briefly and commit more rows
+                time.sleep(1)
 
 
 fileops._hook = hook  # pyright: ignore[reportPrivateUsage]
