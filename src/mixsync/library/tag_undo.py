@@ -58,7 +58,7 @@ def unfinished(sessions: sessionmaker[Session], fo: FileOps) -> list[FileOp]:
         done = set(
             s.scalars(
                 select(FileOp.batch_id).where(
-                    FileOp.kind == "copy",
+                    FileOp.kind.in_(("copy", "restore")),  # published, or rolled back
                     FileOp.status == "done",
                     FileOp.batch_id.like(f"{BATCH}%"),
                 )
@@ -75,3 +75,5 @@ def recover(sessions: sessionmaker[Session], fo: FileOps) -> None:
             log.warning("tag undo: put %s back", op.src)
         except FileExistsError:  # a request published it meanwhile
             pass
+        except FileNotFoundError:  # the trash file is gone (purged); do not crash the worker
+            log.warning("tag undo: trash file for %s is gone", op.src)

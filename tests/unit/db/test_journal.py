@@ -56,3 +56,16 @@ def test_migration_downgrade(settings: Settings) -> None:
     assert {"file_ops", "tag_snapshots"} <= set(inspect(make_engine(settings)).get_table_names())
     downgrade("0001_initial")
     assert "file_ops" not in inspect(make_engine(settings)).get_table_names()
+
+
+def test_settled_op_is_only_overridden_by_done(settings: Settings) -> None:
+    j = _journal(settings)
+    failed = j.begin("b", "copy", "s", "d")
+    j.rolled_back(failed)  # another process's recovery got there first
+    j.fail(failed, "late")
+    assert j.find_completed("b", "s") is None
+    done = j.begin("b", "copy", "s", "d")
+    j.rolled_back(done)
+    j.complete(done, "h")  # the work did finish: done wins
+    found = j.find_completed("b", "s")
+    assert found is not None and found.id == done
