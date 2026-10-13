@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.acquire.requests import hold_imports
+from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import RecordingRef
@@ -262,6 +263,19 @@ async def test_owned_means_library_or_active_provisional_and_users_hold_them(rig
     assert by[rec(2)].provisional_track_id == ptid and by[rec(2)].request_id is None
     assert by[rec(2)].expires_at is not None
     assert by[rec(3)].expires_at is None and by[rec(3)].playlist_id == pid
+
+
+async def test_a_fill_hold_on_an_old_import_starts_its_clock_now(rig: Rig) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist(retention_days=10)
+    ptid = provisional(rig.env, 2)
+    with rig.env.sessions.begin() as s:  # imported 40 days ago for another user
+        s.get_one(ProvisionalTrack, ptid).imported_at = rig.env.clock.now() - timedelta(days=40)
+    rig.history.weekly = [ref(2)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    (hold,) = holds(rig.env)
+    assert aware(hold.expires_at) == rig.env.clock.now() + timedelta(days=10)
 
 
 async def test_two_users_one_request_and_two_holds(rig: Rig) -> None:

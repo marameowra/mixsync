@@ -15,6 +15,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.db.auth import create_user
 from mixsync.db.engine import user_sessions
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
@@ -223,6 +224,43 @@ async def test_owned_and_already_requested_are_skipped(env: Env) -> None:
         "Album 2": "skipped_requested",
         "Album 3": "requested",
     }
+
+
+async def test_a_discovery_track_does_not_make_the_album_owned_or_requested(env: Env) -> None:
+    fid, watch = follow(env), FakeWatch()
+    with env.sessions.begin() as s:
+        # discovery asked for one track of Album 1; Album 2's single track was kept (promoted)
+        s.add(
+            Request(
+                user_id=env.user_id,
+                release_mbid=rid(1001),
+                release_group_mbid=rid(1),
+                provisional=True,
+                source="discovery",
+            )
+        )
+        s.add(
+            Track(
+                path="kept.mp3",
+                release_group_mbid=rid(2),
+                status="verified",
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+            )
+        )
+        s.add(
+            ProvisionalTrack(
+                path="d.mp3",
+                recording_mbid=rid(50),
+                batch_id="promote-1",
+                imported_at=env.clock.now(),
+                status="promoted",
+                promoted_path="kept.mp3",
+            )
+        )
+    watch.hits = [rg(n, today(env)) for n in (1, 2)]
+    await poll(env, watch, entity_id(env, fid))
+    assert history(env, fid) == {"Album 1": "requested", "Album 2": "requested"}
 
 
 async def test_label_cap_and_one_click_request(env: Env, web: TestClient) -> None:

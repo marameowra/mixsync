@@ -163,8 +163,13 @@ class Discovery:
             idempotency_key=f"discovery:{pl.id}:after:{job_id}",
         )
 
-    def links(self, s: Session, user_id: int) -> tuple[dict[str, tuple[str, str]] | None, str]:
-        """(service -> (external username, secret), "") when both links work, else (None, why)."""
+    def links(
+        self,
+        s: Session,
+        user_id: int,
+        need: frozenset[str] = frozenset({"listenbrainz", "navidrome"}),
+    ) -> tuple[dict[str, tuple[str, str]] | None, str]:
+        """(service -> (external username, secret), "") when the `need` links work, else (None, why)."""
         out: dict[str, tuple[str, str]] = {}
         relink: list[str] = []
         for link in s.scalars(select(UserLink).where(UserLink.user_id == user_id)):
@@ -172,7 +177,7 @@ class Discovery:
                 relink.append(LINK_NAMES.get(link.service, link.service))
             else:
                 out[link.service] = (link.external_username, secret)
-        if {"listenbrainz", "navidrome"} <= out.keys():
+        if need <= out.keys():
             return out, ""
         return None, f"{relink[0]} needs relinking on /account" if relink else NO_LINKS
 
@@ -313,8 +318,7 @@ class Discovery:
                     hold = self._hold(s, now, pl, c.recording_mbid)
                     hold.provisional_track_id = pt.id
                     if hold.expires_at is None:
-                        imported = aware(pt.imported_at)
-                        hold.expires_at = imported + timedelta(days=pl.retention_days)
+                        hold.expires_at = now + timedelta(days=pl.retention_days)
             pl.entries = [
                 {"recording_mbid": c.recording_mbid, "artist": c.artist, "title": c.title}
                 for c in cands

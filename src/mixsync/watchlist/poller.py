@@ -14,6 +14,7 @@ from mixsync.core.jobs import JobKind
 from mixsync.core.protocols import ReleaseWatch
 from mixsync.core.types import ReleaseGroupHit
 from mixsync.db import canonical as canonical_db
+from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Request
@@ -53,15 +54,29 @@ def _filtered(f: Follow, h: ReleaseGroupHit) -> bool:
     return bool(f.min_date) and not _date_ok(h.date, f.min_date or "")
 
 
-def is_owned(s: Session, group_id: str) -> bool:
-    return (
-        s.scalar(select(Track.id).where(Track.release_group_mbid == group_id).limit(1)) is not None
+def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
+    """Release groups with a library track. A track kept from discovery is one song, not the
+    album (the pipeline's all-tracks rule needs a tracklist the poller has not fetched)."""
+    promoted = select(ProvisionalTrack.promoted_path).where(
+        ProvisionalTrack.promoted_path.is_not(None)
     )
+    return set(
+        s.scalars(
+            select(Track.release_group_mbid).where(
+                Track.release_group_mbid.in_(group_ids), Track.path.not_in(promoted)
+            )
+        )
+    ) - {None}
+
+
+def is_owned(s: Session, group_id: str) -> bool:
+    return group_id in owned_groups(s, [group_id])
 
 
 def is_requested(s: Session, user_id: int, group_id: str, release_ids: tuple[str, ...]) -> bool:
     manual = select(Request.id).where(
         Request.user_id == user_id,
+        Request.provisional.is_(False),  # discovery's one-track asks are not the album
         or_(Request.release_mbid.in_(release_ids), Request.release_group_mbid == group_id),
     )
     other = (
