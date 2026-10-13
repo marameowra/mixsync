@@ -20,6 +20,7 @@ LEGAL = {
     ("retry_wait", "queued"),
     ("running", "failed"),
     ("leased", "queued"),
+    ("leased", "failed"),
     ("running", "queued"),
 }
 

@@ -193,7 +193,7 @@ async def test_confident_match_makes_a_draft_promote_plan_and_stops_the_chain(en
     assert sorted(rig.lookup.calls) == ["Song One", "Song Two"]
     (plan,) = rig.plans()
     assert plan.kind == "promote" and plan.canonical_release_mbid == ALBUM.release_id
-    assert plan.batch_id == f"promote-{plan.id}"
+    assert plan.batch_id == f"verify-promote-{plan.id}"
     new = [
         f"Alpha Band/Alpha Album (2020)/01-0{i} {t}.mp3"
         for i, t in ((1, "Song One"), (2, "Song Two"))

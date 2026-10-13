@@ -115,7 +115,7 @@ class TrashPurger:
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
                 s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
-            self._purge_monitor_rows()
+            await asyncio.to_thread(self._purge_monitor_rows)
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:

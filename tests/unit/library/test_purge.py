@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -413,3 +414,27 @@ def test_old_monitor_rows_beyond_one_batch_are_all_deleted(
     asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
     with sessions() as s:
         assert list(s.scalars(select(Job.id).where(Job.kind == JobKind.DOWNLOAD))) == []
+
+
+def test_monitor_purge_does_not_block_the_event_loop(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started, ticked = threading.Event(), threading.Event()
+    seen: list[bool] = []
+
+    def slow() -> None:  # blocks until the loop runs another coroutine, or times out
+        started.set()
+        seen.append(ticked.wait(timeout=5))
+
+    purger = TrashPurger(sessions, clock, fo, 30)
+    monkeypatch.setattr(purger, "_purge_monitor_rows", slow)
+
+    async def main() -> None:
+        async def tick() -> None:
+            await asyncio.to_thread(started.wait)
+            ticked.set()
+
+        await asyncio.gather(purger.purge(_job(1)), tick())
+
+    asyncio.run(main())
+    assert seen == [True]

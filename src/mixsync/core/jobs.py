@@ -40,7 +40,7 @@ LIVE = (S.QUEUED, S.LEASED, S.RUNNING, S.RETRY_WAIT)
 # Expired leases (leased/running) return to queued; that is the reaper's transition.
 TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     S.QUEUED: frozenset({S.LEASED, S.CANCELLED}),
-    S.LEASED: frozenset({S.RUNNING, S.QUEUED, S.CANCELLED}),
+    S.LEASED: frozenset({S.RUNNING, S.QUEUED, S.FAILED, S.CANCELLED}),
     S.RUNNING: frozenset({S.SUCCEEDED, S.RETRY_WAIT, S.FAILED, S.QUEUED, S.CANCELLED}),
     S.RETRY_WAIT: frozenset({S.QUEUED, S.CANCELLED}),
     S.SUCCEEDED: frozenset(),

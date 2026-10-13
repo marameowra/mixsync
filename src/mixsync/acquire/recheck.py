@@ -229,7 +229,7 @@ class Rechecker:
         )
         s.add(plan)
         s.flush()
-        plan.batch_id = f"promote-{plan.id}"
+        plan.batch_id = f"verify-promote-{plan.id}"  # not "promote-" (discovery)
         return all(o["op"] == "move" for o in ops)
 
     def start_chains(self) -> None:
