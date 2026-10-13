@@ -21,6 +21,7 @@ The Python package. Every subfolder has a README describing what goes there. Rea
 ## Entry points (top-level files, not folders)
 - `app.py`: builds the FastAPI app. Wires config → DB → adapters → services → routes. Run with `mixsync web`.
 - `worker.py`: the job loop. Claims jobs from the DB queue, dispatches by `JobKind`, heartbeats leases, and runs the startup journal recovery ([data safety](../../docs/design/data-safety.md#4-operation-journal)). Run with `mixsync worker`.
+- Recurring chain initializers run independently in worker threads before polling. Failed initializers retry at the polling interval until shutdown; successful initializers are not repeated.
 - `__main__.py` / CLI: `mixsync web | worker | all | migrate | backup`.
 
 ## Dependency rules
