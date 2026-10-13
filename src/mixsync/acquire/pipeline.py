@@ -499,7 +499,7 @@ class Pipeline:
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
         with self.sessions() as s:
-            d = decisions.get(s, did)
+            d = s.get(MatchDecision, did)
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
             cand = candidate_from_dict(d.evidence["candidate"])
@@ -558,7 +558,7 @@ class Pipeline:
             with self.sessions.begin() as s:
                 if canonical_db.switch(s, group, cid, own) == own:
                     # Same transaction: a retry must not mistake this for a plain canonical import.
-                    row = decisions.get(s, did)
+                    row = s.get(MatchDecision, did)
                     if row:
                         row.evidence = {**row.evidence, "canonical_switched_from": cid}
                     switched = True

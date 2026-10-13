@@ -13,10 +13,10 @@ from sqlalchemy.orm import Session
 
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
-from mixsync.db import decisions
 from mixsync.db.models.auth import MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
@@ -157,7 +157,7 @@ def enqueue_verify(
 
 def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
-    d = decisions.get(s, decision_id)
+    d = s.get(MatchDecision, decision_id)
     req = s.get(Request, d.evidence.get("request_id", 0)) if d else None
     if d is None or req is None:  # a decision that did not come from a request
         return

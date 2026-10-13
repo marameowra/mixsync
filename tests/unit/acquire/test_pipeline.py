@@ -341,7 +341,7 @@ async def test_accept_keeps_each_file_on_its_own_position_of_a_repeated_recordin
     reprise = replace(one, title="Reprise", index=3, medium_index=3)
     _release_changed(monkeypatch, (one, ALBUM.tracks[1], reprise))  # one recording, two tracks
     with env.sessions.begin() as s:
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d
         first, second = d.evidence["assignment"]
         d.evidence = {
@@ -376,7 +376,7 @@ async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
 ) -> None:
     rid, did, tok = await _held_for_review(env, web)
     with env.sessions.begin() as s:
-        d = decisions.get(s, did)
+        d = s.get(MatchDecision, did)
         assert d
         d.evidence = {
             **d.evidence,
@@ -1221,7 +1221,7 @@ async def test_import_with_an_empty_assignment_fails_instead_of_importing(env: E
     await env.drain(until=lambda: bool(env.jobs(JobKind.IMPORT)))
     (d,) = decision_rows(env, 2)
     with env.sessions.begin() as s:
-        row = decisions.get(s, d.id)
+        row = s.get(MatchDecision, d.id)
         assert row
         row.evidence = {**row.evidence, "assignment": []}
     await env.drain()

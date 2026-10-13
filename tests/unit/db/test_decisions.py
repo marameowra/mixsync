@@ -9,6 +9,7 @@ from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
+from mixsync.db.models.matching import MatchDecision
 
 MBID = "11111111-1111-1111-1111-111111111111"
 
@@ -42,7 +43,7 @@ def _rec(s: Session, band: Band, user_id: int = 1) -> int:
     ],
 )
 def test_record_status_from_band(s: Session, band: Band, status: str) -> None:
-    row = decisions.get(s, _rec(s, band))
+    row = s.get(MatchDecision, _rec(s, band))
     assert row is not None and row.status == status
     assert row.breakdown == [{"key": "title", "penalty": 0.5, "weight": 2.0, "reason": "why"}]
     assert row.vetoes == ["veto"] and row.scorer_version == 1
@@ -58,7 +59,7 @@ def test_pending_for(s: Session) -> None:
 def test_act_once_only(s: Session) -> None:
     i = _rec(s, Band.REVIEW)
     decisions.act(s, i, 2, "repick", MBID)
-    row = decisions.get(s, i)
+    row = s.get(MatchDecision, i)
     assert row is not None
     assert (row.status, row.final_action, row.chosen_release_mbid, row.acted_by) == (
         "repick",

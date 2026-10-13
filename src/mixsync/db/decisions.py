@@ -64,10 +64,6 @@ def pending_for(s: Session, user_id: int | None) -> list[MatchDecision]:
     return list(s.scalars(q))
 
 
-def get(s: Session, decision_id: int) -> MatchDecision | None:
-    return s.get(MatchDecision, decision_id)
-
-
 def reopen(s: Session, decision_id: int) -> None:
     """Undo a repick whose release turned out not to exist: the reviewer chooses again."""
     s.execute(
