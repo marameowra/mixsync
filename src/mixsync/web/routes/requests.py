@@ -3,7 +3,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import ColumnElement, delete, select
+from sqlalchemy import ColumnElement, delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import create_request
@@ -11,7 +12,9 @@ from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import JobState
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
+from mixsync.db.models.discovery import ProvisionalHold
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.deps import Db, require
@@ -101,6 +104,9 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
     db.execute(delete(Job).where(_of(req.id), Job.status.not_in(held)))
     if db.scalar(select(Job.id).where(_of(req.id)).limit(1)) is not None:
         raise HTTPException(409, "request is in progress")  # get_db rolls the whole delete back
+    # Keep the hit (its status still stops the watchlist re-requesting) and the hold; drop the link.
+    for model in (FollowHit, ProvisionalHold):
+        db.execute(update(model).where(model.request_id == req.id).values(request_id=None))
     db.delete(req)
 
 
@@ -117,7 +123,7 @@ def delete_imported(user: User, db: Db) -> RedirectResponse:
             # (the last_seen_at autoflush); db/engine.py has no pysqlite SAVEPOINT recipe.
             with db.begin_nested():  # a refused row rolls back only its own changes
                 _delete(db, req, user.id)
-        except HTTPException:
+        except (HTTPException, IntegrityError):
             continue
     return RedirectResponse("/requests", status_code=303)
 
