@@ -933,3 +933,121 @@ def test_list_sort_keys(client: TestClient, sf: sessionmaker[Session]) -> None:
     assert order("?sort=date&order=desc") == [c, b, a]
     assert order("?sort=match")[0] == b
     assert order("?sort=bogus") == [a, b, c]
+
+
+def _reviewed(
+    sf: sessionmaker[Session], user: str, path: str, *, migration: bool = False, link: bool = True
+) -> tuple[int, int]:
+    """A pending stage-2 review of a request (decision id, request id)."""
+    rid = _req(sf, user, "review", JobState.SUCCEEDED)
+    did = _make_decision(sf, user, path)
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.evidence = {
+            **d.evidence,
+            **({"request_id": rid} if link else {}),
+            "candidate": {"username": "peer1", "folder": "Music\\Album", "files": []},
+        }
+        if migration:
+            req = s.get(AlbumRequest, rid)
+            assert req
+            m = Migration(user_id=req.user_id, status="running", summary={})
+            s.add(m)
+            s.flush()
+            req.migration_id = m.id
+    return did, rid
+
+
+def _verifies(sf: sessionmaker[Session], rid: int) -> list[Job]:
+    with sf() as s:
+        return [
+            j
+            for j in s.scalars(select(Job).where(Job.kind == "verify"))
+            if j.payload["request_id"] == rid
+        ]
+
+
+def test_recheck_requeues_with_no_fixed_release(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    mig, mrid = _reviewed(sf, "alice", str(downloads / "a.mp3"), migration=True)
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert r.status_code == 303
+    page = client.get(r.headers["location"]).text
+    assert "Re-queued 2 · skipped 0 (files missing) · 0 already re-checking" in page
+    assert "Nothing to review" in page
+    with sf() as s:
+        for i, q in ((did, rid), (mig, mrid)):
+            d, req = s.get(MatchDecision, i), s.get(AlbumRequest, q)
+            assert d and req
+            assert (d.status, d.final_action, d.acted_by) == ("rechecked", "recheck", d.user_id)
+            assert d.acted_at and req.status == "verifying"
+    for q in (rid, mrid):
+        (job,) = _verifies(sf, q)
+        assert job.payload["release_mbid"] is None
+        assert job.payload["paths"] == [str(downloads / "a.mp3")]
+
+
+def test_recheck_skips_missing_files_and_unlinked_decisions(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    gone, rid = _reviewed(sf, "alice", str(downloads / "gone.mp3"))
+    loose, _ = _reviewed(sf, "alice", str(downloads / "a.mp3"), link=False)
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert "Re-queued 0 · skipped 2 (files missing)" in client.get(r.headers["location"]).text
+    with sf() as s:
+        for i in (gone, loose):
+            d = s.get(MatchDecision, i)
+            assert d and d.status == decisions.PENDING
+    assert not _verifies(sf, rid)
+
+
+def test_recheck_twice_makes_one_job_and_skips_live_ones(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    busy, brid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        s.add(
+            Job(
+                kind="verify",
+                payload={"request_id": brid},
+                status=JobState.QUEUED,
+                max_attempts=1,
+                run_after=datetime.now(UTC),
+            )
+        )
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert "Re-queued 1 · skipped 0 (files missing) · 1 already re-checking" in (
+        client.get(r.headers["location"]).text
+    )
+    client.post("/review/recheck", data={"csrf_token": tok})
+    assert len(_verifies(sf, rid)) == 1 and len(_verifies(sf, brid)) == 1
+    with sf() as s:
+        d = s.get(MatchDecision, busy)
+        assert d and d.status == decisions.PENDING
+
+
+def test_recheck_scope_and_csrf(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    mine, _ = _reviewed(sf, "bob", str(downloads / "a.mp3"))
+    theirs, _ = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    tok = _login(client, "bob")
+    assert client.post("/review/recheck").status_code == 403
+    assert "Re-check" in client.get("/review").text
+    client.post("/review/recheck", data={"csrf_token": tok})
+    with sf() as s:
+        a, b = s.get(MatchDecision, mine), s.get(MatchDecision, theirs)
+        assert a and b and (a.status, b.status) == ("rechecked", decisions.PENDING)
+    tok = _login(client, "root")
+    client.post("/review/recheck", data={"csrf_token": tok})
+    with sf() as s:
+        b = s.get(MatchDecision, theirs)
+        assert b and b.status == "rechecked"
+    assert "Re-check" not in client.get("/review").text

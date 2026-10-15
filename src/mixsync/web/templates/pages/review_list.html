@@ -2,7 +2,13 @@
 {% block title %}Review - MixSync{% endblock %}
 {% block content %}
 <h1>Review</h1>
+{% if requeued is defined %}
+<p role="status">Re-queued {{ requeued }} · skipped {{ missing }} (files missing) · {{ busy }} already re-checking</p>
+{% endif %}
 {% if items %}
+<form method="post" action="/review/recheck" onsubmit="return confirm('Re-check {{ items|length }} pending reviews with the current scoring?')">{{ forms.csrf() }}
+  <button type="submit">Re-check pending reviews</button>
+</form>
 <p>Sort by:
   {% for key, label in [("date", "date"), ("score", "score"), ("artist", "artist"), ("album", "album"), ("match", "match")] %}
   <a href="/review?sort={{ key }}&amp;order={{ 'desc' if sort == key and order == 'asc' else 'asc' }}"{% if sort == key %} aria-current="true"{% endif %}>{{ label }}{% if sort == key %} ({{ order }}){% endif %}</a>{{ " " }}

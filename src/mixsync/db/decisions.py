@@ -19,6 +19,7 @@ _STATUS_BY_ACTION = {
     "reject": "rejected",
     "repick": "repick",
     "unverified": "unverified",
+    "recheck": "rechecked",  # closed out so verify can decide again with the current scorer
 }
 
 

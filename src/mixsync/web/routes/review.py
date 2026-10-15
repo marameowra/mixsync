@@ -8,12 +8,16 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 
-from mixsync.acquire.requests import apply_review
+from mixsync.acquire.requests import apply_review, enqueue_verify
 from mixsync.core.capabilities import Capability
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Job
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
 from mixsync.web.deps import Db, Namer, decision_for, require
@@ -58,13 +62,57 @@ _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
 
 @router.get("")
 def review_list(
-    request: Request, user: User, db: Db, sort: str = "date", order: str = "asc"
+    request: Request,
+    user: User,
+    db: Db,
+    sort: str = "date",
+    order: str = "asc",
+    requeued: int | None = None,
+    missing: int = 0,
+    busy: int = 0,
 ) -> HTMLResponse:
     items = decisions.pending_for(db, _owner(user))
     key = _SORTS.get(sort, _SORTS["date"])
     items.sort(key=key, reverse=order == "desc")
     ctx = {"user": user, "items": items, "sort": sort, "order": order}
+    if requeued is not None:  # the summary of a re-check, carried in the redirect
+        ctx |= {"requeued": requeued, "missing": missing, "busy": busy}
     return templates.TemplateResponse(request, "pages/review_list.html", ctx)
+
+
+@router.post("/recheck")
+def recheck(user: User, db: Db) -> RedirectResponse:
+    """Verify every pending review again with the current scorer: the decision is closed and the
+    files go back through VERIFY with no fixed release, so it picks one afresh. No network here."""
+    now, queued, missing, busy = datetime.now(UTC), 0, 0, 0
+    for d in decisions.pending_for(db, _owner(user)):
+        req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
+        if req is None:  # not from a request: nothing to verify again
+            missing += 1
+            continue
+        files = d.evidence.get("source", {}).get("files", [])
+        if not files or not all(
+            f.get("local_path") and Path(f["local_path"]).exists() for f in files
+        ):
+            missing += 1
+            continue
+        if db.scalar(
+            select(Job.id)
+            .where(
+                Job.kind == JobKind.VERIFY,
+                Job.status.in_(LIVE),
+                Job.payload["request_id"].as_integer() == req.id,
+            )
+            .limit(1)
+        ):
+            busy += 1
+            continue
+        decisions.act(db, d.id, user.id, "recheck")
+        enqueue_verify(db, now, req, None, d.evidence)
+        queued += 1
+    return RedirectResponse(
+        f"/review?requeued={queued}&missing={missing}&busy={busy}", status_code=303
+    )
 
 
 @router.get("/{decision_id}")
