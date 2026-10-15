@@ -67,7 +67,21 @@ def test_repo_and_selector_passed_to_gh_pr_view(tmp_path: Path) -> None:
     ]  # fmt: skip
 
 
-@pytest.mark.parametrize("command", ["gh pr view 3", "git status"])
+def test_unparseable_gh_merge_denied(tmp_path: Path) -> None:
+    out, _ = run_hook(tmp_path, "gh pr merge 'unterminated", "dev")
+    assert denied(out)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh pr view 3",
+        "git status",
+        'echo "line one\nline two"',
+        "cat <<'EOF'\ndon't merge this\nEOF",
+        "echo 'unterminated",
+    ],
+)
 def test_unrelated_commands_allowed_without_calling_gh(tmp_path: Path, command: str) -> None:
     out, calls = run_hook(tmp_path, command, "main")
     assert out == ""

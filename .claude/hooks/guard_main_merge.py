@@ -24,17 +24,17 @@ def deny() -> None:
 
 def segments(command: str) -> list[list[str]]:
     out: list[list[str]] = []
-    for line in command.splitlines():
-        lex = shlex.shlex(line, posix=True, punctuation_chars=True)
-        lex.whitespace_split = True
-        seg: list[str] = []
-        for tok in lex:
-            if re.fullmatch(r"[;&|()<>]+", tok):  # operator token: new segment
-                out.append(seg)
-                seg = []
-            else:
-                seg.append(tok)
-        out.append(seg)
+    # Unquoted newlines are whitespace; a stray token can only skew the selector (fails closed).
+    lex = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    seg: list[str] = []
+    for tok in lex:
+        if re.fullmatch(r"[;&|()<>]+", tok):  # operator token: new segment
+            out.append(seg)
+            seg = []
+        else:
+            seg.append(tok)
+    out.append(seg)
     return out
 
 
@@ -67,9 +67,11 @@ def base_is_main(selector: str | None, repo: str | None) -> bool:
 def main() -> None:
     try:
         command = json.load(sys.stdin)["tool_input"]["command"]
+        if not (re.search(r"\bgh\b", command) and "merge" in command):
+            return  # cheap prefilter: can't be a gh merge, skip parsing
         segs = segments(command)
     except (ValueError, KeyError, TypeError):
-        deny()  # unparseable: fail closed
+        deny()  # bad input or unparseable gh+merge: fail closed
         return
     for seg in segs:
         for i, tok in enumerate(seg):
