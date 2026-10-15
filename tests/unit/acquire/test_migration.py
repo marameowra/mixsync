@@ -31,6 +31,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
+from mixsync.match import scorer
 
 from .conftest import Env, login
 from .fakes import ALBUM, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
@@ -370,9 +371,9 @@ async def test_reject_band_goes_to_review_not_to_search(
     put_album(rig.root, "Alpha Band/Alpha Album")
     rig.meta.refs = [ref(OTHER)]  # the wrong album is all MusicBrainz offers
     real = pipeline.score_files
-    monkeypatch.setattr(
-        pipeline, "score_files", lambda *a: replace(real(*a), band=Band.REJECT, distance=0.9)
-    )
+    reject = lambda *a: replace(real(*a), band=Band.REJECT, distance=0.9)  # noqa: E731
+    monkeypatch.setattr(pipeline, "score_files", reject)
+    monkeypatch.setattr(scorer, "score_files", reject)  # the release choice scores there
     rig.confirm(await rig.preflight())
     await rig.env.drain()
 
@@ -1009,18 +1010,59 @@ async def test_unreadable_files_show_only_when_the_window_reaches_the_start(
         assert [r["status"] for r in mig.report(s, m, start=began + timedelta(seconds=1))] == []
 
 
-async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def to_normal_request(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, other_artist: bool = False, album: str | None = None
+) -> Any:
+    """The same files and flow as the partial migration, but an ordinary request."""
     await migrate_partial(rig, monkeypatch)
+    if album:
+        monkeypatch.setitem(CATALOG, BIG, replace(CATALOG[BIG], album=album))
+    if other_artist:
+        big = CATALOG[BIG]
+        monkeypatch.setitem(CATALOG, BIG, replace(big, artist="Zzzz Qqqq", album="Xxxx Wwww"))
     rig.confirm(await rig.preflight())
-    with rig.env.sessions.begin() as s:  # the same files and flow, but not a migration
+    with rig.env.sessions.begin() as s:
         s.execute(update(Request).values(migration_id=None, release_mbid=BIG))
         (job,) = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY))
         job.payload = {**job.payload, "release_mbid": BIG}
     await rig.env.drain(until=lambda: bool(decision_rows(rig.env, 2)))
     (dec,) = decision_rows(rig.env, 2)
-    assert dec.band == "reject" and library(rig.env) == []  # not auto-accepted, not imported
+    return dec
+
+
+async def test_a_confident_single_track_on_a_normal_request_is_accepted_as_partial(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dec = await to_normal_request(rig, monkeypatch)
+    assert dec.band == "auto_accept" and dec.evidence["partial"] == "1 of 13 tracks present"
+
+
+async def test_an_unsure_single_track_on_a_normal_request_is_rejected_and_retried(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    dec = await to_normal_request(rig, monkeypatch)
+    assert dec.band == "reject" and library(rig.env) == []
+    assert rig.requests()[0].status == "searching"  # on to the next peer, as for any reject
+
+
+async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_is_rejected(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dec = await to_normal_request(rig, monkeypatch, album="The Very Best Of Alpha Band")
+    assert dec.band == "reject" and not dec.evidence["partial"] and library(rig.env) == []
+
+
+async def test_a_single_track_of_another_artist_on_a_normal_request_is_rejected(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    dec = await to_normal_request(rig, monkeypatch, other_artist=True)
+    assert dec.band == "reject" and library(rig.env) == []
 
 
 async def test_a_partial_album_with_an_unsure_file_goes_to_review(

@@ -108,8 +108,14 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
     """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
     req.tried = [*req.tried, [peer, folder]]
-    req.status = "searching"
-    req.last_error = why
+    if req.migration_id is None and s.scalar(
+        select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)
+    ):  # part of the album is already in: it stays a partial request while the rest is sought
+        kept = (req.last_error or "").split("; ")[0]
+        req.status = "partial"
+        req.last_error = "; ".join([kept if kept.startswith("partial: ") else "partial", why])
+    else:
+        req.status, req.last_error = "searching", why
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
 

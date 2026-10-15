@@ -66,11 +66,22 @@ from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
-from mixsync.match.candidates import parse_name, rank
-from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
+from mixsync.match.candidates import parse_name, present_tracks, rank
+from mixsync.match.features import string_dist
+from mixsync.match.scorer import (
+    DEFAULT_WEIGHTS,
+    SCORER_VERSION,
+    assign_tracks,
+    best_release,
+    score_files,
+)
 from mixsync.match.vetoes import all_confident
 
 log = logging.getLogger(__name__)
+
+# A partial import needs the album tag to name the release: 0.2 forgives an edition suffix or a
+# typo, not a compilation title.
+PARTIAL_ALBUM_MAX_DIST = 0.2
 
 Handler = Callable[[JobRecord], Awaitable[None]]
 
@@ -127,7 +138,10 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status not in ("searching", "no_results") or req.migration_id is not None:
+            if (
+                req.status not in ("searching", "no_results", "partial")
+                or req.migration_id is not None
+            ):
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -158,6 +172,7 @@ class Pipeline:
                 req.artist, req.album = album.artist[:255], album.album[:255]
                 req.status, req.last_error = "failed", "release has no tracklist"
             return
+        owned: set[str | None] = set()  # recordings of this album already in the library
         if wanted is not None:  # discovery: any copy of the wanted recordings will do
             with self.sessions() as s:
                 have = self._have_recordings(s, wanted)
@@ -182,6 +197,7 @@ class Pipeline:
                 have = canonical_db.owned(
                     s, album.release_group_id, [t.recording_id or "" for t in album.tracks]
                 )
+            owned = have
             if all(t.recording_id in have for t in album.tracks):  # nothing left to fetch
                 with self.sessions.begin() as s:
                     req = self._request(s, job)
@@ -192,7 +208,16 @@ class Pipeline:
         ranked: list[tuple[Candidate, Any]] = []
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
-            ranked = [cr for cr in rank(found, album, profile) if cr[1].band is not Band.REJECT]
+            ranked = [
+                cr
+                for cr in rank(found, album, profile)
+                if cr[1].band is not Band.REJECT
+                # a folder with nothing new would only download and import nothing
+                and (
+                    not owned
+                    or any(t.recording_id not in owned for t in present_tracks(cr[0], album))
+                )
+            ]
             if ranked:
                 break
 
@@ -206,7 +231,9 @@ class Pipeline:
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
                 ]
                 req.no_results_attempts += 1
-                req.status, req.next_search_at = "no_results", now + delay
+                # a partial album keeps its label while it waits for the rest
+                req.status = "partial" if req.status == "partial" else "no_results"
+                req.next_search_at = now + delay
                 enqueue_in(
                     s,
                     now,
@@ -387,16 +414,17 @@ class Pipeline:
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         partial = ""
-        if (  # deliberately partial: missing tracks cost nothing when every file is sure
-            migrating
-            and result.band is Band.REVIEW
-            and len(pairs) < len(album.tracks)
-            and all_confident(pairs)
-        ):
+        if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
+            # deliberately partial: missing tracks cost nothing, but only when AcoustID is sure
+            # of every file; otherwise the normal bands (and a retry) apply
             free = score_files(
                 files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
-            if free.band is Band.AUTO_ACCEPT:
+            if (
+                free.band is Band.AUTO_ACCEPT
+                and all_confident(pairs)
+                and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
+            ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
         evidence = {
             "request_id": p["request_id"],
@@ -487,14 +515,12 @@ class Pipeline:
             albums = [
                 await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
             ]
-        scored = [(score_files(files, like, a, profile), a) for a in albums]
-        if not scored:
+        if not albums:
             none = MatchResult(
                 1.0, Band.REVIEW, (), ("no release found on MusicBrainz",), SCORER_VERSION
             )
             return AlbumInfo(like.artist or "", like.album or "", ()), none
-        result, best = min(scored, key=lambda x: x[0].distance)
-        return best, result
+        return best_release(files, like, albums, profile)
 
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
@@ -569,13 +595,25 @@ class Pipeline:
             # not yet committed); the fragmentation merge cleans that up.
             files = await self._unowned(album, files, batch)
         if n and not files:  # every file is a verified duplicate: nothing to import or rescan
+            with self.sessions() as s:
+                have = canonical_db.owned(
+                    s, str(album.release_group_id), [t.recording_id or "" for t in album.tracks]
+                )
+            left = [t for t in album.tracks if t.recording_id not in have]
             with self.sessions.begin() as s:
                 req = self._request(s, job)
-                req.status, req.last_error = "owned", None
+                if left and req.migration_id is None and album.release_group_id:
+                    # another copy of what we have: the rest of the album is still wanted
+                    text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
+                    self._keep_looking(s, self.clock.now(), req, cand, text)
+                else:
+                    req.status, req.last_error = "owned", None
             return
         results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
-        await self._finish(job, cand, results, batch, unassigned=unassigned)
+        await self._finish(
+            job, cand, results, batch, unassigned=unassigned, partial=evidence.get("partial", "")
+        )
 
     async def _import_provisional(
         self,
@@ -712,6 +750,7 @@ class Pipeline:
         unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
         root: str = "library",
         note: str = "",
+        partial: str = "",  # "N of M tracks present": import what is here, keep looking
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
@@ -729,12 +768,32 @@ class Pipeline:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
             req.last_error = "; ".join(notes) or None
+            if partial and not errors and not migrating:
+                self._keep_looking(s, now, req, cand, "; ".join([partial, *notes]))
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
                     hold_imports(s, now, batch)
                 if recheck:
                     enqueue_recheck(s, now, recheck, None)
+
+    @staticmethod
+    def _keep_looking(s: Session, now: datetime, req: Request, cand: Candidate, text: str) -> None:
+        """Open until the rest of the album is here. The next search skips owned recordings and
+        the import drops them, so nothing already imported is touched."""
+        delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
+        req.status, req.last_error = "partial", f"partial: {text}"
+        req.tried = [*req.tried, [cand.username, cand.folder]]
+        req.no_results_attempts += 1
+        req.next_search_at = now + delay
+        enqueue_in(
+            s,
+            now,
+            JobKind.SEARCH,
+            {"request_id": req.id},
+            run_after=now + delay,
+            priority=search_priority(req),
+        )
 
     async def _unowned(
         self, album: AlbumInfo, files: list[canonical.File], batch: str

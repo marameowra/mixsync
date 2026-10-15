@@ -4,7 +4,7 @@ import random
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
@@ -53,6 +53,10 @@ def _filtered(f: Follow, h: ReleaseGroupHit) -> bool:
     return bool(f.min_date) and not _date_ok(h.date, f.min_date or "")
 
 
+# Statuses of a request that is still going after some of its tracks were imported.
+OPEN_STATUSES = ("searching", "no_results", "partial", "downloading", "verifying", "review")
+
+
 def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
     """Release groups with a library track. A track kept from discovery is one song, not the
     album (the pipeline's all-tracks rule needs a tracklist the poller has not fetched)."""
@@ -61,7 +65,19 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
             Track.release_group_mbid.in_(group_ids), ~Track.batch_id.like("promote-%")
         )
     )
-    return {g for g in rows if g}
+    # A group whose request is still open after importing some tracks is still wanted. This is
+    # derived from the data (not the status, which shows "downloading" etc. between searches).
+    open_with_tracks = (
+        select(Request.release_group_mbid)
+        .join(Track, Track.batch_id.like(literal("request-") + cast(Request.id, String) + "-%"))
+        .where(
+            Request.release_group_mbid.in_(group_ids),
+            Request.status.in_(OPEN_STATUSES),
+            Request.migration_id.is_(None),
+        )
+    )
+    partial = set(s.scalars(open_with_tracks))
+    return {g for g in rows if g} - partial
 
 
 def is_owned(s: Session, group_id: str) -> bool:

@@ -53,10 +53,15 @@ def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
 
 
 def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
-    """A no_results request always has a queued repeat search, which delete removes with it."""
+    """A no_results or partial request always has a queued repeat search, which delete
+    removes with it."""
     if req.status in _BUSY or is_dead_end(req):
         return False
-    blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(LIVE)
+    blocking = (
+        {JobState.LEASED, JobState.RUNNING}
+        if req.status in ("no_results", "partial")
+        else set(LIVE)
+    )
     return not (live.get(req.id, set()) & blocking)
 
 
