@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
+    adopt_downloads: bool = False  # import album folders nobody requested that land in downloads
+    adopt_settle_minutes: int = Field(default=10, ge=1)  # a folder must be this quiet to be adopted
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
     flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first

@@ -57,3 +57,17 @@ def test_drop_dir_must_not_overlap_other_dirs(
 def test_a_separate_drop_dir_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_DROP_DIR", "/drop")
     assert str(Settings().drop_dir) == "/drop"
+
+
+def test_adopt_downloads_default_env_and_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MIXSYNC_ADOPT_DOWNLOADS", raising=False)
+    monkeypatch.delenv("MIXSYNC_ADOPT_SETTLE_MINUTES", raising=False)
+    s = Settings()
+    assert (s.adopt_downloads, s.adopt_settle_minutes) == (False, 10)
+    monkeypatch.setenv("MIXSYNC_ADOPT_DOWNLOADS", "true")
+    monkeypatch.setenv("MIXSYNC_ADOPT_SETTLE_MINUTES", "3")
+    s = Settings()
+    assert (s.adopt_downloads, s.adopt_settle_minutes) == (True, 3)
+    monkeypatch.setenv("MIXSYNC_ADOPT_SETTLE_MINUTES", "0")
+    with pytest.raises(ValidationError, match="adopt_settle_minutes"):
+        Settings()

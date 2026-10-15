@@ -54,7 +54,9 @@ class Request(TimestampMixin, Base):
     migration_id: Mapped[int | None] = mapped_column(
         ForeignKey("migrations.id")
     )  # old-library import
-    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual / watchlist / drop
+    source: Mapped[str] = mapped_column(
+        String(16), default="manual"
+    )  # manual / watchlist / drop / adopt
     release_group_mbid: Mapped[str | None] = mapped_column(String(36))  # when the creator knew it
     # discovery: import only the wanted recordings, into /data/discover
     provisional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -63,7 +65,7 @@ class Request(TimestampMixin, Base):
     @property
     def from_files(self) -> bool:
         """Identified from files already on disk: nothing to search for."""
-        return self.migration_id is not None or self.source == "drop"
+        return self.migration_id is not None or self.source in ("drop", "adopt")
 
 
 class Migration(TimestampMixin, Base):

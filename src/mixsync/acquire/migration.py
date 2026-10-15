@@ -14,7 +14,7 @@ import os
 import shutil
 import stat
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -60,7 +60,9 @@ def _skip(rel: Path, why: str) -> dict[str, str]:
     return {"path": str(rel), "why": why}
 
 
-def _files(root: Path, skipped: list[dict[str, str]]) -> Iterator[Path]:
+def _files(
+    root: Path, skipped: list[dict[str, str]], exclude: Callable[[Path], bool] | None = None
+) -> Iterator[Path]:
     """Every regular file, whatever its type: the byte-identical check covers the whole tree.
     Symlinks are never followed; what cannot be read or is not a regular file goes in `skipped`
     as {"path", "why"}: paths may contain ": ", so never one string."""
@@ -69,6 +71,8 @@ def _files(root: Path, skipped: list[dict[str, str]]) -> Iterator[Path]:
         skipped.append(_skip(Path(e.filename or root).relative_to(root), "cannot read folder"))
 
     for base, dirs, names in os.walk(root, onerror=onerror):
+        if exclude:  # pruned: nothing under it is listed, hashed or read
+            dirs[:] = [d for d in dirs if not exclude(Path(base) / d)]
         dirs.sort()
         for d in dirs:
             if (p := Path(base) / d).is_symlink():
@@ -101,14 +105,14 @@ def _album_dir(path: Path) -> Path:
     return path.parent.parent if DISC_DIR.match(path.parent.name) else path.parent
 
 
-def scan(root: Path, out: Path) -> dict[str, Any]:
+def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -> dict[str, Any]:
     """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
     out.mkdir(parents=True, exist_ok=True)
     unreadable: list[dict[str, str]] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
     count = total = 0
     with (out / "manifest.jsonl").open("w") as manifest:
-        for path in _files(root, unreadable):
+        for path in _files(root, unreadable, exclude):
             rel = path.relative_to(root)
             try:
                 size, digest = _hash(path)
