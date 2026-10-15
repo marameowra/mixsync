@@ -10,7 +10,13 @@ import httpx
 
 from mixsync.core.audio import EXTENSIONS
 from mixsync.core.errors import AuthError, PermanentError, TransientError
-from mixsync.core.matching import Candidate, CandidateFile, TransferInfo, TransferStatus
+from mixsync.core.matching import (
+    Candidate,
+    CandidateFile,
+    TransferInfo,
+    TransferStatus,
+    download_dir,
+)
 from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset(e[1:] for e in EXTENSIONS)  # only what import takes
@@ -186,7 +192,7 @@ class SlskdSource:
         if not _safe(f.path):  # candidates stored before the map_responses filter existed
             raise PermanentError(f"unsafe slskd path from peer: {f.path!r}")
         parts = f.path.split("\\")
-        path = self._downloads.joinpath(*parts[-2:])
+        path = download_dir(self._downloads, f.path) / parts[-1]
         if path.parent.is_dir():
             dup = re.compile(rf"{re.escape(path.stem)}(?:_\d+)?{re.escape(path.suffix)}")
             fits = [

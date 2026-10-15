@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
+from mixsync.acquire.adopter import adopter
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.merge import Merger
@@ -255,6 +256,14 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         settings.mb_rate,
     )
     dropper = DropFolder(sessions, clock, settings.drop_dir, Path(settings.config_dir) / "drop")
+    adopt = adopter(
+        sessions,
+        clock,
+        Path(settings.downloads_dir),
+        Path(settings.config_dir) / "adopt",
+        settings.adopt_downloads,
+        settings.adopt_settle_minutes,
+    )
     watcher = Watcher(
         sessions,
         clock,
@@ -288,6 +297,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         | pipeline.handlers()
         | migrator.handlers()
         | dropper.handlers()
+        | adopt.handlers()
         | merger.handlers()
         | rechecker.handlers()
         | submitter.handlers()
@@ -306,6 +316,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         watcher.start_chains,
         purger.start_chains,
         dropper.start_chains,
+        adopt.start_chains,
         discovery_startup,
     )
 

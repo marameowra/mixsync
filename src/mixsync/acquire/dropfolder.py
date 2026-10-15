@@ -50,9 +50,14 @@ class DropFolder:
     work_dir: Path  # where the scan keeps its manifest
     rng: Rng = random.uniform
     stat: Callable[[Path], os.stat_result] = Path.stat
+    # the adopter (acquire/adopter.py) is this class over the downloads dir:
+    kind: JobKind = JobKind.DROP_SCAN
+    source: str = "drop"  # Request.source; also the idempotency key prefix
+    settle: timedelta = SETTLE
+    owned: Callable[[Session], set[Path]] | None = None  # dirs whose albums are not ours to take
 
     def handlers(self) -> dict[JobKind, Handler]:
-        return {JobKind.DROP_SCAN: self.run}
+        return {self.kind: self.run}
 
     def start_chains(self) -> None:
         """On startup: queue a scan unless the feature is off or a chain is already live."""
@@ -60,14 +65,14 @@ class DropFolder:
             return
         with self.sessions.begin() as s:
             live = s.scalar(
-                select(Job.id).where(Job.kind == JobKind.DROP_SCAN, Job.status.in_(LIVE)).limit(1)
+                select(Job.id).where(Job.kind == self.kind, Job.status.in_(LIVE)).limit(1)
             )
             if live is None:
-                enqueue_in(s, self.clock.now(), JobKind.DROP_SCAN, {})
+                enqueue_in(s, self.clock.now(), self.kind, {})
 
     def _quiet(self, g: Group) -> bool:
-        """No file, and no folder holding one, changed within SETTLE. ctime counts too: copies
-        that keep the old mtime (cp -p, rsync -a, Finder, SMB) still bump it. A file that
+        """No file, and no folder holding one, changed within the settle time. ctime counts too:
+        copies that keep the old mtime (cp -p, rsync -a, Finder, SMB) still bump it. A file that
         vanishes mid-scan makes the album not quiet yet."""
         root = Path(g.folder)
         paths = {root / rel for rel, _ in g.files}
@@ -76,17 +81,26 @@ class DropFolder:
             newest = max(max(st.st_mtime, st.st_ctime) for st in map(self.stat, paths))
         except OSError:
             return False
-        return newest <= (self.clock.now() - SETTLE).timestamp()
+        return newest <= (self.clock.now() - self.settle).timestamp()
 
     def _queue(self, groups: list[Group], hashes: dict[str, str]) -> int:
         now, queued = self.clock.now(), 0
         with self.sessions.begin() as s:
+            if self.owned is not None:
+                mine = self.owned(s)
+                groups = [
+                    g
+                    for g in groups
+                    if mine.isdisjoint(
+                        {Path(g.folder), *(Path(g.folder, r).parent for r, _ in g.files)}
+                    )
+                ]
             # the first account is the admin who set mixsync up; it owns what lands in review
             owner = s.scalar(select(User.id).order_by(User.id).limit(1))
             if owner is None:
                 return 0
             for g in groups:
-                base = f"drop:{_digest(g, hashes)}"
+                base = f"{self.source}:{_digest(g, hashes)}"
                 earlier = list(
                     s.scalars(
                         select(Job)
@@ -101,7 +115,7 @@ class DropFolder:
                 if earlier:
                     last = s.get(Request, earlier[-1].payload["request_id"])
                     if last is None or last.status != "failed":
-                        log.debug("drop folder: %s already queued as %s", g.folder, base)
+                        log.debug("%s: %s already queued as %s", self.source, g.folder, base)
                         continue  # a failed attempt is tried again; anything else is settled
                 req = Request(
                     user_id=owner,
@@ -109,7 +123,7 @@ class DropFolder:
                     artist=g.artist[:255],
                     album=(g.album or Path(g.folder).name)[:255],
                     status="verifying",
-                    source="drop",
+                    source=self.source,
                 )
                 s.add(req)
                 s.flush()
@@ -137,6 +151,11 @@ class DropFolder:
         found = scan(root, self.work_dir)
         lines = (self.work_dir / "manifest.jsonl").read_text().splitlines()
         hashes = {str(root / e["path"]): e["sha256"] for e in map(json.loads, lines)}
+        if found["unreadable"]:  # left where they are, never deleted
+            bad = [u["path"] for u in found["unreadable"]]
+            log.warning(
+                "%s: %d unreadable file(s) left in place: %s", self.source, len(bad), bad[:5]
+            )
         return self._queue([g for g in found["groups"] if self._quiet(g)], hashes)
 
     async def run(self, job: JobRecord) -> None:
@@ -145,15 +164,15 @@ class DropFolder:
                 # shortcut: hashes the whole folder every scan; add an mtime/size cache if a
                 # drop folder ever holds terabytes nobody has dealt with
                 if n := await asyncio.to_thread(self._scan_and_queue, self.drop_dir):
-                    log.info("drop folder: queued %d album(s)", n)
+                    log.info("%s: queued %d album(s)", self.source, n)
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:
                 enqueue_in(
                     s,
                     now,
-                    JobKind.DROP_SCAN,
+                    self.kind,
                     {},
                     run_after=now + INTERVAL * self.rng(0.75, 1.25),
-                    idempotency_key=f"drop-scan:after:{job.id}",
+                    idempotency_key=f"{self.source}-scan:after:{job.id}",
                 )
