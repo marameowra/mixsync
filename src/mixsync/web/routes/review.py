@@ -38,13 +38,32 @@ def parse_release_mbid(text: str) -> str:
     raise HTTPException(400, "not a MusicBrainz release URL or MBID")
 
 
+def _owner(user: AuthUser) -> int | None:
+    return None if Capability.approve in user.capabilities else user.id
+
+
+def _target(d: MatchDecision, key: str) -> str:
+    return str(d.evidence.get("target", {}).get(key, "")).casefold()
+
+
+_SORTS: dict[str, Callable[[MatchDecision], Any]] = {
+    "date": lambda d: (d.created_at, d.id),
+    "score": lambda d: d.distance,
+    "artist": lambda d: _target(d, "artist"),
+    "album": lambda d: _target(d, "title"),
+    "match": lambda d: bool(d.release_mbid),
+}
+
+
 @router.get("")
-def review_list(request: Request, user: User, db: Db) -> HTMLResponse:
-    owner = None if Capability.approve in user.capabilities else user.id
-    items = decisions.pending_for(db, owner)
-    return templates.TemplateResponse(
-        request, "pages/review_list.html", {"user": user, "items": items}
-    )
+def review_list(
+    request: Request, user: User, db: Db, sort: str = "date", order: str = "asc"
+) -> HTMLResponse:
+    items = decisions.pending_for(db, _owner(user))
+    key = _SORTS.get(sort, _SORTS["date"])
+    items.sort(key=key, reverse=order == "desc")
+    ctx = {"user": user, "items": items, "sort": sort, "order": order}
+    return templates.TemplateResponse(request, "pages/review_list.html", ctx)
 
 
 @router.get("/{decision_id}")
@@ -96,7 +115,13 @@ def _act(
     except decisions.DecisionStateError as e:
         raise HTTPException(409, str(e)) from e
     apply_review(db, datetime.now(UTC), decision_id)
-    return RedirectResponse("/review", status_code=303)
+    return _next(db, user)
+
+
+def _next(db: Db, user: AuthUser) -> RedirectResponse:
+    """Open the next pending review, else the list."""
+    pending = decisions.pending_for(db, _owner(user))
+    return RedirectResponse(f"/review/{pending[0].id}" if pending else "/review", status_code=303)
 
 
 @router.post("/{decision_id}/accept")
@@ -196,4 +221,4 @@ def unverified(
         raise HTTPException(409, str(e)) from e
     d.evidence = {**d.evidence, "unverified": edits}  # same transaction as the action
     apply_review(db, datetime.now(UTC), decision_id)
-    return RedirectResponse("/review", status_code=303)
+    return _next(db, user)

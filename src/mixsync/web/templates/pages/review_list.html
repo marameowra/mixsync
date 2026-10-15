@@ -3,15 +3,22 @@
 {% block content %}
 <h1>Review</h1>
 {% if items %}
+<p>Sort by:
+  {% for key, label in [("date", "date"), ("score", "score"), ("artist", "artist"), ("album", "album"), ("match", "match")] %}
+  <a href="/review?sort={{ key }}&amp;order={{ 'desc' if sort == key and order == 'asc' else 'asc' }}"{% if sort == key %} aria-current="true"{% endif %}>{{ label }}{% if sort == key %} ({{ order }}){% endif %}</a>{{ " " }}
+  {% endfor %}
+</p>
 <div class="scroll">
 <table>
-  <thead><tr><th>#</th><th>Source</th><th>Release</th><th>Band</th><th>Distance</th></tr></thead>
+  <thead><tr><th>#</th><th>Date</th><th>Source</th><th>Release</th><th>Match</th><th>Band</th><th>Distance</th></tr></thead>
   <tbody>
   {% for d in items %}
   <tr>
     <td><a href="/review/{{ d.id }}">{{ d.id }}</a></td>
+    <td>{{ d.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
     <td>{{ d.evidence.get("source", {}).get("peer", "") }}: {{ d.evidence.get("source", {}).get("folder", "") }}</td>
     <td>{{ d.evidence.get("target", {}).get("artist", "") }} - {{ d.evidence.get("target", {}).get("title", "") }}</td>
+    <td>{{ "Partial match" if d.release_mbid else "No match" }}</td>
     <td><span class="band band-{{ d.band }}">{{ d.band }}</span></td>
     <td>{{ "%.3f"|format(d.distance) }}</td>
   </tr>
