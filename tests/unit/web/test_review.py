@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.requests import create_request
@@ -1064,3 +1064,100 @@ def test_recheck_scope_and_csrf(
         b = s.get(MatchDecision, theirs)
         assert b and b.status == "rechecked"
     assert "Re-check" not in client.get("/review").text
+
+
+OTHER = "33333333-3333-3333-3333-333333333333"
+
+
+def _last_verify(sf: sessionmaker[Session], rid: int, mbid: str | None) -> None:
+    """The VERIFY job that produced the pending decision (finished long ago)."""
+    with sf() as s, s.begin():
+        s.add(
+            Job(
+                kind="verify",
+                payload={"request_id": rid, "release_mbid": mbid},
+                status=JobState.SUCCEEDED,
+                max_attempts=1,
+                run_after=datetime.now(UTC),
+            )
+        )
+
+
+def test_recheck_reuses_the_release_of_the_last_verify(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    path = str(downloads / "a.mp3")
+    _, repicked = _reviewed(sf, "alice", path, migration=True)
+    _, identified = _reviewed(sf, "alice", path, migration=True)
+    _, normal = _reviewed(sf, "alice", path)
+    with sf() as s, s.begin():
+        req = s.get(AlbumRequest, normal)
+        assert req
+        req.release_mbid = "44444444-4444-4444-4444-444444444444"
+    _last_verify(sf, repicked, OTHER)
+    _last_verify(sf, identified, None)
+    _last_verify(sf, normal, OTHER)
+    client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    got = {q: _verifies(sf, q)[-1].payload["release_mbid"] for q in (repicked, identified, normal)}
+    assert got == {repicked: OTHER, identified: None, normal: OTHER}
+
+
+def test_recheck_leaves_requests_no_longer_in_review(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        req = s.get(AlbumRequest, rid)
+        assert req
+        req.status = "importing"
+    r = client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    assert "Re-queued 0 · skipped 0 (files missing) · 0 already re-checking · 1 no longer" in (
+        client.get(r.headers["location"]).text
+    )
+    with sf() as s:
+        d = s.get(MatchDecision, did)
+        assert d and d.status == decisions.PENDING
+    assert not _verifies(sf, rid)
+
+
+def test_recheck_empty_files_count_as_missing(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    did, _ = _reviewed(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.evidence = {**d.evidence, "source": {**d.evidence["source"], "files": []}}
+    r = client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    assert "Re-queued 0 · skipped 1 (files missing)" in client.get(r.headers["location"]).text
+
+
+def test_recheck_survives_a_decision_acted_on_meanwhile(
+    client: TestClient,
+    sf: sessionmaker[Session],
+    downloads: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gone, grid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    ok, orid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    real = decisions.pending_for
+
+    def racing(s: Session, user_id: int | None) -> list[MatchDecision]:
+        found = real(s, user_id)
+        s.execute(update(MatchDecision).where(MatchDecision.id == gone).values(status="rejected"))
+        return found
+
+    tok = _login(client, "alice")  # the home page reads the queue too: patch after it
+    monkeypatch.setattr(decisions, "pending_for", racing)
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert r.status_code == 303 and "requeued=1&missing=0&busy=1" in r.headers["location"]
+    assert not _verifies(sf, grid) and len(_verifies(sf, orid)) == 1
+    with sf() as s:
+        d = s.get(MatchDecision, ok)
+        assert d and d.status == "rechecked"
+
+
+def test_review_list_ignores_junk_summary_params(client: TestClient) -> None:
+    _login(client, "alice")
+    r = client.get("/review?requeued=abc&missing=-1&busy=%E2%82%82")
+    assert r.status_code == 200 and "Re-queued 0 · skipped 0" in r.text

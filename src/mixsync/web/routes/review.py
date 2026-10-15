@@ -60,6 +60,10 @@ _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
 }
 
 
+def _count(text: str) -> int:
+    return int(text) if text.isascii() and text.isdigit() and len(text) <= 6 else 0
+
+
 @router.get("")
 def review_list(
     request: Request,
@@ -67,29 +71,42 @@ def review_list(
     db: Db,
     sort: str = "date",
     order: str = "asc",
-    requeued: int | None = None,
-    missing: int = 0,
-    busy: int = 0,
+    requeued: str | None = None,
+    missing: str = "",
+    busy: str = "",
+    stale: str = "",
 ) -> HTMLResponse:
     items = decisions.pending_for(db, _owner(user))
     key = _SORTS.get(sort, _SORTS["date"])
     items.sort(key=key, reverse=order == "desc")
-    ctx = {"user": user, "items": items, "sort": sort, "order": order}
+    ctx: dict[str, Any] = {"user": user, "items": items, "sort": sort, "order": order}
     if requeued is not None:  # the summary of a re-check, carried in the redirect
-        ctx |= {"requeued": requeued, "missing": missing, "busy": busy}
+        n = {
+            k: _count(v)
+            for k, v in (
+                ("requeued", requeued),
+                ("missing", missing),
+                ("busy", busy),
+                ("stale", stale),
+            )
+        }
+        ctx["n"] = n
     return templates.TemplateResponse(request, "pages/review_list.html", ctx)
 
 
 @router.post("/recheck")
 def recheck(user: User, db: Db) -> RedirectResponse:
     """Verify every pending review again with the current scorer: the decision is closed and the
-    files go back through VERIFY against the same release (a migration has none: it picks afresh).
-    No network here."""
-    now, queued, missing, busy = datetime.now(UTC), 0, 0, 0
+    files go back through VERIFY against the release the last VERIFY of the request used (a
+    repick, or none for a migration that identified it). No network here."""
+    now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
     for d in decisions.pending_for(db, _owner(user)):
         req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
         if req is None:  # not from a request: nothing to verify again
             missing += 1
+            continue
+        if req.status != "review":  # already importing, imported or searching again
+            stale += 1
             continue
         files = d.evidence.get("source", {}).get("files", [])
         if not files or not all(
@@ -108,17 +125,30 @@ def recheck(user: User, db: Db) -> RedirectResponse:
         ):
             busy += 1
             continue
-        decisions.act(db, d.id, user.id, "recheck")
-        enqueue_verify(
-            db,
-            now,
-            req,
-            None if req.migration_id else d.release_mbid or req.release_mbid,
-            d.evidence,
+        try:
+            decisions.act(db, d.id, user.id, "recheck")
+        except decisions.DecisionStateError:  # acted on since the list was read
+            busy += 1
+            continue
+        last = db.scalar(
+            select(Job.payload)
+            .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
+            .order_by(Job.id.desc())
+            .limit(1)
         )
+        # the last VERIFY made this decision: its release keeps a repick and a migration's
+        # self-identification; without one (shortcut), a migration re-picks, else the request's
+        mbid = (
+            last["release_mbid"]
+            if last
+            else None
+            if req.migration_id
+            else d.release_mbid or req.release_mbid
+        )
+        enqueue_verify(db, now, req, mbid, d.evidence)
         queued += 1
     return RedirectResponse(
-        f"/review?requeued={queued}&missing={missing}&busy={busy}", status_code=303
+        f"/review?requeued={queued}&missing={missing}&busy={busy}&stale={stale}", status_code=303
     )
 
 

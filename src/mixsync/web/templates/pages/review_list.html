@@ -2,8 +2,8 @@
 {% block title %}Review - MixSync{% endblock %}
 {% block content %}
 <h1>Review</h1>
-{% if requeued is defined %}
-<p role="status">Re-queued {{ requeued }} · skipped {{ missing }} (files missing) · {{ busy }} already re-checking</p>
+{% if n is defined %}
+<p role="status">Re-queued {{ n.requeued }} · skipped {{ n.missing }} (files missing) · {{ n.busy }} already re-checking · {{ n.stale }} no longer in review</p>
 {% endif %}
 {% if items %}
 <form method="post" action="/review/recheck" onsubmit="return confirm('Re-check {{ items|length }} pending reviews with the current scoring?')">{{ forms.csrf() }}
