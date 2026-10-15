@@ -37,21 +37,28 @@ def _latest(db: Db) -> Migration | None:
     return db.scalar(select(Migration).order_by(Migration.id.desc()).limit(1))
 
 
+def _pending(db: Db, m: Migration) -> bool:
+    """Any album request still needing action (verifying, importing, review)."""
+    return (
+        db.scalar(
+            select(AlbumRequest.id)
+            .where(
+                AlbumRequest.migration_id == m.id,
+                AlbumRequest.status.in_(("verifying", "importing", "review")),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _busy(db: Db, m: Migration | None) -> bool:
     """Preflighting, waiting for confirmation, or running with albums not yet settled."""
     if m is None:
         return False
     if m.status in ("preflight", "ready"):
         return True
-    pending = db.scalar(
-        select(AlbumRequest.id)
-        .where(
-            AlbumRequest.migration_id == m.id,
-            AlbumRequest.status.in_(("verifying", "importing", "review")),
-        )
-        .limit(1)
-    )
-    return m.status == "running" and pending is not None
+    return m.status == "running" and _pending(db, m)
 
 
 def _checking(db: Db, m: Migration) -> bool:
@@ -135,6 +142,7 @@ def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") 
         entries.append(
             {
                 "m": m,
+                "completed": m.status == "running" and not _pending(db, m),
                 "start": _local_day(first or m.created_at, tz),
                 "end": _local_day(last, tz),
                 "csv_end": end and _local_day(last, tz),  # unset: the CSV runs up to its own now

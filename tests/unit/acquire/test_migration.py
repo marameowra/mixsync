@@ -832,7 +832,7 @@ async def test_the_page_reports_every_running_migration_and_all_failures(
             )
     login(web, "root")
     html = web.get("/migration").text
-    assert f"Migration {first}: running" in html and f"Migration {second}: running" in html
+    assert f"Migration {first}: completed" in html and f"Migration {second}: running" in html
     assert "first broke" in html and "fail 119" in html
 
 
