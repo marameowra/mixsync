@@ -8,7 +8,7 @@
 {% endif %}
 
 {% for e in migs %}{% set m = e.m %}{% set sm = m.summary %}
-<h2>Migration {{ m.id }}: {{ m.status }}</h2>
+<h2>Migration {{ m.id }}: {{ "completed" if e.completed else m.status }}</h2>
 {% if m.status == "preflight" %}<p>Scanning and hashing the old library. Reload to see the result.</p>{% endif %}
 {% if sm.get("files") is not none and m.status != "preflight" %}
 <ul>
