@@ -86,6 +86,12 @@ def check_review_with(text: str) -> Callable[[MatchResult], None]:
     return check
 
 
+def check_not_rejected_with_missing(r: MatchResult) -> None:
+    # stage 1 has no AcoustID: a partial folder is scored down but never vetoed or rejected
+    assert r.band is not Band.REJECT and not r.vetoes
+    assert any("3 of 4 tracks present" in p.reason for p in r.breakdown)
+
+
 def check_rejected(r: MatchResult) -> None:
     assert r.band is Band.REJECT and r.vetoes and r.vetoes[0] in r.breakdown[0].reason
 
@@ -116,7 +122,7 @@ CASES = [
     ),
     pytest.param(
         cand(album_files()[:3]),
-        check_review_with("1 of 4 tracks missing"),
+        check_not_rejected_with_missing,
         id="SK-F02",
     ),
     pytest.param(

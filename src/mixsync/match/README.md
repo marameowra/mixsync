@@ -35,7 +35,7 @@ MatchResult: distance, band, breakdown[(feature, penalty, weight, reason)], veto
 - **Versioned:** bump `SCORER_VERSION` on any change to weights or features. Decisions record the version.
 - **No ML at runtime** until calibration proves itself on the regression suite ([ADR 0005](../../../docs/decisions/0005-explainable-matching-score.md)).
 - String similarity uses `rapidfuzz` on normalized strings (casefold, NFKC, strip "feat.", punctuation, bracketed suffixes).
-- Artist credits naming several artists (`A & B`, `A feat. B`, `A, B`, `A x B`, `A and B`) that include the expected artist score a flat 0.2 penalty, not a miss (`artist_dist`). Each missing release track costs its share of the release (`missing / total`), so a few missing barely register and a mostly absent release still fails.
+- Artist credits naming several artists (`A & B`, `A feat. B`, `A, B`, `A x B`, `A and B`) that include the expected artist score a flat 0.2 penalty, not a miss (`artist_dist`); parts under 3 characters are ignored and word separators (`and`, `x`, `feat`...) need surrounding spaces. On tags alone such a credit is capped at review, so only AcoustID-confirmed files auto-accept.
 
 ## beets port
 The distance and candidate logic in `features.py` / `scorer.py` is ported from beets' `autotag` (MIT license), not imported ([ADR 0006](../../../docs/decisions/0006-port-beets-autotag.md)). Keep beets' copyright and permission notice in each ported file's header, and note the beets commit the port is based on.

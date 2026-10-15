@@ -162,8 +162,6 @@ def score_candidate(
         len(missing) / total if total else 0.0,
         f"{total - len(missing)} of {total} tracks present",
     )
-    if missing:
-        vetoes.append(f"{len(missing)} of {total} tracks missing")
     for e in extras:
         dist.add("extra_files", 1.0, f"{by_id[id(e)].name!r} has no release track")
 

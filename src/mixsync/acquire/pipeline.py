@@ -67,7 +67,13 @@ from mixsync.library import canonical, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
-from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
+from mixsync.match.scorer import (
+    DEFAULT_WEIGHTS,
+    SCORER_VERSION,
+    assign_tracks,
+    best_release,
+    score_files,
+)
 from mixsync.match.vetoes import all_confident
 
 log = logging.getLogger(__name__)
@@ -387,17 +393,16 @@ class Pipeline:
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         partial = ""
-        if (  # deliberately partial: missing tracks cost nothing when every file is sure
-            migrating
-            and result.band is Band.REVIEW
-            and len(pairs) < len(album.tracks)
-            and all_confident(pairs)
-        ):
+        if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
+            # deliberately partial: missing tracks cost nothing, but only AcoustID-sure files
+            # are imported unreviewed; otherwise review, unless the files fail for other reasons
             free = score_files(
                 files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
-            if free.band is Band.AUTO_ACCEPT:
+            if free.band is Band.AUTO_ACCEPT and all_confident(pairs):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
+            elif free.band is not Band.REJECT and result.band is Band.REJECT:
+                result = replace(result, band=Band.REVIEW)
         evidence = {
             "request_id": p["request_id"],
             "candidate": p["candidate"],
@@ -487,14 +492,12 @@ class Pipeline:
             albums = [
                 await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
             ]
-        scored = [(score_files(files, like, a, profile), a) for a in albums]
-        if not scored:
+        if not albums:
             none = MatchResult(
                 1.0, Band.REVIEW, (), ("no release found on MusicBrainz",), SCORER_VERSION
             )
             return AlbumInfo(like.artist or "", like.album or "", ()), none
-        result, best = min(scored, key=lambda x: x[0].distance)
-        return best, result
+        return best_release(files, like, albums, profile)
 
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
