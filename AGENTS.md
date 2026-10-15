@@ -20,12 +20,13 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   - Skip markers: no `skip`, `skipif`, `xfail`, or `.only`. Fix the code under test.
   If one of these is truly needed, ask first and say why. Write tests against public
   behavior, not internals, so refactors don't force rewriting them.
-- Auto-merge. PRs target `dev`. After opening a PR, queue `gh pr merge --auto --merge` only
-  if the reviewer agent reported no unfixed findings and every CI step passed locally.
-  Otherwise leave the PR for the user to merge. Merging to `dev` publishes the `:dev` image.
-  Never merge into `main` or queue auto-merge on a PR whose base is `main`. A hook in
-  `.claude/settings.json` blocks agent merges into `main`, and a workflow turns off
-  auto-merge on PRs into `main`.
+- Branches and PRs. `main` is the default branch, but work goes to `dev`: branch from
+  `origin/dev` and open PRs with `gh pr create --base dev`. Never open a PR against `main`.
+- Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
+  agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
+  PR for the user to merge. Merging to `dev` publishes the `:dev` image. Never merge into
+  `main` or queue auto-merge on a PR whose base is `main`. A hook in `.claude/settings.json`
+  blocks agent merges into `main`, and a workflow turns off auto-merge on PRs into `main`.
 - Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
   `release.yml` then waits for the user's approval in the `release` environment, publishes
   `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
@@ -37,7 +38,7 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   subagent. The main session plans, writes the brief, reviews, re-runs checks,
   and opens PRs. It does not write the code itself.
 - Run independent pieces of work as parallel implementers. Launch each with
-  `isolation: "worktree"`, branched from the pushed base branch, so they never
-  share a checkout.
+  `isolation: "worktree"`, branched from the pushed base branch (normally `origin/dev`),
+  so they never share a checkout.
 - Brief each implementer like the earlier slices: files to read, deliverables,
   out of scope, the full check list, and the report format.
