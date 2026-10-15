@@ -39,5 +39,11 @@ Anything (composition root).
 - Playwright: phone 375 px and desktop 1280 px; login with a real form submit; no horizontal scroll ([testing](../../../docs/testing.md#ui-tests)).
 - Unit: every route rejects a user missing the capability; CSRF rejects missing/invalid tokens.
 
+## UI preview
+Dev-only: the real app on a throwaway seeded SQLite DB (`.preview/`, gitignored, rebuilt on every start), with the network blocked except loopback and MusicBrainz faked.
+- Run `uv run python -m devtools.preview [--port 8090]`, then open http://127.0.0.1:8090/__preview. It auto-reloads on changes to `src`, `design` and `devtools`.
+- Users `admin`, `alice` and `edge` all have the password `preview`. `edge` holds the edge-case data (long and non-Latin text, 300 requests, no discover data). The `/__preview` page has log-in buttons, a log-out link and links to every seeded page.
+- Themes live in `design/themes/<name>/{templates,static}`. Templates there override the real ones of the same path; the rest fall through. Static files are served at `/themes/<name>/...`. Switch with `?theme=<name>` (kept in a cookie). To add one, copy `design/themes/demo` and edit; see `design/themes/current/README.md`.
+
 ## Design docs
 [ADR 0003](../../../docs/decisions/0003-htmx-server-rendered-ui.md) · [Architecture: users and permissions](../../../docs/architecture.md#users-and-permissions)
