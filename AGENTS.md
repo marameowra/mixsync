@@ -20,12 +20,15 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   - Skip markers: no `skip`, `skipif`, `xfail`, or `.only`. Fix the code under test.
   If one of these is truly needed, ask first and say why. Write tests against public
   behavior, not internals, so refactors don't force rewriting them.
-- Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
-  agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
-  PR for the user to merge. Merging to main publishes the `:dev` image.
-- Releases are human-only. Never create or push `v*` tags, create GitHub releases, or approve
-  deployments to the `release` environment. Pushing a `v*` tag runs `release.yml`, which
-  waits for the user's approval before publishing `:<tag without the v>` (e.g. `:1.0.0`) and `:latest`.
+- Auto-merge. PRs target `dev`. After opening a PR, queue `gh pr merge --auto --merge` only
+  if the reviewer agent reported no unfixed findings and every CI step passed locally.
+  Otherwise leave the PR for the user to merge. Merging to `dev` publishes the `:dev` image.
+  Never merge into `main` or queue auto-merge on a PR whose base is `main`.
+- Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
+  `release.yml` then waits for the user's approval in the `release` environment, publishes
+  `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
+  a version bump publish nothing. Never create or push `v*` tags, create GitHub releases,
+  merge to `main`, or approve deployments to the `release` environment.
 
 ## Delegation
 - Hand all implementation (features, fixes, tests, refactors) to the `implementer`
