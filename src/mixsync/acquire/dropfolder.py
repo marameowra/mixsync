@@ -29,6 +29,7 @@ from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.auth import User
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
+from mixsync.match.candidates import DISC_DIR
 
 log = logging.getLogger(__name__)
 
@@ -88,12 +89,18 @@ class DropFolder:
     def _queue(self, groups: list[Group], hashes: dict[str, str], mine: set[Path]) -> int:
         now, queued = self.clock.now(), 0
         with self.sessions.begin() as s:
+            if self.owned:  # a download may have started while the scan was hashing
+                mine = mine | self.owned(s)
+            discs = {
+                m.parent for m in mine if DISC_DIR.match(m.name)
+            }  # pruned, so the group is cut
             ours = [
                 g
                 for g in groups
                 if mine.isdisjoint(
                     {Path(g.folder), *(Path(g.folder, r).parent for r, _ in g.files)}
                 )
+                and Path(g.folder) not in discs
             ]
             for g in groups:
                 if g not in ours:

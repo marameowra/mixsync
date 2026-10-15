@@ -1,5 +1,6 @@
 """Adopting unrequested folders in downloads: settle, ownership, release, review, no re-queuing."""
 
+import shutil
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any
 import pytest
 from sqlalchemy import select, update
 
+from mixsync.acquire import dropfolder
 from mixsync.acquire.adopter import adopter
 from mixsync.acquire.requests import candidate_dict
 from mixsync.core.jobs import JobKind, JobState
@@ -21,7 +23,7 @@ from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 
 from .conftest import Env
-from .fakes import ALBUM
+from .fakes import ALBUM, AUDIO, OTHER
 from .test_migration import Meta, put_album
 from .test_pipeline import SECOND, decision_rows, library
 
@@ -244,6 +246,58 @@ async def test_a_failed_adoption_is_tried_again_but_only_three_times(rig: Rig) -
         assert len(rig.requests()) == min(n, 3)
         with rig.env.sessions.begin() as s:
             s.execute(update(Request).values(status="failed"))
+
+
+async def test_a_download_that_starts_during_the_scan_is_not_adopted(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    put_album(rig.dl, "Alpha Album")
+    rig.settle()
+    real = dropfolder.scan
+
+    def scan_then_download(*args: Any) -> dict[str, Any]:
+        found = real(*args)
+        files = (CandidateFile("@@share\\Music\\Alpha Album\\01.mp3", 1, "mp3"),)
+        cand = Candidate("peer", "@@share\\Music\\Alpha Album", files)
+        rig.add_job(
+            JobKind.DOWNLOAD,
+            {"request_id": 1, "candidate": candidate_dict(cand)},
+            JobState.RUNNING,
+        )
+        return found
+
+    monkeypatch.setattr(dropfolder, "scan", scan_then_download)
+    await rig.scan()
+    assert rig.requests() == []
+
+
+async def test_a_disc_folder_owned_by_a_download_keeps_the_rest_of_its_album_out(
+    rig: Rig,
+) -> None:
+    put_album(rig.dl, "CD1")  # MixSync's download of some other album
+    put_album(rig.dl, "CD2", OTHER)  # the other disc of a hand download that shares the parent
+    files = (CandidateFile("@@share\\Music\\Other\\CD1\\x.mp3", 1, "mp3"),)
+    cand = Candidate("peer", "@@share\\Music\\Other\\CD1", files)
+    rig.add_job(
+        JobKind.DOWNLOAD, {"request_id": 1, "candidate": candidate_dict(cand)}, JobState.FAILED
+    )
+    rig.settle()
+    await rig.scan()
+    assert rig.requests() == []
+
+
+async def test_a_changed_folder_is_queued_again_after_the_cap(rig: Rig) -> None:
+    d = put_album(rig.dl, "Alpha Album")
+    rig.settle()
+    for _ in range(4):
+        await rig.scan()
+        with rig.env.sessions.begin() as s:
+            s.execute(update(Request).values(status="failed"))
+    assert len(rig.requests()) == 3
+    shutil.copy(AUDIO / "cc0-tone-01.mp3", d / "03 Extra.mp3")
+    rig.settle()
+    await rig.scan()
+    assert len(rig.requests()) == 4
 
 
 async def test_a_disc_folder_of_a_mixsync_download_is_skipped(rig: Rig) -> None:
