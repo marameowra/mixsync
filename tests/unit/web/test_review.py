@@ -72,6 +72,13 @@ def _make_decision(
         ).id
 
 
+class NoNames:
+    """No MusicBrainz in these tests: every name lookup misses."""
+
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        return None
+
+
 @pytest.fixture
 def client(sf: sessionmaker[Session], downloads: Path) -> Iterator[TestClient]:
     with sf() as s, s.begin():
@@ -85,7 +92,9 @@ def client(sf: sessionmaker[Session], downloads: Path) -> Iterator[TestClient]:
         uid = s.query(User).filter_by(username="nocap").one().id
         s.execute(delete(UserRole).where(UserRole.user_id == uid))
         s.add(UserRole(user_id=uid, role_id=role.id))
-    with TestClient(create_app(sf, Settings()), follow_redirects=False) as c:
+    app = create_app(sf, Settings())
+    app.state.namer = NoNames()
+    with TestClient(app, follow_redirects=False) as c:
         yield c
 
 

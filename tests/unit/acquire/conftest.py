@@ -111,6 +111,13 @@ def env(tmp_path: Path, settings: Settings, sessions: sessionmaker[Session]) -> 
     return Env(tmp_path, settings, sessions)
 
 
+class NoNames:
+    """No MusicBrainz in these tests: every name lookup misses."""
+
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        return None
+
+
 @pytest.fixture
 def web(env: Env, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setenv("MIXSYNC_DATA_DIR", str(env.data_dir))
@@ -122,7 +129,9 @@ def web(env: Env, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         uid = create_user(s, "nocap", "pw").id
         s.execute(delete(UserRole).where(UserRole.user_id == uid))
         s.add(UserRole(user_id=uid, role_id=role.id))
-    with TestClient(create_app(env.sessions, Settings()), follow_redirects=False) as c:
+    app = create_app(env.sessions, Settings())
+    app.state.namer = NoNames()
+    with TestClient(app, follow_redirects=False) as c:
         yield c
 
 

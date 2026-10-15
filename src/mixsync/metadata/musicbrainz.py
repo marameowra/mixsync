@@ -9,6 +9,7 @@ from mixsync.metadata.models import (
     MbEntity,
     MbEntitySearch,
     MbGenre,
+    MbRecording,
     MbRelease,
     MbReleaseGroup,
     MbRgSearch,
@@ -250,3 +251,35 @@ class MusicBrainzProvider:
             if (page + 1) * WATCH_LIMIT >= body.count or not body.release_groups:
                 return found, False
         return found, True
+
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        """A human name for a release, release-group, recording or artist MBID, e.g.
+        "Title - Artist (2019, CD)". With cached_only it answers from the response cache or None
+        and never calls MusicBrainz; otherwise it is one cached, rate-limited lookup."""
+        url = f"{self._base}/{kind}/{mbid}"
+        params = {"fmt": "json"}
+        if kind != "artist":
+            params["inc"] = "artist-credits" + (" media" if kind == "release" else "")
+        if cached_only:
+            hit = self._client.cached(url, params=params)
+            data = hit.json() if hit else None
+        else:
+            data = await get_json(self._client, url, params)
+        if data is None:
+            return None
+        if kind == "artist":
+            return MbEntity.model_validate(data).name
+        if kind == "recording":
+            r = MbRecording.model_validate(data)
+            return f"{r.title} \u2014 {_credit(r.artist_credit)}"
+        if kind == "release-group":
+            g = MbReleaseGroup.model_validate(data)
+            return _named(g.title, g.artist_credit, [_year(g.first_release_date)])
+        rel = MbRelease.model_validate(data)
+        media = next((m.format for m in rel.media if m.format), None)
+        return _named(rel.title, rel.artist_credit, [_year(rel.date), media])
+
+
+def _named(title: str, credit: list[MbCredit], extra: list[object]) -> str:
+    detail = ", ".join(str(x) for x in extra if x)
+    return f"{title} \u2014 {_credit(credit)}" + (f" ({detail})" if detail else "")

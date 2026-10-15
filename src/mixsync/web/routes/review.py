@@ -16,7 +16,8 @@ from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
-from mixsync.web.deps import Db, decision_for, require
+from mixsync.web.deps import Db, Namer, decision_for, require
+from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/review")
@@ -67,9 +68,15 @@ def review_list(
 
 
 @router.get("/{decision_id}")
-def review_detail(request: Request, decision_id: int, user: User, db: Db) -> HTMLResponse:
+async def review_detail(
+    request: Request, decision_id: int, user: User, db: Db, namer: Namer
+) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
-    ctx = {"user": user, "d": d, "prefill": _prefill(d)}
+    refs = {("release", d.release_mbid)} | {
+        ("recording", r) for a in d.evidence.get("acoustid", []) for r in a.get("recording_ids", [])
+    }
+    names = await resolve(db, namer, refs, MAX_LOOKUPS)
+    ctx = {"user": user, "d": d, "prefill": _prefill(d), "names": names}
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
 

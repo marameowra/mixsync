@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
 from mixsync.core.clock import SystemClock
-from mixsync.core.protocols import ReleaseWatch
+from mixsync.core.protocols import NameLookup, ReleaseWatch
 from mixsync.db.auth import AuthUser, user_for_session
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
@@ -88,6 +88,20 @@ def get_watch(request: Request) -> ReleaseWatch:
 
 Watch = Annotated[ReleaseWatch, Depends(get_watch)]
 
+
+def get_namer(request: Request) -> NameLookup:
+    """MusicBrainz names for ids, on the same bucket and cache as the worker's."""
+    state = request.app.state
+    if getattr(state, "namer", None) is None:
+        state.namer = MusicBrainzProvider(
+            PoliteClient("musicbrainz", state.settings, state.session_factory),
+            state.settings.mb_base_url,
+        )
+    namer: NameLookup = state.namer
+    return namer
+
+
+Namer = Annotated[NameLookup, Depends(get_namer)]
 
 _box_lock = threading.Lock()
 
