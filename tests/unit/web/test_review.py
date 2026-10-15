@@ -874,7 +874,8 @@ def test_cover_404_when_upstream_has_nothing(
     i = _make_decision(sf, "alice", "/x")
     _login(client, "alice")
     r = client.get(f"/media/cover/{i}")
-    assert r.status_code == 404 and "max-age" in r.headers["cache-control"]
+    assert r.status_code == 404
+    assert r.headers["cache-control"] == ("private, max-age=86400" if code == 404 else "no-store")
 
 
 def test_cover_404_without_a_release(client: TestClient, sf: sessionmaker[Session]) -> None:

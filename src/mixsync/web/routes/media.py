@@ -40,8 +40,8 @@ async def cover(decision_id: int, user: User, db: Db, art: Cover) -> Response:
     headers = {"Cache-Control": "private, max-age=86400"}
     try:
         data = await art.front(mbid, group) if mbid else None
-    except (TransientError, PermanentError):
-        data = None
+    except (TransientError, PermanentError):  # an outage must not hide the art for a day
+        raise HTTPException(404, headers={"Cache-Control": "no-store"}) from None
     if data is None:
         raise HTTPException(404, headers=headers)
     kind = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
