@@ -971,30 +971,29 @@ async def to_normal_request(
     return dec
 
 
-async def test_a_confident_single_track_on_a_normal_request_imports(
+async def test_a_confident_single_track_on_a_normal_request_is_accepted_as_partial(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dec = await to_normal_request(rig, monkeypatch)
     assert dec.band == "auto_accept" and dec.evidence["partial"] == "1 of 13 tracks present"
-    await rig.env.drain()
-    assert len(library(rig.env)) == 1
 
 
-async def test_an_unsure_single_track_on_a_normal_request_goes_to_review(
+async def test_an_unsure_single_track_on_a_normal_request_is_rejected_and_retried(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
         AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
     ]
     dec = await to_normal_request(rig, monkeypatch)
-    assert dec.band == "review" and library(rig.env) == []
+    assert dec.band == "reject" and library(rig.env) == []
+    assert rig.requests()[0].status == "searching"  # on to the next peer, as for any reject
 
 
-async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_goes_to_review(
+async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_is_rejected(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dec = await to_normal_request(rig, monkeypatch, album="The Very Best Of Alpha Band")
-    assert dec.band == "review" and not dec.evidence["partial"] and library(rig.env) == []
+    assert dec.band == "reject" and not dec.evidence["partial"] and library(rig.env) == []
 
 
 async def test_a_single_track_of_another_artist_on_a_normal_request_is_rejected(

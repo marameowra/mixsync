@@ -28,6 +28,7 @@ from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.library.fileops import WriteTags
+from mixsync.watchlist.poller import owned_groups
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS
@@ -1230,3 +1231,60 @@ async def test_import_with_an_empty_assignment_fails_instead_of_importing(env: E
     assert "assigns no files" in (env.jobs(JobKind.IMPORT)[0].last_error or "")
     assert status(env, rid) != "imported"
     assert library(env) == []
+
+
+ONE_TRACK = replace(ALBUM, tracks=ALBUM.tracks[:1])
+FOLDER = "Music\\Alpha Band\\Alpha Album"
+
+
+async def import_one_track(env: Env) -> int:
+    env.source.add("peer1", FOLDER, ONE_TRACK)
+    rid = request(env)
+    await env.drain(until=lambda: status(env, rid) == "partial")
+    return rid
+
+
+async def test_a_confident_partial_import_keeps_the_request_open(env: Env) -> None:
+    rid = await import_one_track(env)
+    assert library(env) == [FIRST]
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.last_error == "partial: 1 of 2 tracks present"
+        assert req.tried == [["peer1", FOLDER]]  # not fetched again
+    later = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
+    assert len(later) == 1 and later[0].payload == {"request_id": rid}
+    assert later[0].run_after.replace(tzinfo=UTC) > env.clock.now()
+
+
+async def test_the_missing_tracks_arrive_later_and_close_the_request(env: Env) -> None:
+    rid = await import_one_track(env)
+    first = (env.data_dir / "library" / FIRST).read_bytes()
+    env.source.add("peer2", FOLDER + " [2]")
+    await env.drain(until=lambda: status(env, rid) == "imported")
+    assert library(env) == [FIRST, SECOND]
+    assert (env.data_dir / "library" / FIRST).read_bytes() == first  # never replaced
+
+
+async def test_the_watchlist_still_wants_a_group_with_a_partial_request(env: Env) -> None:
+    rid = await import_one_track(env)
+    group = str(ALBUM.release_group_id)
+    with env.sessions() as s:
+        assert owned_groups(s, [group]) == set()
+    env.source.add("peer2", FOLDER + " [2]")
+    await env.drain(until=lambda: status(env, rid) == "imported")
+    with env.sessions() as s:
+        assert owned_groups(s, [group]) == {group}
+
+
+async def test_an_unsure_partial_download_gets_the_normal_bands_not_a_partial_import(
+    env: Env,
+) -> None:
+    env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    env.source.add("peer1", FOLDER, ONE_TRACK)
+    rid = request(env)
+    await env.drain(until=lambda: bool(decision_rows(env, 2)))
+    (dec,) = decision_rows(env, 2)
+    assert dec.band != "auto_accept" and not dec.evidence["partial"]
+    assert library(env) == [] and status(env, rid) != "partial"

@@ -45,7 +45,7 @@ class Request(TimestampMixin, Base):
     release_mbid: Mapped[str] = mapped_column(String(36))
     artist: Mapped[str] = mapped_column(String(255), default="")  # display; filled by the search
     album: Mapped[str] = mapped_column(String(255), default="")
-    # searching/downloading/verifying/importing/review/imported/owned/failed/no_results
+    # searching/downloading/verifying/importing/review/imported/partial/owned/failed/no_results
     status: Mapped[str] = mapped_column(String(16), default="searching")
     tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # [peer, folder] pairs
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)

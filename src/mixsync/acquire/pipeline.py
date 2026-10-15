@@ -138,7 +138,10 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status not in ("searching", "no_results") or req.migration_id is not None:
+            if (
+                req.status not in ("searching", "no_results", "partial")
+                or req.migration_id is not None
+            ):
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -217,7 +220,9 @@ class Pipeline:
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
                 ]
                 req.no_results_attempts += 1
-                req.status, req.next_search_at = "no_results", now + delay
+                # a partial album keeps its label while it waits for the rest
+                req.status = "partial" if req.status == "partial" else "no_results"
+                req.next_search_at = now + delay
                 enqueue_in(
                     s,
                     now,
@@ -399,8 +404,8 @@ class Pipeline:
             result = replace(result, band=Band.REVIEW)
         partial = ""
         if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
-            # deliberately partial: missing tracks cost nothing, but only AcoustID-sure files
-            # are imported unreviewed; otherwise review, unless the files fail for other reasons
+            # deliberately partial: missing tracks cost nothing, but only when AcoustID is sure
+            # of every file; otherwise the normal bands (and a retry) apply
             free = score_files(
                 files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
@@ -410,8 +415,6 @@ class Pipeline:
                 and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
             ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
-            elif free.band is not Band.REJECT and result.band is Band.REJECT:
-                result = replace(result, band=Band.REVIEW)
         evidence = {
             "request_id": p["request_id"],
             "candidate": p["candidate"],
@@ -587,7 +590,9 @@ class Pipeline:
             return
         results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
-        await self._finish(job, cand, results, batch, unassigned=unassigned)
+        await self._finish(
+            job, cand, results, batch, unassigned=unassigned, partial=evidence.get("partial", "")
+        )
 
     async def _import_provisional(
         self,
@@ -724,6 +729,7 @@ class Pipeline:
         unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
         root: str = "library",
         note: str = "",
+        partial: str = "",  # "N of M tracks present": import what is here, keep looking
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
@@ -741,6 +747,24 @@ class Pipeline:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
             req.last_error = "; ".join(notes) or None
+            if partial and not errors and not migrating:
+                # Open until the rest is here; the next search skips owned recordings, and the
+                # import drops them, so nothing already imported is touched.
+                delay = NO_RESULTS_BACKOFF[
+                    min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
+                ]
+                req.status, req.last_error = "partial", "; ".join([f"partial: {partial}", *notes])
+                req.tried = [*req.tried, [cand.username, cand.folder]]
+                req.no_results_attempts += 1
+                req.next_search_at = now + delay
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.SEARCH,
+                    {"request_id": req.id},
+                    run_after=now + delay,
+                    priority=search_priority(req),
+                )
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":

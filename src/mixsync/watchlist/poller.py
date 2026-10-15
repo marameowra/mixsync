@@ -61,7 +61,15 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
             Track.release_group_mbid.in_(group_ids), ~Track.batch_id.like("promote-%")
         )
     )
-    return {g for g in rows if g}
+    # a group with a partial request is still wanted: its request keeps looking for the rest
+    partial = set(
+        s.scalars(
+            select(Request.release_group_mbid).where(
+                Request.release_group_mbid.in_(group_ids), Request.status == "partial"
+            )
+        )
+    )
+    return {g for g in rows if g} - partial
 
 
 def is_owned(s: Session, group_id: str) -> bool:
