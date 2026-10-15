@@ -15,6 +15,7 @@ from mixsync.core.matching import (
     FileTrack,
     MatchResult,
     Profile,
+    TrackInfo,
 )
 from mixsync.match.features import normalize, string_dist
 from mixsync.match.profiles import band
@@ -134,6 +135,13 @@ def _size_problem(f: CandidateFile, duration: float | None) -> str:
     elif f.bitrate and abs(implied - f.bitrate) > BITRATE_TOLERANCE * f.bitrate:
         return f"stated {f.bitrate} kbps but size implies ~{implied:.0f} kbps"
     return ""
+
+
+def present_tracks(candidate: Candidate, album: AlbumInfo) -> list[TrackInfo]:
+    """The release tracks the folder's files stand for."""
+    parsed = _dedupe([_parse(f) for f in candidate.files], album)
+    files = [FileTrack(p.title, "", p.file.duration, p.track, p.disc) for p in parsed]
+    return [t for _, t in assign_tracks(files, album.tracks)[0]]
 
 
 def score_candidate(

@@ -1288,3 +1288,42 @@ async def test_an_unsure_partial_download_gets_the_normal_bands_not_a_partial_im
     (dec,) = decision_rows(env, 2)
     assert dec.band != "auto_accept" and not dec.evidence["partial"]
     assert library(env) == [] and status(env, rid) != "partial"
+
+
+async def test_a_second_copy_of_the_same_track_is_not_downloaded(env: Env) -> None:
+    rid = await import_one_track(env)
+    env.source.add("peer2", FOLDER + " [2]", ONE_TRACK)
+    searched = len(env.source.queries)
+    await env.drain(until=lambda: len(env.source.queries) > searched)
+    assert env.source.enqueued == ["peer1"] and status(env, rid) == "partial"
+    assert [j.payload for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED] == [
+        {"request_id": rid}
+    ]  # Song Two is still wanted
+
+
+async def test_a_duplicate_partial_download_does_not_close_the_request(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rid = await import_one_track(env)
+    # as if the folder listing could not tell that it holds nothing new
+    monkeypatch.setattr(pipeline, "present_tracks", lambda c, a: list(a.tracks))
+    env.source.add("peer2", FOLDER + " [2]", ONE_TRACK)
+    await env.drain(until=lambda: len(tried(env, rid)) == 2)
+    assert env.source.enqueued == ["peer1", "peer2"] and library(env) == [FIRST]
+    assert status(env, rid) == "partial"
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.last_error == "partial: 1 of 2 tracks present"
+        assert owned_groups(s, [str(ALBUM.release_group_id)]) == set()
+
+
+async def test_a_partial_request_stays_partial_when_the_next_candidate_fails(env: Env) -> None:
+    rid = await import_one_track(env)
+    env.source.add("peer2", FOLDER + " [2]")
+    env.source.refuse.add("peer2")
+    await env.drain(until=lambda: len(tried(env, rid)) == 2)
+    assert status(env, rid) == "partial"
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and (req.last_error or "").startswith("partial: 1 of 2 tracks present; ")
+        assert owned_groups(s, [str(ALBUM.release_group_id)]) == set()
