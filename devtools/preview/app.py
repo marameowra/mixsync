@@ -16,6 +16,7 @@ from jinja2 import BaseLoader, Environment, FileSystemLoader, TemplateNotFound
 
 ROOT = Path(__file__).resolve().parents[2]
 SECRET_KEY = "5cdn1297qyoYXdRm42ClFLpWl5dO-zdCYxebJ8O3av8="  # fixed: previews are throwaway
+DEAD_URL = "http://127.0.0.1:9"  # discard port: nothing listens
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 theme_var: ContextVar[str] = ContextVar("theme", default="current")
@@ -29,6 +30,16 @@ def preview_env(root: Path) -> dict[str, str]:
         "MIXSYNC_DOWNLOADS_DIR": str(root / "downloads"),
         "MIXSYNC_IMPORT_SOURCE_DIR": str(root / "import-source"),
         "MIXSYNC_SECRET_KEY": SECRET_KEY,
+        # a developer's shell must not point the preview at a real service (ListenBrainz and
+        # cover art URLs are not settings; the socket guard covers them)
+        "MIXSYNC_MB_BASE_URL": DEAD_URL,
+        "MIXSYNC_SLSKD_URL": DEAD_URL,
+        "MIXSYNC_NAVIDROME_URL": DEAD_URL,
+        "MIXSYNC_SLSKD_API_KEY": "",
+        "MIXSYNC_ACOUSTID_APP_KEY": "",
+        "MIXSYNC_ACOUSTID_USER_KEY": "",
+        "MIXSYNC_NAVIDROME_USER": "",
+        "MIXSYNC_NAVIDROME_PASSWORD": "",
     }
 
 
