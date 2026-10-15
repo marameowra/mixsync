@@ -22,9 +22,9 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   behavior, not internals, so refactors don't force rewriting them.
 - Branches and PRs. `main` is the default branch, but work goes to `dev`: branch from
   `origin/dev` and open PRs with `gh pr create --base dev`. Never open a PR against `main`.
-- Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
-  agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
-  PR for the user to merge. Merging to `dev` publishes the `:dev` image. Never merge into
+- Auto-merge. After opening a PR into `dev`, queue `gh pr merge --auto --merge` once every
+  CI step passed locally. A ruleset on `dev` requires the `check` and `postgres` CI jobs, so
+  GitHub holds the merge until they pass. If a local step fails, leave the PR for the user. Merging to `dev` publishes the `:dev` image. Never merge into
   `main` or queue auto-merge on a PR whose base is `main`. A hook in `.claude/settings.json`
   blocks agent merges into `main`, and a workflow turns off auto-merge on PRs into `main`.
 - Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
