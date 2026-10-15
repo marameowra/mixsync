@@ -1,8 +1,10 @@
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
@@ -23,6 +25,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.metadata.coverart import CoverArtClient
 from mixsync.web.deps import get_coverart
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
@@ -101,7 +104,7 @@ def _login(c: TestClient, user: str) -> str:
 def test_nocap_rejected_everywhere(client: TestClient, sf: sessionmaker[Session]) -> None:
     i = _make_decision(sf, "alice", "/x")
     tok = _login(client, "nocap")
-    for path in ["/review", f"/review/{i}", f"/media/preview/{i}/0"]:
+    for path in ["/review", f"/review/{i}", f"/media/preview/{i}/0", f"/media/cover/{i}"]:
         assert client.get(path).status_code == 403
     for action in ["accept", "reject", "repick"]:
         r = client.post(f"/review/{i}/{action}", data={"csrf_token": tok, "release": MBID})
@@ -113,6 +116,7 @@ def test_non_owner_403_approver_ok(client: TestClient, sf: sessionmaker[Session]
     tok = _login(client, "bob")
     assert client.get(f"/review/{i}").status_code == 403
     assert client.get(f"/media/preview/{i}/0").status_code == 403
+    assert client.get(f"/media/cover/{i}").status_code == 403
     assert client.post(f"/review/{i}/accept", data={"csrf_token": tok}).status_code == 403
     assert f'href="/review/{i}"' not in client.get("/review").text
     _login(client, "root")
@@ -835,3 +839,87 @@ def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) 
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert fake.seen == (MBID, "rg")
+
+
+def _real_cover(
+    client: TestClient, make_client: Any, handler: Callable[[httpx.Request], httpx.Response]
+) -> None:
+    art = CoverArtClient(make_client("coverart", handler))
+    client.app.dependency_overrides[get_coverart] = lambda: art  # type: ignore[attr-defined]
+
+
+def test_cover_through_real_client_and_cached(
+    client: TestClient, sf: sessionmaker[Session], make_client: Any
+) -> None:
+    calls: list[str] = []
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        calls.append(str(r.url))
+        return httpx.Response(200, content=b"\xff\xd8jpeg")
+
+    _real_cover(client, make_client, handler)
+    i = _make_decision(sf, "alice", "/x")
+    _login(client, "alice")  # the session's last_seen write must not block the bucket
+    for _ in range(2):
+        r = client.get(f"/media/cover/{i}")
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+    assert calls == [f"https://coverartarchive.org/release/{MBID}/front-1200"]
+
+
+@pytest.mark.parametrize("code", [404, 403, 503])  # no art, permanent error, transient error
+def test_cover_404_when_upstream_has_nothing(
+    client: TestClient, sf: sessionmaker[Session], make_client: Any, code: int
+) -> None:
+    _real_cover(client, make_client, lambda r: httpx.Response(code))
+    i = _make_decision(sf, "alice", "/x")
+    _login(client, "alice")
+    r = client.get(f"/media/cover/{i}")
+    assert r.status_code == 404 and "max-age" in r.headers["cache-control"]
+
+
+def test_cover_404_without_a_release(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        row = s.get(MatchDecision, i)
+        assert row
+        row.release_mbid = ""
+    _login(client, "alice")
+    assert client.get(f"/media/cover/{i}").status_code == 404
+
+
+def test_next_is_scoped_to_the_deciders_queue(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    mine = _make_decision(sf, "alice", "/x")
+    bobs = _make_decision(sf, "bob", "/x")
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{mine}/reject", data={"csrf_token": tok})
+    assert r.headers["location"] == "/review"  # never bob's item
+    other = _make_decision(sf, "alice", "/x")
+    tok = _login(client, "root")  # an approver sees everyone's queue
+    r = client.post(f"/review/{other}/reject", data={"csrf_token": tok})
+    assert r.headers["location"] == f"/review/{bobs}"
+
+
+def test_list_sort_keys(client: TestClient, sf: sessionmaker[Session]) -> None:
+    def make(distance: float, release: str) -> int:
+        with sf() as s, s.begin():
+            uid = s.query(User).filter_by(username="alice").one().id
+            res = MatchResult(distance, Band.REVIEW, (), (), 1)
+            return decisions.record(
+                s, res, evidence={}, user_id=uid, stage=2, release_mbid=release
+            ).id
+
+    a, b, c = make(0.5, MBID), make(0.1, ""), make(0.3, MBID)
+    _login(client, "alice")
+
+    def order(query: str) -> list[int]:
+        html = client.get(f"/review{query}").text
+        return [int(x) for x in re.findall(r'href="/review/(\d+)"', html)]
+
+    assert order("?sort=score") == [b, c, a]
+    assert order("?sort=score&order=desc") == [a, c, b]
+    assert order("?sort=date") == [a, b, c]
+    assert order("?sort=date&order=desc") == [c, b, a]
+    assert order("?sort=match")[0] == b
+    assert order("?sort=bogus") == [a, b, c]

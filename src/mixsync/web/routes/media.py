@@ -34,14 +34,15 @@ def preview(request: Request, decision_id: int, index: int, user: User, db: Db) 
 async def cover(decision_id: int, user: User, db: Db, art: Cover) -> Response:
     """The candidate release's front cover, fetched server-side through the polite client."""
     d = decision_for(db, user, decision_id)
-    if not d.release_mbid:
-        raise HTTPException(404)
+    mbid = d.release_mbid
     group = d.evidence.get("target", {}).get("release_group_id")
+    db.commit()  # the login's last_seen write must not hold the SQLite lock during the bucket's
+    headers = {"Cache-Control": "private, max-age=86400"}
     try:
-        data = await art.front(d.release_mbid, group)
-    except (TransientError, PermanentError) as e:
-        raise HTTPException(404) from e
+        data = await art.front(mbid, group) if mbid else None
+    except (TransientError, PermanentError):
+        data = None
     if data is None:
-        raise HTTPException(404)
+        raise HTTPException(404, headers=headers)
     kind = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
-    return Response(data, media_type=kind, headers={"Cache-Control": "private, max-age=86400"})
+    return Response(data, media_type=kind, headers=headers)

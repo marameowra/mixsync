@@ -19,7 +19,7 @@ The only way MixSync talks HTTP to the outside world. It provides per-service ra
 | Service | Rate | Cache TTL | Identity |
 |---|---|---|---|
 | `musicbrainz` | 1 req/s per IP (`MIXSYNC_MB_RATE`, ≤ 1) | entity 7 d, search 1 d | `MixSync/<ver> ( <contact> )` |
-| `coverart` | 1 req/s (self-imposed; none published) | art saved to disk | same User-Agent; **follow 307 redirects** (off by default in httpx) |
+| `coverart` | 1 req/s (self-imposed; none published) | 7 days | same User-Agent; **follow 307 redirects** (off by default in httpx) |
 | `acoustid` | 3 req/s | lookup 7 d, submit never | app key |
 | `listenbrainz` | 1 req/s, tightened by `X-RateLimit-Remaining` / `-Reset-In` | 1 h | UA required; `Authorization: Token` |
 | `discogs` (off by default) | 50/min (documented: 60/min per IP) | 1 d | unique UA; user token |
