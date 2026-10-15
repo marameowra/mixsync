@@ -1,3 +1,4 @@
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     navidrome_discover_library: str = "discover"  # the library over /data/discover
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
+    drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
     flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first

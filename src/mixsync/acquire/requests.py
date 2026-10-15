@@ -108,7 +108,7 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
     """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
     req.tried = [*req.tried, [peer, folder]]
-    if req.migration_id is None and s.scalar(
+    if not req.from_files and s.scalar(
         select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)
     ):  # part of the album is already in: it stays a partial request while the rest is sought
         kept = (req.last_error or "").split("; ")[0]
@@ -172,7 +172,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
         enqueue_import(s, now, req, d.id)
     elif d.final_action == "repick":
         enqueue_verify(s, now, req, d.chosen_release_mbid, d.evidence)
-    elif req.migration_id is not None:  # no other candidate to look for: the album stays out
+    elif req.from_files:  # no other candidate to look for: the album stays out
         req.status, req.last_error = "skipped", "rejected in review"
     else:
         retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")

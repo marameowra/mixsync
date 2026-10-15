@@ -138,10 +138,7 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if (
-                req.status not in ("searching", "no_results", "partial")
-                or req.migration_id is not None
-            ):
+            if req.status not in ("searching", "no_results", "partial") or req.from_files:
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -390,7 +387,7 @@ class Pipeline:
         like = likelies(paths)
         with self.sessions() as s:
             req = self._request(s, job)
-            profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
+            profile, migrating = profile_for(s, req.user_id), req.from_files
             provisional = req.provisional
         if album is not None:
             result = score_files(files, like, album, profile)
@@ -602,7 +599,7 @@ class Pipeline:
             left = [t for t in album.tracks if t.recording_id not in have]
             with self.sessions.begin() as s:
                 req = self._request(s, job)
-                if left and req.migration_id is None and album.release_group_id:
+                if left and not req.from_files and album.release_group_id:
                     # another copy of what we have: the rest of the album is still wanted
                     text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
                     self._keep_looking(s, self.clock.now(), req, cand, text)
@@ -754,21 +751,22 @@ class Pipeline:
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
-            migrating = self._request(s, job).migration_id is not None
+            req = self._request(s, job)
+            migrating, local = req.migration_id is not None, req.from_files
         if results and not errors and not migrating:  # the old library is never touched
             await self._release(cand, [r.src for r in results], batch, root)
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
             req.status = "failed" if errors else "imported"
-            if migrating and recheck and not errors:
+            if local and recheck and not errors:
                 req.status = "unverified"
             notes = [*errors, *([note] if note else [])]
             if unassigned:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
             req.last_error = "; ".join(notes) or None
-            if partial and not errors and not migrating:
+            if partial and not errors and not local:
                 self._keep_looking(s, now, req, cand, "; ".join([partial, *notes]))
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
@@ -839,7 +837,8 @@ class Pipeline:
         try:
             for src in srcs:
                 await asyncio.to_thread(self.importer.fileops.release, src, batch, root)
-            await self.source.clear(cand)
+            if cand.username:  # a dropped album never came from a peer
+                await self.source.clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)
 
