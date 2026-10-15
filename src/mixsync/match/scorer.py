@@ -26,6 +26,7 @@
 """Distance between a batch of files and a MusicBrainz release."""
 
 import datetime
+import re
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
@@ -43,7 +44,7 @@ from mixsync.match.features import string_dist
 from mixsync.match.profiles import band
 from mixsync.match.vetoes import find_vetoes
 
-SCORER_VERSION = 3  # 3: penalize year mismatches for current-year releases
+SCORER_VERSION = 4  # 4: multi-artist credits partially match; missing tracks scaled by share
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -51,6 +52,14 @@ VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
 # Seconds of length difference that cost nothing, and the further difference that costs 1.0.
 TRACK_LENGTH_GRACE = 10.0
 TRACK_LENGTH_MAX = 30.0
+
+# Splits a multi-artist credit ("A & B", "A feat. B", "A, B", "A x B").
+ARTIST_SPLIT = re.compile(
+    r"\s*(?:,|;|/|&|\+|\b(?:and|x|vs|with|feat|featuring|ft|presents)\b\.?)\s*", re.IGNORECASE
+)
+# Penalty when one side's credit contains the other's artist among several; below any mismatch.
+ARTIST_PARTIAL_PENALTY = 0.2
+ARTIST_PART_MATCH_MAX = 0.1
 
 DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
     {
@@ -75,6 +84,20 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
         "medium": 1.0,
     }
 )
+
+
+def artist_dist(str1: str | None, str2: str | None) -> float:
+    """`string_dist`, but a credit naming several artists that includes the other side is a
+    small partial penalty, not a miss."""
+    full = string_dist(str1, str2)
+    if not str1 or not str2 or full <= ARTIST_PARTIAL_PENALTY:
+        return full
+    parts1 = [p for p in ARTIST_SPLIT.split(str1) if p]
+    parts2 = [p for p in ARTIST_SPLIT.split(str2) if p]
+    if len(parts1) == len(parts2) == 1:
+        return full
+    best = min(string_dist(a, b) for a in parts1 for b in parts2)
+    return ARTIST_PARTIAL_PENALTY if best <= ARTIST_PART_MATCH_MAX else full
 
 
 class Distance:
@@ -171,10 +194,9 @@ def track_distance(
     )
 
     if incl_artist and track.artist and file.artist.lower() not in VA_ARTISTS:
-        dist.add_string(
+        dist.add(
             "track_artist",
-            file.artist,
-            track.artist,
+            artist_dist(file.artist, track.artist),
             f"artist {file.artist!r} vs {track.artist!r}",
         )
 
@@ -279,10 +301,9 @@ def album_distance(
     dist = Distance(weights)
 
     if not album.va:
-        dist.add_string(
+        dist.add(
             "artist",
-            original.artist,
-            album.artist,
+            artist_dist(original.artist, album.artist),
             f"artist {original.artist!r} vs {album.artist!r}",
         )
     dist.add_string(
@@ -356,8 +377,15 @@ def album_distance(
         why = "; ".join(p.reason for p in td.breakdown())
         dist.add("tracks", td.distance, f"{file.title!r} -> {track.title!r}: {why}")
 
-    for _ in range(len(album.tracks) - len(pairs)):
-        dist.add("missing_tracks", 1.0, "release track has no file")
+    missing = len(album.tracks) - len(pairs)
+    # Each missing track costs its share of the release, so a few missing barely register
+    # but a mostly absent release still fails.
+    for _ in range(missing):
+        dist.add(
+            "missing_tracks",
+            missing / len(album.tracks),
+            f"{missing} of {len(album.tracks)} release tracks have no file",
+        )
     for _ in range(unmatched_count):
         dist.add("unmatched_tracks", 1.0, "file has no release track")
 

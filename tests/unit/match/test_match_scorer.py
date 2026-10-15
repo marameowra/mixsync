@@ -289,3 +289,35 @@ def test_empty_tracklist_rejects_under_every_profile() -> None:
     for profile in (STRICT, BALANCED, LOOSE):
         r = score_files([], Likelies(), AlbumInfo("artist", "album", ()), profile)
         assert r.band == Band.REJECT and r.vetoes == ("release has no tracklist",)
+
+
+@pytest.mark.parametrize(
+    "credit",
+    ["Alaska & Seba", "Alaska feat. Seba", "Alaska, Seba", "Alaska x Seba", "Alaska and Seba"],
+)
+def test_multi_artist_credit_is_partial_hit(credit: str) -> None:
+    a = AlbumInfo(artist=credit, album="album", tracks=(info("one", 1),))
+    like = Likelies(artist="Alaska", album="album")
+    partial = album_distance(like, a, [(file("one", 1), a.tracks[0])], 0)
+    miss = AlbumInfo(artist="Zorro", album="album", tracks=a.tracks)
+    full_miss = album_distance(like, miss, [(file("one", 1), a.tracks[0])], 0)
+    (pen,) = partial.breakdown()
+    assert pen.key == "artist" and 0 < pen.penalty < 0.5
+    assert partial.distance < full_miss.distance
+
+
+def test_multi_artist_track_credit_is_partial_hit() -> None:
+    f = FileTrack("one", "Alaska")
+    t = TrackInfo(title="one", artist="Alaska & Seba")
+    (pen,) = track_distance(f, t, incl_artist=True).breakdown()
+    assert pen.key == "track_artist" and 0 < pen.penalty < 0.5
+
+
+def test_missing_tracks_scale_with_share() -> None:
+    full = album("t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10")
+    few = adist([file(t.title, t.index) for t in full.tracks[:9]], full)
+    half = adist([file(t.title, t.index) for t in full.tracks[:5]], full)
+    assert 0 < few < half
+    assert few <= BALANCED.review_max / 4
+    r = score_files([file(t.title, t.index) for t in full.tracks[:9]], LIKE, full, LOOSE)
+    assert r.band != Band.REJECT
