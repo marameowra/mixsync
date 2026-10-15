@@ -410,3 +410,15 @@ def test_rank_untitled_copies_merge_but_differently_named_files_stay() -> None:
     assert _ranked_names([flac("01", 200.0), mp3("01", 200.0, 320)], one) == ["01.flac"]
     kept = _ranked_names([flac("Track 01", 200.0), flac("01", 200.0)], one)
     assert sorted(kept) == ["01.flac", "Track 01.flac"]
+
+
+def test_aif_scores_like_aiff() -> None:
+    def pcm(ext: str) -> Candidate:
+        files = [
+            CandidateFile(f"{FOLDER}\\{i + 1:02d} {t}.{ext}", int(ln * 1411 * 125), ext, 1411, ln)
+            for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+        ]
+        return cand(files)
+
+    assert score(pcm("aif")).distance == score(pcm("aiff")).distance
+    assert "quality_fit" not in keys(score(pcm("aif")))

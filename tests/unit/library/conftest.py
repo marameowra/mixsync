@@ -13,7 +13,7 @@ from mixsync.db.migrate import upgrade
 from mixsync.library.fileops import FileOps
 
 AUDIO = Path(__file__).parents[2] / "fixtures" / "audio"
-FORMATS = ["flac", "mp3", "m4a", "ogg"]
+FORMATS = ["flac", "mp3", "m4a", "ogg", "opus"]
 
 MakeSrc = Callable[..., Path]
 
