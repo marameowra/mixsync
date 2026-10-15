@@ -210,9 +210,12 @@ def score_candidate(
         "; ".join(r for bad, _, r in reasons if bad),
     )
 
+    result_band = band(dist.distance, vetoes, profile)
+    if missing and result_band is Band.AUTO_ACCEPT:
+        result_band = Band.REVIEW  # never ahead of a complete folder; stage 2 has the AcoustID say
     return MatchResult(
         distance=dist.distance,
-        band=band(dist.distance, vetoes, profile),
+        band=result_band,
         breakdown=dist.breakdown(),
         vetoes=tuple(vetoes),
         scorer_version=SCORER_VERSION,

@@ -952,10 +952,12 @@ async def test_unreadable_files_show_only_when_the_window_reaches_the_start(
 
 
 async def to_normal_request(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch, other_artist: bool = False
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, other_artist: bool = False, album: str | None = None
 ) -> Any:
     """The same files and flow as the partial migration, but an ordinary request."""
     await migrate_partial(rig, monkeypatch)
+    if album:
+        monkeypatch.setitem(CATALOG, BIG, replace(CATALOG[BIG], album=album))
     if other_artist:
         big = CATALOG[BIG]
         monkeypatch.setitem(CATALOG, BIG, replace(big, artist="Zzzz Qqqq", album="Xxxx Wwww"))
@@ -986,6 +988,13 @@ async def test_an_unsure_single_track_on_a_normal_request_goes_to_review(
     ]
     dec = await to_normal_request(rig, monkeypatch)
     assert dec.band == "review" and library(rig.env) == []
+
+
+async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_goes_to_review(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dec = await to_normal_request(rig, monkeypatch, album="The Very Best Of Alpha Band")
+    assert dec.band == "review" and not dec.evidence["partial"] and library(rig.env) == []
 
 
 async def test_a_single_track_of_another_artist_on_a_normal_request_is_rejected(

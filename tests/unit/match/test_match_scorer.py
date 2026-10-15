@@ -451,7 +451,7 @@ def test_no_acoustid_leaves_scoring_unchanged() -> None:
 def test_release_with_confirmed_recordings_outranks_tag_only_match() -> None:
     files = [sure_file("One", "r1", track=1)]
     tags = AlbumInfo(artist="artist", album="album", tracks=(rec_track("One", "x1"),))
-    holds = AlbumInfo(artist="artist", album="Other", tracks=(rec_track("One", "r1"),))
+    holds = AlbumInfo(artist="artist", album="album (Deluxe)", tracks=(rec_track("One", "r1"),))
     like = Likelies(artist="artist", album="album")
     best, _ = best_release(files, like, [tags, holds], BALANCED)
     assert best is holds
@@ -464,3 +464,21 @@ def test_among_releases_with_the_same_recordings_tags_decide() -> None:
     like = Likelies(artist="artist", album="album")
     for albums in ([comp, original], [original, comp]):
         assert best_release(files, like, albums, BALANCED)[0] is original
+
+
+def test_compilation_with_more_confirmations_does_not_beat_the_tagged_album() -> None:
+    recs = [f"r{i}" for i in range(1, 11)]
+    files = [sure_file(f"t{i}", r, track=i) for i, r in enumerate(recs, 1)]
+    like = Likelies(artist="artist", album="Album")
+    a_tracks = tuple(rec_track(f"t{i}", r) for i, r in enumerate(recs[:9], 1)) + (
+        rec_track("t10", "sibling"),
+    )
+    a = AlbumInfo(artist="artist", album="Album", tracks=a_tracks)
+    filler = tuple(rec_track(f"other{i}", f"o{i}") for i in range(20))
+    b = AlbumInfo(
+        artist="artist",
+        album="The Very Best Of artist",
+        tracks=tuple(rec_track(f"t{i}", r) for i, r in enumerate(recs, 1)) + filler,
+    )
+    for profile in (STRICT, BALANCED, LOOSE):
+        assert best_release(files, like, [b, a], profile)[0] is a

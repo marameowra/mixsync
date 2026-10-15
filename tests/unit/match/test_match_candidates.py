@@ -416,3 +416,16 @@ def test_rank_untitled_copies_merge_but_differently_named_files_stay() -> None:
     assert _ranked_names([flac("01", 200.0), mp3("01", 200.0, 320)], one) == ["01.flac"]
     kept = _ranked_names([flac("Track 01", 200.0), flac("01", 200.0)], one)
     assert sorted(kept) == ["01.flac", "Track 01.flac"]
+
+
+def test_stage1_incomplete_folder_never_auto_accepts_and_ranks_below_complete_lossy() -> None:
+    mp3s = [
+        mp3(f"{i + 1:02d} {t}", ln) for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+    ]
+    ranked = rank(
+        [cand(album_files()[:3], user="peer-001"), cand(mp3s, user="peer-002")],
+        ALBUM,
+        BALANCED,
+    )
+    assert [c.username for c, _ in ranked] == ["peer-002", "peer-001"]
+    assert ranked[1][1].band is Band.REVIEW and not ranked[1][1].vetoes

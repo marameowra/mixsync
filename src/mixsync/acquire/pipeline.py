@@ -67,6 +67,7 @@ from mixsync.library import canonical, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, rank
+from mixsync.match.features import string_dist
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
     SCORER_VERSION,
@@ -77,6 +78,10 @@ from mixsync.match.scorer import (
 from mixsync.match.vetoes import all_confident
 
 log = logging.getLogger(__name__)
+
+# A partial import needs the album tag to name the release: 0.2 forgives an edition suffix or a
+# typo, not a compilation title.
+PARTIAL_ALBUM_MAX_DIST = 0.2
 
 Handler = Callable[[JobRecord], Awaitable[None]]
 
@@ -399,7 +404,11 @@ class Pipeline:
             free = score_files(
                 files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
-            if free.band is Band.AUTO_ACCEPT and all_confident(pairs):
+            if (
+                free.band is Band.AUTO_ACCEPT
+                and all_confident(pairs)
+                and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
+            ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
             elif free.band is not Band.REJECT and result.band is Band.REJECT:
                 result = replace(result, band=Band.REVIEW)

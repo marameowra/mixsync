@@ -446,13 +446,17 @@ def score_files(
 def best_release(
     files: Sequence[FileTrack], likelies: Likelies, albums: Sequence[AlbumInfo], profile: Profile
 ) -> tuple[AlbumInfo, MatchResult]:
-    """A release holding more AcoustID-confirmed recordings of the files beats one that only
-    matches on tags; among equals the closest metadata wins. `albums` must not be empty."""
+    """Among releases whose distance is within the profile's auto-accept threshold, the one
+    holding more AcoustID-confirmed recordings of the files wins, then the closest metadata. A
+    release the tags rule out (a compilation with every track) cannot win on confirmations
+    alone. `albums` must not be empty."""
     scored = [(score_files(files, likelies, a, profile), a) for a in albums]
 
-    def key(x: tuple[MatchResult, AlbumInfo]) -> tuple[int, float]:
+    def key(x: tuple[MatchResult, AlbumInfo]) -> tuple[int, int, float]:
+        if x[0].distance > profile.auto_accept_max:
+            return 1, 0, x[0].distance
         sure = sum(acoustid_confirms(f, t) for f, t in assign_tracks(files, x[1].tracks)[0])
-        return -sure, x[0].distance
+        return 0, -sure, x[0].distance
 
     result, album = min(scored, key=key)
     return album, result
