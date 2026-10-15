@@ -83,7 +83,8 @@ def review_list(
 @router.post("/recheck")
 def recheck(user: User, db: Db) -> RedirectResponse:
     """Verify every pending review again with the current scorer: the decision is closed and the
-    files go back through VERIFY with no fixed release, so it picks one afresh. No network here."""
+    files go back through VERIFY against the same release (a migration has none: it picks afresh).
+    No network here."""
     now, queued, missing, busy = datetime.now(UTC), 0, 0, 0
     for d in decisions.pending_for(db, _owner(user)):
         req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
@@ -108,7 +109,13 @@ def recheck(user: User, db: Db) -> RedirectResponse:
             busy += 1
             continue
         decisions.act(db, d.id, user.id, "recheck")
-        enqueue_verify(db, now, req, None, d.evidence)
+        enqueue_verify(
+            db,
+            now,
+            req,
+            None if req.migration_id else d.release_mbid or req.release_mbid,
+            d.evidence,
+        )
         queued += 1
     return RedirectResponse(
         f"/review?requeued={queued}&missing={missing}&busy={busy}", status_code=303

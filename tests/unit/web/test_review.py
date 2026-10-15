@@ -968,7 +968,7 @@ def _verifies(sf: sessionmaker[Session], rid: int) -> list[Job]:
         ]
 
 
-def test_recheck_requeues_with_no_fixed_release(
+def test_recheck_requeues_against_the_release(
     client: TestClient, sf: sessionmaker[Session], downloads: Path
 ) -> None:
     did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
@@ -985,10 +985,23 @@ def test_recheck_requeues_with_no_fixed_release(
             assert d and req
             assert (d.status, d.final_action, d.acted_by) == ("rechecked", "recheck", d.user_id)
             assert d.acted_at and req.status == "verifying"
-    for q in (rid, mrid):
+    for q, want in ((rid, MBID), (mrid, None)):  # normal: the decision's release; migration: pick
         (job,) = _verifies(sf, q)
-        assert job.payload["release_mbid"] is None
+        assert job.payload["release_mbid"] == want
         assert job.payload["paths"] == [str(downloads / "a.mp3")]
+
+
+def test_recheck_without_a_matched_release_uses_the_requested_one(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_mbid = ""
+    client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    (job,) = _verifies(sf, rid)
+    assert job.payload["release_mbid"] == MBID
 
 
 def test_recheck_skips_missing_files_and_unlinked_decisions(
