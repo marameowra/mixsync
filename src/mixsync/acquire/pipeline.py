@@ -903,6 +903,7 @@ def _target(album: AlbumInfo) -> dict[str, Any]:
     return {
         "title": album.album,
         "artist": album.artist,
+        "release_group_id": album.release_group_id,
         "tracks": [
             {"position": t.index, "title": t.title, "length": t.length} for t in album.tracks
         ],

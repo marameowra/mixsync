@@ -16,6 +16,7 @@ from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.secretbox import SecretBox, load_box
 from mixsync.library.fileops import FileOps
+from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
 
@@ -112,6 +113,19 @@ def get_navidrome_http(request: Request) -> PoliteClient:
         state.navidrome_http = PoliteClient("navidrome", state.settings, state.session_factory)
     http: PoliteClient = state.navidrome_http
     return http
+
+
+def get_coverart(request: Request) -> CoverArtClient:
+    state = request.app.state
+    if getattr(state, "coverart", None) is None:
+        state.coverart = CoverArtClient(
+            PoliteClient("coverart", state.settings, state.session_factory)
+        )
+    cover: CoverArtClient = state.coverart
+    return cover
+
+
+Cover = Annotated[CoverArtClient, Depends(get_coverart)]
 
 
 def get_listenbrainz_http(request: Request) -> PoliteClient:

@@ -22,7 +22,7 @@ class ServiceLimits:
 def limits(service: str, settings: Settings) -> ServiceLimits:
     table = {
         "musicbrainz": ServiceLimits(settings.mb_rate, WEEK, DAY),
-        "coverart": ServiceLimits(1.0, follow_redirects=True),  # art is saved to disk instead
+        "coverart": ServiceLimits(1.0, WEEK, follow_redirects=True),
         "acoustid": ServiceLimits(3.0, WEEK),
         "listenbrainz": ServiceLimits(1.0, HOUR),
         "discogs": ServiceLimits(50 / 60, DAY),
