@@ -23,7 +23,9 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
 - Auto-merge. PRs target `dev`. After opening a PR, queue `gh pr merge --auto --merge` only
   if the reviewer agent reported no unfixed findings and every CI step passed locally.
   Otherwise leave the PR for the user to merge. Merging to `dev` publishes the `:dev` image.
-  Never merge into `main` or queue auto-merge on a PR whose base is `main`.
+  Never merge into `main` or queue auto-merge on a PR whose base is `main`. A hook in
+  `.claude/settings.json` blocks agent merges into `main`, and a workflow turns off
+  auto-merge on PRs into `main`.
 - Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
   `release.yml` then waits for the user's approval in the `release` environment, publishes
   `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
