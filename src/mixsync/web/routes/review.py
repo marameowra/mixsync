@@ -136,15 +136,12 @@ def recheck(user: User, db: Db) -> RedirectResponse:
             .order_by(Job.id.desc())
             .limit(1)
         )
-        # the last VERIFY made this decision: its release keeps a repick and a migration's
-        # self-identification; without one (shortcut), a migration re-picks, else the request's
-        mbid = (
-            last["release_mbid"]
-            if last
-            else None
-            if req.migration_id
-            else d.release_mbid or req.release_mbid
-        )
+        # The last VERIFY only says whether a release was given (a migration may have had it
+        # identified); the release itself comes from the decision, as a reopened bad repick leaves
+        # a VERIFY for a release the decision never recorded. Without a VERIFY (shortcut): a
+        # migration re-picks, any other request has its release.
+        given = last["release_mbid"] if last else not req.migration_id
+        mbid = (d.release_mbid or req.release_mbid) if given else None
         enqueue_verify(db, now, req, mbid, d.evidence)
         queued += 1
     return RedirectResponse(

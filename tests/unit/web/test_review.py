@@ -1067,6 +1067,7 @@ def test_recheck_scope_and_csrf(
 
 
 OTHER = "33333333-3333-3333-3333-333333333333"
+BAD = "55555555-5555-5555-5555-555555555555"
 
 
 def _last_verify(sf: sessionmaker[Session], rid: int, mbid: str | None) -> None:
@@ -1087,19 +1088,24 @@ def test_recheck_reuses_the_release_of_the_last_verify(
     client: TestClient, sf: sessionmaker[Session], downloads: Path
 ) -> None:
     path = str(downloads / "a.mp3")
-    _, repicked = _reviewed(sf, "alice", path, migration=True)
-    _, identified = _reviewed(sf, "alice", path, migration=True)
-    _, normal = _reviewed(sf, "alice", path)
-    with sf() as s, s.begin():
-        req = s.get(AlbumRequest, normal)
-        assert req
-        req.release_mbid = "44444444-4444-4444-4444-444444444444"
-    _last_verify(sf, repicked, OTHER)
-    _last_verify(sf, identified, None)
-    _last_verify(sf, normal, OTHER)
+    cases = {  # (VERIFY's release, the decision's release, migration) -> payload
+        "repicked": (OTHER, OTHER, True, OTHER),
+        "identified": (None, MBID, True, None),
+        "normal": (OTHER, OTHER, False, OTHER),
+        "reopened bad repick": (BAD, MBID, False, MBID),  # the decision never recorded BAD
+    }
+    rids: dict[str, int] = {}
+    for name, (verified, chosen, migration, _) in cases.items():
+        did, rids[name] = _reviewed(sf, "alice", path, migration=migration)
+        _last_verify(sf, rids[name], verified)
+        with sf() as s, s.begin():
+            d, req = s.get(MatchDecision, did), s.get(AlbumRequest, rids[name])
+            assert d and req
+            d.release_mbid = chosen
+            req.release_mbid = "44444444-4444-4444-4444-444444444444"
     client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
-    got = {q: _verifies(sf, q)[-1].payload["release_mbid"] for q in (repicked, identified, normal)}
-    assert got == {repicked: OTHER, identified: None, normal: OTHER}
+    for name, (*_, want) in cases.items():
+        assert _verifies(sf, rids[name])[-1].payload["release_mbid"] == want, name
 
 
 def test_recheck_leaves_requests_no_longer_in_review(
