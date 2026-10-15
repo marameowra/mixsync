@@ -29,7 +29,9 @@ th, td { text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid var
 audio { width: 100%; max-width: 24rem; }
 .cols { display: grid; gap: var(--s2); }
 .cols > section { min-width: 0; }
-.cover { width: 8rem; height: 8rem; border: 1px dashed var(--line); background: var(--line); }
+.cover { width: 8rem; height: 8rem; object-fit: cover; background: var(--line); }
+.actionbar { position: sticky; top: 0; z-index: 1; display: flex; gap: var(--s2); align-items: center; padding: var(--s1) 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.actionbar form { margin: 0; }
 .band { font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
 .band-auto_accept { color: var(--ok); }
 .band-review { color: var(--warn); }
