@@ -36,7 +36,7 @@ LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
 # last_error prefixes a push writes; a good push clears only these, never a build's error
 PUSH_ERRORS = ("Navidrome: ", "Navidrome needs relinking", "the '")
 PARTIAL_RELEASE = "not on this release"  # an imported request's last_error (pipeline)
-NOT_ON_RELEASE = "none of the wanted recordings"  # a failed request's last_error (pipeline)
+NOT_ON_RELEASE = "none of the wanted recordings"  # pipeline.py must match
 
 
 def is_dead_end(r: Request) -> bool:

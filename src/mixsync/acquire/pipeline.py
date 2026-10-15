@@ -185,9 +185,8 @@ class Pipeline:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
                     req.status = "failed"
-                    req.last_error = (
-                        f"none of the {len(wanted)} wanted recordings are on this release"
-                    )
+                    # must start with discovery.playlists.NOT_ON_RELEASE (is_dead_end)
+                    req.last_error = "none of the wanted recordings are on this release"
                 return
         elif album.release_group_id and album.tracks:
             with self.sessions() as s:
