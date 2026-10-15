@@ -46,7 +46,7 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_DROP_DIR` | drop folder path inside the container (e.g. `/drop`). Unset: feature off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` that MixSync did not request (e.g. a hand download in the slskd UI) are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself, including rejected ones, are never adopted |
-| `MIXSYNC_ADOPT_SETTLE_MINUTES` | how long a folder in `/downloads` must be untouched before it is adopted (default 10) |
+| `MIXSYNC_ADOPT_SETTLE_MINUTES` | how long a folder in `/downloads` must be untouched before it is adopted (default 10). Raise it if peers queue the rest of a hand download for longer: unfinished transfers are not checked |
 | `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
 | `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |

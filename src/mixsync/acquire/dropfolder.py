@@ -13,7 +13,7 @@ import logging
 import os
 import random
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
@@ -33,6 +33,7 @@ from mixsync.db.queue import JobRecord, enqueue_in
 log = logging.getLogger(__name__)
 
 INTERVAL = timedelta(minutes=5)
+MAX_ATTEMPTS = 3  # a failing album is queued this often, then left alone
 SETTLE = timedelta(seconds=60)  # a file touched more recently may still be being copied in
 Rng = Callable[[float, float], float]
 
@@ -55,6 +56,7 @@ class DropFolder:
     source: str = "drop"  # Request.source; also the idempotency key prefix
     settle: timedelta = SETTLE
     owned: Callable[[Session], set[Path]] | None = None  # dirs whose albums are not ours to take
+    capped: set[str] = field(default_factory=set[str])  # digests whose retry cap was logged
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {self.kind: self.run}
@@ -83,18 +85,20 @@ class DropFolder:
             return False
         return newest <= (self.clock.now() - self.settle).timestamp()
 
-    def _queue(self, groups: list[Group], hashes: dict[str, str]) -> int:
+    def _queue(self, groups: list[Group], hashes: dict[str, str], mine: set[Path]) -> int:
         now, queued = self.clock.now(), 0
         with self.sessions.begin() as s:
-            if self.owned is not None:
-                mine = self.owned(s)
-                groups = [
-                    g
-                    for g in groups
-                    if mine.isdisjoint(
-                        {Path(g.folder), *(Path(g.folder, r).parent for r, _ in g.files)}
-                    )
-                ]
+            ours = [
+                g
+                for g in groups
+                if mine.isdisjoint(
+                    {Path(g.folder), *(Path(g.folder, r).parent for r, _ in g.files)}
+                )
+            ]
+            for g in groups:
+                if g not in ours:
+                    log.debug("%s: %s is not ours to take", self.source, g.folder)
+            groups = ours
             # the first account is the admin who set mixsync up; it owns what lands in review
             owner = s.scalar(select(User.id).order_by(User.id).limit(1))
             if owner is None:
@@ -114,6 +118,16 @@ class DropFolder:
                 key = base if not earlier else f"{base}:{len(earlier)}"
                 if earlier:
                     last = s.get(Request, earlier[-1].payload["request_id"])
+                    if len(earlier) >= MAX_ATTEMPTS and last and last.status == "failed":
+                        if base not in self.capped:
+                            self.capped.add(base)
+                            log.info(
+                                "%s: %s failed %d times, giving up",
+                                self.source,
+                                g.folder,
+                                len(earlier),
+                            )
+                        continue
                     if last is None or last.status != "failed":
                         log.debug("%s: %s already queued as %s", self.source, g.folder, base)
                         continue  # a failed attempt is tried again; anything else is settled
@@ -148,7 +162,9 @@ class DropFolder:
         return queued
 
     def _scan_and_queue(self, root: Path) -> int:
-        found = scan(root, self.work_dir)
+        with self.sessions() as s:
+            mine: set[Path] = self.owned(s) if self.owned else set()
+        found = scan(root, self.work_dir, mine.__contains__)
         lines = (self.work_dir / "manifest.jsonl").read_text().splitlines()
         hashes = {str(root / e["path"]): e["sha256"] for e in map(json.loads, lines)}
         if found["unreadable"]:  # left where they are, never deleted
@@ -156,7 +172,7 @@ class DropFolder:
             log.warning(
                 "%s: %d unreadable file(s) left in place: %s", self.source, len(bad), bad[:5]
             )
-        return self._queue([g for g in found["groups"] if self._quiet(g)], hashes)
+        return self._queue([g for g in found["groups"] if self._quiet(g)], hashes, mine)
 
     async def run(self, job: JobRecord) -> None:
         try:

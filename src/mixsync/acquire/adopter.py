@@ -8,7 +8,7 @@ verified is left alone, whatever became of it: rejected and failed downloads sta
 from datetime import timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.dropfolder import DropFolder
@@ -26,7 +26,9 @@ def owned_dirs(s: Session, downloads: Path) -> set[Path]:
     out: set[Path] = set()
     rows = s.execute(
         select(Job.payload, Job.idempotency_key).where(
-            Job.kind.in_([JobKind.DOWNLOAD, JobKind.VERIFY])
+            Job.kind.in_([JobKind.DOWNLOAD, JobKind.VERIFY]),
+            # the monitor rows repeat the download's own candidate
+            or_(Job.idempotency_key.is_(None), ~Job.idempotency_key.like("monitor:%")),
         )
     )
     for payload, key in rows:
@@ -49,6 +51,8 @@ def adopter(
     enabled: bool,
     settle_minutes: int,
 ) -> DropFolder:
+    # shortcut: no check for unfinished slskd transfers; a peer that queues the rest of an album
+    # for longer than the settle window gets it adopted half-done. Ask slskd if that bites.
     return DropFolder(
         sessions,
         clock,
