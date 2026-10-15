@@ -107,8 +107,11 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
 
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
     """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
+    if req.from_files:  # nothing to search for: a person must look at the files
+        req.status, req.last_error = "failed", why
+        return
     req.tried = [*req.tried, [peer, folder]]
-    if not req.from_files and s.scalar(
+    if s.scalar(
         select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)
     ):  # part of the album is already in: it stays a partial request while the rest is sought
         kept = (req.last_error or "").split("; ")[0]

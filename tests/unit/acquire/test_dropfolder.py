@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from mixsync.acquire.dropfolder import DropFolder
+from mixsync.acquire.pipeline import Pipeline
 from mixsync.app import create_app
 from mixsync.core.clock import aware
 from mixsync.core.config import Settings
@@ -22,7 +23,7 @@ from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 
 from .conftest import Env, login
-from .fakes import ALBUM, AUDIO
+from .fakes import ALBUM, AUDIO, OTHER
 from .test_migration import Meta, put_album
 from .test_pipeline import decision_rows, library
 
@@ -45,10 +46,8 @@ class Rig:
         self.n = 0
 
     def settle(self) -> None:
-        """Make every file older than the settle time, as if copied in a while ago."""
-        old = (self.env.clock.now() - timedelta(minutes=5)).timestamp()
-        for p in self.drop.rglob("*"):
-            os.utime(p, (old, old))
+        """Let the files age past the settle time (utime would bump ctime, so move the clock)."""
+        self.env.clock.advance(timedelta(minutes=5))
 
     def job(self) -> JobRecord:
         self.n += 1
@@ -169,3 +168,68 @@ def test_no_drop_dir_schedules_nothing(env: Env, tmp_path: Path) -> None:
     assert env.jobs(JobKind.DROP_SCAN) == []
     DropFolder(env.sessions, env.clock, tmp_path, tmp_path).start_chains()
     assert len(env.jobs(JobKind.DROP_SCAN)) == 1
+
+
+async def test_an_old_mtime_with_a_fresh_ctime_is_not_quiet(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    real = Path.stat
+    fresh = rig.env.clock.now().timestamp()
+
+    def stat(p: Path) -> os.stat_result:
+        st = real(p)
+        return os.stat_result((*st[:8], int(st.st_mtime), int(fresh)))
+
+    rig.dropper = replace(rig.dropper, stat=stat)
+    await rig.scan()
+    assert rig.requests() == []
+
+
+async def test_a_file_vanishing_mid_scan_only_delays_its_album(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    put_album(rig.drop, "Beta Band/Beta Album", OTHER)
+    rig.settle()
+    real = Path.stat
+
+    def stat(p: Path) -> os.stat_result:
+        if p.name == "01 Song One.mp3":
+            raise FileNotFoundError(p)
+        return real(p)
+
+    rig.dropper = replace(rig.dropper, stat=stat)
+    await rig.scan()
+    assert [r.album for r in rig.requests()] == ["Beta Album"]
+
+
+async def test_a_failed_album_is_queued_again_but_a_settled_one_is_not(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    await rig.scan()
+    assert len(rig.requests()) == 1
+    with rig.env.sessions.begin() as s:
+        s.execute(update(Request).values(status="failed"))
+    await rig.scan()
+    reqs = rig.requests()
+    assert [r.status for r in reqs] == ["failed", "verifying"]
+    await rig.scan()  # the new attempt is live: not queued a third time
+    assert len(rig.requests()) == 2
+
+
+async def test_an_unusable_file_fails_the_drop_without_a_search(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def unusable(_self: object, _path: Path) -> str:
+        return "unsupported audio: bad.wav is not readable audio"
+
+    monkeypatch.setattr(Pipeline, "_unusable", unusable)
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    await rig.env.drain()
+    (req,) = rig.requests()
+    assert (req.status, req.last_error) == (
+        "failed",
+        "unsupported audio: bad.wav is not readable audio",
+    )
+    assert rig.env.jobs(JobKind.SEARCH) == []

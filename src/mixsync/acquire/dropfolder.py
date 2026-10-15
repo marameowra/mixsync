@@ -49,6 +49,7 @@ class DropFolder:
     drop_dir: Path | None
     work_dir: Path  # where the scan keeps its manifest
     rng: Rng = random.uniform
+    stat: Callable[[Path], os.stat_result] = Path.stat
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.DROP_SCAN: self.run}
@@ -65,7 +66,16 @@ class DropFolder:
                 enqueue_in(s, self.clock.now(), JobKind.DROP_SCAN, {})
 
     def _quiet(self, g: Group) -> bool:
-        newest = max(os.stat(Path(g.folder) / rel).st_mtime for rel, _ in g.files)
+        """No file, and no folder holding one, changed within SETTLE. ctime counts too: copies
+        that keep the old mtime (cp -p, rsync -a, Finder, SMB) still bump it. A file that
+        vanishes mid-scan makes the album not quiet yet."""
+        root = Path(g.folder)
+        paths = {root / rel for rel, _ in g.files}
+        paths |= {q for p in paths for q in (p.parent, root) if q != p}
+        try:
+            newest = max(max(st.st_mtime, st.st_ctime) for st in map(self.stat, paths))
+        except OSError:
+            return False
         return newest <= (self.clock.now() - SETTLE).timestamp()
 
     def _queue(self, groups: list[Group], hashes: dict[str, str]) -> int:
@@ -76,9 +86,23 @@ class DropFolder:
             if owner is None:
                 return 0
             for g in groups:
-                key = f"drop:{_digest(g, hashes)}"
-                if s.scalar(select(Job.id).where(Job.idempotency_key == key)):
-                    continue
+                base = f"drop:{_digest(g, hashes)}"
+                earlier = list(
+                    s.scalars(
+                        select(Job)
+                        .where(
+                            Job.kind == JobKind.VERIFY,
+                            Job.idempotency_key.like(f"{base}%"),
+                        )
+                        .order_by(Job.id)
+                    )
+                )
+                key = base if not earlier else f"{base}:{len(earlier)}"
+                if earlier:
+                    last = s.get(Request, earlier[-1].payload["request_id"])
+                    if last is None or last.status != "failed":
+                        log.debug("drop folder: %s already queued as %s", g.folder, base)
+                        continue  # a failed attempt is tried again; anything else is settled
                 req = Request(
                     user_id=owner,
                     release_mbid="",
