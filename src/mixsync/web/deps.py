@@ -93,10 +93,8 @@ def get_namer(request: Request) -> NameLookup:
     """MusicBrainz names for ids, on the same bucket and cache as the worker's."""
     state = request.app.state
     if getattr(state, "namer", None) is None:
-        state.namer = MusicBrainzProvider(
-            PoliteClient("musicbrainz", state.settings, state.session_factory),
-            state.settings.mb_base_url,
-        )
+        get_watch(request)  # builds the one MusicBrainzProvider, which also names ids
+        state.namer = state.watch
     namer: NameLookup = state.namer
     return namer
 

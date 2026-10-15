@@ -257,9 +257,13 @@ class MusicBrainzProvider:
         "Title - Artist (2019, CD)". With cached_only it answers from the response cache or None
         and never calls MusicBrainz; otherwise it is one cached, rate-limited lookup."""
         url = f"{self._base}/{kind}/{mbid}"
+        # Params match get_release / entity_name exactly (the cache key is the full URL), so a
+        # release or artist already fetched for the pipeline is named from the cache.
         params = {"fmt": "json"}
-        if kind != "artist":
-            params["inc"] = "artist-credits" + (" media" if kind == "release" else "")
+        if kind == "release":
+            params = {"inc": _INC, "fmt": "json"}
+        elif kind != "artist":
+            params = {"inc": "artist-credits", "fmt": "json"}
         if cached_only:
             hit = self._client.cached(url, params=params)
             data = hit.json() if hit else None
@@ -280,6 +284,8 @@ class MusicBrainzProvider:
         return _named(rel.title, rel.artist_credit, [_year(rel.date), media])
 
 
-def _named(title: str, credit: list[MbCredit], extra: list[object]) -> str:
+def _named(title: str, credit: list[MbCredit], extra: list[object]) -> str | None:
+    if not title:  # a body that is not really this entity
+        return None
     detail = ", ".join(str(x) for x in extra if x)
     return f"{title} \u2014 {_credit(credit)}" + (f" ({detail})" if detail else "")

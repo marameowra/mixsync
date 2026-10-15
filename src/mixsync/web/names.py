@@ -61,7 +61,7 @@ async def resolve(
             if name is None and lookups > 0:
                 lookups -= 1
                 name = await namer.label(kind, mbid)
-        except (TransientError, PermanentError, httpx.HTTPError) as e:
+        except (TransientError, PermanentError, httpx.HTTPError, ValueError) as e:
             log.info("no name for %s %s: %s", kind, mbid, e)
             continue
         if name:
