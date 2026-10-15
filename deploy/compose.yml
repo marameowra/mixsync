@@ -11,6 +11,8 @@ x-mixsync: &mixsync
     # One mount: rename between library/discover/.trash/.incoming must stay atomic.
     - ${DATA_DIR}:/data
     - ${IMPORT_SOURCE_DIR}:/import-source:ro
+    # Drop folder; rw because imported originals are moved to the trash. Enable with MIXSYNC_DROP_DIR=/drop.
+    - ${DROP_DIR:-./drop}:/drop
 
 services:
   mixsync-migrate:

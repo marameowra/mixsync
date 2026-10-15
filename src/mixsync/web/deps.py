@@ -41,6 +41,7 @@ def fileops_for(state: Any) -> FileOps:
             Path(st.downloads_dir),
             SqlJournal(state.session_factory, clock),
             clock,
+            st.drop_dir,
         )
     fileops: FileOps = state.fileops
     return fileops

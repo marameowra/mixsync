@@ -1,6 +1,7 @@
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     navidrome_discover_library: str = "discover"  # the library over /data/discover
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
+    drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
     import_source_dir: str = "/import-source"  # the old library; mounted read-only
     flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
     canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
@@ -42,6 +44,19 @@ class Settings(BaseSettings):
         if not v.startswith(("sqlite:", "postgresql")):
             raise ValueError("MIXSYNC_DATABASE_URL must start with sqlite: or postgresql")
         return v
+
+    @model_validator(mode="after")
+    def _drop_dir_apart(self) -> "Settings":
+        """The drop folder holds originals that get moved to the trash; it must not overlap
+        the library, the downloads or the old library."""
+        if self.drop_dir is None:
+            return self
+        drop = self.drop_dir.resolve()
+        for name in ("data_dir", "downloads_dir", "import_source_dir"):
+            other = Path(getattr(self, name)).resolve()
+            if drop == other or drop.is_relative_to(other) or other.is_relative_to(drop):
+                raise ValueError(f"MIXSYNC_DROP_DIR must not overlap {name} ({other})")
+        return self
 
     @field_validator("timezone")
     @classmethod

@@ -20,9 +20,9 @@ def preview(request: Request, decision_id: int, index: int, user: User, db: Db) 
     if not 0 <= index < len(files):
         raise HTTPException(404)
     settings = request.app.state.settings
+    dirs = [settings.downloads_dir, settings.data_dir, settings.import_source_dir]
     roots = [
-        Path(d).resolve()
-        for d in (settings.downloads_dir, settings.data_dir, settings.import_source_dir)
+        Path(d).resolve() for d in (*dirs, *([settings.drop_dir] if settings.drop_dir else []))
     ]
     path = Path(str(files[index].get("local_path", ""))).resolve()  # follows symlinks and ..
     if not any(path.is_relative_to(r) for r in roots) or not path.is_file():
