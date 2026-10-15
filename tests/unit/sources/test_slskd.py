@@ -33,6 +33,15 @@ def source(make_client: Make, handler: Callable[[httpx.Request], httpx.Response]
     )
 
 
+def test_only_formats_import_takes_become_candidates() -> None:
+    names = ["a.opus", "b.aif", "c.wav", "d.wma", "e.aac", "f.ape"]
+    files = [{"filename": f"Music\\A\\B\\{n}", "size": 1, "isLocked": False} for n in names]
+    resp = [{"username": "p", "hasFreeUploadSlot": True, "queueLength": 0, "uploadSpeed": 1,
+             "files": files}]  # fmt: skip
+    (cand,) = map_responses(resp)
+    assert sorted(f.extension for f in cand.files) == ["aif", "opus", "wav"]
+
+
 def test_mapping_groups_folders_and_drops_non_audio() -> None:
     cands = map_responses(load("responses.json"))  # pyright: ignore[reportArgumentType]
     by_folder = {(c.username, c.folder): c for c in cands}

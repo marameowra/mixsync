@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
+from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
 from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
@@ -38,7 +39,7 @@ from mixsync.match.candidates import DISC_DIR
 
 log = logging.getLogger(__name__)
 
-AUDIO = frozenset({".mp3", ".flac", ".ogg", ".m4a"})  # what library.tags can read and write
+UNSUPPORTED_WHY = "unsupported format"
 SPACE_FACTOR = 1.1  # free space needed on the library, times the source size
 AID_RATE = 3.0  # AcoustID lookups per second
 LISTED = 100  # entries kept of each list in a check result
@@ -116,7 +117,11 @@ def scan(root: Path, out: Path) -> dict[str, Any]:
                 continue
             manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
-            if path.suffix.lower() not in AUDIO:
+            ext = path.suffix.lower()
+            if ext in UNSUPPORTED:
+                unreadable.append(_skip(rel, UNSUPPORTED_WHY))
+                continue
+            if ext not in EXTENSIONS:
                 continue
             try:
                 tg = tags.read_fields(path)
@@ -349,7 +354,7 @@ def report(
         rows.append(
             {
                 "folder": str((Path(root) / rel).parent),
-                "status": "failed",
+                "status": "skipped" if why == UNSUPPORTED_WHY else "failed",
                 "artist": "",
                 "album": "",
                 "release_mbid": "",

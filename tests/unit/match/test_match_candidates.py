@@ -429,3 +429,15 @@ def test_stage1_incomplete_folder_never_auto_accepts_and_ranks_below_complete_lo
     )
     assert [c.username for c, _ in ranked] == ["peer-002", "peer-001"]
     assert ranked[1][1].band is Band.REVIEW and not ranked[1][1].vetoes
+
+
+def test_aif_scores_like_aiff() -> None:
+    def pcm(ext: str) -> Candidate:
+        files = [
+            CandidateFile(f"{FOLDER}\\{i + 1:02d} {t}.{ext}", int(ln * 1411 * 125), ext, 1411, ln)
+            for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+        ]
+        return cand(files)
+
+    assert score(pcm("aif")).distance == score(pcm("aiff")).distance
+    assert "quality_fit" not in keys(score(pcm("aif")))

@@ -42,7 +42,7 @@ STAGE1_WEIGHTS: Mapping[str, float] = MappingProxyType(
     }
 )
 
-LOSSLESS = frozenset({"flac", "wav", "ape", "wv", "aiff", "alac"})
+LOSSLESS = frozenset({"flac", "wav", "ape", "wv", "aiff", "aif", "alac"})
 MIN_LOSSY_KBPS = 192  # below this a lossy file is a full quality penalty
 GOOD_LOSSY_KBPS = 256
 FLAC_MIN_KBPS = 400  # smaller than this and the "FLAC" is probably a transcode (SK-Q01)

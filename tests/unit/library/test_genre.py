@@ -13,7 +13,7 @@ from mixsync.library.paths import render
 from .conftest import FORMATS, MakeSrc
 from .test_tags import TAGSET
 
-GENRE = {"flac": "genre", "ogg": "genre", "mp3": "TCON", "m4a": "\xa9gen"}
+GENRE = {"flac": "genre", "ogg": "genre", "opus": "genre", "mp3": "TCON", "m4a": "\xa9gen"}
 TRACK = TrackInfo("Kid A", medium=1, medium_index=2, recording_id="rec2")
 
 

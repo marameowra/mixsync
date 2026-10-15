@@ -1,4 +1,4 @@
-"""Tag read/write with Picard's field names. FLAC, MP3 (ID3), M4A, Ogg Vorbis.
+"""Tag read/write with Picard's field names. FLAC, MP3 (ID3), M4A, Ogg Vorbis, Opus.
 
 A snapshot is `{"format": ..., "tags": {native key: [str, ...]}}`. `write` only touches the
 managed keys, so `restore` only has to put those back; unmanaged frames (cover art...) are
@@ -17,6 +17,7 @@ from mutagen.flac import FLAC
 from mutagen.id3 import TXXX, UFID
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4, MP4FreeForm
+from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 
@@ -110,7 +111,7 @@ def _sniff(path: Path) -> Any:
 def _kind(f: object) -> str | None:
     if isinstance(f, FLAC):
         return "flac"
-    if isinstance(f, OggVorbis):
+    if isinstance(f, OggVorbis | OggOpus):
         return "ogg"
     if isinstance(f, MP3 | WAVE | AIFF):  # WAV/AIFF get ID3 chunks if imported unencoded
         return "mp3"
