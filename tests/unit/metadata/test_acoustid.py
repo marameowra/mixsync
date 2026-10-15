@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,43 @@ async def test_fingerprint_real_binary(tmp_path: Path) -> None:
     junk.write_bytes(b"not audio")
     with pytest.raises(PermanentError):
         await acoustid.fingerprint(junk)
+
+
+def make_flac(path: Path) -> Path:
+    subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-y"]
+        + ["-f", "lavfi", "-i", "sine=frequency=440:duration=30"]
+        + ["-f", "lavfi", "-i", "anoisesrc=d=30:a=0.1"]
+        + ["-filter_complex", "amix=inputs=2", "-c:a", "flac", str(path)],
+        check=True,
+    )
+    return path
+
+
+async def test_fingerprint_tolerates_trailing_junk(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "tail.flac")
+    with flac.open("ab") as f:
+        f.write(b"\x55\xaa" * 2048)
+    fp = await fingerprint(flac)
+    assert fp.fingerprint
+    assert fp.duration == pytest.approx(30, abs=2)
+
+
+async def test_fingerprint_rejects_midstream_corruption(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "bad.flac")
+    data = bytearray(flac.read_bytes())
+    start = len(data) // 3
+    data[start : start + 200_000] = b"\x55\xaa" * 100_000
+    flac.write_bytes(bytes(data))
+    with pytest.raises(PermanentError):
+        await fingerprint(flac)
+
+
+async def test_fingerprint_rejects_non_audio_flac(tmp_path: Path) -> None:
+    junk = tmp_path / "junk.flac"
+    junk.write_bytes(b"\x55\xaa" * 2048)
+    with pytest.raises(PermanentError):
+        await fingerprint(junk)
 
 
 def keyed(settings: Settings, key: str = "appkey") -> Settings:

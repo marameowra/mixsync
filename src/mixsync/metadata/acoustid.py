@@ -4,7 +4,10 @@ import asyncio
 import gzip
 import json
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import urlencode
+
+import mutagen
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError
@@ -18,19 +21,37 @@ _SUBMIT_URL = "https://api.acoustid.org/v2/submit"
 _STATUS_URL = "https://api.acoustid.org/v2/submission_status"
 
 
-async def fingerprint(path: Path) -> Fingerprint:
+async def _fpcalc(*args: str) -> tuple[int | None, bytes, bytes]:
     try:
         proc = await asyncio.create_subprocess_exec(
             "fpcalc",
-            "-json",
-            str(path),
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError as e:
         raise RuntimeError("fpcalc (chromaprint) is not installed or not on PATH") from e
     out, err = await proc.communicate()
-    if proc.returncode != 0:
+    return proc.returncode, out, err
+
+
+def _duration(path: Path) -> float | None:
+    try:
+        f = cast(Any, mutagen.File(path))  # pyright: ignore[reportUnknownMemberType]
+        return float(f.info.length) if f is not None else None
+    except Exception:
+        return None
+
+
+async def fingerprint(path: Path) -> Fingerprint:
+    code, out, err = await _fpcalc("-json", str(path))
+    if code != 0:
+        # Junk after the last frame makes fpcalc exit 3 on intact audio; stopping 1 s early
+        # skips it, while real corruption still fails.
+        duration = await asyncio.to_thread(_duration, path)
+        if duration is not None and duration > 1:
+            code, out, _ = await _fpcalc("-length", str(int(duration) - 1), "-json", str(path))
+    if code != 0:
         raise PermanentError(f"fpcalc failed on {path}: {err.decode(errors='replace').strip()}")
     try:
         data = json.loads(out)
