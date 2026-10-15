@@ -9,9 +9,9 @@
   <tbody>
   {% for f in items %}
   <tr>
-    <td>{{ f.group_mbid }}</td>
-    <td>{% for rel, n in f.releases.items() %}{{ rel }} ({{ n }}){% if not loop.last %}<br>{% endif %}{% endfor %}</td>
-    <td>{{ f.canonical or "not chosen yet" }}</td>
+    <td>{{ mb.link("release-group", f.group_mbid) }}</td>
+    <td>{% for rel, n in f.releases.items() %}{{ mb.link("release", rel) }} ({{ n }}){% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+    <td>{% if f.canonical %}{{ mb.link("release", f.canonical) }}{% else %}not chosen yet{% endif %}</td>
     <td><form method="post" action="/library/fragments/plan">{{ forms.csrf() }}<input type="hidden" name="group" value="{{ f.group_mbid }}"><button type="submit">Preview merge</button></form></td>
   </tr>
   {% endfor %}
@@ -30,7 +30,7 @@
   {% for p in plans %}
   <tr>
     <td><a href="/library/plans/{{ p.id }}">{{ p.id }}</a></td>
-    <td>{{ p.release_group_mbid }}</td>
+    <td>{{ mb.link("release-group", p.release_group_mbid) }}</td>
     <td>{{ p.status }}{% if p.error %}: {{ p.error }}{% endif %}</td>
     <td>{% if "undo" in allowed[p.id] %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
   </tr>

@@ -19,7 +19,8 @@ from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.discovery.playlists import DONE, is_dead_end
-from mixsync.web.deps import Db, require
+from mixsync.web.deps import Db, Namer, require
+from mixsync.web.names import resolve
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import templates
 
@@ -66,7 +67,7 @@ def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
 
 
 @router.get("")
-def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
+async def request_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     items = db.scalars(
         select(AlbumRequest)
         .where(AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None))
@@ -78,7 +79,13 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "pages/requests.html",
-        {"user": user, "items": items, "deletable": deletable, "queued": queued},
+        {
+            "user": user,
+            "items": items,
+            "deletable": deletable,
+            "queued": queued,
+            "names": await resolve(db, namer, {("release", r.release_mbid) for r in items}),
+        },
     )
 
 

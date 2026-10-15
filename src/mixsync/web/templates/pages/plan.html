@@ -3,8 +3,8 @@
 {% block content %}
 {% set promote = plan.kind == "promote" %}
 <h1>{{ "Promote" if promote else "Merge" }} plan {{ plan.id }}</h1>
-{% if promote %}<p>Found on MusicBrainz as release {{ plan.canonical_release_mbid }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
-{% else %}<p>Release group {{ plan.release_group_mbid }}: merge onto {{ plan.canonical_release_mbid }}. Status: <strong>{{ plan.status }}</strong></p>{% endif %}
+{% if promote %}<p>Found on MusicBrainz as release {{ mb.link("release", plan.canonical_release_mbid) }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
+{% else %}<p>Release group {{ mb.link("release-group", plan.release_group_mbid) }}: merge onto {{ mb.link("release", plan.canonical_release_mbid) }}. Status: <strong>{{ plan.status }}</strong></p>{% endif %}
 {% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
 <p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>
 {% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm promotion" if promote else "Confirm merge") }}{% endif %}
@@ -20,7 +20,7 @@
     <td>{{ op.op }}{% if op.done %} (done){% endif %}</td>
     {% if op.op == "move" %}
     <td>{{ op.old.path }} &rarr; {{ op.new_path }}</td>
-    <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ op.old.release_mbid }} &rarr; {{ op.tags.release_id }}; recording {{ op.tags.recording_id }}; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}{% if op.done %}; <a href="/library/tracks/{{ op.track_id }}/tags">restore earlier tags</a>{% endif %}</td>
+    <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ mb.link("release", op.old.release_mbid) }} &rarr; {{ mb.link("release", op.tags.release_id) }}; recording <a href="https://musicbrainz.org/recording/{{ op.tags.recording_id }}" title="{{ op.tags.recording_id }}">{{ op.tags.title }}</a>; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}{% if op.done %}; <a href="/library/tracks/{{ op.track_id }}/tags">restore earlier tags</a>{% endif %}</td>
     {% elif op.op == "trash" %}
     <td>{{ op.old.path }}</td>
     <td>duplicate; keeping {{ op.keeper }}</td>

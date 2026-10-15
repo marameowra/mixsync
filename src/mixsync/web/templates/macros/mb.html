@@ -1,0 +1,3 @@
+{# A MusicBrainz id as its name, linked to musicbrainz.org with the id in the tooltip.
+   `names` (mbid -> label, from web/names.py) comes from the page; a miss shows a short id. #}
+{% macro link(kind, mbid) %}{% if mbid %}<a href="https://musicbrainz.org/{{ kind }}/{{ mbid }}" title="{{ mbid }}">{{ (names or {}).get(mbid) or (kind | replace("-", " ") | capitalize) ~ " " ~ mbid[:8] }}</a>{% endif %}{% endmacro %}
