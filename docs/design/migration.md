@@ -25,7 +25,8 @@
 - For large libraries, consider pointing MusicBrainz at a local mirror for the duration of the migration.
 
 ## As built
-- Admin page `/migration`. Preflight hashes every regular file into `<config>/migrations/<id>/manifest.jsonl` and groups the audio files (mp3, flac, ogg, m4a) into albums (a disc subfolder joins its album folder; loose files split by album tag). Unreadable files are listed, left out, and appear as failed in the report.
+- Admin page `/migration`. Preflight hashes every regular file into `<config>/migrations/<id>/manifest.jsonl` and groups the audio files (mp3, flac, ogg, opus, m4a, wav) into albums (a disc subfolder joins its album folder; loose files split by album tag). Unreadable files are listed, left out, and appear as failed in the report. Audio in a format mixsync cannot take (wma, aac, ape, wv, aiff...) is listed the same way and appears as `skipped` with the reason `unsupported format`.
+- **Opus** is tagged in place through Vorbis comments, like ogg. **WAV** is encoded to FLAC on import (WAV tagging is poorly supported by players), by the same path as downloads; the original WAV is only read, never moved or written, and the byte-identical check covers it. The supported extensions live in one place, `library/tags.py` (`EXTENSIONS`), shared with the import path.
 - The ETA is the sum of the MusicBrainz requests (1 per album with a `musicbrainz_albumid` tag, 4 without) and the AcoustID lookups, and is a lower bound.
 - Confirming needs the "other MusicBrainz clients paused" box and, above 50 albums, the album count typed in. Album jobs run at lower priority than normal requests.
 - An album with the tag is scored against that release (a tag MusicBrainz does not know falls back to the search); otherwise against the top 3 search hits. A reject band, or no candidate, goes to review (Mark unverified, pick another release, or reject, which skips the album). The source files are never released, moved or written.

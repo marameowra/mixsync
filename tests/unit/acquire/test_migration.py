@@ -6,6 +6,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 from dataclasses import replace
 from datetime import UTC, timedelta
 from pathlib import Path
@@ -235,6 +236,64 @@ async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
     assert rig.tree() == before  # byte-identical
     assert [d.band for d in decision_rows(rig.env, 2)] == ["auto_accept"]
     assert rig.env.jobs(JobKind.SEARCH) == []
+
+
+def put_tagged(root: Path, rel: str, ext: str, album: Any = ALBUM) -> Path:
+    """The album as `ext` files, converted from the mp3 fixture with ffmpeg, then tagged."""
+    d = root / rel
+    d.mkdir(parents=True, exist_ok=True)
+    for t in album.tracks:
+        p = d / f"{t.index:02} {t.title}.{ext}"
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(AUDIO / "cc0-tone-01.mp3"), str(p)], check=True
+        )
+        rid = str(album.release_id)
+        tags.write(
+            p,
+            tags.TagSet(
+                t.title, album.artist, album.album, album.artist, t.index, 1, release_id=rid
+            ),
+        )
+    return d
+
+
+@pytest.mark.parametrize("ext", ["opus", "wav"])
+async def test_opus_and_wav_albums_are_grouped_and_imported_as_is_or_as_flac(
+    rig: Rig, ext: str
+) -> None:
+    put_tagged(rig.root, "Alpha Band/Alpha Album", ext)
+    before = rig.tree()
+    mid = await rig.preflight()
+    sm = rig.get(mid).summary
+    assert sm["unreadable"] == [] and sm["albums"] == 1
+    (group,) = mig.groups_of(rig.get(mid))
+    assert sorted(f for f, _ in group.files) == [f"01 Song One.{ext}", f"02 Song Two.{ext}"]
+    rig.env.pipeline = replace(rig.env.pipeline, reencode=True)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (req,) = rig.requests()
+    assert req.status == "imported", req.last_error
+    lib = rig.env.data_dir / "library"
+    want = "opus" if ext == "opus" else "flac"  # WAV is encoded to FLAC; the original stays
+    assert len(list(lib.rglob(f"*.{want}"))) == 2
+    assert [tags.read_fields(p)["album"] for p in lib.rglob(f"*.{want}")] == ["Alpha Album"] * 2
+    assert rig.tree() == before  # byte-identical, WAV originals included
+
+
+async def test_unsupported_audio_is_listed_in_preflight_and_skipped_in_the_report(
+    rig: Rig,
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    (rig.root / "Alpha Band/Alpha Album/03 Old.WMA").write_bytes(b"wma")
+    mid = await rig.preflight()
+    m = rig.get(mid)
+    assert m.summary["unreadable"] == [
+        {"path": "Alpha Band/Alpha Album/03 Old.WMA", "why": "unsupported format"}
+    ]
+    with rig.env.sessions() as s:
+        (row,) = mig.report(s, m)
+    assert row["status"] == "skipped" and row["reason"] == "03 Old.WMA: unsupported format"
 
 
 async def test_stale_tagged_id_falls_back_to_search(rig: Rig) -> None:

@@ -6,6 +6,7 @@ from mutagen.flac import FLAC
 from mutagen.id3 import TDRC, TXXX
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4, MP4Tags
+from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 
 from mixsync.library import tags
@@ -31,6 +32,7 @@ _MP4 = "----:com.apple.iTunes:"
 NATIVE = {
     "flac": _VORBIS,
     "ogg": _VORBIS,
+    "opus": _VORBIS,
     "mp3": [
         "UFID:http://musicbrainz.org", "TXXX:MusicBrainz Album Id",
         "TXXX:MusicBrainz Release Group Id", "TXXX:MusicBrainz Artist Id",
@@ -46,8 +48,14 @@ NATIVE = {
     ],
 }  # fmt: skip
 VALUES = [RECORDING, RELEASE, GROUP, ARTIST, ARTIST, "acoustid-1", "verified"]
-TITLE = {"flac": "title", "ogg": "title", "mp3": "TIT2", "m4a": "\xa9nam"}
-TRACK = {"flac": "tracknumber", "ogg": "tracknumber", "mp3": "TRCK", "m4a": "trkn"}
+TITLE = {"flac": "title", "ogg": "title", "opus": "title", "mp3": "TIT2", "m4a": "\xa9nam"}
+TRACK = {
+    "flac": "tracknumber",
+    "ogg": "tracknumber",
+    "opus": "tracknumber",
+    "mp3": "TRCK",
+    "m4a": "trkn",
+}
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -105,6 +113,7 @@ WRONG_ID = "00000000-0000-0000-0000-000000000000"
 GONE = {  # the wrong tags planted by _pretag_wrong, by native key
     "flac": ["date", "musicbrainz_releasegroupid", "musicbrainz_artistid", "acoustid_id"],
     "ogg": ["date", "musicbrainz_releasegroupid", "musicbrainz_artistid", "acoustid_id"],
+    "opus": ["date", "musicbrainz_releasegroupid", "musicbrainz_artistid", "acoustid_id"],
     "mp3": ["TDRC", "TXXX:MusicBrainz Release Group Id", "TXXX:MusicBrainz Artist Id",
             "TXXX:Acoustid Id"],
     "m4a": ["\xa9day", _MP4 + "MusicBrainz Release Group Id", _MP4 + "MusicBrainz Artist Id",
@@ -115,8 +124,8 @@ GONE = {  # the wrong tags planted by _pretag_wrong, by native key
 def _pretag_wrong(fmt: str, path: Path) -> None:
     """Wrong date, release group id, artist id and acoustid id, as found in downloads."""
     values = ["1066", WRONG_ID, WRONG_ID, "wrong"]
-    if fmt in ("flac", "ogg"):
-        f = FLAC(path) if fmt == "flac" else OggVorbis(path)
+    if fmt in ("flac", "ogg", "opus"):
+        f = {"flac": FLAC, "ogg": OggVorbis, "opus": OggOpus}[fmt](path)
         assert f.tags is not None
         for k, v in zip(  # UPPERCASE: deletion has to be case-insensitive
             ["DATE", "MUSICBRAINZ_RELEASEGROUPID", "MUSICBRAINZ_ARTISTID", "ACOUSTID_ID"],
