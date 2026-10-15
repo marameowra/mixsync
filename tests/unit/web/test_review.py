@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.requests import create_request
@@ -933,3 +933,237 @@ def test_list_sort_keys(client: TestClient, sf: sessionmaker[Session]) -> None:
     assert order("?sort=date&order=desc") == [c, b, a]
     assert order("?sort=match")[0] == b
     assert order("?sort=bogus") == [a, b, c]
+
+
+def _reviewed(
+    sf: sessionmaker[Session], user: str, path: str, *, migration: bool = False, link: bool = True
+) -> tuple[int, int]:
+    """A pending stage-2 review of a request (decision id, request id)."""
+    rid = _req(sf, user, "review", JobState.SUCCEEDED)
+    did = _make_decision(sf, user, path)
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.evidence = {
+            **d.evidence,
+            **({"request_id": rid} if link else {}),
+            "candidate": {"username": "peer1", "folder": "Music\\Album", "files": []},
+        }
+        if migration:
+            req = s.get(AlbumRequest, rid)
+            assert req
+            m = Migration(user_id=req.user_id, status="running", summary={})
+            s.add(m)
+            s.flush()
+            req.migration_id = m.id
+    return did, rid
+
+
+def _verifies(sf: sessionmaker[Session], rid: int) -> list[Job]:
+    with sf() as s:
+        return [
+            j
+            for j in s.scalars(select(Job).where(Job.kind == "verify"))
+            if j.payload["request_id"] == rid
+        ]
+
+
+def test_recheck_requeues_against_the_release(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    mig, mrid = _reviewed(sf, "alice", str(downloads / "a.mp3"), migration=True)
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert r.status_code == 303
+    page = client.get(r.headers["location"]).text
+    assert "Re-queued 2 · skipped 0 (files missing) · 0 already re-checking" in page
+    assert "Nothing to review" in page
+    with sf() as s:
+        for i, q in ((did, rid), (mig, mrid)):
+            d, req = s.get(MatchDecision, i), s.get(AlbumRequest, q)
+            assert d and req
+            assert (d.status, d.final_action, d.acted_by) == ("rechecked", "recheck", d.user_id)
+            assert d.acted_at and req.status == "verifying"
+    for q, want in ((rid, MBID), (mrid, None)):  # normal: the decision's release; migration: pick
+        (job,) = _verifies(sf, q)
+        assert job.payload["release_mbid"] == want
+        assert job.payload["paths"] == [str(downloads / "a.mp3")]
+
+
+def test_recheck_without_a_matched_release_uses_the_requested_one(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_mbid = ""
+    client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    (job,) = _verifies(sf, rid)
+    assert job.payload["release_mbid"] == MBID
+
+
+def test_recheck_skips_missing_files_and_unlinked_decisions(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    gone, rid = _reviewed(sf, "alice", str(downloads / "gone.mp3"))
+    loose, _ = _reviewed(sf, "alice", str(downloads / "a.mp3"), link=False)
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert "Re-queued 0 · skipped 2 (files missing)" in client.get(r.headers["location"]).text
+    with sf() as s:
+        for i in (gone, loose):
+            d = s.get(MatchDecision, i)
+            assert d and d.status == decisions.PENDING
+    assert not _verifies(sf, rid)
+
+
+def test_recheck_twice_makes_one_job_and_skips_live_ones(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    busy, brid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        s.add(
+            Job(
+                kind="verify",
+                payload={"request_id": brid},
+                status=JobState.QUEUED,
+                max_attempts=1,
+                run_after=datetime.now(UTC),
+            )
+        )
+    tok = _login(client, "alice")
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert "Re-queued 1 · skipped 0 (files missing) · 1 already re-checking" in (
+        client.get(r.headers["location"]).text
+    )
+    client.post("/review/recheck", data={"csrf_token": tok})
+    assert len(_verifies(sf, rid)) == 1 and len(_verifies(sf, brid)) == 1
+    with sf() as s:
+        d = s.get(MatchDecision, busy)
+        assert d and d.status == decisions.PENDING
+
+
+def test_recheck_scope_and_csrf(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    mine, _ = _reviewed(sf, "bob", str(downloads / "a.mp3"))
+    theirs, _ = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    tok = _login(client, "bob")
+    assert client.post("/review/recheck").status_code == 403
+    assert "Re-check" in client.get("/review").text
+    client.post("/review/recheck", data={"csrf_token": tok})
+    with sf() as s:
+        a, b = s.get(MatchDecision, mine), s.get(MatchDecision, theirs)
+        assert a and b and (a.status, b.status) == ("rechecked", decisions.PENDING)
+    tok = _login(client, "root")
+    client.post("/review/recheck", data={"csrf_token": tok})
+    with sf() as s:
+        b = s.get(MatchDecision, theirs)
+        assert b and b.status == "rechecked"
+    assert "Re-check" not in client.get("/review").text
+
+
+OTHER = "33333333-3333-3333-3333-333333333333"
+BAD = "55555555-5555-5555-5555-555555555555"
+
+
+def _last_verify(sf: sessionmaker[Session], rid: int, mbid: str | None) -> None:
+    """The VERIFY job that produced the pending decision (finished long ago)."""
+    with sf() as s, s.begin():
+        s.add(
+            Job(
+                kind="verify",
+                payload={"request_id": rid, "release_mbid": mbid},
+                status=JobState.SUCCEEDED,
+                max_attempts=1,
+                run_after=datetime.now(UTC),
+            )
+        )
+
+
+def test_recheck_reuses_the_release_of_the_last_verify(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    path = str(downloads / "a.mp3")
+    cases = {  # (VERIFY's release, the decision's release, migration) -> payload
+        "repicked": (OTHER, OTHER, True, OTHER),
+        "identified": (None, MBID, True, None),
+        "normal": (OTHER, OTHER, False, OTHER),
+        "reopened bad repick": (BAD, MBID, False, MBID),  # the decision never recorded BAD
+    }
+    rids: dict[str, int] = {}
+    for name, (verified, chosen, migration, _) in cases.items():
+        did, rids[name] = _reviewed(sf, "alice", path, migration=migration)
+        _last_verify(sf, rids[name], verified)
+        with sf() as s, s.begin():
+            d, req = s.get(MatchDecision, did), s.get(AlbumRequest, rids[name])
+            assert d and req
+            d.release_mbid = chosen
+            req.release_mbid = "44444444-4444-4444-4444-444444444444"
+    client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    for name, (*_, want) in cases.items():
+        assert _verifies(sf, rids[name])[-1].payload["release_mbid"] == want, name
+
+
+def test_recheck_leaves_requests_no_longer_in_review(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    with sf() as s, s.begin():
+        req = s.get(AlbumRequest, rid)
+        assert req
+        req.status = "importing"
+    r = client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    assert "Re-queued 0 · skipped 0 (files missing) · 0 already re-checking · 1 no longer" in (
+        client.get(r.headers["location"]).text
+    )
+    with sf() as s:
+        d = s.get(MatchDecision, did)
+        assert d and d.status == decisions.PENDING
+    assert not _verifies(sf, rid)
+
+
+def test_recheck_empty_files_count_as_missing(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    did, _ = _reviewed(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = s.get(MatchDecision, did)
+        assert d
+        d.evidence = {**d.evidence, "source": {**d.evidence["source"], "files": []}}
+    r = client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
+    assert "Re-queued 0 · skipped 1 (files missing)" in client.get(r.headers["location"]).text
+
+
+def test_recheck_survives_a_decision_acted_on_meanwhile(
+    client: TestClient,
+    sf: sessionmaker[Session],
+    downloads: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gone, grid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    ok, orid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
+    real = decisions.pending_for
+
+    def racing(s: Session, user_id: int | None) -> list[MatchDecision]:
+        found = real(s, user_id)
+        s.execute(update(MatchDecision).where(MatchDecision.id == gone).values(status="rejected"))
+        return found
+
+    tok = _login(client, "alice")  # the home page reads the queue too: patch after it
+    monkeypatch.setattr(decisions, "pending_for", racing)
+    r = client.post("/review/recheck", data={"csrf_token": tok})
+    assert r.status_code == 303 and "requeued=1&missing=0&busy=1" in r.headers["location"]
+    assert not _verifies(sf, grid) and len(_verifies(sf, orid)) == 1
+    with sf() as s:
+        d = s.get(MatchDecision, ok)
+        assert d and d.status == "rechecked"
+
+
+def test_review_list_ignores_junk_summary_params(client: TestClient) -> None:
+    _login(client, "alice")
+    r = client.get("/review?requeued=abc&missing=-1&busy=%E2%82%82")
+    assert r.status_code == 200 and "Re-queued 0 · skipped 0" in r.text

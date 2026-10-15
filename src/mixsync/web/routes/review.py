@@ -8,12 +8,16 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 
-from mixsync.acquire.requests import apply_review
+from mixsync.acquire.requests import apply_review, enqueue_verify
 from mixsync.core.capabilities import Capability
+from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Job
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
 from mixsync.web.deps import Db, Namer, decision_for, require
@@ -56,15 +60,93 @@ _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
 }
 
 
+def _count(text: str) -> int:
+    return int(text) if text.isascii() and text.isdigit() and len(text) <= 6 else 0
+
+
 @router.get("")
 def review_list(
-    request: Request, user: User, db: Db, sort: str = "date", order: str = "asc"
+    request: Request,
+    user: User,
+    db: Db,
+    sort: str = "date",
+    order: str = "asc",
+    requeued: str | None = None,
+    missing: str = "",
+    busy: str = "",
+    stale: str = "",
 ) -> HTMLResponse:
     items = decisions.pending_for(db, _owner(user))
     key = _SORTS.get(sort, _SORTS["date"])
     items.sort(key=key, reverse=order == "desc")
-    ctx = {"user": user, "items": items, "sort": sort, "order": order}
+    ctx: dict[str, Any] = {"user": user, "items": items, "sort": sort, "order": order}
+    if requeued is not None:  # the summary of a re-check, carried in the redirect
+        n = {
+            k: _count(v)
+            for k, v in (
+                ("requeued", requeued),
+                ("missing", missing),
+                ("busy", busy),
+                ("stale", stale),
+            )
+        }
+        ctx["n"] = n
     return templates.TemplateResponse(request, "pages/review_list.html", ctx)
+
+
+@router.post("/recheck")
+def recheck(user: User, db: Db) -> RedirectResponse:
+    """Verify every pending review again with the current scorer: the decision is closed and the
+    files go back through VERIFY against the release the last VERIFY of the request used (a
+    repick, or none for a migration that identified it). No network here."""
+    now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
+    for d in decisions.pending_for(db, _owner(user)):
+        req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
+        if req is None:  # not from a request: nothing to verify again
+            missing += 1
+            continue
+        if req.status != "review":  # already importing, imported or searching again
+            stale += 1
+            continue
+        files = d.evidence.get("source", {}).get("files", [])
+        if not files or not all(
+            f.get("local_path") and Path(f["local_path"]).exists() for f in files
+        ):
+            missing += 1
+            continue
+        if db.scalar(
+            select(Job.id)
+            .where(
+                Job.kind == JobKind.VERIFY,
+                Job.status.in_(LIVE),
+                Job.payload["request_id"].as_integer() == req.id,
+            )
+            .limit(1)
+        ):
+            busy += 1
+            continue
+        try:
+            decisions.act(db, d.id, user.id, "recheck")
+        except decisions.DecisionStateError:  # acted on since the list was read
+            busy += 1
+            continue
+        last = db.scalar(
+            select(Job.payload)
+            .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
+            .order_by(Job.id.desc())
+            .limit(1)
+        )
+        # The last VERIFY only says whether a release was given (a migration may have had it
+        # identified); the release itself comes from the decision, as a reopened bad repick leaves
+        # a VERIFY for a release the decision never recorded. Without a VERIFY (shortcut): a
+        # migration re-picks, any other request has its release.
+        given = last["release_mbid"] if last else not req.migration_id
+        mbid = (d.release_mbid or req.release_mbid) if given else None
+        enqueue_verify(db, now, req, mbid, d.evidence)
+        queued += 1
+    return RedirectResponse(
+        f"/review?requeued={queued}&missing={missing}&busy={busy}&stale={stale}", status_code=303
+    )
 
 
 @router.get("/{decision_id}")
