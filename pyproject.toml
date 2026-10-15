@@ -41,7 +41,7 @@ build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = [".", "src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "TID"]
@@ -56,13 +56,14 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "TID"]
 "pathlib.Path.rmdir".msg = "Nothing deletes except purge(); move to the trash via library.fileops."
 
 [tool.pyright]
-include = ["src"]
-strict = ["src"]
+include = ["src", "devtools"]
+strict = ["src", "devtools"]
 pythonVersion = "3.13"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+pythonpath = ["."]  # devtools/ sits at the repo root
 markers = [
     "integration: needs docker compose (slskd, Navidrome, MixSync)",
     "crash: SIGKILL crash-safety tests",
