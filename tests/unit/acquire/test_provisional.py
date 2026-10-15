@@ -19,6 +19,7 @@ from mixsync.db import canonical as canonical_db
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import CanonicalRelease, Track
 from mixsync.db.models.work import Request
+from mixsync.discovery.playlists import is_dead_end
 
 from .conftest import Env
 from .fakes import ALBUM, BIG
@@ -223,7 +224,7 @@ async def test_wanted_recordings_missing_from_the_release(env: Env) -> None:
     assert status(env, none) == "failed" and env.source.enqueued == []
     with env.sessions() as s:
         req = s.get(Request, none)
-        assert req and "none of the 2 wanted" in (req.last_error or "")
+        assert req and "none of the wanted recordings" in (req.last_error or "")
 
     some = discovery(env, (WANTED[0], "not-on-it"))
     await env.drain()
@@ -231,6 +232,15 @@ async def test_wanted_recordings_missing_from_the_release(env: Env) -> None:
     with env.sessions() as s:
         req = s.get(Request, some)
         assert req and req.last_error == "1 of 2 wanted recordings not on this release"
+
+
+async def test_a_search_stage_failure_is_a_discovery_dead_end(env: Env) -> None:
+    env.source.add("peer1", FOLDER, BIG)
+    rid = discovery(env, ("not-on-it", "nor-this"))
+    await env.drain()
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.status == "failed" and is_dead_end(req)
 
 
 async def test_a_recording_twice_on_a_release_is_imported_once(env: Env) -> None:
