@@ -24,9 +24,6 @@ from mutagen.wave import WAVE
 Snapshot = dict[str, Any]
 _ITUNES = "----:com.apple.iTunes:"
 _MB_UFID = "UFID:http://musicbrainz.org"
-# What migration and import take (WAV is encoded to FLAC on import); the rest is reported.
-EXTENSIONS = frozenset({".mp3", ".flac", ".ogg", ".opus", ".m4a", ".wav"})
-UNSUPPORTED = frozenset({".aac", ".wma", ".ape", ".wv", ".aiff", ".aif", ".alac", ".dsf", ".mka"})
 
 
 @dataclass(frozen=True)

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
+from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
 from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import Candidate, CandidateFile
@@ -117,10 +118,10 @@ def scan(root: Path, out: Path) -> dict[str, Any]:
             manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
             ext = path.suffix.lower()
-            if ext in tags.UNSUPPORTED:
+            if ext in UNSUPPORTED:
                 unreadable.append(_skip(rel, UNSUPPORTED_WHY))
                 continue
-            if ext not in tags.EXTENSIONS:
+            if ext not in EXTENSIONS:
                 continue
             try:
                 tg = tags.read_fields(path)

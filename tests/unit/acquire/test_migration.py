@@ -257,7 +257,7 @@ def put_tagged(root: Path, rel: str, ext: str, album: Any = ALBUM) -> Path:
     return d
 
 
-@pytest.mark.parametrize("ext", ["opus", "wav"])
+@pytest.mark.parametrize("ext", ["opus", "wav", "aiff"])
 async def test_opus_and_wav_albums_are_grouped_and_imported_as_is_or_as_flac(
     rig: Rig, ext: str
 ) -> None:
@@ -275,7 +275,7 @@ async def test_opus_and_wav_albums_are_grouped_and_imported_as_is_or_as_flac(
     (req,) = rig.requests()
     assert req.status == "imported", req.last_error
     lib = rig.env.data_dir / "library"
-    want = "opus" if ext == "opus" else "flac"  # WAV is encoded to FLAC; the original stays
+    want = "opus" if ext == "opus" else "flac"  # WAV/AIFF are encoded to FLAC; the original stays
     assert len(list(lib.rglob(f"*.{want}"))) == 2
     assert [tags.read_fields(p)["album"] for p in lib.rglob(f"*.{want}")] == ["Alpha Album"] * 2
     assert rig.tree() == before  # byte-identical, WAV originals included
