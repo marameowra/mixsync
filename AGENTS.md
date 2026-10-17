@@ -10,7 +10,8 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   User-Agent). Cache where sensible, and never hammer an API.
 - Before reporting work as done, run every CI step (`.github/workflows/ci.yml`), not just
   tests: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`,
-  `uv run lint-imports`, `uv run pytest`.
+  `uv run lint-imports`, `uv run pytest`. Docs-only changes (every changed file under
+  `docs/` or ending in `.md`) skip these, matching the `changes` job in ci.yml.
 - Don't weaken tests. A hook prompts on each of these, so avoid them; everything under
   `tests/` counts, fixtures and cassettes included:
   - Deleting or emptying a file: no `rm`, `git rm`, `unlink`, `truncate`, `>` redirects, or
@@ -23,7 +24,7 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
 - Branches and PRs. `main` is the default branch, but work goes to `dev`: branch from
   `origin/dev` and open PRs with `gh pr create --base dev`. Never open a PR against `main`.
 - Auto-merge. After opening a PR into `dev`, queue `gh pr merge --auto --merge` once every
-  CI step passed locally. A ruleset on `dev` requires the `check` and `postgres` CI jobs, so
+  CI step passed locally (or the change is docs-only). A ruleset on `dev` requires the `check` and `postgres` CI jobs, so
   GitHub holds the merge until they pass. If a local step fails, leave the PR for the user. Merging to `dev` publishes the `:dev` image. Never merge into
   `main` or queue auto-merge on a PR whose base is `main`. A hook in `.claude/settings.json`
   blocks agent merges into `main`, and a workflow turns off auto-merge on PRs into `main`.
