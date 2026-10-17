@@ -2,7 +2,18 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, false
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    false,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.core.jobs import JobKind, JobState
@@ -50,7 +61,9 @@ class Request(TimestampMixin, Base):
     tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # [peer, folder] pairs
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_error: Mapped[str | None]
+    last_error: Mapped[str | None]  # human-readable; state lives in the columns below
+    dead_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    partial_note: Mapped[str | None] = mapped_column(Text)  # "N of M tracks present"
     migration_id: Mapped[int | None] = mapped_column(
         ForeignKey("migrations.id")
     )  # old-library import

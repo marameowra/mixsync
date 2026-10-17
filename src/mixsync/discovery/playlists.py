@@ -11,6 +11,7 @@ from sqlalchemy import CursorResult, Select, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock, aware
@@ -35,25 +36,6 @@ JITTER_CAP = timedelta(hours=6)  # "weekly" stays weekly: up to 10% of the caden
 LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
 # last_error prefixes a push writes; a good push clears only these, never a build's error
 PUSH_ERRORS = ("Navidrome: ", "Navidrome needs relinking", "the '")
-PARTIAL_RELEASE = "not on this release"  # an imported request's last_error (pipeline)
-NOT_ON_RELEASE = "none of the wanted recordings"  # pipeline.py must match
-
-
-def is_dead_end(r: Request) -> bool:
-    """A provisional request whose release cannot give the wanted recording: asking again finds
-    the same, so the row itself is the record that stops a rebuild re-requesting it."""
-    err = r.last_error or ""
-    return (
-        r.provisional
-        and r.status in ("failed", "imported")
-        and (
-            err.startswith(NOT_ON_RELEASE)
-            or (r.status == "imported" and err.endswith(PARTIAL_RELEASE))
-        )
-    )
-
-
-DONE = ("imported", "owned", "failed", "skipped")  # requests that will not bring a file
 LibraryFor = Callable[[str, str], UserLibrary]  # (Navidrome username, password)
 
 
@@ -277,13 +259,11 @@ class Discovery:
                 for r in s.scalars(
                     select(Request).where(
                         Request.provisional,
-                        Request.status.in_(("failed", "imported")),
+                        Request.dead_end,
                         Request.release_mbid.in_(releases),
                     )
                 )
-                if is_dead_end(r)
-                for m in r.recording_mbids
-                if r.status == "failed" or m not in ever
+                for m in lifecycle.dead_recordings(r, ever)
             }
         asks: list[tuple[RecordingRef, str]] = []
         for c, release in ready:
@@ -350,7 +330,9 @@ class Discovery:
     def _live_requests(s: Session) -> dict[str, int]:
         """recording MBID -> a provisional request still on its way to a file."""
         live: dict[str, int] = {}
-        for r in s.scalars(select(Request).where(Request.provisional, Request.status.not_in(DONE))):
+        for r in s.scalars(
+            select(Request).where(Request.provisional, Request.status.not_in(lifecycle.DONE))
+        ):
             for m in r.recording_mbids:
                 live.setdefault(m, r.id)
         return live

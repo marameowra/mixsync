@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from mixsync.acquire.lifecycle import is_dead_end
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind
@@ -19,7 +20,6 @@ from mixsync.db import canonical as canonical_db
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import CanonicalRelease, Track
 from mixsync.db.models.work import Request
-from mixsync.discovery.playlists import is_dead_end
 
 from .conftest import Env
 from .fakes import ALBUM, BIG
