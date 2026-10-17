@@ -43,9 +43,13 @@ def clock() -> FakeClock:
     return FakeClock()
 
 
+def _ignore(*_: Any) -> None:
+    """A final-failure hook for tests that do not care about it."""
+
+
 @pytest.fixture
 def q(engine: Engine, clock: FakeClock) -> JobQueue:
-    return JobQueue(engine, clock)
+    return JobQueue(engine, clock, _ignore)
 
 
 def enq(q: JobQueue, kind: JobKind, payload: dict[str, Any] | None = None, **kw: Any) -> JobRecord:
@@ -73,7 +77,10 @@ def test_idempotency_key_blocks_duplicate(q: JobQueue) -> None:
 
 
 def test_claim_race_has_one_winner(engine: Engine, clock: FakeClock) -> None:
-    q1, q2 = JobQueue(engine, clock), JobQueue(make_engine(), clock)  # two connections, file DB
+    q1, q2 = (
+        JobQueue(engine, clock, _ignore),
+        JobQueue(make_engine(), clock, _ignore),
+    )  # two connections, file DB
     enq(q1, JobKind.NOOP)
     barrier = threading.Barrier(2)
     won: list[JobRecord | None] = []
@@ -263,6 +270,21 @@ def test_reaped_dead_job_is_handed_to_the_hook(
     fq.reap()
     assert fq.get(j.id).status is JobState.FAILED
     assert failures.calls == [(j.id, {"request_id": 7}, "lease expired with no attempts left")]
+
+
+def test_the_hook_sees_a_reaped_job_as_failed(engine: Engine, clock: FakeClock) -> None:
+    seen: list[JobState] = []
+
+    def hook(c: Connection, job_id: int, *_: Any) -> None:
+        seen.append(c.execute(select(Job.status).where(Job.id == job_id)).scalar_one())
+
+    q = JobQueue(engine, clock, hook)
+    j = enq(q, JobKind.NOOP, max_attempts=1)
+    q.claim("w1", LEASE)
+    q.start(j.id, "w1")
+    clock.advance(LEASE + timedelta(seconds=1))
+    q.reap()
+    assert seen == [JobState.FAILED]
 
 
 def _locked() -> OperationalError:

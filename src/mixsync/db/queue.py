@@ -41,17 +41,16 @@ FailureHook = Callable[[Connection, int, dict[str, Any], str, datetime], None]
 
 
 class JobQueue:
-    def __init__(self, engine: Engine, clock: Clock, on_final_failure: FailureHook | None = None):
+    def __init__(self, engine: Engine, clock: Clock, on_final_failure: FailureHook) -> None:
         self._engine = engine
         self._clock = clock
         self._on_final_failure = on_final_failure
 
     def _failed_for_good(self, c: Connection, job_id: int, error: str, now: datetime) -> None:
-        if self._on_final_failure:
-            payload: dict[str, Any] = (
-                c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
-            )
-            self._on_final_failure(c, job_id, payload, error, now)
+        payload: dict[str, Any] = (
+            c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
+        )
+        self._on_final_failure(c, job_id, payload, error, now)
 
     def get(self, job_id: int) -> JobRecord:
         with self._engine.connect() as c:
@@ -134,9 +133,7 @@ class JobQueue:
                 _J.c.lease_expires_at < now,
                 _J.c.attempts >= _J.c.max_attempts,
             )
-            for (job_id,) in c.execute(select(_J.c.id).where(*dead)).all():
-                self._failed_for_good(c, job_id, "lease expired with no attempts left", now)
-            n += c.execute(
+            failed = c.execute(
                 update(_J)
                 .where(*dead)
                 .values(
@@ -148,7 +145,11 @@ class JobQueue:
                     last_error="lease expired with no attempts left",
                     updated_at=now,
                 )
-            ).rowcount
+                .returning(_J.c.id)
+            ).all()
+            for (job_id,) in failed:  # the hook sees FAILED, only for rows this update took
+                self._failed_for_good(c, job_id, "lease expired with no attempts left", now)
+            n += len(failed)
             for src, due in (
                 (JobState.LEASED, _J.c.lease_expires_at < now),
                 (JobState.RUNNING, _J.c.lease_expires_at < now),

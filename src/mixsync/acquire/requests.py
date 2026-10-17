@@ -23,6 +23,12 @@ from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
+NO_RESULTS_BACKOFF = (
+    timedelta(hours=1),
+    timedelta(hours=6),
+    timedelta(hours=24),
+    timedelta(weeks=1),
+)
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
@@ -131,6 +137,20 @@ def fail_request_of_job(
         if req and req.status in lifecycle.IN_PROGRESS and newer is None:
             lifecycle.job_failed(req, _has_tracks(s, req), error)
             req.updated_at = now  # the queue's clock, as the job rows use
+            if req.status == "partial":  # a partial request always has a repeat search queued
+                delay = NO_RESULTS_BACKOFF[
+                    min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
+                ]
+                req.no_results_attempts += 1
+                req.next_search_at = now + delay
+                enqueue_in(
+                    s,
+                    now,
+                    JobKind.SEARCH,
+                    {"request_id": rid},
+                    run_after=now + delay,
+                    priority=search_priority(req),
+                )
             s.flush()
 
 
