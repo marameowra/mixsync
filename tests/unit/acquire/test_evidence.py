@@ -32,7 +32,7 @@ def _verified(assignment: list[dict[str, Any]]) -> Evidence:
 
 def test_round_trip_through_json_keeps_the_stored_shape() -> None:
     stored = json.loads(json.dumps(_verified([ROW]).to_json()))
-    assert set(stored) == {
+    assert list(stored) == [  # ADR 0005: the stored key order is part of the shape
         "request_id",
         "candidate",
         "unassigned",
@@ -42,7 +42,18 @@ def test_round_trip_through_json_keeps_the_stored_shape() -> None:
         "acoustid",
         "duration_deltas",
         "assignment",
-    }
+    ]
+    assert list(stored["source"]) == ["peer", "folder", "files"]
+    assert list(stored["source"]["files"][0]) == [
+        "name",
+        "format",
+        "bitrate",
+        "size",
+        "duration",
+        "local_path",
+    ]
+    assert list(stored["target"]) == ["title", "artist", "release_group_id", "tracks"]
+    assert list(stored["target"]["tracks"][0]) == ["position", "title", "length"]
     assert stored["source"]["files"][0]["local_path"] == "/dl/01.mp3"
     assert stored["target"]["tracks"][0] == {"position": 0, "title": "One", "length": None}
     ev = Evidence.parse(stored)
@@ -60,7 +71,7 @@ def test_round_trip_through_json_keeps_the_stored_shape() -> None:
 
 def test_searched_has_the_stage_one_shape() -> None:
     stored = Evidence.searched(3, CAND, ALBUM).to_json()
-    assert set(stored) == {"request_id", "source", "target"}
+    assert list(stored) == ["request_id", "source", "target"]
     assert Evidence.parse(stored).files[0]["local_path"] is None
 
 
