@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import verify
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
@@ -768,7 +768,7 @@ def test_discovery_dead_end_request_is_kept(client: TestClient, sf: sessionmaker
         r = s.get(AlbumRequest, dead)
         assert r
         r.provisional = True
-        r.last_error = "1 of 2 wanted recordings not on this release"
+        lifecycle.finished(r, [], ["1 of 2 wanted recordings not on this release"], dead_end=True)
     tok = _login(client, "alice")
     assert f"/requests/{dead}/delete" not in client.get("/requests").text
     r = client.post(f"/requests/{dead}/delete", data={"csrf_token": tok})

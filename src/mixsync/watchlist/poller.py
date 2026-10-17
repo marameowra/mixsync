@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import verify
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
@@ -54,10 +54,6 @@ def _filtered(f: Follow, h: ReleaseGroupHit) -> bool:
     return bool(f.min_date) and not _date_ok(h.date, f.min_date or "")
 
 
-# Statuses of a request that is still going after some of its tracks were imported.
-OPEN_STATUSES = ("searching", "no_results", "partial", "downloading", "verifying", "review")
-
-
 def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
     """Release groups with a library track. A track kept from discovery is one song, not the
     album (the pipeline's all-tracks rule needs a tracklist the poller has not fetched)."""
@@ -73,7 +69,7 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
         .join(Track, verify.in_request(Track.batch_id, Request.id))
         .where(
             Request.release_group_mbid.in_(group_ids),
-            Request.status.in_(OPEN_STATUSES),
+            Request.status.in_(lifecycle.OPEN),
             Request.migration_id.is_(None),
         )
     )

@@ -8,6 +8,7 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
 from mixsync.acquire.requests import create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
@@ -18,7 +19,6 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.discovery.playlists import DONE, is_dead_end
 from mixsync.web.deps import Db, Namer, require
 from mixsync.web.names import resolve
 from mixsync.web.routes.review import parse_release_mbid
@@ -27,9 +27,6 @@ from mixsync.web.templating import templates
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/requests")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
-
-
-_BUSY = ("downloading", "verifying", "importing")
 
 
 def _of(req_id: int) -> ColumnElement[bool]:
@@ -56,13 +53,9 @@ def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
 def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
     """A no_results or partial request always has a queued repeat search, which delete
     removes with it."""
-    if req.status in _BUSY or is_dead_end(req):
+    if is_busy(req) or is_dead_end(req):
         return False
-    blocking = (
-        {JobState.LEASED, JobState.RUNNING}
-        if req.status in ("no_results", "partial")
-        else set(LIVE)
-    )
+    blocking = {JobState.LEASED, JobState.RUNNING} if is_waiting(req) else set(LIVE)
     return not (live.get(req.id, set()) & blocking)
 
 

@@ -1,14 +1,14 @@
 """requests: whether the release was given or identified, so a re-check need not read old jobs
 
-Revision ID: 0018_request_release_given
-Revises: 0017_jobs_status_index
+Revision ID: 0019_request_release_given
+Revises: 0018_request_lifecycle
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0018_request_release_given"
-down_revision: str | None = "0017_jobs_status_index"
+revision = "0019_request_release_given"
+down_revision: str | None = "0018_request_lifecycle"
 branch_labels = None
 depends_on = None
 

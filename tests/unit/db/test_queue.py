@@ -214,6 +214,16 @@ def test_permanent_failure_fails_the_request(q: JobQueue, engine: Engine) -> Non
     assert _status(engine, rid) == ("failed", "PermanentError('404')")
 
 
+def test_a_job_failure_is_not_a_dead_end(q: JobQueue, engine: Engine) -> None:
+    rid = _request(engine, "searching")
+    with Session(engine) as s, s.begin():
+        s.get_one(Request, rid).dead_end = True
+    enq(q, JobKind.NOOP, {"request_id": rid})
+    _run(q, PermanentError("404"))
+    with Session(engine) as s:
+        assert not s.get_one(Request, rid).dead_end
+
+
 def test_failure_leaves_a_request_that_moved_on(q: JobQueue, engine: Engine) -> None:
     rid = _request(engine, "imported")
     enq(q, JobKind.NOOP, {"request_id": rid})

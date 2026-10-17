@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mixsync.acquire import lifecycle
 from mixsync.acquire.requests import hold_imports
 from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, PermanentError
@@ -660,16 +661,14 @@ async def test_a_recording_known_not_to_be_on_the_release_is_not_asked_for_again
     rig.link(rig.env.user_id)
     pid = rig.playlist()
     with rig.env.sessions.begin() as s:
-        s.add(
-            Request(
-                user_id=rig.env.user_id,
-                release_mbid=REL_A,
-                provisional=True,
-                recording_mbids=[rec(1)],
-                status="failed",
-                last_error="none of the wanted recordings are on the downloaded release",
-            )
+        req = Request(
+            user_id=rig.env.user_id,
+            release_mbid=REL_A,
+            provisional=True,
+            recording_mbids=[rec(1)],
         )
+        s.add(req)
+        lifecycle.dead_end(req, "none of the wanted recordings are on the downloaded release")
     rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(1, REL_B)]
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
@@ -721,16 +720,14 @@ async def test_a_recording_missing_from_an_imported_release_is_not_asked_for_aga
     rig.link(rig.env.user_id)
     rig.playlist()
     with rig.env.sessions.begin() as s:
-        s.add(
-            Request(
-                user_id=rig.env.user_id,
-                release_mbid=REL_A,
-                provisional=True,
-                recording_mbids=[rec(1), rec(2)],
-                status="imported",
-                last_error="1 of 2 wanted recordings not on this release",
-            )
+        req = Request(
+            user_id=rig.env.user_id,
+            release_mbid=REL_A,
+            provisional=True,
+            recording_mbids=[rec(1), rec(2)],
         )
+        s.add(req)
+        lifecycle.finished(req, [], ["1 of 2 wanted recordings not on this release"], dead_end=True)
     provisional(rig.env, 2)  # the one it did bring in
     rig.history.weekly = [ref(1, REL_A), ref(3, REL_A)]
     rig.disc.start_chains()
@@ -744,16 +741,14 @@ async def test_only_dead_pairs_for_the_asked_releases_block_a_request(rig: Rig) 
     rig.playlist()
     with rig.env.sessions.begin() as s:
         for rel, mbids in ((REL_A, [rec(1)]), (REL_B, [rec(2), rec(3)])):
-            s.add(
-                Request(
-                    user_id=rig.env.user_id,
-                    release_mbid=rel,
-                    provisional=True,
-                    recording_mbids=mbids,
-                    status="failed",
-                    last_error="none of the wanted recordings are on this release",
-                )
+            req = Request(
+                user_id=rig.env.user_id,
+                release_mbid=rel,
+                provisional=True,
+                recording_mbids=mbids,
             )
+            s.add(req)
+            lifecycle.dead_end(req, "none of the wanted recordings are on this release")
     # (REL_A, rec1) and (REL_B, rec2) are dead; the same recordings on another release are not
     rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(3, REL_A), ref(2, REL_B)]
     rig.disc.start_chains()

@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0018_request_release_given"
+    assert _version(settings) == "0019_request_release_given"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0018_request_release_given"
+    assert _version(settings) == "0019_request_release_given"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
@@ -36,7 +36,7 @@ def test_models_match_migrations(settings: Settings) -> None:
 
 
 def test_release_given_is_backfilled_from_the_last_verify(settings: Settings) -> None:
-    upgrade("0017_jobs_status_index")
+    upgrade("0018_request_lifecycle")
     day = "'2026-01-01'"
     with make_engine(settings).begin() as c:
         c.execute(
@@ -90,3 +90,43 @@ def test_pre_0012_file_op_reads_back_as_library(settings: Settings) -> None:
     upgrade()
     with make_engine(settings).connect() as c:
         assert c.execute(text("SELECT root FROM file_ops")).scalar() == "library"
+
+
+def test_0018_backfills_dead_end_and_partial_from_last_error(settings: Settings) -> None:
+    upgrade("0017_jobs_status_index")
+    rows = [  # (provisional, status, last_error)
+        (True, "failed", "none of the wanted recordings are on this release"),
+        (True, "failed", "none of the wanted recordings are on the downloaded release"),
+        (True, "imported", "1 of 2 wanted recordings not on this release"),
+        (True, "imported", None),
+        (False, "failed", "none of the wanted recordings are on this release"),
+        (False, "partial", "partial: 2 of 5 tracks present; rejected after download"),
+        (False, "downloading", "partial: 1 of 3 tracks present"),
+        (False, "partial", "partial"),
+    ]
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                " VALUES (1, 'u', 'x', 'active', '2026-01-01', '2026-01-01')"
+            )
+        )
+        for i, (prov, status, err) in enumerate(rows, 1):
+            c.execute(
+                text(
+                    "INSERT INTO requests (id, user_id, release_mbid, artist, album, status,"
+                    " tried, no_results_attempts, provisional, last_error, created_at,"
+                    " updated_at) VALUES (:i, 1, 'm', '', '', :s, '[]', 0, :p, :e,"
+                    " '2026-01-01', '2026-01-01')"
+                ),
+                {"i": i, "s": status, "p": prov, "e": err},
+            )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        got = c.execute(text("SELECT dead_end, partial_note FROM requests ORDER BY id")).all()
+    assert [bool(d) for d, _ in got] == [True, True, True, False, False, False, False, False]
+    assert [n for _, n in got] == [None] * 5 + [
+        "2 of 5 tracks present",
+        "1 of 3 tracks present",
+        None,
+    ]
