@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     false,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -74,6 +75,8 @@ class Request(TimestampMixin, Base):
     # discovery: import only the wanted recordings, into /data/discover
     provisional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     recording_mbids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # False when the last verify had to identify the release itself (files with none given)
+    release_given: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 
     @property
     def from_files(self) -> bool:

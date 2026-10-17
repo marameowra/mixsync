@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from mixsync.acquire import verify
 from mixsync.acquire.requests import NO_RESULTS_BACKOFF
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
@@ -59,7 +60,7 @@ async def test_a_failing_job_keeps_a_partial_request_partial(env: Env) -> None:
             Track(
                 path="a.mp3",
                 status="verified",
-                batch_id=f"request-{rid}-1",
+                batch_id=verify.batch_id(rid, 1),
                 imported_at=env.clock.now(),
             )
         )

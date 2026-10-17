@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from mixsync.acquire import migration as mig
-from mixsync.acquire import pipeline
+from mixsync.acquire import pipeline, verify
 from mixsync.acquire.migration import Migrator
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -211,6 +211,9 @@ async def test_confirm_makes_low_priority_jobs_once(rig: Rig) -> None:
     assert p["release_mbid"] is None and p["candidate"]["username"] == ""
     assert p["candidate"]["files"][0]["extension"] == "mp3"
     assert all(Path(x).is_absolute() for x in p["paths"])
+    assert [j.idempotency_key for j in jobs] == [f"migrate:{mid}:0", f"migrate:{mid}:1"]
+    assert all(j.max_attempts == verify.VERIFY_ATTEMPTS for j in jobs)
+    assert [r.release_given for r in reqs] == [False, False]  # identified, not given
 
 
 async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
@@ -733,7 +736,10 @@ async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
     assert web.post(url, data=form).status_code == 303
     assert web.post(url, data=form).status_code == 409  # not failed any more: once only
     assert rig.requests()[0].status == "verifying"
-    assert len(rig.env.jobs(JobKind.VERIFY)) == 2
+    jobs = rig.env.jobs(JobKind.VERIFY)
+    assert len(jobs) == 2 and jobs[1].priority == mig.MIGRATION_PRIORITY
+    assert jobs[1].payload == {**jobs[0].payload, "release_mbid": None}  # the same files again
+    assert rig.requests()[0].release_given is False
     await rig.env.drain()  # matched again: a fresh review item to repick or mark unverified
     assert rig.requests()[0].status == "review"
     assert [x.status for x in decision_rows(rig.env, 2)] == ["pending_review", "pending_review"]
