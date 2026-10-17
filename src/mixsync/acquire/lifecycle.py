@@ -7,16 +7,31 @@ Transitions only set fields on the Request; the caller's job transaction commits
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from mixsync.db.models.work import Status
+
 if TYPE_CHECKING:
     from mixsync.db.models.work import Request
 
-SEARCHING = ("searching", "no_results", "partial")  # a search is the next step
-WAITING = ("no_results", "partial")  # a repeat search is queued
-IN_PROGRESS = (*SEARCHING, "downloading", "verifying", "importing")  # a failed job fails these
-BUSY = ("downloading", "verifying", "importing")  # files are moving: cannot be deleted
-OPEN = (*SEARCHING, "downloading", "verifying", "review")  # may still bring tracks in
-DONE = ("imported", "owned", "failed", "skipped")  # will not bring a file
-NO_FILE = ("failed", "skipped")  # DONE minus imported/owned: ended without a file
+__all__ = ["Status"]  # defined beside the column it types (db cannot import acquire)
+
+SEARCHING: tuple[Status, ...] = ("searching", "no_results", "partial")  # a search is next
+WAITING: tuple[Status, ...] = ("no_results", "partial")  # a repeat search is queued
+IN_PROGRESS: tuple[Status, ...] = (
+    *SEARCHING,
+    "downloading",
+    "verifying",
+    "importing",
+)  # a failed job fails these
+BUSY: tuple[Status, ...] = ("downloading", "verifying", "importing")  # files moving: no delete
+OPEN: tuple[Status, ...] = (*SEARCHING, "downloading", "verifying", "review")  # may bring tracks
+DONE: tuple[Status, ...] = (
+    "imported",
+    "owned",
+    "failed",
+    "skipped",
+    "unverified",
+)  # no file to come
+NO_FILE: tuple[Status, ...] = ("failed", "skipped")  # ended without a file (not in DONE's rest)
 
 
 def can_search(req: "Request") -> bool:
@@ -43,36 +58,56 @@ def dead_recordings(req: "Request", ever: set[str]) -> list[str]:
     return [m for m in req.recording_mbids if req.status == "failed" or m not in ever]
 
 
+def _set(req: "Request", status: Status, *, keep_note: bool = False) -> None:
+    """Every transition goes through here: dead_end and partial_note are cleared unless a
+    transition sets or keeps them."""
+    req.status, req.dead_end = status, False
+    if not keep_note:
+        req.partial_note = None
+
+
 def failed(req: "Request", why: str) -> None:
-    req.status, req.last_error = "failed", why
+    _set(req, "failed")
+    req.last_error = why
 
 
 def owned(req: "Request") -> None:
-    req.status, req.last_error = "owned", None
+    _set(req, "owned")
+    req.last_error = None
 
 
 def dead_end(req: "Request", why: str) -> None:
-    req.status, req.last_error, req.dead_end = "failed", why, True
+    _set(req, "failed")
+    req.last_error, req.dead_end = why, True
 
 
 def no_results(req: "Request") -> None:
     """A search found nothing. A partial album keeps its label while it waits for the rest."""
-    if req.status != "partial":
-        req.status = "no_results"
+    _set(req, req.status if req.status == "partial" else "no_results", keep_note=True)
 
 
 def downloading(req: "Request") -> None:
-    req.status, req.no_results_attempts = "downloading", 0
+    _set(req, "downloading", keep_note=True)  # a partial request fetches its next candidate
+    req.no_results_attempts = 0
+
+
+def verifying(req: "Request") -> None:
+    _set(req, "verifying", keep_note=True)
+
+
+def importing(req: "Request") -> None:
+    _set(req, "importing", keep_note=True)
 
 
 def review(req: "Request", why: str | None = None) -> None:
-    req.status = "review"
+    _set(req, "review")
     if why:
         req.last_error = why
 
 
 def rejected(req: "Request") -> None:
-    req.status, req.last_error = "skipped", "rejected in review"
+    _set(req, "skipped")
+    req.last_error = "rejected in review"
 
 
 def download_failed(req: "Request", has_tracks: bool, why: str) -> None:
@@ -82,14 +117,17 @@ def download_failed(req: "Request", has_tracks: bool, why: str) -> None:
         failed(req, why)
     elif has_tracks:
         head = f"partial: {req.partial_note}" if req.partial_note else "partial"
-        req.status, req.last_error = "partial", f"{head}; {why}"
+        _set(req, "partial", keep_note=True)
+        req.last_error = f"{head}; {why}"
     else:
-        req.status, req.last_error = "searching", why
+        _set(req, "searching")
+        req.last_error = why
 
 
 def keep_looking(req: "Request", partial: str, notes: Sequence[str] = ()) -> None:
     """Some tracks are in ("N of M tracks present"); open until the rest of the album is here."""
-    req.status, req.partial_note = "partial", partial
+    _set(req, "partial")
+    req.partial_note = partial
     req.last_error = "partial: " + "; ".join([partial, *notes])
 
 
@@ -102,7 +140,6 @@ def finished(
     dead_end: bool = False,
 ) -> None:
     """An import ended. `dead_end`: the release lacks some wanted recordings (discovery)."""
-    req.status = "failed" if errors else "unverified" if unverified else "imported"
+    _set(req, "failed" if errors else "unverified" if unverified else "imported")
     req.dead_end = dead_end and not errors
-    req.partial_note = None
     req.last_error = "; ".join(notes) or None

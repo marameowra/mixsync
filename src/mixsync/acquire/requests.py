@@ -132,7 +132,7 @@ def enqueue_rescan(s: Session, now: datetime) -> None:
 
 
 def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) -> None:
-    req.status = "importing"
+    lifecycle.importing(req)
     enqueue_in(
         s,
         now,
@@ -147,7 +147,7 @@ def enqueue_verify(
 ) -> None:
     """Verify the downloaded files again, against `release_mbid` (a repick, or a release that
     changed under a stored assignment)."""
-    req.status = "verifying"
+    lifecycle.verifying(req)
     enqueue_in(
         s,
         now,

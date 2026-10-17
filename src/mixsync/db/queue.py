@@ -43,7 +43,7 @@ def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None
     payload: dict[str, Any] = (
         c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
     )
-    if "request_id" in payload:
+    if "request_id" in payload:  # SQL, not lifecycle: a compare-and-set on the request
         c.execute(
             update(_R)
             .where(
@@ -54,7 +54,9 @@ def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None
                     _J.c.payload["request_id"].as_integer() == payload["request_id"],
                 ),
             )
-            .values(status="failed", dead_end=False, last_error=error, updated_at=now)
+            .values(
+                status="failed", dead_end=False, partial_note=None, last_error=error, updated_at=now
+            )
         )
 
 
