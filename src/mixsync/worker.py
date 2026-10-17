@@ -18,6 +18,7 @@ from mixsync.acquire.merge import Merger
 from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
+from mixsync.acquire.requests import fail_request_of_job
 from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
@@ -218,7 +219,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
     )
     fileops.recover()
     tag_undo.recover(sessions, fileops)
-    queue = JobQueue(engine, clock)
+    queue = JobQueue(engine, clock, fail_request_of_job)
     merger = Merger(
         sessions,
         clock,

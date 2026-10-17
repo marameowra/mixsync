@@ -50,3 +50,14 @@ def test_status_questions() -> None:
     assert lifecycle.can_search(_req("no_results")) and not lifecycle.can_search(_req("review"))
     assert not lifecycle.can_search(_req("partial", source="adopt"))
     assert lifecycle.is_busy(_req("importing")) and lifecycle.is_waiting(_req("partial"))
+
+
+def test_a_job_failing_for_good_fails_the_request_unless_tracks_are_in() -> None:
+    r = _req(dead_end=True)
+    lifecycle.job_failed(r, False, "boom")
+    assert (r.status, r.last_error, r.dead_end) == ("failed", "boom", False)
+    p = _req("partial", dead_end=True)
+    lifecycle.keep_looking(p, "2 of 5 tracks present")
+    lifecycle.job_failed(p, True, "boom")
+    assert p.status == "partial" and not p.dead_end
+    assert p.last_error == "partial: 2 of 5 tracks present; boom"

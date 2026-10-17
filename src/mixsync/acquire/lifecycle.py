@@ -87,6 +87,17 @@ def download_failed(req: "Request", has_tracks: bool, why: str) -> None:
         req.status, req.last_error = "searching", why
 
 
+def job_failed(req: "Request", has_tracks: bool, why: str) -> None:
+    """A job for this request failed for good. Tracks already in keep it partial (the error is
+    recorded, the tracks stay); otherwise it fails. Either way the failure is not a dead end."""
+    req.dead_end = False
+    if has_tracks:
+        head = f"partial: {req.partial_note}" if req.partial_note else "partial"
+        req.status, req.last_error = "partial", f"{head}; {why}"
+    else:
+        failed(req, why)
+
+
 def keep_looking(req: "Request", partial: str, notes: Sequence[str] = ()) -> None:
     """Some tracks are in ("N of M tracks present"); open until the rest of the album is here."""
     req.status, req.partial_note = "partial", partial
