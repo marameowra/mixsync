@@ -96,6 +96,16 @@ async def test_fingerprint_rejects_midstream_corruption(tmp_path: Path) -> None:
         await fingerprint(flac)
 
 
+async def test_fingerprint_rejects_corrupt_final_second(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "tail_bad.flac")
+    data = bytearray(flac.read_bytes())
+    for i in range(len(data) - 3000, len(data) - 2900):  # inside a frame near the end
+        data[i] ^= 0xFF
+    flac.write_bytes(bytes(data))
+    with pytest.raises(PermanentError):
+        await fingerprint(flac)
+
+
 async def test_fingerprint_rejects_non_audio_flac(tmp_path: Path) -> None:
     junk = tmp_path / "junk.flac"
     junk.write_bytes(b"\x55\xaa" * 2048)

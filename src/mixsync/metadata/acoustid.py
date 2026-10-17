@@ -8,6 +8,7 @@ from typing import Any, cast
 from urllib.parse import urlencode
 
 import mutagen
+from mutagen.flac import FLAC
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError
@@ -43,13 +44,36 @@ def _duration(path: Path) -> float | None:
         return None
 
 
+async def _flac_fully_decodes(path: Path) -> bool:
+    """Does ffmpeg decode every sample STREAMINFO promises? False for any other format or error."""
+    try:
+        info = cast(Any, FLAC(path).info)  # pyright: ignore[reportUnknownMemberType]
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-nostdin", "-xerror", "-v", "quiet", "-i", str(path),
+            "-map", "0:a", "-f", "s16le", "-",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )  # fmt: skip
+    except FileNotFoundError as e:
+        raise RuntimeError("ffmpeg is not installed or not on PATH") from e
+    except Exception:
+        return False
+    assert proc.stdout is not None
+    size = 0
+    while chunk := await proc.stdout.read(1 << 20):  # counted, not kept: files can be large
+        size += len(chunk)
+    await proc.wait()
+    return bool(info.total_samples) and size == info.total_samples * info.channels * 2
+
+
 async def fingerprint(path: Path) -> Fingerprint:
     code, out, err = await _fpcalc("-json", str(path))
     if code != 0:
         # Junk after the last frame makes fpcalc exit 3 on intact audio; stopping 1 s early
-        # skips it, while real corruption still fails.
+        # skips it. Only do that when every sample decodes, or it would hide a corrupt tail.
         duration = await asyncio.to_thread(_duration, path)
-        if duration is not None and duration > 1:
+        if duration is not None and duration > 1 and await _flac_fully_decodes(path):
             code, out, _ = await _fpcalc("-length", str(int(duration) - 1), "-json", str(path))
     if code != 0:
         raise PermanentError(f"fpcalc failed on {path}: {err.decode(errors='replace').strip()}")
