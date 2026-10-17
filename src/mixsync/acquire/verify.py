@@ -14,6 +14,7 @@ from sqlalchemy import ColumnElement, String, and_, cast, literal, select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import lifecycle
+from mixsync.acquire.evidence import Evidence
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
@@ -70,25 +71,18 @@ def start(
 
 
 def again(
-    s: Session, now: datetime, req: Request, release_mbid: str | None, evidence: dict[str, Any]
+    s: Session, now: datetime, req: Request, release_mbid: str | None, evidence: Evidence
 ) -> None:
     """Verify the files a decision was made on again, against `release_mbid` (a repick, or a
     release that changed under a stored assignment)."""
-    start(
-        s,
-        now,
-        req,
-        release_mbid,
-        evidence["candidate"],
-        [f["local_path"] for f in evidence["source"]["files"]],
-    )
+    start(s, now, req, release_mbid, evidence.candidate, evidence.paths)
 
 
 def recheck(s: Session, now: datetime, req: Request, d: MatchDecision) -> None:
     """Verify again with the current scorer. A decision whose release was given keeps the one
     it recorded; one that was identified is identified again."""
     given = (d.release_mbid or req.release_mbid) if d.release_given else None
-    again(s, now, req, given, d.evidence)
+    again(s, now, req, given, Evidence.parse(d.evidence))
 
 
 def rematch(s: Session, now: datetime, req: Request, priority: int) -> bool:

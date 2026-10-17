@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from mixsync.acquire import verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import apply_review
 from mixsync.core.capabilities import Capability
 from mixsync.db import decisions
@@ -46,7 +47,7 @@ def _owner(user: AuthUser) -> int | None:
 
 
 def _target(d: MatchDecision, key: str) -> str:
-    return str(d.evidence.get("target", {}).get(key, "")).casefold()
+    return str(Evidence.parse(d.evidence).target.get(key, "")).casefold()
 
 
 _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
@@ -99,14 +100,15 @@ def recheck(user: User, db: Db) -> RedirectResponse:
     for a migration that identified it). No network here."""
     now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
     for d in decisions.pending_for(db, _owner(user)):
-        req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
+        ev = Evidence.parse(d.evidence)
+        req = db.get(AlbumRequest, ev.request_id)
         if req is None:  # not from a request: nothing to verify again
             missing += 1
             continue
         if req.status != "review":  # already importing, imported or searching again
             stale += 1
             continue
-        files = d.evidence.get("source", {}).get("files", [])
+        files = ev.files
         if not files or not all(
             f.get("local_path") and Path(f["local_path"]).exists() for f in files
         ):
@@ -133,7 +135,7 @@ async def review_detail(
 ) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
     refs = {("release", d.release_mbid)} | {
-        ("recording", r) for a in d.evidence.get("acoustid", []) for r in a.get("recording_ids", [])
+        ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
     names = await resolve(db, namer, refs, MAX_LOOKUPS)
     ctx = {"user": user, "d": d, "prefill": _prefill(d), "names": names}
@@ -142,7 +144,7 @@ async def review_detail(
 
 def _prefill(d: MatchDecision) -> dict[str, Any]:
     """Editable tags for Mark unverified: each downloaded file's own tags, else its file name."""
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     found: list[dict[str, str]] = []
     for f in files:
         try:
@@ -242,7 +244,7 @@ def unverified(
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     if not files or any(not f.get("local_path") for f in files):
         raise HTTPException(409, "the downloaded files are not known")
     errors: list[str] = []
@@ -286,6 +288,8 @@ def unverified(
         decisions.act(db, decision_id, user.id, "unverified")
     except decisions.DecisionStateError as e:
         raise HTTPException(409, str(e)) from e
-    d.evidence = {**d.evidence, "unverified": edits}  # same transaction as the action
+    d.evidence = (
+        Evidence.parse(d.evidence).with_unverified(edits).to_json()
+    )  # same transaction as the action
     apply_review(db, datetime.now(UTC), decision_id)
     return _next(db, user)

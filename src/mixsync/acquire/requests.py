@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db.models.auth import MatchingProfile, User
@@ -144,18 +145,18 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
 def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
     d = s.get(MatchDecision, decision_id)
-    req = s.get(Request, d.evidence.get("request_id", 0)) if d else None
-    if d is None or req is None:  # a decision that did not come from a request
+    ev = Evidence.parse(d.evidence) if d else None
+    req = s.get(Request, ev.request_id) if ev else None
+    if d is None or ev is None or req is None:  # a decision that did not come from a request
         return
-    src = d.evidence["source"]
     if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
         enqueue_import(s, now, req, d.id)
     elif d.final_action == "repick":
-        verify.again(s, now, req, d.chosen_release_mbid, d.evidence)
+        verify.again(s, now, req, d.chosen_release_mbid, ev)
     elif req.from_files:  # no other candidate to look for: the album stays out
         lifecycle.rejected(req)
     else:
-        retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
+        retry_search(s, now, req, ev.peer, ev.folder, "rejected in review")
 
 
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them

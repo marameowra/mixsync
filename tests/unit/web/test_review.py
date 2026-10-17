@@ -11,11 +11,19 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import Band, MatchResult, Penalty
+from mixsync.core.matching import (
+    AlbumInfo,
+    Band,
+    Candidate,
+    CandidateFile,
+    MatchResult,
+    Penalty,
+)
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
@@ -58,18 +66,21 @@ def _make_decision(
     with sf() as s, s.begin():
         uid = s.query(User).filter_by(username=user).one().id
         res = MatchResult(0.2, Band.REVIEW, (Penalty("title", 0.5, 2.0, reason),), ("v<b>",), 1)
-        evidence = {
-            "source": {
-                "peer": "peer1",
-                "folder": "Music\\Album",
-                "files": [{"local_path": local_path, "name": "a.mp3", "format": "mp3"}],
-            },
-            "target": {"title": "Album", "artist": "Artist", "tracks": []},
-            "acoustid": [{"score": 0.97, "recording_ids": ["r1"]}],
-            "duration_deltas": [1.5],
-        }
+        cand = Candidate("peer1", "Music\\Album", (CandidateFile("a.mp3", 0, "mp3"),))
+        evidence = Evidence.verified(
+            0,
+            {},
+            cand,
+            [Path(local_path)],
+            AlbumInfo("Artist", "Album", ()),
+            unassigned=[],
+            partial="",
+            acoustid=[{"score": 0.97, "recording_ids": ["r1"]}],
+            duration_deltas=[1.5],
+            assignment=[],
+        )
         return decisions.record(
-            s, res, evidence=evidence, user_id=uid, stage=2, release_mbid=MBID
+            s, res, evidence=evidence.to_json(), user_id=uid, stage=2, release_mbid=MBID
         ).id
 
 
