@@ -23,6 +23,7 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
 from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
@@ -336,8 +337,9 @@ def report(
     # every decision since the migration began, not just the window: a row shows its current state
     since = select(MatchDecision).where(MatchDecision.created_at >= began)
     for d in s.scalars(since.order_by(MatchDecision.id)):
-        if d.evidence.get("request_id") in ids:
-            partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
+        ev = Evidence.parse(d.evidence)
+        if ev.request_id in ids:
+            partial[ev.request_id] = ev.partial
     rows = [
         {
             "folder": first.get(r.id, {}).get("candidate", {}).get("folder", ""),

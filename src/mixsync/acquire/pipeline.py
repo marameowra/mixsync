@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
     VERIFY_ATTEMPTS,
@@ -244,7 +245,7 @@ class Pipeline:
             decisions.record(
                 s,
                 result,
-                evidence={"request_id": req.id, "source": _source(cand), "target": _target(album)},
+                evidence=Evidence.searched(req.id, cand, album).to_json(),
                 user_id=req.user_id,
                 stage=1,
                 release_mbid=mbid,
@@ -422,17 +423,18 @@ class Pipeline:
                 and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
             ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
-        evidence = {
-            "request_id": p["request_id"],
-            "candidate": p["candidate"],
-            "unassigned": unassigned,
-            "partial": partial,
-            "source": _source(cand, paths),
-            "target": _target(album),
-            "acoustid": [_best(f) for f in files],
-            "duration_deltas": [abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
-            "assignment": assignment,
-        }
+        evidence = Evidence.verified(
+            p["request_id"],
+            p["candidate"],
+            cand,
+            paths,
+            album,
+            unassigned=unassigned,
+            partial=partial,
+            acoustid=[_best(f) for f in files],
+            duration_deltas=[abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
+            assignment=assignment,
+        ).to_json()
 
         now = self.clock.now()
         with self.sessions.begin() as s:
@@ -486,7 +488,7 @@ class Pipeline:
             .where(MatchDecision.chosen_release_mbid == mbid, MatchDecision.status == "repick")
             .order_by(MatchDecision.id.desc())
         ):
-            if d.evidence.get("request_id") == req.id:
+            if Evidence.parse(d.evidence).request_id == req.id:
                 decisions.reopen(s, d.id)
                 req.status, req.last_error = "review", f"release {mbid} not found on MusicBrainz"
                 return
@@ -524,13 +526,13 @@ class Pipeline:
             d = s.get(MatchDecision, did)
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
-            cand = candidate_from_dict(d.evidence["candidate"])
-            edits = d.evidence.get("unverified")
-            evidence = d.evidence
+            evidence = Evidence.parse(d.evidence)
+            cand = candidate_from_dict(evidence.candidate)
+            edits = evidence.unverified
             mbid = d.chosen_release_mbid or d.release_mbid
-            assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
-            switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
-            unassigned = tuple(d.evidence.get("unassigned", ()))
+            assignment = evidence.assignment
+            # an earlier run made us canonical
+            switched = evidence.canonical_switched_from is not None
             req = self._request(s, job)
             wanted = set(req.recording_mbids) if req.provisional else None
         if edits:
@@ -544,15 +546,8 @@ class Pipeline:
         album = await self.metadata.get_release(mbid)
         # Same batch id on every retry, so a resumed import skips what is already in.
         batch = f"request-{rid}-decision-{did}"
-        by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
         files: list[tuple[Path, TrackInfo, str | None]] = []
-        for a in assignment:
-            pos: int = a["track"]
-            track: TrackInfo | None = album.tracks[pos] if pos < len(album.tracks) else None
-            # shortcut: a recording on the release twice AND a shifted list maps to the last
-            # one; upgrade by storing the medium and position in the assignment.
-            if "recording_id" in a and (track is None or track.recording_id != a["recording_id"]):
-                track = by_rec.get(a["recording_id"])
+        for path, track, acoustid in evidence.resolve(album):
             if track is None:  # the release changed since verify
                 if any(self._imported(Path(x["local_path"]), batch) for x in assignment):
                     raise PermanentError(
@@ -562,7 +557,7 @@ class Pipeline:
                 with self.sessions.begin() as s:
                     enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
                 return
-            files.append((Path(a["local_path"]), track, a["acoustid_id"]))
+            files.append((path, track, acoustid))
         if wanted is not None:
             return await self._import_provisional(job, cand, album, files, wanted, batch)
         target, n = album, len(files)
@@ -582,7 +577,9 @@ class Pipeline:
                     # Same transaction: a retry must not mistake this for a plain canonical import.
                     row = s.get(MatchDecision, did)
                     if row:
-                        row.evidence = {**row.evidence, "canonical_switched_from": cid}
+                        row.evidence = (
+                            Evidence.parse(row.evidence).with_switched_from(cid).to_json()
+                        )
                     switched = True
                     break
             # lost a race to another switch: decide again against the stored choice
@@ -608,7 +605,7 @@ class Pipeline:
         results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
         await self._finish(
-            job, cand, results, batch, unassigned=unassigned, partial=evidence.get("partial", "")
+            job, cand, results, batch, unassigned=evidence.unassigned, partial=evidence.partial
         )
 
     async def _import_provisional(
@@ -936,32 +933,3 @@ def _best(f: FileTrack) -> dict[str, Any]:
 def acoustid_id(f: FileTrack) -> str | None:
     best = max(f.acoustid, key=lambda r: r.score, default=None)
     return best.id if best and best.score >= ACOUSTID_ID_SCORE else None
-
-
-def _source(cand: Candidate, local: list[Path] | None = None) -> dict[str, Any]:
-    return {
-        "peer": cand.username,
-        "folder": cand.folder,
-        "files": [
-            {
-                "name": f.path.rsplit("\\", 1)[-1],
-                "format": f.extension,
-                "bitrate": f.bitrate,
-                "size": f.size,
-                "duration": f.duration,
-                "local_path": str(local[i]) if local else None,
-            }
-            for i, f in enumerate(cand.files)
-        ],
-    }
-
-
-def _target(album: AlbumInfo) -> dict[str, Any]:
-    return {
-        "title": album.album,
-        "artist": album.artist,
-        "release_group_id": album.release_group_id,
-        "tracks": [
-            {"position": t.index, "title": t.title, "length": t.length} for t in album.tracks
-        ],
-    }
