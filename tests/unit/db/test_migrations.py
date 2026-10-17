@@ -57,9 +57,9 @@ def test_release_given_is_backfilled_from_the_last_verify(settings: Settings) ->
                     "INSERT INTO requests (id, user_id, release_mbid, artist, album, status,"
                     " tried, no_results_attempts, source, provisional, recording_mbids,"
                     f" migration_id, created_at, updated_at) VALUES ({rid}, 1, '', '', '',"
-                    f" 'review', '[]', 0, 'manual', 0, '[]', :m, {day}, {day})"
+                    f" 'review', '[]', 0, 'manual', :prov, '[]', :m, {day}, {day})"
                 ),
-                {"m": migration},
+                {"m": migration, "prov": False},
             )
         for rid, release in ((1, "rel"), (2, "rel"), (2, None), (3, None), (3, "rel"), (4, None)):
             c.execute(
