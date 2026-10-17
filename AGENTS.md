@@ -32,6 +32,9 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
   a version bump publish nothing. Never create or push `v*` tags, create GitHub releases,
   merge to `main`, or approve deployments to the `release` environment.
+- Release PR bodies (`dev` → `main`) list `Closes #N` for every issue fixed since the last
+  release. GitHub ignores closing keywords in PRs merged into `dev`, so the release PR is
+  what closes them.
 
 ## Delegation
 - Hand all implementation (features, fixes, tests, refactors) to the `implementer`
