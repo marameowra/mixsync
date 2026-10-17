@@ -2,7 +2,18 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, false
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    false,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.core.jobs import JobKind, JobState
@@ -61,6 +72,8 @@ class Request(TimestampMixin, Base):
     # discovery: import only the wanted recordings, into /data/discover
     provisional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     recording_mbids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # False when the last verify had to identify the release itself (files with none given)
+    release_given: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 
     @property
     def from_files(self) -> bool:

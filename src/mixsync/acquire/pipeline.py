@@ -19,16 +19,15 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import verify
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
-    VERIFY_ATTEMPTS,
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
-    enqueue_verify,
     hold_imports,
     profile_for,
     retry_search,
@@ -321,18 +320,13 @@ class Pipeline:
             if problem:  # never import a missing or partial file (SK-P04)
                 retry_search(s, now, req, cand.username, cand.folder, problem)
                 return
-            req.status = "verifying"
-            enqueue_in(
+            verify.start(
                 s,
                 now,
-                JobKind.VERIFY,
-                {
-                    "request_id": req.id,
-                    "release_mbid": req.release_mbid,
-                    "candidate": p["candidate"],
-                    "paths": list(info.local_paths),
-                },
-                max_attempts=VERIFY_ATTEMPTS,
+                req,
+                req.release_mbid,
+                p["candidate"],
+                list(info.local_paths),
                 idempotency_key=f"verify:{job.id}",
             )
 
@@ -543,7 +537,7 @@ class Pipeline:
             raise PermanentError("the decision assigns no files to import")
         album = await self.metadata.get_release(mbid)
         # Same batch id on every retry, so a resumed import skips what is already in.
-        batch = f"request-{rid}-decision-{did}"
+        batch = verify.batch_id(rid, did)
         by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
         files: list[tuple[Path, TrackInfo, str | None]] = []
         for a in assignment:
@@ -560,7 +554,7 @@ class Pipeline:
                         "imported; check it by hand"
                     )
                 with self.sessions.begin() as s:
-                    enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
+                    verify.again(s, self.clock.now(), self._request(s, job), mbid, evidence)
                 return
             files.append((Path(a["local_path"]), track, a["acoustid_id"]))
         if wanted is not None:
@@ -695,7 +689,7 @@ class Pipeline:
             )
             for t in edits["tracks"]
         ]
-        batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
+        batch = verify.batch_id(job.payload["request_id"], job.payload["decision_id"])
         results = await self._import_files(files, album, "unverified", batch)
         year = str(edits["year"]) if edits["year"] else ""
         await self._finish(job, cand, results, batch, (album.artist, album.album, year))
@@ -862,16 +856,7 @@ class Pipeline:
 
 def _stale(s: Session, job: JobRecord, req: Request) -> bool:
     """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
-    newer = s.scalar(
-        select(Job.id)
-        .where(
-            Job.kind == JobKind.VERIFY,
-            Job.id > job.id,
-            Job.payload["request_id"].as_integer() == req.id,
-        )
-        .limit(1)
-    )
-    return req.status != "verifying" or newer is not None
+    return req.status != "verifying" or verify.superseded(s, job.id, req.id)
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
