@@ -35,11 +35,13 @@ def record(
     user_id: int,
     stage: int,
     release_mbid: str,
+    release_given: bool = True,
 ) -> MatchDecision:
     row = MatchDecision(
         user_id=user_id,
         stage=stage,
         release_mbid=release_mbid,
+        release_given=release_given,
         band=result.band.value,
         distance=result.distance,
         breakdown=[asdict(p) for p in result.breakdown],

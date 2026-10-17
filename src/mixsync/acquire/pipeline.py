@@ -443,6 +443,7 @@ class Pipeline:
                 user_id=req.user_id,
                 stage=2,
                 release_mbid=p["release_mbid"] or album.release_id or "",
+                release_given=bool(p["release_mbid"]),
             )
             if result.band is Band.AUTO_ACCEPT:
                 enqueue_import(s, now, req, d.id)

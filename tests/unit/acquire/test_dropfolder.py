@@ -168,7 +168,9 @@ async def test_a_dropped_album_starts_a_verify_that_identifies_the_release(rig: 
     assert (p["request_id"], p["release_mbid"]) == (req.id, None)
     assert len(p["paths"]) == len(ALBUM.tracks) and all(Path(x).is_absolute() for x in p["paths"])
     assert job.max_attempts == verify.VERIFY_ATTEMPTS and job.idempotency_key
-    assert (req.status, req.release_given) == ("verifying", False)
+    assert req.status == "verifying"
+    await rig.env.drain()
+    assert [d.release_given for d in decision_rows(rig.env, 2)] == [False]  # identified
 
 
 async def test_a_scan_schedules_the_next_one(rig: Rig) -> None:
