@@ -4,10 +4,10 @@ import random
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import String, cast, func, literal, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
@@ -66,7 +66,7 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
     # derived from the data (not the status, which shows "downloading" etc. between searches).
     open_with_tracks = (
         select(Request.release_group_mbid)
-        .join(Track, Track.batch_id.like(literal("request-") + cast(Request.id, String) + "-%"))
+        .join(Track, verify.in_request(Track.batch_id, Request.id))
         .where(
             Request.release_group_mbid.in_(group_ids),
             Request.status.in_(lifecycle.OPEN),

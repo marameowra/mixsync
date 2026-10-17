@@ -8,15 +8,14 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 
-from mixsync.acquire.requests import apply_review, enqueue_verify
+from mixsync.acquire import verify
+from mixsync.acquire.evidence import Evidence
+from mixsync.acquire.requests import apply_review
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
@@ -48,7 +47,7 @@ def _owner(user: AuthUser) -> int | None:
 
 
 def _target(d: MatchDecision, key: str) -> str:
-    return str(d.evidence.get("target", {}).get(key, "")).casefold()
+    return str(Evidence.parse(d.evidence).target.get(key, "")).casefold()
 
 
 _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
@@ -97,32 +96,25 @@ def review_list(
 @router.post("/recheck")
 def recheck(user: User, db: Db) -> RedirectResponse:
     """Verify every pending review again with the current scorer: the decision is closed and the
-    files go back through VERIFY against the release the last VERIFY of the request used (a
-    repick, or none for a migration that identified it). No network here."""
+    files go back through VERIFY against the release the request was given (a repick, or none
+    for a migration that identified it). No network here."""
     now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
     for d in decisions.pending_for(db, _owner(user)):
-        req = db.get(AlbumRequest, d.evidence.get("request_id", 0))
+        ev = Evidence.parse(d.evidence)
+        req = db.get(AlbumRequest, ev.request_id)
         if req is None:  # not from a request: nothing to verify again
             missing += 1
             continue
         if req.status != "review":  # already importing, imported or searching again
             stale += 1
             continue
-        files = d.evidence.get("source", {}).get("files", [])
+        files = ev.files
         if not files or not all(
             f.get("local_path") and Path(f["local_path"]).exists() for f in files
         ):
             missing += 1
             continue
-        if db.scalar(
-            select(Job.id)
-            .where(
-                Job.kind == JobKind.VERIFY,
-                Job.status.in_(LIVE),
-                Job.payload["request_id"].as_integer() == req.id,
-            )
-            .limit(1)
-        ):
+        if verify.running(db, req.id):
             busy += 1
             continue
         try:
@@ -130,19 +122,7 @@ def recheck(user: User, db: Db) -> RedirectResponse:
         except decisions.DecisionStateError:  # acted on since the list was read
             busy += 1
             continue
-        last = db.scalar(
-            select(Job.payload)
-            .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
-            .order_by(Job.id.desc())
-            .limit(1)
-        )
-        # The last VERIFY only says whether a release was given (a migration may have had it
-        # identified); the release itself comes from the decision, as a reopened bad repick leaves
-        # a VERIFY for a release the decision never recorded. Without a VERIFY (shortcut): a
-        # migration re-picks, any other request has its release.
-        given = last["release_mbid"] if last else not req.migration_id
-        mbid = (d.release_mbid or req.release_mbid) if given else None
-        enqueue_verify(db, now, req, mbid, d.evidence)
+        verify.recheck(db, now, req, d)
         queued += 1
     return RedirectResponse(
         f"/review?requeued={queued}&missing={missing}&busy={busy}&stale={stale}", status_code=303
@@ -155,7 +135,7 @@ async def review_detail(
 ) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
     refs = {("release", d.release_mbid)} | {
-        ("recording", r) for a in d.evidence.get("acoustid", []) for r in a.get("recording_ids", [])
+        ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
     names = await resolve(db, namer, refs, MAX_LOOKUPS)
     ctx = {"user": user, "d": d, "prefill": _prefill(d), "names": names}
@@ -164,7 +144,7 @@ async def review_detail(
 
 def _prefill(d: MatchDecision) -> dict[str, Any]:
     """Editable tags for Mark unverified: each downloaded file's own tags, else its file name."""
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     found: list[dict[str, str]] = []
     for f in files:
         try:
@@ -264,7 +244,7 @@ def unverified(
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     if not files or any(not f.get("local_path") for f in files):
         raise HTTPException(409, "the downloaded files are not known")
     errors: list[str] = []
@@ -308,6 +288,8 @@ def unverified(
         decisions.act(db, decision_id, user.id, "unverified")
     except decisions.DecisionStateError as e:
         raise HTTPException(409, str(e)) from e
-    d.evidence = {**d.evidence, "unverified": edits}  # same transaction as the action
+    d.evidence = (
+        Evidence.parse(d.evidence).with_unverified(edits).to_json()
+    )  # same transaction as the action
     apply_review(db, datetime.now(UTC), decision_id)
     return _next(db, user)

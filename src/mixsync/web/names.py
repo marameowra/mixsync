@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.evidence import Evidence
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.protocols import NameLookup
 from mixsync.db.models.matching import MatchDecision
@@ -32,7 +33,7 @@ def _local(db: Session, releases: set[str]) -> dict[str, str]:
             MatchDecision.release_mbid.in_(releases)
         )
     ):
-        t = ev.get("target", {})
+        t = Evidence.parse(ev).target
         if t.get("title"):
             found[mbid] = f"{t['title']} — {t.get('artist', '')}"
     for mbid, artist, album in db.execute(
