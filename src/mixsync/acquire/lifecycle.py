@@ -124,6 +124,17 @@ def download_failed(req: "Request", has_tracks: bool, why: str) -> None:
         req.last_error = why
 
 
+def job_failed(req: "Request", has_tracks: bool, why: str) -> None:
+    """A job for this request failed for good. Tracks already in keep it partial (the error is
+    recorded, the tracks stay); otherwise it fails. Either way the failure is not a dead end."""
+    if has_tracks and not req.from_files:  # files identified from disk have nothing to search for
+        head = f"partial: {req.partial_note}" if req.partial_note else "partial"
+        _set(req, "partial", keep_note=True)
+        req.last_error = f"{head}; {why}"
+    else:
+        failed(req, why)
+
+
 def keep_looking(req: "Request", partial: str, notes: Sequence[str] = ()) -> None:
     """Some tracks are in ("N of M tracks present"); open until the rest of the album is here."""
     _set(req, "partial")

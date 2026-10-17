@@ -54,6 +54,17 @@ def test_status_questions() -> None:
     assert lifecycle.is_busy(_req("importing")) and lifecycle.is_waiting(_req("partial"))
 
 
+def test_a_job_failing_for_good_fails_the_request_unless_tracks_are_in() -> None:
+    r = _req(dead_end=True)
+    lifecycle.job_failed(r, False, "boom")
+    assert (r.status, r.last_error, r.dead_end) == ("failed", "boom", False)
+    p = _req("partial", dead_end=True)
+    lifecycle.keep_looking(p, "2 of 5 tracks present")
+    lifecycle.job_failed(p, True, "boom")
+    assert p.status == "partial" and not p.dead_end
+    assert p.last_error == "partial: 2 of 5 tracks present; boom"
+
+
 def test_every_status_is_in_a_set_and_unverified_is_done_but_has_a_file() -> None:
     sets = (lifecycle.OPEN, lifecycle.DONE, lifecycle.IN_PROGRESS)
     assert all(any(st in group for group in sets) for st in get_args(Status))
@@ -71,7 +82,9 @@ def test_only_dead_end_transitions_set_dead_end() -> None:
         lifecycle.review,
         lifecycle.rejected,
         lambda r: lifecycle.download_failed(r, True, "x"),
+        lambda r: lifecycle.job_failed(r, True, "x"),
         lambda r: lifecycle.download_failed(r, False, "x"),
+        lambda r: lifecycle.job_failed(r, False, "x"),
         lambda r: lifecycle.keep_looking(r, "1 of 2 tracks present"),
         lambda r: lifecycle.finished(r, [], [], dead_end=False),
         lambda r: lifecycle.finished(r, ["boom"], [], dead_end=True),
@@ -94,6 +107,7 @@ def test_only_keep_looking_sets_the_partial_note_and_in_flight_transitions_keep_
         lifecycle.verifying,
         lifecycle.importing,
         lambda r: lifecycle.download_failed(r, True, "x"),
+        lambda r: lifecycle.job_failed(r, True, "x"),
     )
     clear = (
         lambda r: lifecycle.failed(r, "x"),
@@ -102,6 +116,7 @@ def test_only_keep_looking_sets_the_partial_note_and_in_flight_transitions_keep_
         lifecycle.rejected,
         lambda r: lifecycle.dead_end(r, "x"),
         lambda r: lifecycle.download_failed(r, False, "x"),
+        lambda r: lifecycle.job_failed(r, False, "x"),
         lambda r: lifecycle.finished(r, [], []),
     )
     for transition, kept in [(t, True) for t in keep] + [(t, False) for t in clear]:

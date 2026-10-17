@@ -23,6 +23,7 @@ from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
+    NO_RESULTS_BACKOFF,
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
@@ -86,12 +87,6 @@ PARTIAL_ALBUM_MAX_DIST = 0.2
 Handler = Callable[[JobRecord], Awaitable[None]]
 
 SEARCH_DEBOUNCE = timedelta(minutes=10)  # one request never searches twice within this
-NO_RESULTS_BACKOFF = (
-    timedelta(hours=1),
-    timedelta(hours=6),
-    timedelta(hours=24),
-    timedelta(weeks=1),
-)
 MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 SEARCH_BUSY_DELAY = timedelta(minutes=1)

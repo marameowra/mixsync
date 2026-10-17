@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import Engine, select
+from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -14,8 +14,7 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState, backoff
 from mixsync.db.engine import make_engine, make_session_factory, user_sessions
 from mixsync.db.migrate import upgrade
-from mixsync.db.models.auth import User
-from mixsync.db.models.work import Job, Request
+from mixsync.db.models.work import Job
 from mixsync.db.queue import USER_PRIORITY, JobQueue, JobRecord, LeaseLostError, enqueue_in
 from mixsync.worker import HANDLERS, Handler, _heartbeat, run_job  # pyright: ignore[reportPrivateUsage]
 
@@ -44,9 +43,13 @@ def clock() -> FakeClock:
     return FakeClock()
 
 
+def _ignore(*_: Any) -> None:
+    """A final-failure hook for tests that do not care about it."""
+
+
 @pytest.fixture
 def q(engine: Engine, clock: FakeClock) -> JobQueue:
-    return JobQueue(engine, clock)
+    return JobQueue(engine, clock, _ignore)
 
 
 def enq(q: JobQueue, kind: JobKind, payload: dict[str, Any] | None = None, **kw: Any) -> JobRecord:
@@ -74,7 +77,10 @@ def test_idempotency_key_blocks_duplicate(q: JobQueue) -> None:
 
 
 def test_claim_race_has_one_winner(engine: Engine, clock: FakeClock) -> None:
-    q1, q2 = JobQueue(engine, clock), JobQueue(make_engine(), clock)  # two connections, file DB
+    q1, q2 = (
+        JobQueue(engine, clock, _ignore),
+        JobQueue(make_engine(), clock, _ignore),
+    )  # two connections, file DB
     enq(q1, JobKind.NOOP)
     barrier = threading.Barrier(2)
     won: list[JobRecord | None] = []
@@ -190,105 +196,95 @@ def test_job_that_keeps_killing_its_worker_fails(q: JobQueue, clock: FakeClock) 
     assert q.get(j.id).status is JobState.FAILED
 
 
-def _request(engine: Engine, status: str) -> int:
-    with Session(engine) as s, s.begin():
-        s.add(User(username="u", password_hash="x", status="active"))
-        s.flush()
-        req = Request(user_id=s.query(User).one().id, release_mbid="m", status=status)
-        s.add(req)
-        s.flush()
-        return req.id
+class Failures:
+    """Records what the queue hands to its final-failure hook."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, dict[str, Any], str]] = []
+
+    def __call__(
+        self, _c: Connection, job_id: int, payload: dict[str, Any], error: str, _now: datetime
+    ) -> None:
+        self.calls.append((job_id, payload, error))
 
 
-def _status(engine: Engine, req_id: int) -> tuple[str, str | None]:
-    with Session(engine) as s:
-        req = s.get(Request, req_id)
-        assert req
-        return req.status, req.last_error
+@pytest.fixture
+def failures() -> Failures:
+    return Failures()
 
 
-def test_permanent_failure_fails_the_request(q: JobQueue, engine: Engine) -> None:
-    rid = _request(engine, "searching")
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    _run(q, PermanentError("404"))
-    assert _status(engine, rid) == ("failed", "PermanentError('404')")
+@pytest.fixture
+def fq(engine: Engine, clock: FakeClock, failures: Failures) -> JobQueue:
+    return JobQueue(engine, clock, failures)
 
 
-def test_a_job_failure_is_not_a_dead_end(q: JobQueue, engine: Engine) -> None:
-    rid = _request(engine, "searching")
-    with Session(engine) as s, s.begin():
-        s.get_one(Request, rid).dead_end = True
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    _run(q, PermanentError("404"))
-    with Session(engine) as s:
-        assert not s.get_one(Request, rid).dead_end
+def test_permanent_failure_hands_the_job_to_the_hook(fq: JobQueue, failures: Failures) -> None:
+    j = enq(fq, JobKind.NOOP, {"request_id": 7})
+    _run(fq, PermanentError("404"))
+    assert failures.calls == [(j.id, {"request_id": 7}, "PermanentError('404')")]
 
 
-def test_failure_leaves_a_request_that_moved_on(q: JobQueue, engine: Engine) -> None:
-    rid = _request(engine, "imported")
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    _run(q, PermanentError("stale"))
-    assert _status(engine, rid) == ("imported", None)
+def test_the_hook_commits_or_rolls_back_with_the_state_change(
+    engine: Engine, clock: FakeClock
+) -> None:
+    seen: list[JobState] = []
+
+    def hook(c: Connection, job_id: int, *_: Any) -> None:
+        seen.append(c.execute(select(Job.status).where(Job.id == job_id)).scalar_one())
+
+    q = JobQueue(engine, clock, hook)
+    enq(q, JobKind.NOOP)
+    _run(q, PermanentError("x"))
+    assert seen == [JobState.FAILED]
+
+    def boom(*_: Any) -> None:
+        raise RuntimeError("hook failed")
+
+    q2 = JobQueue(engine, clock, boom)
+    j = enq(q2, JobKind.NOOP)
+    assert (job := q2.claim("w2", LEASE)) and job.id == j.id
+    with pytest.raises(RuntimeError):
+        q2.fail(j.id, "w2", "e")
+    assert q2.get(j.id).status is JobState.LEASED  # rolled back with the hook
 
 
-def test_reaped_dead_job_fails_the_request(q: JobQueue, engine: Engine, clock: FakeClock) -> None:
-    rid = _request(engine, "verifying")
-    j = enq(q, JobKind.NOOP, {"request_id": rid}, max_attempts=1)
+def test_a_retry_does_not_call_the_hook(fq: JobQueue, failures: Failures) -> None:
+    enq(fq, JobKind.NOOP, {"request_id": 7})
+    _run(fq, TransientError("later"))
+    assert failures.calls == []
+
+
+def test_a_job_without_a_request_still_reaches_the_hook(fq: JobQueue, failures: Failures) -> None:
+    j = enq(fq, JobKind.NOOP, {})
+    _run(fq, PermanentError("gone"))
+    assert failures.calls == [(j.id, {}, "PermanentError('gone')")]
+
+
+def test_reaped_dead_job_is_handed_to_the_hook(
+    fq: JobQueue, failures: Failures, clock: FakeClock
+) -> None:
+    j = enq(fq, JobKind.NOOP, {"request_id": 7}, max_attempts=1)
+    fq.claim("w1", LEASE)
+    fq.start(j.id, "w1")
+    clock.advance(LEASE + timedelta(seconds=1))
+    fq.reap()
+    assert fq.get(j.id).status is JobState.FAILED
+    assert failures.calls == [(j.id, {"request_id": 7}, "lease expired with no attempts left")]
+
+
+def test_the_hook_sees_a_reaped_job_as_failed(engine: Engine, clock: FakeClock) -> None:
+    seen: list[JobState] = []
+
+    def hook(c: Connection, job_id: int, *_: Any) -> None:
+        seen.append(c.execute(select(Job.status).where(Job.id == job_id)).scalar_one())
+
+    q = JobQueue(engine, clock, hook)
+    j = enq(q, JobKind.NOOP, max_attempts=1)
     q.claim("w1", LEASE)
     q.start(j.id, "w1")
     clock.advance(LEASE + timedelta(seconds=1))
     q.reap()
-    assert _status(engine, rid)[0] == "failed"
-
-
-def test_permanent_failure_fails_a_no_results_request(q: JobQueue, engine: Engine) -> None:
-    rid = _request(engine, "no_results")
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    _run(q, PermanentError("gone"))
-    assert _status(engine, rid)[0] == "failed"
-
-
-def test_failure_of_a_superseded_job_leaves_the_request(q: JobQueue, engine: Engine) -> None:
-    rid = _request(engine, "no_results")
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    enq(q, JobKind.NOOP, {"request_id": rid})  # the newer job now drives the request
-    _run(q, PermanentError("stale"))  # fails the older job
-    assert _status(engine, rid) == ("no_results", None)
-
-
-def test_reaped_superseded_job_leaves_the_request(
-    q: JobQueue, engine: Engine, clock: FakeClock
-) -> None:
-    rid = _request(engine, "no_results")
-    j = enq(q, JobKind.NOOP, {"request_id": rid}, max_attempts=1)
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    q.claim("w1", LEASE)
-    q.start(j.id, "w1")
-    clock.advance(LEASE + timedelta(seconds=1))
-    q.reap()
-    assert q.get(j.id).status is JobState.FAILED
-    assert _status(engine, rid) == ("no_results", None)
-
-
-def test_newer_jobs_of_other_requests_do_not_shield_the_request(
-    q: JobQueue, engine: Engine
-) -> None:
-    rid = _request(engine, "searching")
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    enq(q, JobKind.NOOP, {"request_id": rid + 1})
-    enq(q, JobKind.NOOP, {})
-    _run(q, PermanentError("boom"))  # claims the first job
-    assert _status(engine, rid)[0] == "failed"
-
-
-def test_newest_job_failing_fails_despite_an_older_one(
-    q: JobQueue, engine: Engine, clock: FakeClock
-) -> None:
-    rid = _request(engine, "searching")
-    enq(q, JobKind.NOOP, {"request_id": rid}, run_after=clock.now() + timedelta(hours=1))
-    enq(q, JobKind.NOOP, {"request_id": rid})
-    _run(q, PermanentError("boom"))  # claims the newer, runnable job
-    assert _status(engine, rid)[0] == "failed"
+    assert seen == [JobState.FAILED]
 
 
 def _locked() -> OperationalError:
