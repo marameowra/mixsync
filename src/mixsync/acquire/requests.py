@@ -119,6 +119,18 @@ def _has_tracks(s: Session, req: Request) -> bool:
     )
 
 
+def _failed_candidate(s: Session, payload: dict[str, Any]) -> list[str] | None:
+    """[peer, folder] of a DOWNLOAD / VERIFY job's candidate, or of an IMPORT job's decision."""
+    if "candidate" in payload:
+        c = payload["candidate"]
+        return [c["username"], c["folder"]]
+    d = s.get(MatchDecision, payload["decision_id"]) if "decision_id" in payload else None
+    if d is None:
+        return None
+    ev = Evidence.parse(d.evidence)
+    return [ev.peer, ev.folder]
+
+
 def fail_request_of_job(
     c: Connection, job_id: int, payload: dict[str, Any], error: str, now: datetime
 ) -> None:
@@ -138,6 +150,8 @@ def fail_request_of_job(
             lifecycle.job_failed(req, _has_tracks(s, req), error)
             req.updated_at = now  # the queue's clock, as the job rows use
             if req.status == "partial":  # a partial request always has a repeat search queued
+                if (cand := _failed_candidate(s, payload)) and cand not in req.tried:
+                    req.tried = [*req.tried, cand]  # else the search re-picks it, hourly, forever
                 delay = NO_RESULTS_BACKOFF[
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
                 ]

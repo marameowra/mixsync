@@ -10,6 +10,7 @@ from mixsync.acquire.requests import NO_RESULTS_BACKOFF
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.library import Track
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.worker import run_job
@@ -25,9 +26,21 @@ def _request(env: Env, status: str, **kw: Any) -> int:
         return req.id
 
 
-def _enqueue(env: Env, rid: int, **kw: Any) -> None:
+def _enqueue(env: Env, rid: int, extra: dict[str, Any] | None = None, **kw: Any) -> None:
     with env.sessions.begin() as s:
-        enqueue_in(s, env.clock.now(), JobKind.NOOP, {"request_id": rid}, **kw)
+        enqueue_in(s, env.clock.now(), JobKind.NOOP, {"request_id": rid, **(extra or {})}, **kw)
+
+
+def _add_track(env: Env, rid: int) -> None:
+    with env.sessions.begin() as s:
+        s.add(
+            Track(
+                path="a.mp3",
+                status="verified",
+                batch_id=verify.batch_id(rid, 1),
+                imported_at=env.clock.now(),
+            )
+        )
 
 
 async def _fail_next(env: Env) -> None:
@@ -141,3 +154,45 @@ async def test_permanent_failure_fails_a_no_results_request(env: Env) -> None:
     _enqueue(env, rid)
     await _fail_next(env)
     assert _get(env, rid).status == "failed"
+
+
+async def test_a_partial_requests_failed_download_candidate_is_tried(env: Env) -> None:
+    rid = _request(env, "partial")
+    _add_track(env, rid)
+    _enqueue(env, rid, {"candidate": {"username": "peer", "folder": "Music\\Album"}})
+    await _fail_next(env)
+    assert _get(env, rid).tried == [["peer", "Music\\Album"]]
+    assert len(env.jobs(JobKind.SEARCH)) == 1
+
+
+async def test_a_partial_requests_failed_import_candidate_is_tried(env: Env) -> None:
+    rid = _request(env, "partial")
+    _add_track(env, rid)
+    with env.sessions.begin() as s:
+        d = MatchDecision(
+            user_id=env.user_id,
+            stage=2,
+            release_mbid="m",
+            band="auto",
+            distance=0.0,
+            breakdown=[],
+            vetoes=[],
+            scorer_version=1,
+            status="done",
+            evidence={"request_id": rid, "source": {"peer": "peer", "folder": "F", "files": []}},
+        )
+        s.add(d)
+        s.flush()
+        did = d.id
+    _enqueue(env, rid, {"decision_id": did})
+    await _fail_next(env)
+    assert _get(env, rid).tried == [["peer", "F"]]
+
+
+async def test_a_migrated_request_with_tracks_fails_without_a_search(env: Env) -> None:
+    rid = _request(env, "importing", source="drop")
+    _add_track(env, rid)
+    _enqueue(env, rid)
+    await _fail_next(env)
+    assert _get(env, rid).status == "failed"
+    assert env.jobs(JobKind.SEARCH) == []
