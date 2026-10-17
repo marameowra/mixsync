@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import pipeline
+from mixsync.acquire import pipeline, verify
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -525,6 +525,8 @@ async def test_repick_verifies_against_the_chosen_release(env: Env, web: TestCli
     assert (old.status, old.chosen_release_mbid) == ("repick", ALBUM_B.release_id)
     assert new.release_mbid == ALBUM_B.release_id and new.status == "pending_review"
     assert status(env, rid) == "review" and library(env) == []
+    files = [f["local_path"] for f in old.evidence["source"]["files"]]
+    assert files and [f["local_path"] for f in new.evidence["source"]["files"]] == files
 
 
 async def test_stage_one_decisions_never_need_review(env: Env) -> None:
@@ -1327,3 +1329,139 @@ async def test_a_partial_request_stays_partial_when_the_next_candidate_fails(env
         req = s.get(Request, rid)
         assert req and (req.last_error or "").startswith("partial: 1 of 2 tracks present; ")
         assert owned_groups(s, [str(ALBUM.release_group_id)]) == set()
+
+
+async def test_a_download_starts_a_verify_for_the_requested_release(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain(until=lambda: bool(env.jobs(JobKind.VERIFY)))
+    (job,) = env.jobs(JobKind.VERIFY)
+    download = env.jobs(JobKind.DOWNLOAD)[-1]  # the last status check of the transfer
+    p = job.payload
+    assert (p["request_id"], p["release_mbid"]) == (rid, ALBUM.release_id)
+    assert len(p["paths"]) == len(ALBUM.tracks) and p["candidate"]["username"] == "peer1"
+    assert job.max_attempts == verify.VERIFY_ATTEMPTS
+    assert job.idempotency_key == f"verify:{download.id}"
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.status == "verifying"
+    await env.drain()
+    assert decision_rows(env, 2)[0].release_given is True  # started with a release
+
+
+async def test_recheck_verifies_again_against_the_decisions_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    assert web.post("/review/recheck", data={"csrf_token": tok}).status_code == 303
+    assert status(env, rid) == "verifying"
+    await env.drain()
+    old, new = decision_rows(env, 2)
+    assert (old.id, old.status, old.final_action) == (did, "rechecked", "recheck")
+    assert (new.status, new.release_mbid) == ("pending_review", ALBUM.release_id)
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_of_an_identified_request_identifies_the_release_again(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # how a migration or a drop leaves its decision
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_given = False
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ""  # the fake MusicBrainz finds nothing to identify it by
+    assert new.release_given is False
+
+
+async def test_recheck_after_a_reopened_bad_repick_uses_the_decisions_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    ghost = "44444444-4444-4444-4444-444444444444"
+    real = env.pipeline.metadata.get_release
+
+    async def get_release(mbid: str, *, fresh: bool = False) -> AlbumInfo:
+        if mbid == ghost:
+            raise PermanentError("returned 404")
+        return await real(mbid, fresh=fresh)
+
+    env.pipeline.metadata.get_release = get_release  # type: ignore[method-assign]
+    web.post(f"/review/{did}/repick", data={"csrf_token": tok, "release": ghost})
+    await env.drain()
+    assert status(env, rid) == "review"  # reopened: the decision never recorded the ghost
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    assert [d.status for d in decision_rows(env, 2)] == ["rechecked", "pending_review"]
+    assert decision_rows(env, 2)[-1].release_mbid == ALBUM.release_id
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_without_a_matched_release_uses_the_requested_one(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_mbid = ""  # the decision never named a release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id  # the request's own release
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_prefers_the_decisions_release_to_the_requests(
+    env: Env, web: TestClient
+) -> None:
+    rid, _, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        req = s.get(Request, rid)
+        assert req
+        req.release_mbid = str(ALBUM_B.release_id)  # differs from the decision's release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id
+
+
+async def test_recheck_follows_the_decision_not_a_later_verify_of_the_request(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # a later VERIFY of the request had the release identified
+        req = s.get(Request, rid)
+        assert req
+        verify.start(s, env.clock.now(), req, None, {}, [])
+        req.status = "review"
+        s.flush()
+        for j in s.scalars(
+            select(Job).where(Job.kind == JobKind.VERIFY, Job.status != "succeeded")
+        ):
+            j.status = JobState.SUCCEEDED
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    old, new = decision_rows(env, 2)
+    assert old.id == did and old.release_given is True
+    assert (new.release_mbid, new.release_given) == (ALBUM.release_id, True)
+
+
+async def test_recheck_of_an_identified_request_after_a_repick_uses_the_repicked_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # how a migration or a drop leaves its decision
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_given = False
+    web.post(f"/review/{did}/repick", data={"csrf_token": tok, "release": str(ALBUM_B.release_id)})
+    await env.drain()
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    last = decision_rows(env, 2)[-1]
+    assert (last.status, last.release_mbid) == ("pending_review", ALBUM_B.release_id)
+    assert last.release_given is True  # the repick gave a release

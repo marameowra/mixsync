@@ -20,10 +20,10 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.migration import Group, scan
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
+from mixsync.acquire.requests import candidate_dict
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.matching import Candidate, CandidateFile
@@ -113,19 +113,10 @@ class DropFolder:
                 return 0
             for g in groups:
                 base = f"{self.source}:{_digest(g, hashes)}"
-                earlier = list(
-                    s.scalars(
-                        select(Job)
-                        .where(
-                            Job.kind == JobKind.VERIFY,
-                            Job.idempotency_key.like(f"{base}%"),
-                        )
-                        .order_by(Job.id)
-                    )
-                )
+                earlier = verify.requests_of_key(s, base)
                 key = base if not earlier else f"{base}:{len(earlier)}"
                 if earlier:
-                    last = s.get(Request, earlier[-1].payload["request_id"])
+                    last = s.get(Request, earlier[-1])
                     if len(earlier) >= MAX_ATTEMPTS and last and last.status == "failed":
                         if base not in self.capped:
                             self.capped.add(base)
@@ -153,17 +144,13 @@ class DropFolder:
                     CandidateFile(rel, size, Path(rel).suffix.lower().lstrip("."))
                     for rel, size in g.files
                 )
-                enqueue_in(
+                verify.start(
                     s,
                     now,
-                    JobKind.VERIFY,
-                    {
-                        "request_id": req.id,
-                        "release_mbid": None,
-                        "candidate": candidate_dict(Candidate("", g.folder, files)),
-                        "paths": [str(Path(g.folder) / rel) for rel, _ in g.files],
-                    },
-                    max_attempts=VERIFY_ATTEMPTS,
+                    req,
+                    None,
+                    candidate_dict(Candidate("", g.folder, files)),
+                    [str(Path(g.folder) / rel) for rel, _ in g.files],
                     idempotency_key=key,
                 )
                 queued += 1

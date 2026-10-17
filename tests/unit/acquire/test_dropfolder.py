@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
+from mixsync.acquire import verify
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.app import create_app
@@ -155,6 +156,21 @@ async def test_a_second_scan_does_not_queue_the_same_album_twice(rig: Rig) -> No
     await rig.scan()
     assert len(rig.requests()) == 1 and len(rig.env.jobs(JobKind.VERIFY)) == 1
     assert (rig.drop / "notes.txt").exists()
+
+
+async def test_a_dropped_album_starts_a_verify_that_identifies_the_release(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    (req,) = rig.requests()
+    (job,) = rig.env.jobs(JobKind.VERIFY)
+    p = job.payload
+    assert (p["request_id"], p["release_mbid"]) == (req.id, None)
+    assert len(p["paths"]) == len(ALBUM.tracks) and all(Path(x).is_absolute() for x in p["paths"])
+    assert job.max_attempts == verify.VERIFY_ATTEMPTS and job.idempotency_key
+    assert req.status == "verifying"
+    await rig.env.drain()
+    assert [d.release_given for d in decision_rows(rig.env, 2)] == [False]  # identified
 
 
 async def test_a_scan_schedules_the_next_one(rig: Rig) -> None:

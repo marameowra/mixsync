@@ -10,11 +10,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
-from mixsync.core.jobs import JobState
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band, MatchResult, Penalty
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
@@ -957,16 +957,13 @@ def _reviewed(
             s.add(m)
             s.flush()
             req.migration_id = m.id
+            d.release_given = False  # a migration had the release identified
     return did, rid
 
 
-def _verifies(sf: sessionmaker[Session], rid: int) -> list[Job]:
+def _started(sf: sessionmaker[Session], rid: int) -> bool:
     with sf() as s:
-        return [
-            j
-            for j in s.scalars(select(Job).where(Job.kind == "verify"))
-            if j.payload["request_id"] == rid
-        ]
+        return verify.started(s, rid)
 
 
 def test_recheck_requeues_against_the_release(
@@ -986,10 +983,18 @@ def test_recheck_requeues_against_the_release(
             assert d and req
             assert (d.status, d.final_action, d.acted_by) == ("rechecked", "recheck", d.user_id)
             assert d.acted_at and req.status == "verifying"
-    for q, want in ((rid, MBID), (mrid, None)):  # normal: the decision's release; migration: pick
-        (job,) = _verifies(sf, q)
-        assert job.payload["release_mbid"] == want
-        assert job.payload["paths"] == [str(downloads / "a.mp3")]
+    with sf() as s:  # one verify each; which release it uses is checked end to end in
+        for q, i, given in (
+            (rid, did, True),
+            (mrid, mig, False),
+        ):  # test_pipeline (normal: given, migration: not)
+            d = s.get(MatchDecision, i)
+            assert d and d.release_given is given and verify.running(s, q)
+    with sf() as s:  # re-verifies the files the decision was made on
+        jobs = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)).all()
+        for q in (rid, mrid):
+            (job,) = [j for j in jobs if j.payload["request_id"] == q][-1:]
+            assert job.payload["paths"] == [str(downloads / "a.mp3")]
 
 
 def test_recheck_without_a_matched_release_uses_the_requested_one(
@@ -1001,8 +1006,7 @@ def test_recheck_without_a_matched_release_uses_the_requested_one(
         assert d
         d.release_mbid = ""
     client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
-    (job,) = _verifies(sf, rid)
-    assert job.payload["release_mbid"] == MBID
+    assert _started(sf, rid)
 
 
 def test_recheck_skips_missing_files_and_unlinked_decisions(
@@ -1017,7 +1021,7 @@ def test_recheck_skips_missing_files_and_unlinked_decisions(
         for i in (gone, loose):
             d = s.get(MatchDecision, i)
             assert d and d.status == decisions.PENDING
-    assert not _verifies(sf, rid)
+    assert not _started(sf, rid)
 
 
 def test_recheck_twice_makes_one_job_and_skips_live_ones(
@@ -1025,23 +1029,20 @@ def test_recheck_twice_makes_one_job_and_skips_live_ones(
 ) -> None:
     did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
     busy, brid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
-    with sf() as s, s.begin():
-        s.add(
-            Job(
-                kind="verify",
-                payload={"request_id": brid},
-                status=JobState.QUEUED,
-                max_attempts=1,
-                run_after=datetime.now(UTC),
-            )
-        )
+    with sf() as s, s.begin():  # a re-check already waiting; the request is still in review
+        busy_req = s.get(AlbumRequest, brid)
+        assert busy_req
+        verify.start(s, datetime.now(UTC), busy_req, None, {}, [])
+        busy_req.status = "review"
     tok = _login(client, "alice")
     r = client.post("/review/recheck", data={"csrf_token": tok})
     assert "Re-queued 1 · skipped 0 (files missing) · 1 already re-checking" in (
         client.get(r.headers["location"]).text
     )
     client.post("/review/recheck", data={"csrf_token": tok})
-    assert len(_verifies(sf, rid)) == 1 and len(_verifies(sf, brid)) == 1
+    assert _started(sf, rid) and _started(sf, brid)
+    with sf() as s:
+        assert len(s.scalars(select(Job).where(Job.kind == "verify")).all()) == 2  # one each
     with sf() as s:
         d = s.get(MatchDecision, busy)
         assert d and d.status == decisions.PENDING
@@ -1067,48 +1068,6 @@ def test_recheck_scope_and_csrf(
     assert "Re-check" not in client.get("/review").text
 
 
-OTHER = "33333333-3333-3333-3333-333333333333"
-BAD = "55555555-5555-5555-5555-555555555555"
-
-
-def _last_verify(sf: sessionmaker[Session], rid: int, mbid: str | None) -> None:
-    """The VERIFY job that produced the pending decision (finished long ago)."""
-    with sf() as s, s.begin():
-        s.add(
-            Job(
-                kind="verify",
-                payload={"request_id": rid, "release_mbid": mbid},
-                status=JobState.SUCCEEDED,
-                max_attempts=1,
-                run_after=datetime.now(UTC),
-            )
-        )
-
-
-def test_recheck_reuses_the_release_of_the_last_verify(
-    client: TestClient, sf: sessionmaker[Session], downloads: Path
-) -> None:
-    path = str(downloads / "a.mp3")
-    cases = {  # (VERIFY's release, the decision's release, migration) -> payload
-        "repicked": (OTHER, OTHER, True, OTHER),
-        "identified": (None, MBID, True, None),
-        "normal": (OTHER, OTHER, False, OTHER),
-        "reopened bad repick": (BAD, MBID, False, MBID),  # the decision never recorded BAD
-    }
-    rids: dict[str, int] = {}
-    for name, (verified, chosen, migration, _) in cases.items():
-        did, rids[name] = _reviewed(sf, "alice", path, migration=migration)
-        _last_verify(sf, rids[name], verified)
-        with sf() as s, s.begin():
-            d, req = s.get(MatchDecision, did), s.get(AlbumRequest, rids[name])
-            assert d and req
-            d.release_mbid = chosen
-            req.release_mbid = "44444444-4444-4444-4444-444444444444"
-    client.post("/review/recheck", data={"csrf_token": _login(client, "alice")})
-    for name, (*_, want) in cases.items():
-        assert _verifies(sf, rids[name])[-1].payload["release_mbid"] == want, name
-
-
 def test_recheck_leaves_requests_no_longer_in_review(
     client: TestClient, sf: sessionmaker[Session], downloads: Path
 ) -> None:
@@ -1124,7 +1083,7 @@ def test_recheck_leaves_requests_no_longer_in_review(
     with sf() as s:
         d = s.get(MatchDecision, did)
         assert d and d.status == decisions.PENDING
-    assert not _verifies(sf, rid)
+    assert not _started(sf, rid)
 
 
 def test_recheck_empty_files_count_as_missing(
@@ -1158,7 +1117,7 @@ def test_recheck_survives_a_decision_acted_on_meanwhile(
     monkeypatch.setattr(decisions, "pending_for", racing)
     r = client.post("/review/recheck", data={"csrf_token": tok})
     assert r.status_code == 303 and "requeued=1&missing=0&busy=1" in r.headers["location"]
-    assert not _verifies(sf, grid) and len(_verifies(sf, orid)) == 1
+    assert not _started(sf, grid) and _started(sf, orid)
     with sf() as s:
         d = s.get(MatchDecision, ok)
         assert d and d.status == "rechecked"
