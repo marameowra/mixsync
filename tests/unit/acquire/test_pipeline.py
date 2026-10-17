@@ -1396,3 +1396,18 @@ async def test_recheck_after_a_reopened_bad_repick_uses_the_decisions_release(
     assert [d.status for d in decision_rows(env, 2)] == ["rechecked", "pending_review"]
     assert decision_rows(env, 2)[-1].release_mbid == ALBUM.release_id
     assert status(env, rid) == "review"
+
+
+async def test_recheck_without_a_matched_release_uses_the_requested_one(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_mbid = ""  # the decision never named a release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id  # the request's own release
+    assert status(env, rid) == "review"
