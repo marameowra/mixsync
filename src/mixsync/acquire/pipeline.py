@@ -666,7 +666,9 @@ class Pipeline:
                         artist=track.artist or album.artist,
                     )
                 )
-        await self._finish(job, cand, results, batch, root="discover", note=note)
+        await self._finish(
+            job, cand, results, batch, root="discover", note=note, dead_end=bool(note)
+        )
 
     async def _import_unverified(
         self, job: JobRecord, cand: Candidate, edits: dict[str, Any]
@@ -735,6 +737,7 @@ class Pipeline:
         unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
         root: str = "library",
         note: str = "",
+        dead_end: bool = False,  # the release lacks some wanted recordings (discovery)
         partial: str = "",  # "N of M tracks present": import what is here, keep looking
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
@@ -751,7 +754,7 @@ class Pipeline:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
             lifecycle.finished(
-                req, errors, notes, unverified=bool(local and recheck), dead_end=bool(note)
+                req, errors, notes, unverified=bool(local and recheck), dead_end=dead_end
             )
             if partial and not errors and not local:
                 self._keep_looking(s, now, req, cand, partial, notes)
