@@ -19,17 +19,16 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
-    VERIFY_ATTEMPTS,
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
-    enqueue_verify,
     hold_imports,
     profile_for,
     retry_search,
@@ -139,7 +138,7 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status not in ("searching", "no_results", "partial") or req.from_files:
+            if not lifecycle.can_search(req):
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -168,7 +167,7 @@ class Pipeline:
             with self.sessions.begin() as s:
                 req = self._request(s, job)
                 req.artist, req.album = album.artist[:255], album.album[:255]
-                req.status, req.last_error = "failed", "release has no tracklist"
+                lifecycle.failed(req, "release has no tracklist")
             return
         owned: set[str | None] = set()  # recordings of this album already in the library
         if wanted is not None:  # discovery: any copy of the wanted recordings will do
@@ -179,15 +178,13 @@ class Pipeline:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
                     req.release_group_mbid = req.release_group_mbid or album.release_group_id
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
                 return
             if album.tracks and not wanted & {t.recording_id for t in album.tracks}:
                 with self.sessions.begin() as s:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
-                    req.status = "failed"
-                    # must start with discovery.playlists.NOT_ON_RELEASE (is_dead_end)
-                    req.last_error = "none of the wanted recordings are on this release"
+                    lifecycle.dead_end(req, "none of the wanted recordings are on this release")
                 return
         elif album.release_group_id and album.tracks:
             with self.sessions() as s:
@@ -200,7 +197,7 @@ class Pipeline:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
                     req.release_group_mbid = req.release_group_mbid or album.release_group_id
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
                 return
         ranked: list[tuple[Candidate, Any]] = []
         for q in self.queries(album.artist, album.album):
@@ -228,8 +225,7 @@ class Pipeline:
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
                 ]
                 req.no_results_attempts += 1
-                # a partial album keeps its label while it waits for the rest
-                req.status = "partial" if req.status == "partial" else "no_results"
+                lifecycle.no_results(req)
                 req.next_search_at = now + delay
                 enqueue_in(
                     s,
@@ -250,7 +246,7 @@ class Pipeline:
                 stage=1,
                 release_mbid=mbid,
             )
-            req.status, req.no_results_attempts = "downloading", 0
+            lifecycle.downloading(req)
             req.next_search_at = now + SEARCH_DEBOUNCE
             enqueue_in(
                 s,
@@ -322,18 +318,13 @@ class Pipeline:
             if problem:  # never import a missing or partial file (SK-P04)
                 retry_search(s, now, req, cand.username, cand.folder, problem)
                 return
-            req.status = "verifying"
-            enqueue_in(
+            verify.start(
                 s,
                 now,
-                JobKind.VERIFY,
-                {
-                    "request_id": req.id,
-                    "release_mbid": req.release_mbid,
-                    "candidate": p["candidate"],
-                    "paths": list(info.local_paths),
-                },
-                max_attempts=VERIFY_ATTEMPTS,
+                req,
+                req.release_mbid,
+                p["candidate"],
+                list(info.local_paths),
                 idempotency_key=f"verify:{job.id}",
             )
 
@@ -467,7 +458,7 @@ class Pipeline:
                     f"would need review, which discovery skips: {why}",
                 )
             elif result.band is Band.REVIEW:
-                req.status = "review"
+                lifecycle.review(req)
             else:  # files stay in /downloads: reject never deletes
                 retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
 
@@ -490,7 +481,7 @@ class Pipeline:
         ):
             if Evidence.parse(d.evidence).request_id == req.id:
                 decisions.reopen(s, d.id)
-                req.status, req.last_error = "review", f"release {mbid} not found on MusicBrainz"
+                lifecycle.review(req, f"release {mbid} not found on MusicBrainz")
                 return
         raise PermanentError(f"release {mbid} not found on MusicBrainz")
 
@@ -545,7 +536,7 @@ class Pipeline:
             raise PermanentError("the decision assigns no files to import")
         album = await self.metadata.get_release(mbid)
         # Same batch id on every retry, so a resumed import skips what is already in.
-        batch = f"request-{rid}-decision-{did}"
+        batch = verify.batch_id(rid, did)
         files: list[tuple[Path, TrackInfo, str | None]] = []
         for path, track, acoustid in evidence.resolve(album):
             if track is None:  # the release changed since verify
@@ -555,7 +546,7 @@ class Pipeline:
                         "imported; check it by hand"
                     )
                 with self.sessions.begin() as s:
-                    enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
+                    verify.again(s, self.clock.now(), self._request(s, job), mbid, evidence)
                 return
             files.append((path, track, acoustid))
         if wanted is not None:
@@ -600,7 +591,7 @@ class Pipeline:
                     text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
                     self._keep_looking(s, self.clock.now(), req, cand, text)
                 else:
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
             return
         results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
@@ -645,10 +636,11 @@ class Pipeline:
             with self.sessions.begin() as s:
                 req = self._request(s, job)
                 if todo:
-                    req.status = "failed"
-                    req.last_error = "none of the wanted recordings are on the downloaded release"
+                    lifecycle.dead_end(
+                        req, "none of the wanted recordings are on the downloaded release"
+                    )
                 else:  # everything wanted is owned by now
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
             return
         results = await self._import_files(files, album, "verified", batch, "discover")
         by_src = {f[0]: f for f in files}
@@ -692,7 +684,7 @@ class Pipeline:
             )
             for t in edits["tracks"]
         ]
-        batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
+        batch = verify.batch_id(job.payload["request_id"], job.payload["decision_id"])
         results = await self._import_files(files, album, "unverified", batch)
         year = str(edits["year"]) if edits["year"] else ""
         await self._finish(job, cand, results, batch, (album.artist, album.album, year))
@@ -754,16 +746,15 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            req.status = "failed" if errors else "imported"
-            if local and recheck and not errors:
-                req.status = "unverified"
             notes = [*errors, *([note] if note else [])]
             if unassigned:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
-            req.last_error = "; ".join(notes) or None
+            lifecycle.finished(
+                req, errors, notes, unverified=bool(local and recheck), dead_end=bool(note)
+            )
             if partial and not errors and not local:
-                self._keep_looking(s, now, req, cand, "; ".join([partial, *notes]))
+                self._keep_looking(s, now, req, cand, partial, notes)
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
@@ -772,11 +763,18 @@ class Pipeline:
                     enqueue_recheck(s, now, recheck, None)
 
     @staticmethod
-    def _keep_looking(s: Session, now: datetime, req: Request, cand: Candidate, text: str) -> None:
+    def _keep_looking(
+        s: Session,
+        now: datetime,
+        req: Request,
+        cand: Candidate,
+        partial: str,
+        notes: list[str] | None = None,
+    ) -> None:
         """Open until the rest of the album is here. The next search skips owned recordings and
         the import drops them, so nothing already imported is touched."""
         delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
-        req.status, req.last_error = "partial", f"partial: {text}"
+        lifecycle.keep_looking(req, partial, notes or [])
         req.tried = [*req.tried, [cand.username, cand.folder]]
         req.no_results_attempts += 1
         req.next_search_at = now + delay
@@ -859,16 +857,7 @@ class Pipeline:
 
 def _stale(s: Session, job: JobRecord, req: Request) -> bool:
     """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
-    newer = s.scalar(
-        select(Job.id)
-        .where(
-            Job.kind == JobKind.VERIFY,
-            Job.id > job.id,
-            Job.payload["request_id"].as_integer() == req.id,
-        )
-        .limit(1)
-    )
-    return req.status != "verifying" or newer is not None
+    return req.status != "verifying" or verify.superseded(s, job.id, req.id)
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:

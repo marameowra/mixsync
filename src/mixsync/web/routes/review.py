@@ -8,16 +8,14 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 
+from mixsync.acquire import verify
 from mixsync.acquire.evidence import Evidence
-from mixsync.acquire.requests import apply_review, enqueue_verify
+from mixsync.acquire.requests import apply_review
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
@@ -98,8 +96,8 @@ def review_list(
 @router.post("/recheck")
 def recheck(user: User, db: Db) -> RedirectResponse:
     """Verify every pending review again with the current scorer: the decision is closed and the
-    files go back through VERIFY against the release the last VERIFY of the request used (a
-    repick, or none for a migration that identified it). No network here."""
+    files go back through VERIFY against the release the request was given (a repick, or none
+    for a migration that identified it). No network here."""
     now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
     for d in decisions.pending_for(db, _owner(user)):
         ev = Evidence.parse(d.evidence)
@@ -116,15 +114,7 @@ def recheck(user: User, db: Db) -> RedirectResponse:
         ):
             missing += 1
             continue
-        if db.scalar(
-            select(Job.id)
-            .where(
-                Job.kind == JobKind.VERIFY,
-                Job.status.in_(LIVE),
-                Job.payload["request_id"].as_integer() == req.id,
-            )
-            .limit(1)
-        ):
+        if verify.running(db, req.id):
             busy += 1
             continue
         try:
@@ -132,19 +122,7 @@ def recheck(user: User, db: Db) -> RedirectResponse:
         except decisions.DecisionStateError:  # acted on since the list was read
             busy += 1
             continue
-        last = db.scalar(
-            select(Job.payload)
-            .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
-            .order_by(Job.id.desc())
-            .limit(1)
-        )
-        # The last VERIFY only says whether a release was given (a migration may have had it
-        # identified); the release itself comes from the decision, as a reopened bad repick leaves
-        # a VERIFY for a release the decision never recorded. Without a VERIFY (shortcut): a
-        # migration re-picks, any other request has its release.
-        given = last["release_mbid"] if last else not req.migration_id
-        mbid = (d.release_mbid or req.release_mbid) if given else None
-        enqueue_verify(db, now, req, mbid, ev)
+        verify.recheck(db, now, req, d)
         queued += 1
     return RedirectResponse(
         f"/review?requeued={queued}&missing={missing}&busy={busy}&stale={stale}", status_code=303

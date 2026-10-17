@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from mixsync.acquire.lifecycle import is_dead_end
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind
@@ -19,7 +20,6 @@ from mixsync.db import canonical as canonical_db
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import CanonicalRelease, Track
 from mixsync.db.models.work import Request
-from mixsync.discovery.playlists import is_dead_end
 
 from .conftest import Env
 from .fakes import ALBUM, BIG
@@ -225,6 +225,7 @@ async def test_wanted_recordings_missing_from_the_release(env: Env) -> None:
     with env.sessions() as s:
         req = s.get(Request, none)
         assert req and "none of the wanted recordings" in (req.last_error or "")
+        assert is_dead_end(req)
 
     some = discovery(env, (WANTED[0], "not-on-it"))
     await env.drain()
@@ -232,6 +233,18 @@ async def test_wanted_recordings_missing_from_the_release(env: Env) -> None:
     with env.sessions() as s:
         req = s.get(Request, some)
         assert req and req.last_error == "1 of 2 wanted recordings not on this release"
+        assert is_dead_end(req)
+
+
+async def test_a_download_without_the_wanted_recording_is_a_dead_end(env: Env) -> None:
+    short = replace(BIG, tracks=tuple(t for t in BIG.tracks if t.recording_id != WANTED[0]))
+    env.source.add("peer1", FOLDER, short)
+    rid = discovery(env, (WANTED[0],))
+    await env.drain()
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.status == "failed" and is_dead_end(req)
+        assert "downloaded release" in (req.last_error or "")
 
 
 async def test_a_search_stage_failure_is_a_discovery_dead_end(env: Env) -> None:
