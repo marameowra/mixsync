@@ -808,6 +808,22 @@ async def test_a_skipped_album_can_be_retried(rig: Rig, web: TestClient) -> None
     assert rig.requests()[0].status == "verifying"
 
 
+async def test_retrying_a_dead_end_album_clears_the_dead_end(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (d,) = decision_rows(rig.env, 2)
+    form = {"csrf_token": login(web, "root")}
+    web.post(f"/review/{d.id}/reject", data=form)
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:
+        s.get_one(Request, req.id).dead_end = True
+    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
+    (req,) = rig.requests()
+    assert req.status == "verifying" and req.dead_end is False
+
+
 async def test_the_page_reports_every_running_migration_and_all_failures(
     rig: Rig, web: TestClient
 ) -> None:

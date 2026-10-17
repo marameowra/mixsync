@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import lifecycle
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db.models.auth import MatchingProfile, User
@@ -108,17 +109,14 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
 def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
     """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
     if req.from_files:  # nothing to search for: a person must look at the files
-        req.status, req.last_error = "failed", why
+        lifecycle.download_failed(req, False, why)
         return
     req.tried = [*req.tried, [peer, folder]]
-    if s.scalar(
-        select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)
-    ):  # part of the album is already in: it stays a partial request while the rest is sought
-        kept = (req.last_error or "").split("; ")[0]
-        req.status = "partial"
-        req.last_error = "; ".join([kept if kept.startswith("partial: ") else "partial", why])
-    else:
-        req.status, req.last_error = "searching", why
+    has_tracks = (
+        s.scalar(select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1))
+        is not None
+    )
+    lifecycle.download_failed(req, has_tracks, why)
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
 
@@ -134,7 +132,7 @@ def enqueue_rescan(s: Session, now: datetime) -> None:
 
 
 def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) -> None:
-    req.status = "importing"
+    lifecycle.importing(req)
     enqueue_in(
         s,
         now,
@@ -149,7 +147,7 @@ def enqueue_verify(
 ) -> None:
     """Verify the downloaded files again, against `release_mbid` (a repick, or a release that
     changed under a stored assignment)."""
-    req.status = "verifying"
+    lifecycle.verifying(req)
     enqueue_in(
         s,
         now,
@@ -176,7 +174,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     elif d.final_action == "repick":
         enqueue_verify(s, now, req, d.chosen_release_mbid, d.evidence)
     elif req.from_files:  # no other candidate to look for: the album stays out
-        req.status, req.last_error = "skipped", "rejected in review"
+        lifecycle.rejected(req)
     else:
         retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
 

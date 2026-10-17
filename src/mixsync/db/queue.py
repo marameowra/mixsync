@@ -6,13 +6,13 @@ from sqlalchemy import Connection, Engine, Row, Table, exists, select, update
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import lifecycle
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition
 from mixsync.db.models.work import Job, Request
 
 _J = cast(Table, Job.__table__)
 _R = cast(Table, Request.__table__)
-_IN_PROGRESS = ("searching", "no_results", "partial", "downloading", "verifying", "importing")
 
 
 class LeaseLostError(Exception):
@@ -43,18 +43,20 @@ def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None
     payload: dict[str, Any] = (
         c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
     )
-    if "request_id" in payload:
+    if "request_id" in payload:  # SQL, not lifecycle: a compare-and-set on the request
         c.execute(
             update(_R)
             .where(
                 _R.c.id == payload["request_id"],
-                _R.c.status.in_(_IN_PROGRESS),
+                _R.c.status.in_(lifecycle.IN_PROGRESS),
                 ~exists().where(
                     _J.c.id > job_id,
                     _J.c.payload["request_id"].as_integer() == payload["request_id"],
                 ),
             )
-            .values(status="failed", last_error=error, updated_at=now)
+            .values(
+                status="failed", dead_end=False, partial_note=None, last_error=error, updated_at=now
+            )
         )
 
 
