@@ -8,6 +8,7 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
 from mixsync.acquire.requests import create_request
 from mixsync.core.capabilities import Capability
@@ -112,7 +113,7 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
         MatchDecision.status == decisions.PENDING, MatchDecision.stage == 2
     )
     for d in db.scalars(pending):
-        if d.evidence.get("request_id") == req.id:
+        if Evidence.parse(d.evidence).request_id == req.id:
             try:
                 decisions.act(db, d.id, user_id, "reject")
             except decisions.DecisionStateError:
