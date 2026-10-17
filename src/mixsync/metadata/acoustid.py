@@ -44,10 +44,16 @@ def _duration(path: Path) -> float | None:
         return None
 
 
-async def _flac_fully_decodes(path: Path) -> bool:
-    """Does ffmpeg decode every sample STREAMINFO promises? False for any other format or error."""
+def _flac_info(path: Path) -> Any | None:
     try:
-        info = cast(Any, FLAC(path).info)  # pyright: ignore[reportUnknownMemberType]
+        return FLAC(path).info  # pyright: ignore[reportUnknownMemberType]
+    except Exception:
+        return None
+
+
+async def _flac_fully_decodes(path: Path, info: Any) -> bool:
+    """Does ffmpeg decode every sample STREAMINFO promises?"""
+    try:
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-nostdin", "-xerror", "-v", "quiet", "-i", str(path),
             "-map", "0:a", "-f", "s16le", "-",
@@ -57,23 +63,29 @@ async def _flac_fully_decodes(path: Path) -> bool:
         )  # fmt: skip
     except FileNotFoundError as e:
         raise RuntimeError("ffmpeg is not installed or not on PATH") from e
-    except Exception:
-        return False
     assert proc.stdout is not None
     size = 0
-    while chunk := await proc.stdout.read(1 << 20):  # counted, not kept: files can be large
-        size += len(chunk)
-    await proc.wait()
+    try:
+        while chunk := await proc.stdout.read(1 << 20):  # counted, not kept: files can be large
+            size += len(chunk)
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+        await proc.wait()
     return bool(info.total_samples) and size == info.total_samples * info.channels * 2
 
 
 async def fingerprint(path: Path) -> Fingerprint:
+    # fpcalc can exit 0 on a FLAC whose last frames are corrupt, so decode it all first.
+    info = await asyncio.to_thread(_flac_info, path)
+    if info is not None and not await _flac_fully_decodes(path, info):
+        raise PermanentError(f"{path} does not decode completely")
     code, out, err = await _fpcalc("-json", str(path))
-    if code != 0:
+    if code != 0 and info is not None:
         # Junk after the last frame makes fpcalc exit 3 on intact audio; stopping 1 s early
-        # skips it. Only do that when every sample decodes, or it would hide a corrupt tail.
+        # skips it. Safe because the whole stream decoded above.
         duration = await asyncio.to_thread(_duration, path)
-        if duration is not None and duration > 1 and await _flac_fully_decodes(path):
+        if duration is not None and duration > 1:
             code, out, _ = await _fpcalc("-length", str(int(duration) - 1), "-json", str(path))
     if code != 0:
         raise PermanentError(f"fpcalc failed on {path}: {err.decode(errors='replace').strip()}")
