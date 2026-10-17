@@ -844,6 +844,13 @@ def test_detail_shows_source_duration(client: TestClient, sf: sessionmaker[Sessi
     assert "3:05" in client.get(f"/review/{i}").text
 
 
+def test_detail_lists_unreadable_files(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _extra_decision(sf, "alice", unreadable=["/old/02 Broken.mp3"])
+    _login(client, "alice")
+    html = client.get(f"/review/{i}").text
+    assert "Unreadable files" in html and "/old/02 Broken.mp3" in html
+
+
 def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) -> None:
     class Fake:
         seen: tuple[str, str | None] | None = None

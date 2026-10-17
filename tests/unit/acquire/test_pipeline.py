@@ -452,6 +452,26 @@ async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
     assert status(env, rid) == "imported"
 
 
+async def test_a_download_with_an_unreadable_file_goes_back_to_search(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    real = env.pipeline.fingerprint
+
+    async def fingerprint(path: Path) -> Any:
+        if path.name.endswith("Song Two.mp3"):
+            raise PermanentError("fpcalc cannot decode this file")
+        return await real(path)
+
+    env.pipeline = replace(env.pipeline, fingerprint=fingerprint)
+    env.handlers = env.pipeline.handlers()
+    rid = request(env)
+    await env.drain(until=lambda: bool(tried(env, rid)))
+
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and "Song Two.mp3" in (req.last_error or "")
+    assert decision_rows(env, 2) == [] and library(env) == []
+
+
 @pytest.mark.parametrize("fault", ["wrong_size", "missing"])
 async def test_bad_download_is_never_imported(env: Env, fault: str) -> None:
     if fault == "wrong_size":

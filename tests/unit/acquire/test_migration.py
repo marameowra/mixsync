@@ -409,6 +409,48 @@ async def test_mark_unverified_copies_and_leaves_the_source(rig: Rig, web: TestC
     assert rig.tree() == before and rig.env.source.cleared == []
 
 
+async def _unreadable_album(rig: Rig, bad: str | None) -> Path:
+    src = put_album(rig.root, "Alpha Band/Alpha Album")
+    real = rig.env.pipeline.fingerprint
+
+    async def fingerprint(path: Path) -> Any:
+        if bad is None or path.name == bad:
+            raise PermanentError("fpcalc cannot decode this file")
+        return await real(path)
+
+    rig.env.pipeline = replace(rig.env.pipeline, fingerprint=fingerprint)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+    rig.meta.refs = [ref(ALBUM)]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+    return src
+
+
+async def test_one_unreadable_track_sends_a_migrated_album_to_review(rig: Rig) -> None:
+    src = await _unreadable_album(rig, "02 Song Two.mp3")
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.band, d.release_mbid) == ("review", "review", ALBUM.release_id)
+    assert d.evidence["unreadable"] == [str(src / "02 Song Two.mp3")]
+
+
+async def test_accepting_imports_only_the_readable_files(rig: Rig, web: TestClient) -> None:
+    src = await _unreadable_album(rig, "02 Song Two.mp3")
+    (d,) = decision_rows(rig.env, 2)
+    tok = login(web, "root")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await rig.env.drain()
+    assert len(library(rig.env)) == 1 and "Song Two" not in library(rig.env)[0]
+    assert (src / "02 Song Two.mp3").exists()
+
+
+async def test_a_migrated_album_with_no_readable_file_fails(rig: Rig) -> None:
+    await _unreadable_album(rig, None)
+    (req,) = rig.requests()
+    assert req.status == "failed" and "fpcalc cannot decode" in (req.last_error or "")
+    assert decision_rows(rig.env, 2) == []
+
+
 async def test_acoustid_outage_retries_a_migrated_album(rig: Rig) -> None:
     put_album(rig.root, "Alpha Band/Alpha Album", mbid=str(ALBUM.release_id))
     rig.confirm(await rig.preflight())

@@ -75,6 +75,12 @@
   <p>These are not imported by Accept:</p>
   <ul>{% for x in extra %}<li>{{ x }}</li>{% endfor %}</ul>
   {% endif %}
+  {% set bad = d.evidence.get("unreadable", []) %}
+  {% if bad %}
+  <h3>Unreadable files</h3>
+  <p>These could not be fingerprinted and are not imported by Accept:</p>
+  <ul>{% for x in bad %}<li>{{ x }}</li>{% endfor %}</ul>
+  {% endif %}
   {% set dd = d.evidence.get("duration_deltas", []) %}
   {% if dd %}
   <h3>Duration deltas</h3>

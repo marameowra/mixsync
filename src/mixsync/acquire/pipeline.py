@@ -370,16 +370,35 @@ class Pipeline:
                             why,
                         )
                 return
-        files: list[FileTrack] = []
-        for path in paths:
-            fp = await self.fingerprint(path)
-            results = await self.acoustid.lookup(fp)
-            files.append(file_track(path, fp.duration, tuple(results)))
-        like = likelies(paths)
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.from_files
             provisional = req.provisional
+        files: list[FileTrack] = []
+        readable: list[Path] = []
+        unreadable: list[str] = []
+        failure: PermanentError | None = None
+        for path in paths:
+            try:
+                fp = await self.fingerprint(path)
+            except PermanentError as e:  # fpcalc cannot decode this one file
+                failure = e
+                unreadable.append(str(path))
+                continue
+            results = await self.acoustid.lookup(fp)
+            files.append(file_track(path, fp.duration, tuple(results)))
+            readable.append(path)
+        if failure and not (migrating and files):  # only a migrated album can go on without them
+            if migrating:
+                raise failure
+            with self.sessions.begin() as s:
+                if not _stale(s, job, self._request(s, job)):
+                    why = f"unreadable audio: {Path(unreadable[0]).name}: {failure}"
+                    retry_search(
+                        s, self.clock.now(), self._request(s, job), cand.username, cand.folder, why
+                    )
+            return
+        like = likelies(readable)
         if album is not None:
             result = score_files(files, like, album, profile)
         else:
@@ -391,14 +410,14 @@ class Pipeline:
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
         assignment = [
             {
-                "local_path": str(paths[index[id(f)]]),
+                "local_path": str(readable[index[id(f)]]),
                 "track": track_no[id(t)],  # old decisions have only this
                 "recording_id": t.recording_id,
                 "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
         ]
-        unassigned = [str(paths[index[id(f)]]) for f in extra]  # import copies only the paired
+        unassigned = [str(readable[index[id(f)]]) for f in extra]  # import copies only the paired
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         partial = ""
@@ -414,6 +433,8 @@ class Pipeline:
                 and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
             ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
+        if unreadable and result.band is Band.AUTO_ACCEPT:  # a human sees what was left out
+            result = replace(result, band=Band.REVIEW)
         evidence = Evidence.verified(
             p["request_id"],
             p["candidate"],
@@ -421,6 +442,7 @@ class Pipeline:
             paths,
             album,
             unassigned=unassigned,
+            unreadable=unreadable,
             partial=partial,
             acoustid=[_best(f) for f in files],
             duration_deltas=[abs((f.length or 0) - (t.length or 0)) for f, t in pairs],

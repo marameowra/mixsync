@@ -36,6 +36,7 @@ def test_round_trip_through_json_keeps_the_stored_shape() -> None:
         "request_id",
         "candidate",
         "unassigned",
+        "unreadable",
         "partial",
         "source",
         "target",
