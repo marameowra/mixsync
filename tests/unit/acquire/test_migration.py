@@ -213,7 +213,8 @@ async def test_confirm_makes_low_priority_jobs_once(rig: Rig) -> None:
     assert all(Path(x).is_absolute() for x in p["paths"])
     assert [j.idempotency_key for j in jobs] == [f"migrate:{mid}:0", f"migrate:{mid}:1"]
     assert all(j.max_attempts == verify.VERIFY_ATTEMPTS for j in jobs)
-    assert [r.release_given for r in reqs] == [False, False]  # identified, not given
+    await rig.env.drain()
+    assert [d.release_given for d in decision_rows(rig.env, 2)] == [False, False]  # identified
 
 
 async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
@@ -739,8 +740,8 @@ async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
     jobs = rig.env.jobs(JobKind.VERIFY)
     assert len(jobs) == 2 and jobs[1].priority == mig.MIGRATION_PRIORITY
     assert jobs[1].payload == {**jobs[0].payload, "release_mbid": None}  # the same files again
-    assert rig.requests()[0].release_given is False
     await rig.env.drain()  # matched again: a fresh review item to repick or mark unverified
+    assert decision_rows(rig.env, 2)[-1].release_given is False
     assert rig.requests()[0].status == "review"
     assert [x.status for x in decision_rows(rig.env, 2)] == ["pending_review", "pending_review"]
     assert web.post(f"/migration/{mid}/retry/999", data=form).status_code == 404

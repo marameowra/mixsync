@@ -957,7 +957,7 @@ def _reviewed(
             s.add(m)
             s.flush()
             req.migration_id = m.id
-            req.release_given = False  # a migration had the release identified
+            d.release_given = False  # a migration had the release identified
     return did, rid
 
 
@@ -984,12 +984,12 @@ def test_recheck_requeues_against_the_release(
             assert (d.status, d.final_action, d.acted_by) == ("rechecked", "recheck", d.user_id)
             assert d.acted_at and req.status == "verifying"
     with sf() as s:  # one verify each; which release it uses is checked end to end in
-        for q, given in (
-            (rid, True),
-            (mrid, False),
+        for q, i, given in (
+            (rid, did, True),
+            (mrid, mig, False),
         ):  # test_pipeline (normal: given, migration: not)
-            req = s.get(AlbumRequest, q)
-            assert req and req.release_given is given and verify.running(s, q)
+            d = s.get(MatchDecision, i)
+            assert d and d.release_given is given and verify.running(s, q)
     with sf() as s:  # re-verifies the files the decision was made on
         jobs = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)).all()
         for q in (rid, mrid):

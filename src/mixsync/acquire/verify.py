@@ -2,7 +2,7 @@
 re-check), and the batch id of the import that follows it.
 
 The only place that builds or reads VERIFY payloads and `request-<id>-decision-<id>` batch ids.
-Whether a request's release was given or identified is kept on the request (`release_given`),
+Whether a decision's release was given or identified is kept on the decision (`release_given`),
 so nothing has to read old jobs back to know. Nothing here commits: the job is added in the
 caller's transaction, next to the state it belongs with (ADR 0004).
 """
@@ -53,7 +53,6 @@ def start(
 ) -> None:
     """Verify `paths` against `release_mbid`, or None to have the release identified."""
     lifecycle.verifying(req)
-    req.release_given = bool(release_mbid)
     enqueue_in(
         s,
         now,
@@ -86,9 +85,9 @@ def again(
 
 
 def recheck(s: Session, now: datetime, req: Request, d: MatchDecision) -> None:
-    """Verify again with the current scorer. A request whose release was given keeps the one
-    the decision recorded; one that was identified is identified again."""
-    given = (d.release_mbid or req.release_mbid) if req.release_given else None
+    """Verify again with the current scorer. A decision whose release was given keeps the one
+    it recorded; one that was identified is identified again."""
+    given = (d.release_mbid or req.release_mbid) if d.release_given else None
     again(s, now, req, given, d.evidence)
 
 

@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0019_request_release_given"
+    assert _version(settings) == "0019_decision_release_given"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0019_request_release_given"
+    assert _version(settings) == "0019_decision_release_given"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
@@ -35,7 +35,7 @@ def test_models_match_migrations(settings: Settings) -> None:
     assert diff == []
 
 
-def test_release_given_is_backfilled_from_the_last_verify(settings: Settings) -> None:
+def test_decision_release_given_is_backfilled_from_the_last_verify(settings: Settings) -> None:
     upgrade("0018_request_lifecycle")
     day = "'2026-01-01'"
     with make_engine(settings).begin() as c:
@@ -70,11 +70,29 @@ def test_release_given_is_backfilled_from_the_last_verify(settings: Settings) ->
                 ),
                 {"p": json.dumps({"request_id": rid, "release_mbid": release})},
             )
+        for did, rid in ((1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, None)):
+            c.execute(
+                text(
+                    "INSERT INTO match_decisions (id, user_id, stage, release_mbid, band, distance,"
+                    " breakdown, vetoes, scorer_version, evidence, status, created_at, updated_at)"
+                    " VALUES (:i, 1, 2, '', 'review', 0.5, '[]', '[]', 1, :e, 'pending_review',"
+                    f" {day}, {day})"
+                ),
+                {"i": did, "e": json.dumps({} if rid is None else {"request_id": rid})},
+            )
     upgrade()
     with make_engine(settings).connect() as c:
-        got = dict(c.execute(text("SELECT id, release_given FROM requests")).all())
-    # the last VERIFY decides; with none, only a migration's request was identified
-    assert {k: bool(v) for k, v in got.items()} == {1: True, 2: False, 3: True, 4: False, 5: False}
+        got = dict(c.execute(text("SELECT id, release_given FROM match_decisions")).all())
+    # the request's last VERIFY decides; with none, only a migration's request was identified;
+    # a decision with no request keeps the default
+    assert {k: bool(v) for k, v in got.items()} == {
+        1: True,
+        2: False,
+        3: True,
+        4: False,
+        5: False,
+        6: True,
+    }
 
 
 def test_pre_0012_file_op_reads_back_as_library(settings: Settings) -> None:
