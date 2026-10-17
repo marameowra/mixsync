@@ -52,7 +52,7 @@ def start(
 ) -> None:
     """Verify `paths` against `release_mbid`, or None to have the release identified."""
     req.status = "verifying"
-    req.release_given = release_mbid is not None
+    req.release_given = bool(release_mbid)
     enqueue_in(
         s,
         now,

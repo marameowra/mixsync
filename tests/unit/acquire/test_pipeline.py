@@ -1411,3 +1411,36 @@ async def test_recheck_without_a_matched_release_uses_the_requested_one(
     _, new = decision_rows(env, 2)
     assert new.release_mbid == ALBUM.release_id  # the request's own release
     assert status(env, rid) == "review"
+
+
+async def test_recheck_prefers_the_decisions_release_to_the_requests(
+    env: Env, web: TestClient
+) -> None:
+    rid, _, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        req = s.get(Request, rid)
+        assert req
+        req.release_mbid = str(ALBUM_B.release_id)  # differs from the decision's release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id
+
+
+async def test_recheck_of_an_identified_request_after_a_repick_uses_the_repicked_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # how a migration or a drop leaves its request
+        req = s.get(Request, rid)
+        assert req
+        req.release_given = False
+    web.post(f"/review/{did}/repick", data={"csrf_token": tok, "release": str(ALBUM_B.release_id)})
+    await env.drain()
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    last = decision_rows(env, 2)[-1]
+    assert (last.status, last.release_mbid) == ("pending_review", ALBUM_B.release_id)
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.release_given is True
