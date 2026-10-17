@@ -116,12 +116,15 @@ async def test_corrupt_tail_fixture_passes_plain_fpcalc(tmp_path: Path) -> None:
     assert (await acoustid._fpcalc("-json", str(flac)))[0] == 0  # pyright: ignore[reportPrivateUsage]
 
 
-async def test_fingerprint_rejects_flac_without_total_samples(tmp_path: Path) -> None:
+async def test_fingerprint_flac_without_total_samples(tmp_path: Path) -> None:
     flac = make_flac(tmp_path / "nototal.flac")
     data = bytearray(flac.read_bytes())
-    data[21] &= 0xF0  # STREAMINFO total_samples (36 bits) -> 0
+    data[21] &= 0xF0  # STREAMINFO total_samples (36 bits) -> 0: unknown length, still valid
     data[22:26] = bytes(4)
     flac.write_bytes(bytes(data))
+    assert (await fingerprint(flac)).fingerprint
+    with flac.open("ab") as f:  # fpcalc now fails and there is no proven decode to retry on
+        f.write(b"\x55\xaa" * 2048)
     with pytest.raises(PermanentError):
         await fingerprint(flac)
 

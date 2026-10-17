@@ -72,16 +72,20 @@ async def _flac_fully_decodes(path: Path, info: Any) -> bool:
         if proc.returncode is None:
             proc.kill()
         await proc.wait()
-    return bool(info.total_samples) and size == info.total_samples * info.channels * 2
+    return size == info.total_samples * info.channels * 2
 
 
 async def fingerprint(path: Path) -> Fingerprint:
     # fpcalc can exit 0 on a FLAC whose last frames are corrupt, so decode it all first.
     info = await asyncio.to_thread(_flac_info, path)
-    if info is not None and not await _flac_fully_decodes(path, info):
-        raise PermanentError(f"{path} does not decode completely")
+    # shortcut: total_samples == 0 (unknown length) cannot be compared, so it is not checked
+    proven = False
+    if info is not None and info.total_samples:
+        proven = await _flac_fully_decodes(path, info)
+        if not proven:
+            raise PermanentError(f"{path} does not decode completely")
     code, out, err = await _fpcalc("-json", str(path))
-    if code != 0 and info is not None:
+    if code != 0 and proven:
         # Junk after the last frame makes fpcalc exit 3 on intact audio; stopping 1 s early
         # skips it. Safe because the whole stream decoded above.
         duration = await asyncio.to_thread(_duration, path)
