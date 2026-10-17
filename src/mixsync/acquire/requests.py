@@ -131,7 +131,7 @@ def enqueue_rescan(s: Session, now: datetime) -> None:
 
 
 def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) -> None:
-    req.status = "importing"
+    lifecycle.importing(req)
     enqueue_in(
         s,
         now,

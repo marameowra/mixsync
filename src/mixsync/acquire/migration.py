@@ -23,7 +23,7 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import verify
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import candidate_dict
 from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
@@ -227,9 +227,9 @@ def confirm(s: Session, now: datetime, m: Migration) -> int:
             release_mbid="",
             artist=g.artist[:255],
             album=(g.album or Path(g.folder).name)[:255],
-            status="verifying",
             migration_id=m.id,
         )
+        lifecycle.verifying(req)
         s.add(req)
         s.flush()
         files = tuple(
@@ -269,16 +269,15 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
         return "its imported files were later merged or removed"
     if batch is None and not verify.started(s, req.id):
         return "it was never matched"
-    values = (
-        {"status": "importing", "last_error": None}
-        if batch
-        else {"status": "verifying", "release_mbid": "", "last_error": None}
+    # SQL, not lifecycle: an atomic compare-and-set, so a double click claims the retry once
+    values = {"dead_end": False, "partial_note": None, "last_error": None} | (
+        {"status": "importing"} if batch else {"status": "verifying", "release_mbid": ""}
     )
     claimed = cast(
         CursorResult[Any],
         s.execute(
             update(Request)
-            .where(Request.id == req.id, Request.status.in_(("failed", "skipped")))
+            .where(Request.id == req.id, Request.status.in_(lifecycle.NO_FILE))
             .values(values)
         ),
     )

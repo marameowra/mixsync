@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, String, and_, cast, literal, select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import lifecycle
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
@@ -51,7 +52,7 @@ def start(
     idempotency_key: str | None = None,
 ) -> None:
     """Verify `paths` against `release_mbid`, or None to have the release identified."""
-    req.status = "verifying"
+    lifecycle.verifying(req)
     req.release_given = bool(release_mbid)
     enqueue_in(
         s,

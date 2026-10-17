@@ -1,8 +1,10 @@
+from typing import get_args
+
 from mixsync.acquire import lifecycle
-from mixsync.db.models.work import Request
+from mixsync.db.models.work import Request, Status
 
 
-def _req(status: str = "searching", **kw: object) -> Request:
+def _req(status: Status = "searching", **kw: object) -> Request:
     return Request(user_id=1, release_mbid="m", status=status, recording_mbids=["a", "b"], **kw)
 
 
@@ -50,3 +52,60 @@ def test_status_questions() -> None:
     assert lifecycle.can_search(_req("no_results")) and not lifecycle.can_search(_req("review"))
     assert not lifecycle.can_search(_req("partial", source="adopt"))
     assert lifecycle.is_busy(_req("importing")) and lifecycle.is_waiting(_req("partial"))
+
+
+def test_every_status_is_in_a_set_and_unverified_is_done_but_has_a_file() -> None:
+    sets = (lifecycle.OPEN, lifecycle.DONE, lifecycle.IN_PROGRESS)
+    assert all(any(st in group for group in sets) for st in get_args(Status))
+    assert "unverified" in lifecycle.DONE and "unverified" not in lifecycle.NO_FILE
+
+
+def test_only_dead_end_transitions_set_dead_end() -> None:
+    to_clear = (
+        lambda r: lifecycle.failed(r, "x"),
+        lifecycle.owned,
+        lifecycle.no_results,
+        lifecycle.downloading,
+        lifecycle.verifying,
+        lifecycle.importing,
+        lifecycle.review,
+        lifecycle.rejected,
+        lambda r: lifecycle.download_failed(r, True, "x"),
+        lambda r: lifecycle.download_failed(r, False, "x"),
+        lambda r: lifecycle.keep_looking(r, "1 of 2 tracks present"),
+        lambda r: lifecycle.finished(r, [], [], dead_end=False),
+        lambda r: lifecycle.finished(r, ["boom"], [], dead_end=True),
+    )
+    for transition in to_clear:
+        r = _req()
+        lifecycle.dead_end(r, "x")
+        assert r.status == "failed" and r.dead_end
+        transition(r)
+        assert not r.dead_end
+    r = _req()
+    lifecycle.finished(r, [], ["x"], dead_end=True)
+    assert r.dead_end
+
+
+def test_only_keep_looking_sets_the_partial_note_and_in_flight_transitions_keep_it() -> None:
+    keep = (
+        lifecycle.no_results,
+        lifecycle.downloading,  # the next candidate of a partial request
+        lifecycle.verifying,
+        lifecycle.importing,
+        lambda r: lifecycle.download_failed(r, True, "x"),
+    )
+    clear = (
+        lambda r: lifecycle.failed(r, "x"),
+        lifecycle.owned,
+        lifecycle.review,
+        lifecycle.rejected,
+        lambda r: lifecycle.dead_end(r, "x"),
+        lambda r: lifecycle.download_failed(r, False, "x"),
+        lambda r: lifecycle.finished(r, [], []),
+    )
+    for transition, kept in [(t, True) for t in keep] + [(t, False) for t in clear]:
+        r = _req()
+        lifecycle.keep_looking(r, "1 of 2 tracks present")
+        transition(r)
+        assert (r.partial_note == "1 of 2 tracks present") is kept
