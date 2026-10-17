@@ -525,6 +525,8 @@ async def test_repick_verifies_against_the_chosen_release(env: Env, web: TestCli
     assert (old.status, old.chosen_release_mbid) == ("repick", ALBUM_B.release_id)
     assert new.release_mbid == ALBUM_B.release_id and new.status == "pending_review"
     assert status(env, rid) == "review" and library(env) == []
+    files = [f["local_path"] for f in old.evidence["source"]["files"]]
+    assert files and [f["local_path"] for f in new.evidence["source"]["files"]] == files
 
 
 async def test_stage_one_decisions_never_need_review(env: Env) -> None:

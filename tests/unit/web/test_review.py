@@ -14,7 +14,7 @@ from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
-from mixsync.core.jobs import JobState
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import Band, MatchResult, Penalty
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
@@ -990,6 +990,11 @@ def test_recheck_requeues_against_the_release(
         ):  # test_pipeline (normal: given, migration: not)
             req = s.get(AlbumRequest, q)
             assert req and req.release_given is given and verify.running(s, q)
+    with sf() as s:  # re-verifies the files the decision was made on
+        jobs = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)).all()
+        for q in (rid, mrid):
+            (job,) = [j for j in jobs if j.payload["request_id"] == q][-1:]
+            assert job.payload["paths"] == [str(downloads / "a.mp3")]
 
 
 def test_recheck_without_a_matched_release_uses_the_requested_one(
