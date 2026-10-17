@@ -260,6 +260,7 @@ class Discovery:
                     select(Request).where(
                         Request.provisional,
                         Request.dead_end,
+                        Request.status.in_(lifecycle.DONE),
                         Request.release_mbid.in_(releases),
                     )
                 )

@@ -54,7 +54,7 @@ def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None
                     _J.c.payload["request_id"].as_integer() == payload["request_id"],
                 ),
             )
-            .values(status="failed", last_error=error, updated_at=now)
+            .values(status="failed", dead_end=False, last_error=error, updated_at=now)
         )
 
 

@@ -30,7 +30,9 @@ def upgrade() -> None:
         ),
         {"yes": True},
     )
-    rows = c.execute(sa.text("SELECT id, last_error FROM requests WHERE status = 'partial'"))
+    rows = c.execute(
+        sa.text("SELECT id, last_error FROM requests WHERE last_error LIKE 'partial: %'")
+    )
     for rid, err in rows.all():
         head = (err or "").split("; ")[0]
         if head.startswith(PARTIAL):

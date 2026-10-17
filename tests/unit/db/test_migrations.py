@@ -51,13 +51,14 @@ def test_pre_0012_file_op_reads_back_as_library(settings: Settings) -> None:
 def test_0018_backfills_dead_end_and_partial_from_last_error(settings: Settings) -> None:
     upgrade("0017_jobs_status_index")
     rows = [  # (provisional, status, last_error)
-        (1, "failed", "none of the wanted recordings are on this release"),
-        (1, "failed", "none of the wanted recordings are on the downloaded release"),
-        (1, "imported", "1 of 2 wanted recordings not on this release"),
-        (1, "imported", None),
-        (0, "failed", "none of the wanted recordings are on this release"),
-        (0, "partial", "partial: 2 of 5 tracks present; rejected after download"),
-        (0, "partial", "partial"),
+        (True, "failed", "none of the wanted recordings are on this release"),
+        (True, "failed", "none of the wanted recordings are on the downloaded release"),
+        (True, "imported", "1 of 2 wanted recordings not on this release"),
+        (True, "imported", None),
+        (False, "failed", "none of the wanted recordings are on this release"),
+        (False, "partial", "partial: 2 of 5 tracks present; rejected after download"),
+        (False, "downloading", "partial: 1 of 3 tracks present"),
+        (False, "partial", "partial"),
     ]
     with make_engine(settings).begin() as c:
         c.execute(
@@ -79,5 +80,9 @@ def test_0018_backfills_dead_end_and_partial_from_last_error(settings: Settings)
     upgrade()
     with make_engine(settings).connect() as c:
         got = c.execute(text("SELECT dead_end, partial_note FROM requests ORDER BY id")).all()
-    assert [bool(d) for d, _ in got] == [True, True, True, False, False, False, False]
-    assert [n for _, n in got] == [None] * 5 + ["2 of 5 tracks present", None]
+    assert [bool(d) for d, _ in got] == [True, True, True, False, False, False, False, False]
+    assert [n for _, n in got] == [None] * 5 + [
+        "2 of 5 tracks present",
+        "1 of 3 tracks present",
+        None,
+    ]
