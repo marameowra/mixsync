@@ -20,7 +20,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import verify
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.migration import Group, scan
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import candidate_dict
@@ -135,9 +135,9 @@ class DropFolder:
                     release_mbid="",
                     artist=g.artist[:255],
                     album=(g.album or Path(g.folder).name)[:255],
-                    status="verifying",
                     source=self.source,
                 )
+                lifecycle.verifying(req)
                 s.add(req)
                 s.flush()
                 files = tuple(
