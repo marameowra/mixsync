@@ -46,7 +46,7 @@ def _duration(path: Path) -> float | None:
 
 def _flac_info(path: Path) -> Any | None:
     try:
-        return FLAC(path).info  # pyright: ignore[reportUnknownMemberType]
+        return cast(Any, FLAC(path).info)  # pyright: ignore[reportUnknownMemberType]
     except Exception:
         return None
 
