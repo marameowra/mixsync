@@ -2,6 +2,7 @@
 # https://acoustid.org/webservice on 2026-10-10.
 import asyncio
 import gzip
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -51,12 +52,19 @@ def _flac_info(path: Path) -> Any | None:
         return None
 
 
+_RAW = {8: "s8", 16: "s16le", 24: "s24le", 32: "s32le"}  # what the FLAC MD5 is defined over
+
+
 async def _flac_fully_decodes(path: Path, info: Any) -> bool:
-    """Does ffmpeg decode every sample STREAMINFO promises?"""
+    """Does ffmpeg decode every sample STREAMINFO promises, and (when stored, for the bit depths
+    in _RAW) to the audio its MD5 was taken from? Counting samples alone can be fooled by
+    concealment."""
+    fmt = _RAW.get(info.bits_per_sample)
+    width = info.bits_per_sample // 8 if fmt else 2
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-nostdin", "-xerror", "-v", "quiet", "-i", str(path),
-            "-map", "0:a", "-f", "s16le", "-",
+            "-map", "0:a", "-f", fmt or "s16le", "-",
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -64,15 +72,18 @@ async def _flac_fully_decodes(path: Path, info: Any) -> bool:
     except FileNotFoundError as e:
         raise RuntimeError("ffmpeg is not installed or not on PATH") from e
     assert proc.stdout is not None
-    size = 0
+    size, md5 = 0, hashlib.md5(usedforsecurity=False)
     try:
-        while chunk := await proc.stdout.read(1 << 20):  # counted, not kept: files can be large
+        while chunk := await proc.stdout.read(1 << 20):  # hashed, not kept: files can be large
             size += len(chunk)
+            md5.update(chunk)
     finally:
         if proc.returncode is None:
             proc.kill()
         await proc.wait()
-    return size == info.total_samples * info.channels * 2
+    if size != info.total_samples * info.channels * width:
+        return False
+    return not (fmt and info.md5_signature) or md5.hexdigest() == f"{info.md5_signature:032x}"
 
 
 async def fingerprint(path: Path) -> Fingerprint:

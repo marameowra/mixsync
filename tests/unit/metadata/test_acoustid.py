@@ -107,13 +107,17 @@ async def test_fingerprint_rejects_corrupt_tail(tmp_path: Path, from_end: int) -
         await fingerprint(flac)
 
 
-async def test_corrupt_tail_fixture_passes_plain_fpcalc(tmp_path: Path) -> None:
-    flac = make_flac(tmp_path / "tail_bad.flac")
+async def test_fingerprint_rejects_wrong_stored_md5(tmp_path: Path) -> None:
+    # Intact frames, but the audio is not what the stored MD5 was taken from. Depending on the
+    # ffmpeg/fpcalc version a corrupt tail can decode to the full sample count (and fpcalc can
+    # exit 0), so the MD5 is what makes the corruption cases above reject reliably.
+    flac = make_flac(tmp_path / "md5.flac")
     data = bytearray(flac.read_bytes())
-    for i in range(len(data) - 3000, len(data) - 2900):
-        data[i] ^= 0xFF
+    assert any(data[26:42])  # the encoder stored an MD5 (STREAMINFO bytes 26-41)
+    data[30] ^= 0xFF
     flac.write_bytes(bytes(data))
-    assert (await acoustid._fpcalc("-json", str(flac)))[0] == 0  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(PermanentError, match="decode"):
+        await fingerprint(flac)
 
 
 async def test_fingerprint_flac_without_total_samples(tmp_path: Path) -> None:
