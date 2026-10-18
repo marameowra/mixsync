@@ -378,7 +378,7 @@ class Pipeline:
                 if not local:  # a corrupt download: another peer may have a good copy
                     with self.sessions.begin() as s:
                         if not _stale(s, job, self._request(s, job)):
-                            retry_search(
+                            drop_candidate(
                                 s,
                                 self.clock.now(),
                                 self._request(s, job),
