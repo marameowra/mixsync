@@ -451,18 +451,26 @@ def best_release(
     """Among releases whose distance is within the profile's auto-accept threshold, the one
     holding more AcoustID-confirmed recordings of the files wins, then the closest metadata. A
     release the tags rule out (a compilation with every track) cannot win on confirmations
-    alone. A runner-up within the auto-accept limit of the winner caps the band at review.
+    alone. A runner-up that AcoustID does not separate from the winner and within the
+    auto-accept limit of its distance caps the band at review.
     `albums` must not be empty."""
-    scored = [(score_files(files, likelies, a, profile), a) for a in albums]
+    scored = [
+        (
+            score_files(files, likelies, a, profile),
+            a,
+            sum(acoustid_confirms(f, t) for f, t in assign_tracks(files, a.tracks)[0]),
+        )
+        for a in albums
+    ]
 
-    def key(x: tuple[MatchResult, AlbumInfo]) -> tuple[int, int, float]:
+    def key(x: tuple[MatchResult, AlbumInfo, int]) -> tuple[int, int, float]:
         if x[0].distance > profile.auto_accept_max:
             return 1, 0, x[0].distance
-        sure = sum(acoustid_confirms(f, t) for f, t in assign_tracks(files, x[1].tracks)[0])
-        return 0, -sure, x[0].distance
+        return 0, -x[2], x[0].distance
 
-    result, album = min(scored, key=key)
-    others = [(r, a) for r, a in scored if a is not album]
+    result, album, sure = min(scored, key=key)
+    # AcoustID already separates a release with fewer confirmed recordings: not a coin flip.
+    others = [(r, a) for r, a, n in scored if a is not album and n >= sure]
     if others:
         near, other = min(others, key=lambda x: x[0].distance)
         gap = near.distance - result.distance

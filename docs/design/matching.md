@@ -44,6 +44,9 @@ Users can edit their thresholds; the presets are starting points.
 > [!question] Threshold values
 > The numbers above are placeholders taken from beets' defaults (`strong_rec_thresh` 0.04, `medium_rec_thresh` 0.25). Tune them during phase 2 against the regression fixtures.
 
+## Close runner-up
+When several releases are scored, a match cannot auto-accept if another release, holding at least as many AcoustID-confirmed recordings as the winner, is within the profile's auto-accept limit of the winner's distance. It goes to review, and the decision's evidence names the runner-up and the gap.
+
 ## Review screen
 Laid out side by side:
 - **Source:** peer, folder, filename, format, bitrate, size, and for future sources the URL, uploader, and thumbnail

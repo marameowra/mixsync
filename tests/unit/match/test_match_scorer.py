@@ -514,3 +514,24 @@ def test_a_distant_runner_up_does_not_cap() -> None:
     )
     _, result = best_release(files, like, [a, b], LOOSE)
     assert result.band is Band.AUTO_ACCEPT and result.runner_up is None
+
+
+def test_acoustid_separated_runner_up_does_not_cap() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    holds = AlbumInfo(
+        artist="artist", album="album (Deluxe)", release_id="a", tracks=(rec_track("One", "r1"),)
+    )
+    tags = AlbumInfo(
+        artist="artist",
+        album="album",
+        release_id="b",
+        tracks=(replace(rec_track("One", "x"), recording_id=None),),
+    )
+    album, result = best_release(files, like, [holds, tags], LOOSE)
+    assert album is holds and tags_closer(files, like, tags, holds)
+    assert result.band is Band.AUTO_ACCEPT and result.runner_up is None
+
+
+def tags_closer(files: list[FileTrack], like: Likelies, a: AlbumInfo, b: AlbumInfo) -> bool:
+    return score_files(files, like, a, LOOSE).distance < score_files(files, like, b, LOOSE).distance
