@@ -356,6 +356,8 @@ class Pipeline:
                 return
         for path in paths:  # import must be able to turn WAV/AIFF into FLAC, so check now
             if why := await self._unusable(path):
+                if not local:
+                    await self._quarantine(job, paths, "rejected")
                 with self.sessions.begin() as s:
                     if not _stale(s, job, self._request(s, job)):
                         await self._drop(
@@ -420,6 +422,15 @@ class Pipeline:
         unassigned = [str(readable[index[id(f)]]) for f in extra]  # import copies only the paired
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
+        if not migrating and result.band is not Band.AUTO_ACCEPT:
+            # Both reasons keep the files; a discovery review is a rejection (see below). The
+            # stored evidence then points at the quarantine copies.
+            kept = "review" if result.band is Band.REVIEW and not provisional else "rejected"
+            moved = await self._quarantine(job, paths, kept)
+            where = {str(a): str(b) for a, b in zip(paths, moved, strict=True)}
+            paths = moved
+            assignment = [{**a, "local_path": where[str(a["local_path"])]} for a in assignment]
+            unassigned = [where[u] for u in unassigned]
         partial = ""
         if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
             # deliberately partial: missing tracks cost nothing, but only when AcoustID is sure
@@ -487,8 +498,16 @@ class Pipeline:
                 )
             elif result.band is Band.REVIEW:
                 lifecycle.review(req)
-            else:  # files stay in /downloads: reject never deletes
+            else:  # reject never deletes: the files went to quarantine
                 await self._drop(cand, s, now, req, "rejected after download")
+
+    async def _quarantine(self, job: JobRecord, paths: list[Path], kind: str) -> list[Path]:
+        """Move a dropped candidate's files out of /downloads (slskd may purge it) into
+        mixsync's quarantine; one journal batch per job, so a retry resumes."""
+        batch = f"request-{job.payload['request_id']}-quarantine-{job.id}"
+        return [
+            await asyncio.to_thread(self.importer.fileops.quarantine, p, kind, batch) for p in paths
+        ]
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF

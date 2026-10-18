@@ -61,6 +61,10 @@ def library(env: Env) -> list[str]:
     return sorted(str(p.relative_to(lib)) for p in lib.rglob("*.mp3"))
 
 
+def quarantined(env: Env, kind: str) -> list[Path]:
+    return sorted((env.data_dir / "quarantine" / kind).rglob("*.mp3"))
+
+
 def decision_rows(env: Env, stage: int) -> list[MatchDecision]:
     with env.sessions() as s:
         return list(
@@ -518,7 +522,7 @@ async def test_review_reject_tries_next_candidate_and_keeps_files(
 
     assert env.source.enqueued == ["peer1", "peer2"]
     assert status(env, rid) == "imported" and len(library(env)) == 2
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2  # rejected files are kept
+    assert len(quarantined(env, "review")) == 2  # rejected files are kept, in quarantine
     with env.sessions() as s:
         req = s.get(Request, rid)
         assert req and req.tried[0][0] == "peer1"
@@ -1070,7 +1074,7 @@ async def test_unverified_partial_failure_releases_nothing(
     assert web.post(f"/review/{did}/unverified", data=form).status_code == 303
     await env.drain()
     assert status(env, rid) == "failed"
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
+    assert len(quarantined(env, "review")) == 2  # nothing released: the review copies remain
     assert env.source.cleared == []
 
 
