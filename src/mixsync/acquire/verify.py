@@ -7,7 +7,7 @@ so nothing has to read old jobs back to know. Nothing here commits: the job is a
 caller's transaction, next to the state it belongs with (ADR 0004).
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import ColumnElement, String, and_, cast, literal, select
@@ -15,12 +15,14 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire import lifecycle
 from mixsync.acquire.evidence import Evidence
-from mixsync.core.jobs import LIVE, JobKind
+from mixsync.core.errors import PermanentError
+from mixsync.core.jobs import LIVE, JobKind, backoff
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
-from mixsync.db.queue import enqueue_in
+from mixsync.db.queue import JobRecord, enqueue_in
 
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
+ACOUSTID_PATIENCE = timedelta(hours=24)  # from the first failed lookup
 
 
 def batch_id(request_id: int, decision_id: int) -> str:
@@ -67,6 +69,26 @@ def start(
         max_attempts=VERIFY_ATTEMPTS,
         priority=priority,
         idempotency_key=idempotency_key,
+    )
+
+
+def wait_for_acoustid(s: Session, now: datetime, req: Request, job: JobRecord) -> None:
+    """AcoustID is unreachable: verify again later, backing off, for up to ACOUSTID_PATIENCE from
+    the first failure. Then the error is permanent, which fails the request."""
+    since = datetime.fromisoformat(job.payload.get("acoustid_since", now.isoformat()))
+    if now - since > ACOUSTID_PATIENCE:
+        raise PermanentError("AcoustID unreachable for 24 hours")
+    tries = job.payload.get("acoustid_tries", 0) + 1
+    req.last_error = "waiting for AcoustID"
+    enqueue_in(
+        s,
+        now,
+        JobKind.VERIFY,
+        {**job.payload, "acoustid_since": since.isoformat(), "acoustid_tries": tries},
+        run_after=now + backoff(tries),
+        max_attempts=VERIFY_ATTEMPTS,
+        priority=s.scalar(select(Job.priority).where(Job.id == job.id)) or 0,
+        idempotency_key=f"verify:acoustid:{job.id}",
     )
 
 
