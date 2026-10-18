@@ -1,0 +1,23 @@
+# GitHub's allow-auto-merge setting is repo-wide; this makes auto-merge dev-only.
+name: no-automerge-main
+
+on:
+  pull_request_target:
+    types: [auto_merge_enabled]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  disable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr merge "$PR" --disable-auto --repo "$GITHUB_REPOSITORY"
+          echo "::notice::Auto-merge is disabled for PRs into main; merge by hand."

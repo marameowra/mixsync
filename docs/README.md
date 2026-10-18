@@ -21,6 +21,7 @@ Design phase. No code yet. These docs are the source of truth for v1.
 - [0006 Port beets' matching algorithm](decisions/0006-port-beets-autotag.md)
 
 ## Design
+- [UI style and design direction](design/ui-style.md)
 - [Matching](design/matching.md)
 - [Library layout and release canonicalization](design/library.md)
 - [Data safety](design/data-safety.md)

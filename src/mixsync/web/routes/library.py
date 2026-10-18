@@ -33,7 +33,8 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Files, Merge, require
+from mixsync.web.deps import Db, Files, Merge, Namer, require
+from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/library")
@@ -77,20 +78,26 @@ def _check_count(plan: Plan, count: str) -> None:
 
 
 @router.get("/fragments")
-def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
+async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
     plans = [
         *db.scalars(select(Plan).where(stuck).order_by(Plan.id.desc())),
         *db.scalars(select(Plan).where(~stuck).order_by(Plan.id.desc()).limit(20)),
     ]
     plans.sort(key=lambda p: -p.id)
+    items = fragmentation.find(db)
+    refs = {("release-group", p.release_group_mbid) for p in plans}
+    for f in items:  # list page: local rows and the cache only, no MusicBrainz call
+        refs |= {("release-group", f.group_mbid), *(("release", r) for r in f.releases)}
+        refs |= {("release", f.canonical)} if f.canonical else set()
     return templates.TemplateResponse(
         request,
         "pages/fragments.html",
         {
             "user": user,
-            "items": fragmentation.find(db),
+            "items": items,
             "plans": plans,
+            "names": await resolve(db, namer, refs),
             "allowed": {p.id: _allowed(db, p, _days(request)) for p in plans},
         },
     )
@@ -227,14 +234,25 @@ async def build_plan(
 
 
 @router.get("/plans/{plan_id}")
-def plan_detail(plan_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
+async def plan_detail(
+    plan_id: int, request: Request, user: User, db: Db, namer: Namer
+) -> HTMLResponse:
     plan = _plan(db, plan_id)
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
+    refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
+    for op in plan.ops:
+        if op["op"] == "move":
+            refs |= {
+                ("release", op["old"].get("release_mbid") or ""),
+                ("release", op["tags"].get("release_id") or ""),
+            }
+    allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
     ctx = {
         "user": user,
         "plan": plan,
         "counts": counts,
-        "allowed": _allowed(db, plan, _days(request)),
+        "allowed": allowed,
+        "names": await resolve(db, namer, refs, MAX_LOOKUPS),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 

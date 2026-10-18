@@ -11,11 +11,14 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
+from mixsync.acquire.adopter import adopter
+from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.merge import Merger
 from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
+from mixsync.acquire.requests import fail_request_of_job
 from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
@@ -208,11 +211,15 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
     clock = SystemClock()
     sessions = make_session_factory(engine)
     fileops = FileOps(
-        Path(settings.data_dir), Path(settings.downloads_dir), SqlJournal(sessions, clock), clock
+        Path(settings.data_dir),
+        Path(settings.downloads_dir),
+        SqlJournal(sessions, clock),
+        clock,
+        settings.drop_dir,
     )
     fileops.recover()
     tag_undo.recover(sessions, fileops)
-    queue = JobQueue(engine, clock)
+    queue = JobQueue(engine, clock, fail_request_of_job)
     merger = Merger(
         sessions,
         clock,
@@ -249,6 +256,15 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         Path(settings.data_dir) / "library",
         settings.mb_rate,
     )
+    dropper = DropFolder(sessions, clock, settings.drop_dir, Path(settings.config_dir) / "drop")
+    adopt = adopter(
+        sessions,
+        clock,
+        Path(settings.downloads_dir),
+        Path(settings.config_dir) / "adopt",
+        settings.adopt_downloads,
+        settings.adopt_settle_minutes,
+    )
     watcher = Watcher(
         sessions,
         clock,
@@ -281,6 +297,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         HANDLERS
         | pipeline.handlers()
         | migrator.handlers()
+        | dropper.handlers()
+        | adopt.handlers()
         | merger.handlers()
         | rechecker.handlers()
         | submitter.handlers()
@@ -298,6 +316,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
+        dropper.start_chains,
+        adopt.start_chains,
         discovery_startup,
     )
 

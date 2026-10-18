@@ -25,6 +25,7 @@ from fakes import (  # noqa: E402
     make_pipeline,
 )
 
+from mixsync.acquire.requests import fail_request_of_job  # noqa: E402
 from mixsync.core.config import Settings  # noqa: E402
 from mixsync.core.jobs import DEFAULT_LEASE  # noqa: E402
 from mixsync.db.engine import make_engine, make_session_factory  # noqa: E402
@@ -61,7 +62,7 @@ def hook(step: str) -> None:
 
 
 fileops._hook = hook  # pyright: ignore[reportPrivateUsage]
-queue = JobQueue(engine, clock)
+queue = JobQueue(engine, clock, fail_request_of_job)
 job = queue.claim("doomed", DEFAULT_LEASE)
 assert job, "no due job"
 asyncio.run(run_job(queue, job, "doomed", pipeline.handlers(), DEFAULT_LEASE))

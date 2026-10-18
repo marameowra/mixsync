@@ -34,7 +34,7 @@
 <section>
   <h2>Candidate</h2>
   {% if d.release_mbid %}<img class="cover" src="/media/cover/{{ d.id }}" alt="Cover art" width="128" height="128">{% endif %}
-  <p>{{ tgt.get("artist", "") }} - {{ tgt.get("title", "") }}<br>MBID {{ d.release_mbid }}</p>
+  <p>{{ tgt.get("artist", "") }} - {{ tgt.get("title", "") }}<br>{{ mb.link("release", d.release_mbid) }}</p>
   <div class="scroll">
   <table>
     <thead><tr><th>#</th><th>Title</th><th>Length</th></tr></thead>
@@ -67,7 +67,7 @@
   {% set ac = d.evidence.get("acoustid", []) %}
   {% if ac %}
   <h3>AcoustID</h3>
-  <ul>{% for a in ac %}<li>{{ files[loop.index0].get("name", "") if loop.index0 < files|length else "" }}: score {{ a.get("score", "") }}, recordings {{ a.get("recording_ids", [])|join(", ") }}</li>{% endfor %}</ul>
+  <ul>{% for a in ac %}<li>{{ files[loop.index0].get("name", "") if loop.index0 < files|length else "" }}: score {{ a.get("score", "") }}, recordings {% for r in a.get("recording_ids", []) %}{{ mb.link("recording", r) }}{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endfor %}</ul>
   {% endif %}
   {% set extra = d.evidence.get("unassigned", []) %}
   {% if extra %}

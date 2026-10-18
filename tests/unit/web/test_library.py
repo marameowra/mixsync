@@ -71,6 +71,13 @@ def sf(settings: Settings) -> sessionmaker[Session]:
     return make_session_factory(make_engine(settings))
 
 
+class NoNames:
+    """No MusicBrainz in these tests: every name lookup misses."""
+
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        return None
+
+
 @pytest.fixture
 def client(sf: sessionmaker[Session]) -> Iterator[TestClient]:
     with sf() as s, s.begin():
@@ -89,6 +96,7 @@ def client(sf: sessionmaker[Session]) -> Iterator[TestClient]:
             )
     app = create_app(sf, Settings())
     app.state.merger = FakeMerger(sf)
+    app.state.namer = NoNames()
     with TestClient(app, follow_redirects=False) as c:
         yield c
 
@@ -110,7 +118,8 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "done", [_op("move", 0)])
     _login(client, "root")
     html = client.get("/library/fragments").text
-    assert G in html and f"{R1} (1)" in html and "Preview merge" in html
+    assert f'title="{G}">Release group 11111111</a>' in html  # unknown: short id, full id on hover
+    assert f'title="{R1}">Release 11111111</a> (1)' in html and "Preview merge" in html
     assert f"/library/plans/{pid}/undo" in html
 
 

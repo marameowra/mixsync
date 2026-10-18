@@ -68,6 +68,10 @@ class PoliteClient:
     ) -> None:
         await self._http.aclose()
 
+    def cached(self, url: str, **kwargs: Any) -> httpx.Response | None:
+        """A live cached GET answer, or None. Never touches the network."""
+        return self.cache.get(self._http.build_request("GET", url, **kwargs), self.clock.now())
+
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self.request("GET", url, **kwargs)
 

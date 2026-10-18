@@ -10,7 +10,8 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   User-Agent). Cache where sensible, and never hammer an API.
 - Before reporting work as done, run every CI step (`.github/workflows/ci.yml`), not just
   tests: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`,
-  `uv run lint-imports`, `uv run pytest`.
+  `uv run lint-imports`, `uv run pytest`. Docs-only changes (every changed file under
+  `docs/` or ending in `.md`) skip these, matching the `changes` job in ci.yml.
 - Don't weaken tests. A hook prompts on each of these, so avoid them; everything under
   `tests/` counts, fixtures and cassettes included:
   - Deleting or emptying a file: no `rm`, `git rm`, `unlink`, `truncate`, `>` redirects, or
@@ -20,19 +21,28 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   - Skip markers: no `skip`, `skipif`, `xfail`, or `.only`. Fix the code under test.
   If one of these is truly needed, ask first and say why. Write tests against public
   behavior, not internals, so refactors don't force rewriting them.
-- Auto-merge. After opening a PR, queue `gh pr merge --auto --merge` only if the reviewer
-  agent reported no unfixed findings and every CI step passed locally. Otherwise leave the
-  PR for the user to merge. Merging to main publishes the `:dev` image.
-- Releases are human-only. Never create or push `v*` tags, create GitHub releases, or approve
-  deployments to the `release` environment. Pushing a `v*` tag runs `release.yml`, which
-  waits for the user's approval before publishing `:<tag without the v>` (e.g. `:1.0.0`) and `:latest`.
+- Branches and PRs. `main` is the default branch, but work goes to `dev`: branch from
+  `origin/dev` and open PRs with `gh pr create --base dev`. Never open a PR against `main`.
+- Auto-merge. After opening a PR into `dev`, queue `gh pr merge --auto --merge` once every
+  CI step passed locally (or the change is docs-only). A ruleset on `dev` requires the `check` and `postgres` CI jobs, so
+  GitHub holds the merge until they pass. If a local step fails, leave the PR for the user. Merging to `dev` publishes the `:dev` image. Never merge into
+  `main` or queue auto-merge on a PR whose base is `main`. A hook in `.claude/settings.json`
+  blocks agent merges into `main`, and a workflow turns off auto-merge on PRs into `main`.
+- Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
+  `release.yml` then waits for the user's approval in the `release` environment, publishes
+  `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
+  a version bump publish nothing. Never create or push `v*` tags, create GitHub releases,
+  merge to `main`, or approve deployments to the `release` environment.
+- Close issues once their fix merges into `dev`. GitHub ignores closing keywords in PRs
+  merged into `dev`, so close them yourself after the merge:
+  `gh issue close <n> --comment "Fixed in #<pr>, merged to dev."`
 
 ## Delegation
 - Hand all implementation (features, fixes, tests, refactors) to the `implementer`
   subagent. The main session plans, writes the brief, reviews, re-runs checks,
   and opens PRs. It does not write the code itself.
 - Run independent pieces of work as parallel implementers. Launch each with
-  `isolation: "worktree"`, branched from the pushed base branch, so they never
-  share a checkout.
+  `isolation: "worktree"`, branched from the pushed base branch (normally `origin/dev`),
+  so they never share a checkout.
 - Brief each implementer like the earlier slices: files to read, deliverables,
   out of scope, the full check list, and the report format.

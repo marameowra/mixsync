@@ -14,7 +14,7 @@ import os
 import shutil
 import stat
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,8 +23,10 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
+from mixsync.acquire.requests import candidate_dict
 from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
 from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import JobKind
@@ -32,7 +34,7 @@ from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
-from mixsync.db.models.work import Job, Migration, Request
+from mixsync.db.models.work import Migration, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.match.candidates import DISC_DIR
@@ -60,7 +62,9 @@ def _skip(rel: Path, why: str) -> dict[str, str]:
     return {"path": str(rel), "why": why}
 
 
-def _files(root: Path, skipped: list[dict[str, str]]) -> Iterator[Path]:
+def _files(
+    root: Path, skipped: list[dict[str, str]], exclude: Callable[[Path], bool] | None = None
+) -> Iterator[Path]:
     """Every regular file, whatever its type: the byte-identical check covers the whole tree.
     Symlinks are never followed; what cannot be read or is not a regular file goes in `skipped`
     as {"path", "why"}: paths may contain ": ", so never one string."""
@@ -69,6 +73,8 @@ def _files(root: Path, skipped: list[dict[str, str]]) -> Iterator[Path]:
         skipped.append(_skip(Path(e.filename or root).relative_to(root), "cannot read folder"))
 
     for base, dirs, names in os.walk(root, onerror=onerror):
+        if exclude:  # pruned: nothing under it is listed, hashed or read
+            dirs[:] = [d for d in dirs if not exclude(Path(base) / d)]
         dirs.sort()
         for d in dirs:
             if (p := Path(base) / d).is_symlink():
@@ -101,14 +107,14 @@ def _album_dir(path: Path) -> Path:
     return path.parent.parent if DISC_DIR.match(path.parent.name) else path.parent
 
 
-def scan(root: Path, out: Path) -> dict[str, Any]:
+def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -> dict[str, Any]:
     """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
     out.mkdir(parents=True, exist_ok=True)
     unreadable: list[dict[str, str]] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
     count = total = 0
     with (out / "manifest.jsonl").open("w") as manifest:
-        for path in _files(root, unreadable):
+        for path in _files(root, unreadable, exclude):
             rel = path.relative_to(root)
             try:
                 size, digest = _hash(path)
@@ -222,25 +228,21 @@ def confirm(s: Session, now: datetime, m: Migration) -> int:
             release_mbid="",
             artist=g.artist[:255],
             album=(g.album or Path(g.folder).name)[:255],
-            status="verifying",
             migration_id=m.id,
         )
+        lifecycle.verifying(req)
         s.add(req)
         s.flush()
         files = tuple(
             CandidateFile(rel, size, Path(rel).suffix.lower().lstrip(".")) for rel, size in g.files
         )
-        enqueue_in(
+        verify.start(
             s,
             now,
-            JobKind.VERIFY,
-            {
-                "request_id": req.id,
-                "release_mbid": None,
-                "candidate": candidate_dict(Candidate("", g.folder, files)),
-                "paths": [str(Path(g.folder) / rel) for rel, _ in g.files],
-            },
-            max_attempts=VERIFY_ATTEMPTS,
+            req,
+            None,
+            candidate_dict(Candidate("", g.folder, files)),
+            [str(Path(g.folder) / rel) for rel, _ in g.files],
             priority=MIGRATION_PRIORITY,
             idempotency_key=f"migrate:{m.id}:{i}",
         )
@@ -252,12 +254,12 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     same decision again (it skips what is in); else re-match from the first VERIFY, so it lands
     in review (or imports) with fresh choices. Returns why it cannot, else None."""
     batch = s.scalar(
-        select(Track.batch_id).where(Track.batch_id.like(f"request-{req.id}-decision-%")).limit(1)
+        select(Track.batch_id).where(verify.in_request(Track.batch_id, req.id)).limit(1)
     )
     copied = s.scalar(
         select(FileOp.id)
         .where(
-            FileOp.batch_id.like(f"request-{req.id}-decision-%"),
+            verify.in_request(FileOp.batch_id, req.id),
             FileOp.kind == "copy",
             FileOp.status == "done",
             FileOp.src != "(generated)",
@@ -266,24 +268,17 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     )
     if batch is None and copied is not None:  # a re-match could copy back what a merge removed
         return "its imported files were later merged or removed"
-    first = s.scalar(
-        select(Job)
-        .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
-        .order_by(Job.id)
-        .limit(1)
-    )
-    if batch is None and first is None:
+    if batch is None and not verify.started(s, req.id):
         return "it was never matched"
-    values = (
-        {"status": "importing", "last_error": None}
-        if batch
-        else {"status": "verifying", "release_mbid": "", "last_error": None}
+    # SQL, not lifecycle: an atomic compare-and-set, so a double click claims the retry once
+    values = {"dead_end": False, "partial_note": None, "last_error": None} | (
+        {"status": "importing"} if batch else {"status": "verifying", "release_mbid": ""}
     )
     claimed = cast(
         CursorResult[Any],
         s.execute(
             update(Request)
-            .where(Request.id == req.id, Request.status.in_(("failed", "skipped")))
+            .where(Request.id == req.id, Request.status.in_(lifecycle.NO_FILE))
             .values(values)
         ),
     )
@@ -291,17 +286,10 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     if claimed.rowcount != 1:  # not failed (any more): a double click retries once
         return "it has not failed"
     if batch:  # no idempotency key: the first import's job exists already
-        payload = {"request_id": req.id, "decision_id": int(batch.rpartition("-")[2])}
+        payload = {"request_id": req.id, "decision_id": verify.decision_of(batch)}
         enqueue_in(s, now, JobKind.IMPORT, payload, priority=MIGRATION_PRIORITY)
-    elif first:
-        enqueue_in(
-            s,
-            now,
-            JobKind.VERIFY,
-            {**first.payload, "release_mbid": None},
-            max_attempts=VERIFY_ATTEMPTS,
-            priority=MIGRATION_PRIORITY,
-        )
+    else:
+        verify.rematch(s, now, req, MIGRATION_PRIORITY)
     return None
 
 
@@ -324,24 +312,22 @@ def report(
         )
     )
     ids = {r.id for r in reqs}
-    first: dict[int, dict[str, Any]] = {}  # the VERIFY job each request started with
-    for j in s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)):
-        if j.payload["request_id"] in ids:
-            first.setdefault(j.payload["request_id"], j.payload)
+    first = verify.first_of(s, ids)  # (folder, files) each request started with
     partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
     # every decision since the migration began, not just the window: a row shows its current state
     since = select(MatchDecision).where(MatchDecision.created_at >= began)
     for d in s.scalars(since.order_by(MatchDecision.id)):
-        if d.evidence.get("request_id") in ids:
-            partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
-    rows = [
+        ev = Evidence.parse(d.evidence)
+        if ev.request_id in ids:
+            partial[ev.request_id] = ev.partial
+    rows: list[dict[str, Any]] = [
         {
-            "folder": first.get(r.id, {}).get("candidate", {}).get("folder", ""),
+            "folder": first.get(r.id, ("", 0))[0],
             "status": "partial" if r.status == "imported" and partial.get(r.id) else r.status,
             "artist": r.artist,
             "album": r.album,
             "release_mbid": r.release_mbid,
-            "files": len(first.get(r.id, {}).get("paths", [])),
+            "files": first.get(r.id, ("", 0))[1],
             "reason": (r.status == "imported" and partial.get(r.id)) or r.last_error or "",
             "request_id": r.id,
         }

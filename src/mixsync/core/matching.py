@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from mixsync.core.types import AcoustIdResult
 
@@ -139,3 +140,9 @@ class TransferInfo:
     state: TransferStatus
     bytes: int
     local_paths: tuple[str, ...] = ()  # one per candidate file, same order; set once DONE
+
+
+def download_dir(downloads: Path, remote_path: str) -> Path:
+    """Where slskd saves a peer's file: <downloads>/<the file's own parent folder name>/. A
+    folder path (trailing backslash) maps to its own leaf the same way."""
+    return downloads.joinpath(*remote_path.split("\\")[-2:-1])

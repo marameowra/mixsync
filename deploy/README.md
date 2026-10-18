@@ -19,16 +19,17 @@ How MixSync runs: Docker Compose on a home server, next to slskd and Navidrome. 
 
 Small installs can run a single `mixsync all` container instead of web + worker.
 
-`.github/workflows/image.yml` publishes the image as `ghcr.io/marameowra/mixsync:dev` on every push to `main`.
+`.github/workflows/image.yml` publishes the image as `ghcr.io/marameowra/mixsync:dev` on every push to `dev`. Approved releases from `main` publish `:<version>` and `:latest`.
 
 ## Mounts
 ```
-mixsync-*:   /config  (rw)   /downloads (rw)   /data (rw)   /import-source (ro, migration only)
+mixsync-*:   /config  (rw)   /downloads (rw)   /data (rw)   /import-source (ro, migration only)   /drop (rw, optional)
 slskd:       /downloads (rw) /data/library (ro, shared folder)
 navidrome:   /data/library (ro)  /data/discover (ro)
 ```
 - **`/data` is one mount**, so `rename` between `library/`, `discover/`, `.trash/`, and `.incoming/` stays atomic. Never split it into separate mounts ([architecture](../docs/architecture.md#deployment)).
 - **Discovery library:** needs Navidrome 0.58+ (multiple libraries). Create `${DATA_DIR}/discover` on the same filesystem as `data/.incoming` and `data/.trash`, add `/data/discover` as Library 2 in Navidrome, and grant users access to it.
+- `/drop` is the optional drop folder (set `MIXSYNC_DROP_DIR=/drop`): album folders put there are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash` (recoverable until `trash_days`). Files younger than a minute are left alone; a rejected folder stays put and is not queued again unless its contents change.
 - `/import-source` is read-only at the OS level during [migration](../docs/design/migration.md).
 - **File ownership:** run all containers with the same `PUID`/`PGID` so files written by MixSync are readable by Navidrome and slskd.
 
@@ -43,6 +44,9 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
 | `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID user key (from your acoustid.org account). Optional: without it fingerprints are not submitted after a promotion. All submissions go under this one account. |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
+| `MIXSYNC_DROP_DIR` | drop folder path inside the container (e.g. `/drop`). Unset: feature off |
+| `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` that MixSync did not request (e.g. a hand download in the slskd UI) are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself, including rejected ones, are never adopted |
+| `MIXSYNC_ADOPT_SETTLE_MINUTES` | how long a folder in `/downloads` must be untouched before it is adopted (default 10). Raise it if peers queue the rest of a hand download for longer: unfinished transfers are not checked |
 | `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
 | `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |

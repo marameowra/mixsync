@@ -183,3 +183,35 @@ def test_a_day_ends_where_the_next_begins_across_dst() -> None:
     # 2026-09-06: local midnight does not exist; the day starts at the jump
     first, _ = _window("2026-09-06", "2026-09-06", santiago)
     assert first == datetime(2026, 9, 6, 4, tzinfo=UTC)
+
+
+def _add_request(sf: sessionmaker[Session], mid: int, status: str) -> None:
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="root").one().id
+        s.add(
+            AlbumRequest(
+                user_id=uid,
+                release_mbid=MBID,
+                artist="Beta Band",
+                album="Beta Album",
+                status=status,
+                migration_id=mid,
+            )
+        )
+
+
+def test_settled_migration_shows_completed(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int
+) -> None:
+    _add_request(sf, migration_id, "failed")
+    text = client.get("/migration").text
+    assert f"Migration {migration_id}: completed" in text
+    assert f"/migration/{migration_id}/report.csv" in text
+
+
+@pytest.mark.parametrize("status", ["verifying", "importing", "review"])
+def test_unsettled_migration_shows_running(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int, status: str
+) -> None:
+    _add_request(sf, migration_id, status)
+    assert f"Migration {migration_id}: running" in client.get("/migration").text

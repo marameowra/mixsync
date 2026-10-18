@@ -8,6 +8,8 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.evidence import Evidence
+from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
 from mixsync.acquire.requests import create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
@@ -18,17 +20,14 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.discovery.playlists import DONE, is_dead_end
-from mixsync.web.deps import Db, require
+from mixsync.web.deps import Db, Namer, require
+from mixsync.web.names import resolve
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import templates
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/requests")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
-
-
-_BUSY = ("downloading", "verifying", "importing")
 
 
 def _of(req_id: int) -> ColumnElement[bool]:
@@ -53,15 +52,16 @@ def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
 
 
 def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
-    """A no_results request always has a queued repeat search, which delete removes with it."""
-    if req.status in _BUSY or is_dead_end(req):
+    """A no_results or partial request always has a queued repeat search, which delete
+    removes with it."""
+    if is_busy(req) or is_dead_end(req):
         return False
-    blocking = {JobState.LEASED, JobState.RUNNING} if req.status == "no_results" else set(LIVE)
+    blocking = {JobState.LEASED, JobState.RUNNING} if is_waiting(req) else set(LIVE)
     return not (live.get(req.id, set()) & blocking)
 
 
 @router.get("")
-def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
+async def request_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     items = db.scalars(
         select(AlbumRequest)
         .where(AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None))
@@ -73,7 +73,13 @@ def request_list(request: Request, user: User, db: Db) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "pages/requests.html",
-        {"user": user, "items": items, "deletable": deletable, "queued": queued},
+        {
+            "user": user,
+            "items": items,
+            "deletable": deletable,
+            "queued": queued,
+            "names": await resolve(db, namer, {("release", r.release_mbid) for r in items}),
+        },
     )
 
 
@@ -107,7 +113,7 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
         MatchDecision.status == decisions.PENDING, MatchDecision.stage == 2
     )
     for d in db.scalars(pending):
-        if d.evidence.get("request_id") == req.id:
+        if Evidence.parse(d.evidence).request_id == req.id:
             try:
                 decisions.act(db, d.id, user_id, "reject")
             except decisions.DecisionStateError:

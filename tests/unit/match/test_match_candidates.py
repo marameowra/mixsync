@@ -86,6 +86,12 @@ def check_review_with(text: str) -> Callable[[MatchResult], None]:
     return check
 
 
+def check_not_rejected_with_missing(r: MatchResult) -> None:
+    # stage 1 has no AcoustID: a partial folder is scored down but never vetoed or rejected
+    assert r.band is not Band.REJECT and not r.vetoes
+    assert any("3 of 4 tracks present" in p.reason for p in r.breakdown)
+
+
 def check_rejected(r: MatchResult) -> None:
     assert r.band is Band.REJECT and r.vetoes and r.vetoes[0] in r.breakdown[0].reason
 
@@ -116,7 +122,7 @@ CASES = [
     ),
     pytest.param(
         cand(album_files()[:3]),
-        check_review_with("1 of 4 tracks missing"),
+        check_not_rejected_with_missing,
         id="SK-F02",
     ),
     pytest.param(
@@ -410,6 +416,19 @@ def test_rank_untitled_copies_merge_but_differently_named_files_stay() -> None:
     assert _ranked_names([flac("01", 200.0), mp3("01", 200.0, 320)], one) == ["01.flac"]
     kept = _ranked_names([flac("Track 01", 200.0), flac("01", 200.0)], one)
     assert sorted(kept) == ["01.flac", "Track 01.flac"]
+
+
+def test_stage1_incomplete_folder_never_auto_accepts_and_ranks_below_complete_lossy() -> None:
+    mp3s = [
+        mp3(f"{i + 1:02d} {t}", ln) for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+    ]
+    ranked = rank(
+        [cand(album_files()[:3], user="peer-001"), cand(mp3s, user="peer-002")],
+        ALBUM,
+        BALANCED,
+    )
+    assert [c.username for c, _ in ranked] == ["peer-002", "peer-001"]
+    assert ranked[1][1].band is Band.REVIEW and not ranked[1][1].vetoes
 
 
 def test_aif_scores_like_aiff() -> None:

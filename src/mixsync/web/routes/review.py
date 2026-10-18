@@ -9,14 +9,18 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from mixsync.acquire import verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import apply_review
 from mixsync.core.capabilities import Capability
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
-from mixsync.web.deps import Db, decision_for, require
+from mixsync.web.deps import Db, Namer, decision_for, require
+from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/review")
@@ -43,7 +47,7 @@ def _owner(user: AuthUser) -> int | None:
 
 
 def _target(d: MatchDecision, key: str) -> str:
-    return str(d.evidence.get("target", {}).get(key, "")).casefold()
+    return str(Evidence.parse(d.evidence).target.get(key, "")).casefold()
 
 
 _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
@@ -55,27 +59,92 @@ _SORTS: dict[str, Callable[[MatchDecision], Any]] = {
 }
 
 
+def _count(text: str) -> int:
+    return int(text) if text.isascii() and text.isdigit() and len(text) <= 6 else 0
+
+
 @router.get("")
 def review_list(
-    request: Request, user: User, db: Db, sort: str = "date", order: str = "asc"
+    request: Request,
+    user: User,
+    db: Db,
+    sort: str = "date",
+    order: str = "asc",
+    requeued: str | None = None,
+    missing: str = "",
+    busy: str = "",
+    stale: str = "",
 ) -> HTMLResponse:
     items = decisions.pending_for(db, _owner(user))
     key = _SORTS.get(sort, _SORTS["date"])
     items.sort(key=key, reverse=order == "desc")
-    ctx = {"user": user, "items": items, "sort": sort, "order": order}
+    ctx: dict[str, Any] = {"user": user, "items": items, "sort": sort, "order": order}
+    if requeued is not None:  # the summary of a re-check, carried in the redirect
+        n = {
+            k: _count(v)
+            for k, v in (
+                ("requeued", requeued),
+                ("missing", missing),
+                ("busy", busy),
+                ("stale", stale),
+            )
+        }
+        ctx["n"] = n
     return templates.TemplateResponse(request, "pages/review_list.html", ctx)
 
 
+@router.post("/recheck")
+def recheck(user: User, db: Db) -> RedirectResponse:
+    """Verify every pending review again with the current scorer: the decision is closed and the
+    files go back through VERIFY against the release the request was given (a repick, or none
+    for a migration that identified it). No network here."""
+    now, queued, missing, busy, stale = datetime.now(UTC), 0, 0, 0, 0
+    for d in decisions.pending_for(db, _owner(user)):
+        ev = Evidence.parse(d.evidence)
+        req = db.get(AlbumRequest, ev.request_id)
+        if req is None:  # not from a request: nothing to verify again
+            missing += 1
+            continue
+        if req.status != "review":  # already importing, imported or searching again
+            stale += 1
+            continue
+        files = ev.files
+        if not files or not all(
+            f.get("local_path") and Path(f["local_path"]).exists() for f in files
+        ):
+            missing += 1
+            continue
+        if verify.running(db, req.id):
+            busy += 1
+            continue
+        try:
+            decisions.act(db, d.id, user.id, "recheck")
+        except decisions.DecisionStateError:  # acted on since the list was read
+            busy += 1
+            continue
+        verify.recheck(db, now, req, d)
+        queued += 1
+    return RedirectResponse(
+        f"/review?requeued={queued}&missing={missing}&busy={busy}&stale={stale}", status_code=303
+    )
+
+
 @router.get("/{decision_id}")
-def review_detail(request: Request, decision_id: int, user: User, db: Db) -> HTMLResponse:
+async def review_detail(
+    request: Request, decision_id: int, user: User, db: Db, namer: Namer
+) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
-    ctx = {"user": user, "d": d, "prefill": _prefill(d)}
+    refs = {("release", d.release_mbid)} | {
+        ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
+    }
+    names = await resolve(db, namer, refs, MAX_LOOKUPS)
+    ctx = {"user": user, "d": d, "prefill": _prefill(d), "names": names}
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
 
 def _prefill(d: MatchDecision) -> dict[str, Any]:
     """Editable tags for Mark unverified: each downloaded file's own tags, else its file name."""
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     found: list[dict[str, str]] = []
     for f in files:
         try:
@@ -175,7 +244,7 @@ def unverified(
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
-    files = d.evidence.get("source", {}).get("files", [])
+    files = Evidence.parse(d.evidence).files
     if not files or any(not f.get("local_path") for f in files):
         raise HTTPException(409, "the downloaded files are not known")
     errors: list[str] = []
@@ -219,6 +288,8 @@ def unverified(
         decisions.act(db, decision_id, user.id, "unverified")
     except decisions.DecisionStateError as e:
         raise HTTPException(409, str(e)) from e
-    d.evidence = {**d.evidence, "unverified": edits}  # same transaction as the action
+    d.evidence = (
+        Evidence.parse(d.evidence).with_unverified(edits).to_json()
+    )  # same transaction as the action
     apply_review(db, datetime.now(UTC), decision_id)
     return _next(db, user)

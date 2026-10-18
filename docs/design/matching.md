@@ -14,7 +14,7 @@ Input: slskd search results (peer, folder, file list with names, sizes, bitrates
 | Size plausibility | File size consistent with the claimed format, bitrate, and duration |
 | Peer health | Free upload slots, queue length, reported speed |
 
-The best-scoring candidate is downloaded. The runners-up are kept as fallbacks if verification fails.
+The best-scoring candidate is downloaded. No runners-up are stored. When a candidate is dropped (failed transfer, unusable files, rejection), it is added to the request's tried list and the retry runs a fresh search that skips every tried folder.
 
 ## Stage 2: post-download verification
 | Feature | What it measures |
