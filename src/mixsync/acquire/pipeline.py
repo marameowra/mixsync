@@ -27,12 +27,12 @@ from mixsync.acquire.requests import (
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
+    drop_candidate,
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
     hold_imports,
     profile_for,
-    retry_search,
     search_priority,
 )
 from mixsync.core.clock import Clock, aware
@@ -294,7 +294,7 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                retry_search(s, now, self._request(s, job), cand.username, cand.folder, str(e))
+                drop_candidate(s, now, self._request(s, job), cand.username, cand.folder, str(e))
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -307,11 +307,11 @@ class Pipeline:
             req = self._request(s, job)
             if info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
-                retry_search(s, now, req, cand.username, cand.folder, why)
+                drop_candidate(s, now, req, cand.username, cand.folder, why)
                 return
             problem = _missing(cand, info.local_paths)
             if problem:  # never import a missing or partial file (SK-P04)
-                retry_search(s, now, req, cand.username, cand.folder, problem)
+                drop_candidate(s, now, req, cand.username, cand.folder, problem)
                 return
             verify.start(
                 s,
@@ -356,7 +356,7 @@ class Pipeline:
             if why := await self._unusable(path):
                 with self.sessions.begin() as s:
                     if not _stale(s, job, self._request(s, job)):
-                        retry_search(
+                        drop_candidate(
                             s,
                             self.clock.now(),
                             self._request(s, job),
@@ -445,7 +445,7 @@ class Pipeline:
             elif result.band is Band.REVIEW and provisional:  # discovery never fills Review
                 d.status = "rejected_auto"
                 why = "; ".join(result.vetoes) or f"distance {result.distance:.2f}"
-                retry_search(
+                drop_candidate(
                     s,
                     now,
                     req,
@@ -456,7 +456,7 @@ class Pipeline:
             elif result.band is Band.REVIEW:
                 lifecycle.review(req)
             else:  # files stay in /downloads: reject never deletes
-                retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
+                drop_candidate(s, now, req, cand.username, cand.folder, "rejected after download")
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
@@ -585,7 +585,9 @@ class Pipeline:
                 if left and not req.from_files and album.release_group_id:
                     # another copy of what we have: the rest of the album is still wanted
                     text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
-                    self._keep_looking(s, self.clock.now(), req, cand, text)
+                    drop_candidate(
+                        s, self.clock.now(), req, cand.username, cand.folder, text, partial=text
+                    )
                 else:
                     lifecycle.owned(req)
             return
@@ -753,38 +755,15 @@ class Pipeline:
                 req, errors, notes, unverified=bool(local and recheck), dead_end=dead_end
             )
             if partial and not errors and not local:
-                self._keep_looking(s, now, req, cand, partial, notes)
+                drop_candidate(
+                    s, now, req, cand.username, cand.folder, partial, partial=partial, notes=notes
+                )
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
                     hold_imports(s, now, batch)
                 if recheck:
                     enqueue_recheck(s, now, recheck, None)
-
-    @staticmethod
-    def _keep_looking(
-        s: Session,
-        now: datetime,
-        req: Request,
-        cand: Candidate,
-        partial: str,
-        notes: list[str] | None = None,
-    ) -> None:
-        """Open until the rest of the album is here. The next search skips owned recordings and
-        the import drops them, so nothing already imported is touched."""
-        delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
-        lifecycle.keep_looking(req, partial, notes or [])
-        req.tried = [*req.tried, [cand.username, cand.folder]]
-        req.no_results_attempts += 1
-        req.next_search_at = now + delay
-        enqueue_in(
-            s,
-            now,
-            JobKind.SEARCH,
-            {"request_id": req.id},
-            run_after=now + delay,
-            priority=search_priority(req),
-        )
 
     async def _unowned(
         self, album: AlbumInfo, files: list[canonical.File], batch: str
