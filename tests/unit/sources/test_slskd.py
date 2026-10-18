@@ -96,11 +96,24 @@ async def test_search_polls_until_complete(make_client: Make) -> None:
     assert post.headers["X-API-Key"] == "key-123"
     body = json.loads(post.content)
     assert body["searchText"] == "Test Artist Test Album"
+    assert {
+        "responseLimit",
+        "fileLimit",
+        "searchTimeout",
+        "minimumPeerUploadSpeed",
+        "maximumPeerQueueLength",
+    } <= body.keys()
+    assert body["responseLimit"] > 100
     assert seen[-1].url.path == f"/api/v0/searches/{body['id']}/responses"
 
 
-async def test_search_gives_up(make_client: Make) -> None:
+async def test_search_gives_up_and_deletes_the_search(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "DELETE":
+            return httpx.Response(204)
         return httpx.Response(200, json=load("search_running.json"))
 
     src = SlskdSource(
@@ -113,6 +126,9 @@ async def test_search_gives_up(make_client: Make) -> None:
     )
     with pytest.raises(TransientError):
         await src.search("x")
+    post, last = seen[0], seen[-1]
+    search_id = json.loads(post.content)["id"]
+    assert last.method == "DELETE" and last.url.path == f"/api/v0/searches/{search_id}"
 
 
 @pytest.mark.parametrize("code", [401, 403])

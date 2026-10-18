@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import re
 import uuid
 from collections import defaultdict
@@ -21,6 +22,15 @@ from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset(e[1:] for e in EXTENSIONS)  # only what import takes
 RESPONSE_TRIES = 10
+# slskd defaults stop a search at 100 responses; ask for more. Timeout is seconds since the last
+# response (slskd minimum 5), so a slow search keeps going while it still gets hits.
+SEARCH_SETTINGS = {
+    "responseLimit": 1000,
+    "fileLimit": 20000,
+    "searchTimeout": 15,
+    "minimumPeerUploadSpeed": 0,  # keep slow peers: they may be the only ones with the album
+    "maximumPeerQueueLength": 1000,  # a queue this deep will not start within our patience
+}
 _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+", re.IGNORECASE)
 
 
@@ -122,12 +132,16 @@ class SlskdSource:
 
     async def search(self, query: str) -> list[Candidate]:
         search_id = str(uuid.uuid4())
-        await self._call("POST", "/searches", json={"id": search_id, "searchText": query})
+        await self._call(
+            "POST", "/searches", json={"id": search_id, "searchText": query, **SEARCH_SETTINGS}
+        )
         for _ in range(self._max_polls):
             state = await self._call("GET", f"/searches/{search_id}")
             if state["isComplete"]:
                 return await self._responses(search_id, state["responseCount"])
             await self._sleep(self._poll_interval)
+        with contextlib.suppress(PermanentError):  # 404: slskd already dropped it
+            await self._call("DELETE", f"/searches/{search_id}")
         raise TransientError(f"slskd search {query!r} did not complete")
 
     async def _responses(self, search_id: str, expected: int) -> list[Candidate]:
