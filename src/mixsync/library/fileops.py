@@ -321,8 +321,8 @@ class FileOps:
             if old[0] == kind:
                 return src
             name = "/".join(old[2:])
-        elif self._downloads.resolve() in real.parents:
-            name = str(real.relative_to(self._downloads.resolve()))
+        elif self.downloads.resolve() in real.parents:
+            name = str(real.relative_to(self.downloads.resolve()))
         else:  # not a download (an old library's file, say): never ours to move
             return src
         rel = self.find_imported(batch_id, src, "quarantine")
