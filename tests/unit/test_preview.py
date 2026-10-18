@@ -10,7 +10,7 @@ from devtools.preview import app as preview_app
 from devtools.preview.app import _reset, build_app, preview_env
 from mixsync.web.templating import templates
 
-THEMES = ("current", "demo")
+THEMES = ("current", "demo", "swiss")
 
 
 @pytest.fixture
@@ -73,6 +73,20 @@ def test_demo_theme_changes_the_html(preview: TestClient) -> None:
     assert "demo.css" not in current and "demo.css" in demo
     assert preview.get("/themes/demo/static/demo.css").status_code == 200
     assert "demo.css" in preview.get("/").text  # the cookie keeps the theme
+
+
+def test_swiss_theme_serves_css_and_gates_nav_links(preview: TestClient) -> None:
+    css = preview.get("/themes/swiss/static/theme.css")
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    _login(preview, "admin")
+    admin = preview.get("/?theme=swiss").text
+    assert "/themes/swiss/static/theme.css" in admin and "/static/app.css" not in admin
+    assert 'href="/migration"' in admin and "Waiting on you" in admin
+    assert 'href="/" aria-current="page"' in admin
+    assert 'href="/review" aria-current="page"' in preview.get("/review").text
+    preview.get("/__preview/logout")
+    _login(preview, "alice")
+    assert 'href="/migration"' not in preview.get("/").text
 
 
 def test_logout_link_clears_the_session(preview: TestClient) -> None:

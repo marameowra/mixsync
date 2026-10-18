@@ -19,7 +19,7 @@ from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.watchlist import FollowHit
-from mixsync.db.models.work import Job, Migration
+from mixsync.db.models.work import Job, Migration, Status
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.secretbox import SecretBox, set_secret
 from mixsync.watchlist.follows import add_follow
@@ -31,7 +31,7 @@ NON_LATIN = "夜に駆ける – Ночной дозор – مرحبا بالع
 G = "11111111-1111-1111-1111-111111111111"
 R1, R2 = "11111111-1111-1111-1111-111111111112", "11111111-1111-1111-1111-111111111113"
 # request status -> state of its job
-REQUEST_STATES = {
+REQUEST_STATES: dict[Status, JobState] = {
     "searching": JobState.QUEUED,
     "downloading": JobState.RUNNING,
     "verifying": JobState.RUNNING,
@@ -54,7 +54,7 @@ def _request(
     now: datetime,
     uid: int,
     key: str,
-    status: str,
+    status: Status,
     artist: str,
     album: str,
     migration_id: int | None = None,

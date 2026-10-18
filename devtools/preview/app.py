@@ -125,7 +125,7 @@ def build_app(
     from mixsync.db.engine import make_engine, make_session_factory
     from mixsync.db.migrate import upgrade
     from mixsync.db.secretbox import load_box
-    from mixsync.web.deps import SESSION_COOKIE, get_watch
+    from mixsync.web.deps import SESSION_COOKIE, get_namer, get_watch
     from mixsync.web.templating import templates
 
     from .fakes import FakeWatch
@@ -144,6 +144,7 @@ def build_app(
 
     app = create_app(sf, settings)
     app.dependency_overrides[get_watch] = lambda: FakeWatch()
+    app.dependency_overrides[get_namer] = lambda: FakeWatch()  # detail pages name MBIDs offline
     app.mount("/themes", StaticFiles(directory=themes_dir), name="themes")
 
     def names() -> list[str]:

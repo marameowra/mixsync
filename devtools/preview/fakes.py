@@ -16,6 +16,9 @@ class FakeWatch:
             EntityRef(_A.format(3), "坂本龍一 (Ryuichi Sakamoto)"),
         ]
 
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        return f"Preview {kind}"
+
     async def entity_name(self, kind: str, mbid: str) -> str:
         return "Preview Artist"
 
