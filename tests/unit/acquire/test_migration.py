@@ -34,7 +34,7 @@ from mixsync.library import tags
 from mixsync.match import scorer
 
 from .conftest import Env, login
-from .fakes import ALBUM, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
+from .fakes import ALBUM, ALBUM_B, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
 from .test_pipeline import decision_rows, library
 
 
@@ -344,6 +344,24 @@ async def test_untagged_album_picks_the_best_of_the_top_three(rig: Rig) -> None:
     assert req.status == "imported" and req.release_mbid == ALBUM.release_id
 
 
+async def test_two_near_identical_releases_go_to_review_with_the_runner_up(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    twin = replace(ALBUM_B, year=ALBUM.year)  # same group, tracks and year: only the id differs
+    monkeypatch.setitem(CATALOG, str(twin.release_id), twin)
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM), ref(twin)]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status) == ("review", "pending_review")
+    assert d.evidence["runner_up"]["release_id"] == twin.release_id
+    login(web, "root")
+    assert "Close runner-up" in web.get(f"/review/{d.id}").text
+
+
 async def test_no_candidate_goes_to_review_and_reject_skips(rig: Rig, web: TestClient) -> None:
     put_album(rig.root, "Alpha Band/Alpha Album")
     rig.confirm(await rig.preflight())
@@ -627,6 +645,49 @@ async def test_untagged_files_search_by_folder_name_and_keep_the_name(rig: Rig) 
     assert rig.meta.searches == [("", "Some Folder", 5)]
     (req,) = rig.requests()
     assert (req.status, req.album) == ("review", "Some Folder")
+
+
+async def _fail_on(rig: Rig, name: str) -> None:
+    real = rig.env.pipeline.fingerprint
+
+    async def fingerprint(path: Path) -> Any:
+        if path.name.startswith(name):
+            raise PermanentError("fpcalc failed: Invalid data")
+        return await real(path)
+
+    rig.env.pipeline = replace(rig.env.pipeline, fingerprint=fingerprint)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+
+
+async def test_one_unreadable_track_still_identifies_the_release_and_is_never_imported(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "02 ")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status, d.release_mbid) == ("review", "pending_review", ALBUM.release_id)
+    assert any("02 " in v and "Invalid data" in v for v in d.vetoes)
+    tok = login(web, "root")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await rig.env.drain()
+    assert len(library(rig.env)) == 1 and not any("02 " in x for x in library(rig.env))
+
+
+async def test_every_track_unreadable_still_fails(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "0")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    assert req.status == "failed" and "fpcalc failed" in (req.last_error or "")
+    assert decision_rows(rig.env, 2) == []
 
 
 async def test_discard_frees_a_ready_preflight_but_not_a_running_migration(

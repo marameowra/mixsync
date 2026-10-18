@@ -11,7 +11,7 @@ import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -339,8 +339,10 @@ class Pipeline:
         A migrated album has no release yet: `_identify` picks one."""
         p = job.payload
         with self.sessions() as s:
-            if _stale(s, job, self._request(s, job)):  # before spending any rate-limited calls
+            req = self._request(s, job)
+            if _stale(s, job, req):  # before spending any rate-limited calls
                 return
+            local = req.from_files
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
         album: AlbumInfo | None = None
@@ -366,11 +368,35 @@ class Pipeline:
                         )
                 return
         files: list[FileTrack] = []
+        readable: list[Path] = []  # aligned with `files`; the rest are never imported
+        unreadable: list[str] = []
+        first: PermanentError | None = None
         for path in paths:
-            fp = await self.fingerprint(path)
+            try:
+                fp = await self.fingerprint(path)
+            except PermanentError as e:
+                if not local:  # a corrupt download: another peer may have a good copy
+                    with self.sessions.begin() as s:
+                        if not _stale(s, job, self._request(s, job)):
+                            drop_candidate(
+                                s,
+                                self.clock.now(),
+                                self._request(s, job),
+                                cand.username,
+                                cand.folder,
+                                f"unreadable: {path.name}: {e}",
+                            )
+                    return
+                # local files cannot be fetched again: identify the album from the rest
+                first = first or e
+                unreadable.append(f"{path}: {e}")
+                continue
+            readable.append(path)
             results = await self.acoustid.lookup(fp)
             files.append(file_track(path, fp.duration, tuple(results)))
-        like = likelies(paths)
+        if first and not files:
+            raise first
+        like = likelies(readable)
         with self.sessions() as s:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.from_files
@@ -386,14 +412,14 @@ class Pipeline:
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
         assignment = [
             {
-                "local_path": str(paths[index[id(f)]]),
+                "local_path": str(readable[index[id(f)]]),
                 "track": track_no[id(t)],  # old decisions have only this
                 "recording_id": t.recording_id,
                 "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
         ]
-        unassigned = [str(paths[index[id(f)]]) for f in extra]  # import copies only the paired
+        unassigned = [str(readable[index[id(f)]]) for f in extra]  # import copies only the paired
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         partial = ""
@@ -405,10 +431,17 @@ class Pipeline:
             )
             if (
                 free.band is Band.AUTO_ACCEPT
+                and not result.runner_up  # the cap on a close runner-up stands
                 and all_confident(pairs)
                 and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
             ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
+        if unreadable:  # a human confirms the release; the bad file is not in `assignment`
+            result = replace(
+                result,
+                band=Band.REVIEW if result.band is Band.AUTO_ACCEPT else result.band,
+                vetoes=(*result.vetoes, *(f"unreadable, not imported: {u}" for u in unreadable)),
+            )
         evidence = Evidence.verified(
             p["request_id"],
             p["candidate"],
@@ -421,6 +454,8 @@ class Pipeline:
             duration_deltas=[abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
             assignment=assignment,
         ).to_json()
+        if result.runner_up:
+            evidence["runner_up"] = asdict(result.runner_up)
 
         now = self.clock.now()
         with self.sessions.begin() as s:

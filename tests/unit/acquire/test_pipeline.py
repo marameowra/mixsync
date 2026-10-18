@@ -18,7 +18,7 @@ from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo, TrackInfo, TransferStatus
-from mixsync.core.types import AcoustIdResult, ReleaseRef
+from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
@@ -31,7 +31,7 @@ from mixsync.library.fileops import WriteTags
 from mixsync.watchlist.poller import owned_groups
 
 from .conftest import Env, login
-from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS
+from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS, fake_fingerprint
 
 FIRST = "Alpha Band/Alpha Album (2020)/01-01 Song One.mp3"
 SECOND = "Alpha Band/Alpha Album (2020)/01-02 Song Two.mp3"
@@ -1465,3 +1465,25 @@ async def test_recheck_of_an_identified_request_after_a_repick_uses_the_repicked
     last = decision_rows(env, 2)[-1]
     assert (last.status, last.release_mbid) == ("pending_review", ALBUM_B.release_id)
     assert last.release_given is True  # the repick gave a release
+
+
+async def test_a_downloaded_file_that_will_not_fingerprint_drops_the_peer_and_searches_again(
+    env: Env,
+) -> None:
+    async def fingerprint(path: Path) -> Fingerprint:
+        if path.name.startswith("02 "):
+            raise PermanentError("fpcalc failed: Invalid data")
+        return await fake_fingerprint(path)
+
+    env.pipeline = replace(env.pipeline, fingerprint=fingerprint)
+    env.handlers = env.pipeline.handlers()
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain(until=lambda: bool(tried(env, rid)))
+
+    assert tried(env, rid) == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and "unreadable: 02 " in (req.last_error or "")
+    assert len(env.jobs(JobKind.SEARCH)) == 2  # the first, and the one after the drop
+    assert decision_rows(env, 2) == []
