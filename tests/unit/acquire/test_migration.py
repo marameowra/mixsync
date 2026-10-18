@@ -629,6 +629,49 @@ async def test_untagged_files_search_by_folder_name_and_keep_the_name(rig: Rig) 
     assert (req.status, req.album) == ("review", "Some Folder")
 
 
+async def _fail_on(rig: Rig, name: str) -> None:
+    real = rig.env.pipeline.fingerprint
+
+    async def fingerprint(path: Path) -> Any:
+        if path.name.startswith(name):
+            raise PermanentError("fpcalc failed: Invalid data")
+        return await real(path)
+
+    rig.env.pipeline = replace(rig.env.pipeline, fingerprint=fingerprint)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+
+
+async def test_one_unreadable_track_still_identifies_the_release_and_is_never_imported(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "02 ")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status, d.release_mbid) == ("review", "pending_review", ALBUM.release_id)
+    assert any("02 " in v and "Invalid data" in v for v in d.vetoes)
+    tok = login(web, "root")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await rig.env.drain()
+    assert len(library(rig.env)) == 1 and not any("02 " in x for x in library(rig.env))
+
+
+async def test_every_track_unreadable_still_fails(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "0")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    assert req.status == "failed" and "fpcalc failed" in (req.last_error or "")
+    assert decision_rows(rig.env, 2) == []
+
+
 async def test_discard_frees_a_ready_preflight_but_not_a_running_migration(
     rig: Rig, web: TestClient
 ) -> None:
