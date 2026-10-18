@@ -4,6 +4,7 @@ import asyncio
 import random
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -13,6 +14,7 @@ from mixsync.core.clock import Clock
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
@@ -89,6 +91,25 @@ class TrashPurger:
             keep.update(op.dst for op in tag_undo.unfinished(self.sessions, self.fileops))
             return keep
 
+    def rejected_review(self) -> list[str]:
+        """Quarantine files of review candidates a person rejected more than the window ago
+        (web rejects leave the files in review/; the decision is the only mark)."""
+        cutoff = self.clock.now() - timedelta(days=self.days)
+        with self.sessions() as s:
+            evidence = s.scalars(
+                select(MatchDecision.evidence).where(
+                    MatchDecision.final_action == "reject", MatchDecision.acted_at < cutoff
+                )
+            ).all()
+        q = self.fileops.quarantine_dir
+        paths = [
+            f["local_path"]
+            for ev in evidence
+            for f in ev.get("source", {}).get("files", [])
+            if f.get("local_path")
+        ]
+        return [str(Path(p).relative_to(q)) for p in paths if Path(p).is_relative_to(q)]
+
     def _purge_monitor_rows(self) -> None:
         """One row per 30 s per transfer; only their dedup key names them. In batches, each in
         its own transaction, so the first purge after a long gap never holds the write lock long."""
@@ -111,6 +132,12 @@ class TrashPurger:
                 self.days,
                 f"purge-{self.clock.now().date().isoformat()}",
                 self.protected(),
+            )
+            await asyncio.to_thread(
+                self.fileops.purge_quarantine,
+                self.days,
+                f"purge-quarantine-{self.clock.now().date().isoformat()}",
+                self.rejected_review(),
             )
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)

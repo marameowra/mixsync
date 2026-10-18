@@ -12,6 +12,7 @@ from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
@@ -438,3 +439,89 @@ def test_monitor_purge_does_not_block_the_event_loop(
 
     asyncio.run(main())
     assert seen == [True]
+
+
+def q_put(fo: FileOps, rel: str) -> Path:
+    p = fo.quarantine_dir / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"q")
+    return p
+
+
+def _decision(
+    sessions: sessionmaker[Session], path: Path, action: str | None, acted: datetime | None
+) -> None:
+    with sessions.begin() as s:
+        s.add(
+            MatchDecision(
+                user_id=1,
+                stage=2,
+                release_mbid="m",
+                band="review",
+                distance=0.0,
+                breakdown=[],
+                vetoes=[],
+                scorer_version=1,
+                status="done" if action else "pending",
+                final_action=action,
+                acted_at=acted,
+                evidence={"source": {"files": [{"local_path": str(path)}]}},
+            )
+        )
+
+
+def test_rejected_quarantine_past_the_window_is_purged_and_journaled_newer_kept(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    old = q_put(fo, f"rejected/{day(31)}/F/a.mp3")
+    edge = q_put(fo, f"rejected/{day(30)}/F/b.mp3")
+    new = q_put(fo, f"rejected/{day(5)}/F/c.mp3")
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert not old.exists() and edge.exists() and new.exists()
+    assert not old.parent.parent.exists()  # the emptied day folder goes
+    assert [(o.kind, o.root, o.src, o.status) for o in ops(sessions)] == [
+        ("purge", "quarantine", f"rejected/{day(31)}/F/a.mp3", "done")
+    ]
+
+
+def test_review_quarantine_of_any_age_is_kept(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    pending = q_put(fo, f"review/{day(400)}/F/a.mp3")
+    accepted = q_put(fo, f"review/{day(400)}/G/a.mp3")
+    repick = q_put(fo, f"review/{day(400)}/H/a.mp3")
+    _decision(sessions, pending, None, None)
+    _decision(sessions, accepted, "accept", NOW - timedelta(days=400))
+    _decision(sessions, repick, "repick", NOW - timedelta(days=400))
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert pending.exists() and accepted.exists() and repick.exists()
+    assert ops(sessions) == []
+
+
+def test_a_person_rejected_review_entry_is_purged_once_acted_on_past_the_window(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    old = q_put(fo, f"review/{day(2)}/F/a.mp3")  # filed recently, rejected long ago
+    fresh = q_put(fo, f"review/{day(90)}/G/a.mp3")  # filed long ago, rejected just now
+    _decision(sessions, old, "reject", NOW - timedelta(days=31))
+    _decision(sessions, fresh, "reject", NOW - timedelta(days=1))
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert not old.exists() and fresh.exists()
+    assert not (fo.quarantine_dir / f"review/{day(2)}").exists()
+    assert [(o.root, o.src, o.status) for o in ops(sessions)] == [
+        ("quarantine", f"review/{day(2)}/F/a.mp3", "done")
+    ]
+
+
+def test_quarantine_purge_never_follows_symlinks(
+    fo: FileOps, sessions: sessionmaker[Session], tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.mp3").write_bytes(b"precious")
+    d = fo.quarantine_dir / "rejected" / day(40)
+    d.mkdir(parents=True)
+    (d / "link.mp3").symlink_to(outside / "keep.mp3")
+    (d / "linkdir").symlink_to(outside)
+    assert fo.purge_quarantine(30, "b") == 0
+    assert (outside / "keep.mp3").read_bytes() == b"precious" and (d / "link.mp3").is_symlink()
