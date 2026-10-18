@@ -49,6 +49,13 @@ def status(env: Env, rid: int) -> str:
         return req.status
 
 
+def last_error(env: Env, rid: int) -> str | None:
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req
+        return req.last_error
+
+
 def tried(env: Env, rid: int) -> list[list[str]]:
     with env.sessions() as s:
         req = s.get(Request, rid)
@@ -490,19 +497,58 @@ async def test_bad_download_is_never_imported(env: Env, fault: str) -> None:
         assert req and req.tried and req.last_error
 
 
-async def test_acoustid_outage_retries_verify_and_imports_nothing(env: Env) -> None:
+async def test_acoustid_outage_waits_and_imports_nothing(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     env.acoustid.fail = 1
     rid = request(env)
-    await env.drain(until=lambda: bool(env.jobs(JobKind.VERIFY)) and env.acoustid.fail == 0)
+    await env.drain(until=lambda: len(env.jobs(JobKind.VERIFY)) == 2)
 
-    (verify,) = env.jobs(JobKind.VERIFY)
-    assert verify.status is JobState.RETRY_WAIT and verify.max_attempts == 10
+    first, again = env.jobs(JobKind.VERIFY)
+    assert first.status is JobState.SUCCEEDED and again.status is JobState.QUEUED
+    assert again.run_after > first.run_after
     assert status(env, rid) == "verifying" and library(env) == []
+    assert last_error(env, rid) == "waiting for AcoustID"
     assert decision_rows(env, 2) == []
 
     await env.drain()
     assert status(env, rid) == "imported" and len(library(env)) == 2
+
+
+async def test_acoustid_outage_under_a_day_recovers(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.fail = 10**6
+    rid = request(env)
+    start = env.clock.now()
+    await env.drain(until=lambda: env.clock.now() > start + timedelta(hours=20))
+    assert status(env, rid) == "verifying"
+    assert last_error(env, rid) == "waiting for AcoustID"
+
+    env.acoustid.fail = 0
+    await env.drain()
+    assert status(env, rid) == "imported" and len(library(env)) == 2
+
+
+async def test_acoustid_outage_past_a_day_fails_the_request(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.fail = 10**6
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "failed" and library(env) == []
+    assert "24 hours" in (last_error(env, rid) or "")
+
+
+async def test_a_missing_acoustid_key_fails_at_once(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+
+    async def no_key(fp: Fingerprint) -> list[AcoustIdResult]:
+        raise RuntimeError("MIXSYNC_ACOUSTID_APP_KEY is not set")
+
+    env.acoustid.lookup = no_key  # type: ignore[method-assign]
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "failed" and len(env.jobs(JobKind.VERIFY)) == 1
 
 
 async def test_review_reject_tries_next_candidate_and_keeps_files(

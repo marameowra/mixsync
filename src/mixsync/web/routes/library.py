@@ -16,7 +16,6 @@ from mixsync.acquire import recheck
 from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
-from mixsync.core.clock import SystemClock
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
@@ -104,7 +103,7 @@ async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLR
 
 
 def _read_unverified(request: Request, db: Session) -> list[recheck.Item]:
-    return recheck.read_unverified(db, Path(request.app.state.settings.data_dir) / "library")
+    return recheck.read_unverified(db, request.app.state.services.fileops.library)
 
 
 @router.get("/unverified")
@@ -143,7 +142,7 @@ def _num(v: str | None, default: int) -> int:
 def _seed_release(
     request: Request, items: list[recheck.Item], album: str, artist: str, year: str
 ) -> SeedRelease:
-    root = Path(request.app.state.settings.data_dir) / "library"
+    root = request.app.state.services.fileops.library
     discs: dict[int, list[recheck.Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
@@ -384,7 +383,12 @@ def restore_track_tags(
         db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
         try:
             tag_undo.restore_tags(
-                fo, request.app.state.session_factory, SystemClock(), tid, rel, old
+                fo,
+                request.app.state.session_factory,
+                request.app.state.services.clock,
+                tid,
+                rel,
+                old,
             )
         except FileExistsError:
             raise HTTPException(
