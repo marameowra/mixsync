@@ -64,6 +64,11 @@
   <h3>Vetoes</h3>
   <ul>{% for v in d.vetoes %}<li>{{ v }}</li>{% endfor %}</ul>
   {% endif %}
+  {% set ru = d.evidence.get("runner_up") %}
+  {% if ru %}
+  <h3>Close runner-up</h3>
+  <p>{{ mb.link("release", ru.release_id) }} {{ ru.title }} is only {{ "%.3f"|format(ru.gap) }} behind, too close to accept automatically.</p>
+  {% endif %}
   {% set ac = d.evidence.get("acoustid", []) %}
   {% if ac %}
   <h3>AcoustID</h3>

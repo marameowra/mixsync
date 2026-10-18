@@ -17,3 +17,8 @@ def band(distance: float, vetoes: Sequence[str], profile: Profile) -> Band:
     if distance <= profile.auto_accept_max and not vetoes:
         return Band.AUTO_ACCEPT
     return Band.REVIEW
+
+
+def close_gap(gap: float, profile: Profile) -> bool:
+    """A runner-up this near the best is a coin flip. Inclusive, with float slack."""
+    return gap <= profile.auto_accept_max + 1e-9
