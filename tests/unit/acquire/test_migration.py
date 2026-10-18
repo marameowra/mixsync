@@ -433,8 +433,9 @@ async def test_acoustid_outage_retries_a_migrated_album(rig: Rig) -> None:
     rig.confirm(await rig.preflight())
     rig.env.acoustid.fail = 1
     await rig.env.drain(until=lambda: rig.env.acoustid.fail == 0)
-    (verify,) = rig.env.jobs(JobKind.VERIFY)
-    assert verify.status is JobState.RETRY_WAIT and decision_rows(rig.env, 2) == []
+    first, again = rig.env.jobs(JobKind.VERIFY)
+    assert first.status is JobState.SUCCEEDED and again.status is JobState.QUEUED
+    assert decision_rows(rig.env, 2) == []
     await rig.env.drain()
     assert rig.requests()[0].status == "imported"
 

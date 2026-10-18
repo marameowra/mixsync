@@ -36,7 +36,7 @@ from mixsync.acquire.requests import (
     search_priority,
 )
 from mixsync.core.clock import Clock, aware
-from mixsync.core.errors import AuthError, PermanentError
+from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -390,7 +390,13 @@ class Pipeline:
                 unreadable.append(f"{path}: {e}")
                 continue
             readable.append(path)
-            results = await self.acoustid.lookup(fp)
+            try:
+                results = await self.acoustid.lookup(fp)
+            except TransientError:
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        verify.wait_for_acoustid(s, self.clock.now(), self._request(s, job), job)
+                return
             files.append(file_track(path, fp.duration, tuple(results)))
         if first and not files:
             raise first
