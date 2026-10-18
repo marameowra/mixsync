@@ -16,9 +16,6 @@ class FakeWatch:
             EntityRef(_A.format(3), "坂本龍一 (Ryuichi Sakamoto)"),
         ]
 
-    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
-        return f"Preview {kind}"
-
     async def entity_name(self, kind: str, mbid: str) -> str:
         return "Preview Artist"
 
@@ -53,3 +50,6 @@ class FakeWatch:
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
         return []
+
+    async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None:
+        return None if cached_only else f"Preview {kind} \u2014 Preview Artist"

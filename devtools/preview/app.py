@@ -144,7 +144,7 @@ def build_app(
 
     app = create_app(sf, settings)
     app.dependency_overrides[get_watch] = lambda: FakeWatch()
-    app.dependency_overrides[get_namer] = lambda: FakeWatch()  # detail pages name MBIDs offline
+    app.dependency_overrides[get_namer] = lambda: FakeWatch()
     app.mount("/themes", StaticFiles(directory=themes_dir), name="themes")
 
     def names() -> list[str]:
