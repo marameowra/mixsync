@@ -28,6 +28,7 @@ from mixsync.discovery import retention
 from mixsync.discovery.playlists import Discovery, ensure_build
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
+from mixsync.wiring import build_services
 
 from .conftest import Env
 from .fakes import ALBUM, ALBUM_B, AUDIO
@@ -318,7 +319,6 @@ async def test_startup_recovery_creates_default_playlist_and_retention_chain(
             "downloads_dir": str(env.downloads),
         }
     )
-    monkeypatch.setattr(worker, "Settings", lambda: settings)
     start = Discovery.start_chains
     attempts = 0
 
@@ -330,7 +330,7 @@ async def test_startup_recovery_creates_default_playlist_and_retention_chain(
         start(discovery)
 
     monkeypatch.setattr(Discovery, "start_chains", fail_once)
-    _, _, _, startup = worker._new_queue()
+    _, _, _, startup = worker._new_queue(build_services(settings, env.sessions))
     stop = asyncio.Event()
     claims = 0
 

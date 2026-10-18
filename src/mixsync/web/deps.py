@@ -1,23 +1,18 @@
-import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
-from mixsync.core.clock import SystemClock
-from mixsync.core.protocols import ReleaseWatch
+from mixsync.core.protocols import NameLookup, ReleaseWatch
 from mixsync.db.auth import AuthUser, user_for_session
-from mixsync.db.journal import SqlJournal
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.secretbox import SecretBox, load_box
+from mixsync.db.secretbox import SecretBox
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
-from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
 
 SESSION_COOKIE = "mixsync_session"
@@ -33,40 +28,13 @@ def get_db(request: Request) -> Iterator[Session]:
 Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
-def fileops_for(state: Any) -> FileOps:
-    if getattr(state, "fileops", None) is None:
-        st, clock = state.settings, SystemClock()
-        state.fileops = FileOps(
-            Path(st.data_dir),
-            Path(st.downloads_dir),
-            SqlJournal(state.session_factory, clock),
-            clock,
-        )
-    fileops: FileOps = state.fileops
+def get_fileops(request: Request) -> FileOps:
+    fileops: FileOps = request.app.state.services.fileops
     return fileops
 
 
-def get_fileops(request: Request) -> FileOps:
-    return fileops_for(request.app.state)
-
-
 def get_merger(request: Request) -> Merger:
-    """Built on first use. MusicBrainz goes through the same DB-backed bucket and cache as the
-    worker's, so the rate limit holds across both processes. No FileOps.recover() here."""
-    state = request.app.state
-    if getattr(state, "merger", None) is None:
-        st, sessions, clock = state.settings, state.session_factory, SystemClock()
-        state.merger = Merger(
-            sessions,
-            clock,
-            MusicBrainzProvider(PoliteClient("musicbrainz", st, sessions), st.mb_base_url),
-            get_fileops(request),
-            st.path_template,
-            tuple(st.canonical_media),
-            tuple(st.canonical_countries),
-            st.trash_days,
-        )
-    merger: Merger = state.merger
+    merger: Merger = request.app.state.services.merger
     return merger
 
 
@@ -75,31 +43,25 @@ Files = Annotated[FileOps, Depends(get_fileops)]
 
 
 def get_watch(request: Request) -> ReleaseWatch:
-    """MusicBrainz for follow search and lookup, on the same bucket and cache as the worker's."""
-    state = request.app.state
-    if getattr(state, "watch", None) is None:
-        state.watch = MusicBrainzProvider(
-            PoliteClient("musicbrainz", state.settings, state.session_factory),
-            state.settings.mb_base_url,
-        )
-    watch: ReleaseWatch = state.watch
+    """The one MusicBrainzProvider, for follow search and lookup."""
+    watch: ReleaseWatch = request.app.state.services.musicbrainz
     return watch
 
 
 Watch = Annotated[ReleaseWatch, Depends(get_watch)]
 
 
-_box_lock = threading.Lock()
+def get_namer(request: Request) -> NameLookup:
+    """The same provider, which also names ids."""
+    namer: NameLookup = request.app.state.services.musicbrainz
+    return namer
+
+
+Namer = Annotated[NameLookup, Depends(get_namer)]
 
 
 def get_box(request: Request) -> SecretBox:
-    """Loaded on first use; a key file with loose permissions fails here, before any secret is
-    read or written."""
-    state = request.app.state
-    with _box_lock:  # sync dependencies run in a thread pool
-        if getattr(state, "secret_box", None) is None:
-            state.secret_box = load_box(state.settings)
-        box: SecretBox = state.secret_box
+    box: SecretBox = request.app.state.services.secret_box
     return box
 
 
@@ -107,21 +69,13 @@ Box = Annotated[SecretBox, Depends(get_box)]
 
 
 def get_navidrome_http(request: Request) -> PoliteClient:
-    """One client for the app's life; account links ping Navidrome as the user through it."""
-    state = request.app.state
-    if getattr(state, "navidrome_http", None) is None:
-        state.navidrome_http = PoliteClient("navidrome", state.settings, state.session_factory)
-    http: PoliteClient = state.navidrome_http
+    """Account links ping Navidrome as the user through it."""
+    http: PoliteClient = request.app.state.services.navidrome_http
     return http
 
 
 def get_coverart(request: Request) -> CoverArtClient:
-    state = request.app.state
-    if getattr(state, "coverart", None) is None:
-        state.coverart = CoverArtClient(
-            PoliteClient("coverart", state.settings, state.session_factory)
-        )
-    cover: CoverArtClient = state.coverart
+    cover: CoverArtClient = request.app.state.services.coverart
     return cover
 
 
@@ -129,12 +83,7 @@ Cover = Annotated[CoverArtClient, Depends(get_coverart)]
 
 
 def get_listenbrainz_http(request: Request) -> PoliteClient:
-    state = request.app.state
-    if getattr(state, "listenbrainz_http", None) is None:
-        state.listenbrainz_http = PoliteClient(
-            "listenbrainz", state.settings, state.session_factory
-        )
-    http: PoliteClient = state.listenbrainz_http
+    http: PoliteClient = request.app.state.services.listenbrainz_http
     return http
 
 

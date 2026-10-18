@@ -108,6 +108,7 @@ Every folder has a `README.md` with implementation guidance: purpose, boundaries
 | `/data/.trash` | Soft-deleted files, purged after N days | |
 | `/data/.incoming` | Staging for atomic imports | |
 | `/import-source` | Old library during [migration](design/migration.md) | **ro** |
+| `/drop` | Optional drop folder: polled, imported originals move to `/data/.trash` | rw |
 
 **Why one `/data` mount:** moving a file between library, discover, trash, and incoming must be an atomic `rename`, and `rename` fails across Docker mount points (`EXDEV`). Keeping `discover/` as a sibling of `library/`, not nested inside it, also stops Navidrome's main library from indexing provisional tracks. Navidrome mounts only `/data/library` and `/data/discover`.
 

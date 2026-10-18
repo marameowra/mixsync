@@ -11,7 +11,7 @@ import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,23 +19,24 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
-    VERIFY_ATTEMPTS,
+    NO_RESULTS_BACKOFF,
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
+    drop_candidate,
     enqueue_import,
     enqueue_recheck,
     enqueue_rescan,
-    enqueue_verify,
     hold_imports,
     profile_for,
-    retry_search,
     search_priority,
 )
 from mixsync.core.clock import Clock, aware
-from mixsync.core.errors import AuthError, PermanentError
+from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -66,21 +67,26 @@ from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
-from mixsync.match.candidates import parse_name, rank
-from mixsync.match.scorer import DEFAULT_WEIGHTS, SCORER_VERSION, assign_tracks, score_files
+from mixsync.match.candidates import parse_name, present_tracks, rank
+from mixsync.match.features import string_dist
+from mixsync.match.scorer import (
+    DEFAULT_WEIGHTS,
+    SCORER_VERSION,
+    assign_tracks,
+    best_release,
+    score_files,
+)
 from mixsync.match.vetoes import all_confident
 
 log = logging.getLogger(__name__)
 
+# A partial import needs the album tag to name the release: 0.2 forgives an edition suffix or a
+# typo, not a compilation title.
+PARTIAL_ALBUM_MAX_DIST = 0.2
+
 Handler = Callable[[JobRecord], Awaitable[None]]
 
 SEARCH_DEBOUNCE = timedelta(minutes=10)  # one request never searches twice within this
-NO_RESULTS_BACKOFF = (
-    timedelta(hours=1),
-    timedelta(hours=6),
-    timedelta(hours=24),
-    timedelta(weeks=1),
-)
 MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
@@ -127,7 +133,7 @@ class Pipeline:
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if req.status not in ("searching", "no_results") or req.migration_id is not None:
+            if not lifecycle.can_search(req):
                 return  # superseded: another job already moved this request on
             wait = req.next_search_at and aware(req.next_search_at)
             # A DB count is enough: the cap protects the peer network, not a hard invariant.
@@ -156,8 +162,9 @@ class Pipeline:
             with self.sessions.begin() as s:
                 req = self._request(s, job)
                 req.artist, req.album = album.artist[:255], album.album[:255]
-                req.status, req.last_error = "failed", "release has no tracklist"
+                lifecycle.failed(req, "release has no tracklist")
             return
+        owned: set[str | None] = set()  # recordings of this album already in the library
         if wanted is not None:  # discovery: any copy of the wanted recordings will do
             with self.sessions() as s:
                 have = self._have_recordings(s, wanted)
@@ -166,33 +173,40 @@ class Pipeline:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
                     req.release_group_mbid = req.release_group_mbid or album.release_group_id
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
                 return
             if album.tracks and not wanted & {t.recording_id for t in album.tracks}:
                 with self.sessions.begin() as s:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
-                    req.status = "failed"
-                    req.last_error = (
-                        f"none of the {len(wanted)} wanted recordings are on this release"
-                    )
+                    lifecycle.dead_end(req, "none of the wanted recordings are on this release")
                 return
         elif album.release_group_id and album.tracks:
             with self.sessions() as s:
                 have = canonical_db.owned(
                     s, album.release_group_id, [t.recording_id or "" for t in album.tracks]
                 )
+            owned = have
             if all(t.recording_id in have for t in album.tracks):  # nothing left to fetch
                 with self.sessions.begin() as s:
                     req = self._request(s, job)
                     req.artist, req.album = album.artist[:255], album.album[:255]
                     req.release_group_mbid = req.release_group_mbid or album.release_group_id
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
                 return
         ranked: list[tuple[Candidate, Any]] = []
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
-            ranked = [cr for cr in rank(found, album, profile) if cr[1].band is not Band.REJECT]
+            ranked = [
+                cr
+                for cr in rank(found, album, profile)
+                if cr[1].band is not Band.REJECT
+                # a folder with nothing new would only download and import nothing
+                and (
+                    not owned
+                    or any(t.recording_id not in owned for t in present_tracks(cr[0], album))
+                )
+            ]
             if ranked:
                 break
 
@@ -206,7 +220,8 @@ class Pipeline:
                     min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
                 ]
                 req.no_results_attempts += 1
-                req.status, req.next_search_at = "no_results", now + delay
+                lifecycle.no_results(req)
+                req.next_search_at = now + delay
                 enqueue_in(
                     s,
                     now,
@@ -221,12 +236,12 @@ class Pipeline:
             decisions.record(
                 s,
                 result,
-                evidence={"request_id": req.id, "source": _source(cand), "target": _target(album)},
+                evidence=Evidence.searched(req.id, cand, album).to_json(),
                 user_id=req.user_id,
                 stage=1,
                 release_mbid=mbid,
             )
-            req.status, req.no_results_attempts = "downloading", 0
+            lifecycle.downloading(req)
             req.next_search_at = now + SEARCH_DEBOUNCE
             enqueue_in(
                 s,
@@ -279,7 +294,7 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                retry_search(s, now, self._request(s, job), cand.username, cand.folder, str(e))
+                await self._drop(cand, s, now, self._request(s, job), str(e))
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -292,24 +307,19 @@ class Pipeline:
             req = self._request(s, job)
             if info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
-                retry_search(s, now, req, cand.username, cand.folder, why)
+                await self._drop(cand, s, now, req, why)
                 return
             problem = _missing(cand, info.local_paths)
             if problem:  # never import a missing or partial file (SK-P04)
-                retry_search(s, now, req, cand.username, cand.folder, problem)
+                await self._drop(cand, s, now, req, problem)
                 return
-            req.status = "verifying"
-            enqueue_in(
+            verify.start(
                 s,
                 now,
-                JobKind.VERIFY,
-                {
-                    "request_id": req.id,
-                    "release_mbid": req.release_mbid,
-                    "candidate": p["candidate"],
-                    "paths": list(info.local_paths),
-                },
-                max_attempts=VERIFY_ATTEMPTS,
+                req,
+                req.release_mbid,
+                p["candidate"],
+                list(info.local_paths),
                 idempotency_key=f"verify:{job.id}",
             )
 
@@ -329,8 +339,10 @@ class Pipeline:
         A migrated album has no release yet: `_identify` picks one."""
         p = job.payload
         with self.sessions() as s:
-            if _stale(s, job, self._request(s, job)):  # before spending any rate-limited calls
+            req = self._request(s, job)
+            if _stale(s, job, req):  # before spending any rate-limited calls
                 return
+            local = req.from_files
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
         album: AlbumInfo | None = None
@@ -346,24 +358,52 @@ class Pipeline:
             if why := await self._unusable(path):
                 with self.sessions.begin() as s:
                     if not _stale(s, job, self._request(s, job)):
-                        retry_search(
+                        await self._drop(
+                            cand,
                             s,
                             self.clock.now(),
                             self._request(s, job),
-                            cand.username,
-                            cand.folder,
                             why,
                         )
                 return
         files: list[FileTrack] = []
+        readable: list[Path] = []  # aligned with `files`; the rest are never imported
+        unreadable: list[str] = []
+        first: PermanentError | None = None
         for path in paths:
-            fp = await self.fingerprint(path)
-            results = await self.acoustid.lookup(fp)
+            try:
+                fp = await self.fingerprint(path)
+            except PermanentError as e:
+                if not local:  # a corrupt download: another peer may have a good copy
+                    with self.sessions.begin() as s:
+                        if not _stale(s, job, self._request(s, job)):
+                            await self._drop(
+                                cand,
+                                s,
+                                self.clock.now(),
+                                self._request(s, job),
+                                f"unreadable: {path.name}: {e}",
+                            )
+                    return
+                # local files cannot be fetched again: identify the album from the rest
+                first = first or e
+                unreadable.append(f"{path}: {e}")
+                continue
+            readable.append(path)
+            try:
+                results = await self.acoustid.lookup(fp)
+            except TransientError:
+                with self.sessions.begin() as s:
+                    if not _stale(s, job, self._request(s, job)):
+                        verify.wait_for_acoustid(s, self.clock.now(), self._request(s, job), job)
+                return
             files.append(file_track(path, fp.duration, tuple(results)))
-        like = likelies(paths)
+        if first and not files:
+            raise first
+        like = likelies(readable)
         with self.sessions() as s:
             req = self._request(s, job)
-            profile, migrating = profile_for(s, req.user_id), req.migration_id is not None
+            profile, migrating = profile_for(s, req.user_id), req.from_files
             provisional = req.provisional
         if album is not None:
             result = score_files(files, like, album, profile)
@@ -376,39 +416,50 @@ class Pipeline:
         track_no = {id(t): i for i, t in enumerate(album.tracks)}
         assignment = [
             {
-                "local_path": str(paths[index[id(f)]]),
+                "local_path": str(readable[index[id(f)]]),
                 "track": track_no[id(t)],  # old decisions have only this
                 "recording_id": t.recording_id,
                 "acoustid_id": acoustid_id(f),
             }
             for f, t in pairs
         ]
-        unassigned = [str(paths[index[id(f)]]) for f in extra]  # import copies only the paired
+        unassigned = [str(readable[index[id(f)]]) for f in extra]  # import copies only the paired
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         partial = ""
-        if (  # deliberately partial: missing tracks cost nothing when every file is sure
-            migrating
-            and result.band is Band.REVIEW
-            and len(pairs) < len(album.tracks)
-            and all_confident(pairs)
-        ):
+        if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
+            # deliberately partial: missing tracks cost nothing, but only when AcoustID is sure
+            # of every file; otherwise the normal bands (and a retry) apply
             free = score_files(
                 files, like, album, profile, {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
             )
-            if free.band is Band.AUTO_ACCEPT:
+            if (
+                free.band is Band.AUTO_ACCEPT
+                and not result.runner_up  # the cap on a close runner-up stands
+                and all_confident(pairs)
+                and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
+            ):
                 result, partial = free, f"{len(pairs)} of {len(album.tracks)} tracks present"
-        evidence = {
-            "request_id": p["request_id"],
-            "candidate": p["candidate"],
-            "unassigned": unassigned,
-            "partial": partial,
-            "source": _source(cand, paths),
-            "target": _target(album),
-            "acoustid": [_best(f) for f in files],
-            "duration_deltas": [abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
-            "assignment": assignment,
-        }
+        if unreadable:  # a human confirms the release; the bad file is not in `assignment`
+            result = replace(
+                result,
+                band=Band.REVIEW if result.band is Band.AUTO_ACCEPT else result.band,
+                vetoes=(*result.vetoes, *(f"unreadable, not imported: {u}" for u in unreadable)),
+            )
+        evidence = Evidence.verified(
+            p["request_id"],
+            p["candidate"],
+            cand,
+            paths,
+            album,
+            unassigned=unassigned,
+            partial=partial,
+            acoustid=[_best(f) for f in files],
+            duration_deltas=[abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
+            assignment=assignment,
+        ).to_json()
+        if result.runner_up:
+            evidence["runner_up"] = asdict(result.runner_up)
 
         now = self.clock.now()
         with self.sessions.begin() as s:
@@ -426,24 +477,24 @@ class Pipeline:
                 user_id=req.user_id,
                 stage=2,
                 release_mbid=p["release_mbid"] or album.release_id or "",
+                release_given=bool(p["release_mbid"]),
             )
             if result.band is Band.AUTO_ACCEPT:
                 enqueue_import(s, now, req, d.id)
             elif result.band is Band.REVIEW and provisional:  # discovery never fills Review
                 d.status = "rejected_auto"
                 why = "; ".join(result.vetoes) or f"distance {result.distance:.2f}"
-                retry_search(
+                await self._drop(
+                    cand,
                     s,
                     now,
                     req,
-                    cand.username,
-                    cand.folder,
                     f"would need review, which discovery skips: {why}",
                 )
             elif result.band is Band.REVIEW:
-                req.status = "review"
+                lifecycle.review(req)
             else:  # files stay in /downloads: reject never deletes
-                retry_search(s, now, req, cand.username, cand.folder, "rejected after download")
+                await self._drop(cand, s, now, req, "rejected after download")
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
@@ -462,9 +513,9 @@ class Pipeline:
             .where(MatchDecision.chosen_release_mbid == mbid, MatchDecision.status == "repick")
             .order_by(MatchDecision.id.desc())
         ):
-            if d.evidence.get("request_id") == req.id:
+            if Evidence.parse(d.evidence).request_id == req.id:
                 decisions.reopen(s, d.id)
-                req.status, req.last_error = "review", f"release {mbid} not found on MusicBrainz"
+                lifecycle.review(req, f"release {mbid} not found on MusicBrainz")
                 return
         raise PermanentError(f"release {mbid} not found on MusicBrainz")
 
@@ -487,14 +538,12 @@ class Pipeline:
             albums = [
                 await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
             ]
-        scored = [(score_files(files, like, a, profile), a) for a in albums]
-        if not scored:
+        if not albums:
             none = MatchResult(
                 1.0, Band.REVIEW, (), ("no release found on MusicBrainz",), SCORER_VERSION
             )
             return AlbumInfo(like.artist or "", like.album or "", ()), none
-        result, best = min(scored, key=lambda x: x[0].distance)
-        return best, result
+        return best_release(files, like, albums, profile)
 
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]
@@ -502,13 +551,13 @@ class Pipeline:
             d = s.get(MatchDecision, did)
             if d is None:
                 raise LookupError(f"decision {did} does not exist")
-            cand = candidate_from_dict(d.evidence["candidate"])
-            edits = d.evidence.get("unverified")
-            evidence = d.evidence
+            evidence = Evidence.parse(d.evidence)
+            cand = candidate_from_dict(evidence.candidate)
+            edits = evidence.unverified
             mbid = d.chosen_release_mbid or d.release_mbid
-            assignment: list[dict[str, Any]] = [] if edits else d.evidence["assignment"]  # strict
-            switched = "canonical_switched_from" in d.evidence  # an earlier run made us canonical
-            unassigned = tuple(d.evidence.get("unassigned", ()))
+            assignment = evidence.assignment
+            # an earlier run made us canonical
+            switched = evidence.canonical_switched_from is not None
             req = self._request(s, job)
             wanted = set(req.recording_mbids) if req.provisional else None
         if edits:
@@ -521,16 +570,9 @@ class Pipeline:
             raise PermanentError("the decision assigns no files to import")
         album = await self.metadata.get_release(mbid)
         # Same batch id on every retry, so a resumed import skips what is already in.
-        batch = f"request-{rid}-decision-{did}"
-        by_rec: dict[str | None, TrackInfo] = {t.recording_id: t for t in album.tracks}
+        batch = verify.batch_id(rid, did)
         files: list[tuple[Path, TrackInfo, str | None]] = []
-        for a in assignment:
-            pos: int = a["track"]
-            track: TrackInfo | None = album.tracks[pos] if pos < len(album.tracks) else None
-            # shortcut: a recording on the release twice AND a shifted list maps to the last
-            # one; upgrade by storing the medium and position in the assignment.
-            if "recording_id" in a and (track is None or track.recording_id != a["recording_id"]):
-                track = by_rec.get(a["recording_id"])
+        for path, track, acoustid in evidence.resolve(album):
             if track is None:  # the release changed since verify
                 if any(self._imported(Path(x["local_path"]), batch) for x in assignment):
                     raise PermanentError(
@@ -538,9 +580,9 @@ class Pipeline:
                         "imported; check it by hand"
                     )
                 with self.sessions.begin() as s:
-                    enqueue_verify(s, self.clock.now(), self._request(s, job), mbid, evidence)
+                    verify.again(s, self.clock.now(), self._request(s, job), mbid, evidence)
                 return
-            files.append((Path(a["local_path"]), track, a["acoustid_id"]))
+            files.append((path, track, acoustid))
         if wanted is not None:
             return await self._import_provisional(job, cand, album, files, wanted, batch)
         target, n = album, len(files)
@@ -560,7 +602,9 @@ class Pipeline:
                     # Same transaction: a retry must not mistake this for a plain canonical import.
                     row = s.get(MatchDecision, did)
                     if row:
-                        row.evidence = {**row.evidence, "canonical_switched_from": cid}
+                        row.evidence = (
+                            Evidence.parse(row.evidence).with_switched_from(cid).to_json()
+                        )
                     switched = True
                     break
             # lost a race to another switch: decide again against the stored choice
@@ -569,13 +613,25 @@ class Pipeline:
             # not yet committed); the fragmentation merge cleans that up.
             files = await self._unowned(album, files, batch)
         if n and not files:  # every file is a verified duplicate: nothing to import or rescan
+            with self.sessions() as s:
+                have = canonical_db.owned(
+                    s, str(album.release_group_id), [t.recording_id or "" for t in album.tracks]
+                )
+            left = [t for t in album.tracks if t.recording_id not in have]
             with self.sessions.begin() as s:
                 req = self._request(s, job)
-                req.status, req.last_error = "owned", None
+                if left and not req.from_files and album.release_group_id:
+                    # another copy of what we have: the rest of the album is still wanted
+                    text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
+                    await self._drop(cand, s, self.clock.now(), req, text, partial=text)
+                else:
+                    lifecycle.owned(req)
             return
         results = await self._import_files(files, target, "verified", batch)
         await self._cover(target, results, batch)
-        await self._finish(job, cand, results, batch, unassigned=unassigned)
+        await self._finish(
+            job, cand, results, batch, unassigned=evidence.unassigned, partial=evidence.partial
+        )
 
     async def _import_provisional(
         self,
@@ -614,10 +670,11 @@ class Pipeline:
             with self.sessions.begin() as s:
                 req = self._request(s, job)
                 if todo:
-                    req.status = "failed"
-                    req.last_error = "none of the wanted recordings are on the downloaded release"
+                    lifecycle.dead_end(
+                        req, "none of the wanted recordings are on the downloaded release"
+                    )
                 else:  # everything wanted is owned by now
-                    req.status, req.last_error = "owned", None
+                    lifecycle.owned(req)
             return
         results = await self._import_files(files, album, "verified", batch, "discover")
         by_src = {f[0]: f for f in files}
@@ -643,7 +700,9 @@ class Pipeline:
                         artist=track.artist or album.artist,
                     )
                 )
-        await self._finish(job, cand, results, batch, root="discover", note=note)
+        await self._finish(
+            job, cand, results, batch, root="discover", note=note, dead_end=bool(note)
+        )
 
     async def _import_unverified(
         self, job: JobRecord, cand: Candidate, edits: dict[str, Any]
@@ -661,7 +720,7 @@ class Pipeline:
             )
             for t in edits["tracks"]
         ]
-        batch = f"request-{job.payload['request_id']}-decision-{job.payload['decision_id']}"
+        batch = verify.batch_id(job.payload["request_id"], job.payload["decision_id"])
         results = await self._import_files(files, album, "unverified", batch)
         year = str(edits["year"]) if edits["year"] else ""
         await self._finish(job, cand, results, batch, (album.artist, album.album, year))
@@ -712,23 +771,27 @@ class Pipeline:
         unassigned: tuple[str, ...] = (),  # downloaded files the release has no track for
         root: str = "library",
         note: str = "",
+        dead_end: bool = False,  # the release lacks some wanted recordings (discovery)
+        partial: str = "",  # "N of M tracks present": import what is here, keep looking
     ) -> None:
         errors = [f"{r.src.name}: {r.error}" for r in results if r.error]
         with self.sessions() as s:
-            migrating = self._request(s, job).migration_id is not None
+            req = self._request(s, job)
+            migrating, local = req.migration_id is not None, req.from_files
         if results and not errors and not migrating:  # the old library is never touched
             await self._release(cand, [r.src for r in results], batch, root)
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            req.status = "failed" if errors else "imported"
-            if migrating and recheck and not errors:
-                req.status = "unverified"
             notes = [*errors, *([note] if note else [])]
             if unassigned:
                 names = ", ".join(Path(u).name for u in unassigned)
                 notes.append(f"{len(unassigned)} file(s) not on the release: {names}")
-            req.last_error = "; ".join(notes) or None
+            lifecycle.finished(
+                req, errors, notes, unverified=bool(local and recheck), dead_end=dead_end
+            )
+            if partial and not errors and not local:
+                await self._drop(cand, s, now, req, partial, partial=partial, notes=notes)
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
@@ -772,6 +835,17 @@ class Pipeline:
     def _imported(self, src: Path, batch: str, root: str = "library") -> bool:
         return self.importer.fileops.find_imported(batch, src, root) is not None
 
+    async def _drop(
+        self, cand: Candidate, s: Session, now: datetime, req: Request, why: str, **kw: Any
+    ) -> None:
+        """drop_candidate, after cancelling what the candidate still has moving in slskd so a
+        dropped album stops downloading. Finished files stay; a failed cancel never blocks."""
+        try:
+            await self.source.clear(cand)
+        except Exception:
+            log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
+        drop_candidate(s, now, req, cand.username, cand.folder, why, **kw)
+
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
     ) -> None:
@@ -780,7 +854,8 @@ class Pipeline:
         try:
             for src in srcs:
                 await asyncio.to_thread(self.importer.fileops.release, src, batch, root)
-            await self.source.clear(cand)
+            if cand.username:  # a dropped album never came from a peer
+                await self.source.clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)
 
@@ -805,16 +880,7 @@ class Pipeline:
 
 def _stale(s: Session, job: JobRecord, req: Request) -> bool:
     """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
-    newer = s.scalar(
-        select(Job.id)
-        .where(
-            Job.kind == JobKind.VERIFY,
-            Job.id > job.id,
-            Job.payload["request_id"].as_integer() == req.id,
-        )
-        .limit(1)
-    )
-    return req.status != "verifying" or newer is not None
+    return req.status != "verifying" or verify.superseded(s, job.id, req.id)
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
@@ -879,32 +945,3 @@ def _best(f: FileTrack) -> dict[str, Any]:
 def acoustid_id(f: FileTrack) -> str | None:
     best = max(f.acoustid, key=lambda r: r.score, default=None)
     return best.id if best and best.score >= ACOUSTID_ID_SCORE else None
-
-
-def _source(cand: Candidate, local: list[Path] | None = None) -> dict[str, Any]:
-    return {
-        "peer": cand.username,
-        "folder": cand.folder,
-        "files": [
-            {
-                "name": f.path.rsplit("\\", 1)[-1],
-                "format": f.extension,
-                "bitrate": f.bitrate,
-                "size": f.size,
-                "duration": f.duration,
-                "local_path": str(local[i]) if local else None,
-            }
-            for i, f in enumerate(cand.files)
-        ],
-    }
-
-
-def _target(album: AlbumInfo) -> dict[str, Any]:
-    return {
-        "title": album.album,
-        "artist": album.artist,
-        "release_group_id": album.release_group_id,
-        "tracks": [
-            {"position": t.index, "title": t.title, "length": t.length} for t in album.tracks
-        ],
-    }

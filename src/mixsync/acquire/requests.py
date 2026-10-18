@@ -2,15 +2,17 @@
 marking candidates tried, coalescing rescans and applying a reviewer's decision."""
 
 import random
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db.models.auth import MatchingProfile, User
@@ -22,10 +24,15 @@ from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
+NO_RESULTS_BACKOFF = (
+    timedelta(hours=1),
+    timedelta(hours=6),
+    timedelta(hours=24),
+    timedelta(weeks=1),
+)
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
-VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
 
 
 def candidate_from_dict(d: dict[str, Any]) -> Candidate:
@@ -105,11 +112,88 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
                 )
 
 
-def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
-    """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
-    req.tried = [*req.tried, [peer, folder]]
-    req.status = "searching"
-    req.last_error = why
+def _has_tracks(s: Session, req: Request) -> bool:
+    return (
+        s.scalar(select(Track.id).where(verify.in_request(Track.batch_id, req.id)).limit(1))
+        is not None
+    )
+
+
+def _failed_candidate(s: Session, payload: dict[str, Any]) -> list[str] | None:
+    """[peer, folder] of a DOWNLOAD / VERIFY job's candidate, or of an IMPORT job's decision."""
+    if "candidate" in payload:
+        c = payload["candidate"]
+        return [c["username"], c["folder"]]
+    d = s.get(MatchDecision, payload["decision_id"]) if "decision_id" in payload else None
+    if d is None:
+        return None
+    ev = Evidence.parse(d.evidence)
+    return [ev.peer, ev.folder]
+
+
+def fail_request_of_job(
+    c: Connection, job_id: int, payload: dict[str, Any], error: str, now: datetime
+) -> None:
+    """The queue's final-failure hook: a job that failed for good must not leave its request in
+    progress forever, unless a newer job for the request has taken over."""
+    rid = payload.get("request_id")
+    if rid is None:
+        return
+    with Session(c) as s:  # joins the queue's transaction: the caller commits
+        req = s.get(Request, rid)
+        newer = s.scalar(
+            select(Job.id)
+            .where(Job.id > job_id, Job.payload["request_id"].as_integer() == rid)
+            .limit(1)
+        )
+        if req and req.status in lifecycle.IN_PROGRESS and newer is None:
+            lifecycle.job_failed(req, _has_tracks(s, req), error)
+            req.updated_at = now  # the queue's clock, as the job rows use
+            if req.status == "partial":  # a partial request always has a repeat search queued
+                peer, folder = _failed_candidate(s, payload) or ("", "")
+                drop_candidate(s, now, req, peer, folder, error, job_failed=True)
+            s.flush()
+
+
+def drop_candidate(
+    s: Session,
+    now: datetime,
+    req: Request,
+    peer: str,
+    folder: str,
+    why: str,
+    *,
+    partial: str = "",  # "N of M tracks present": some tracks are in, keep looking with backoff
+    notes: Sequence[str] = (),
+    job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
+) -> None:
+    """The one way a candidate is dropped: it joins the request's tried list (its files stay in
+    /downloads, never deleted) and the request searches again, or fails when it has nothing to
+    search for. The next search is fresh and skips every tried [peer, folder]."""
+    if req.from_files:  # nothing to search for: a person must look at the files
+        if not partial and not job_failed:
+            lifecycle.download_failed(req, False, why)
+        return
+    if (
+        peer and [peer, folder] not in req.tried
+    ):  # no candidate known, or else the search re-picks it, hourly, forever
+        req.tried = [*req.tried, [peer, folder]]
+    if partial or job_failed:  # part of the album is in: repeat the search with backoff
+        if partial:
+            lifecycle.keep_looking(req, partial, notes)
+        delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
+        req.no_results_attempts += 1
+        req.next_search_at = now + delay
+        enqueue_in(
+            s,
+            now,
+            JobKind.SEARCH,
+            {"request_id": req.id},
+            run_after=now + delay,
+            priority=search_priority(req),
+        )
+        return
+    lifecycle.download_failed(req, _has_tracks(s, req), why)
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
 
@@ -125,7 +209,7 @@ def enqueue_rescan(s: Session, now: datetime) -> None:
 
 
 def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) -> None:
-    req.status = "importing"
+    lifecycle.importing(req)
     enqueue_in(
         s,
         now,
@@ -135,41 +219,21 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
     )
 
 
-def enqueue_verify(
-    s: Session, now: datetime, req: Request, release_mbid: str | None, evidence: dict[str, Any]
-) -> None:
-    """Verify the downloaded files again, against `release_mbid` (a repick, or a release that
-    changed under a stored assignment)."""
-    req.status = "verifying"
-    enqueue_in(
-        s,
-        now,
-        JobKind.VERIFY,
-        {
-            "request_id": req.id,
-            "release_mbid": release_mbid,
-            "candidate": evidence["candidate"],
-            "paths": [f["local_path"] for f in evidence["source"]["files"]],
-        },
-        max_attempts=VERIFY_ATTEMPTS,
-    )
-
-
 def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
     d = s.get(MatchDecision, decision_id)
-    req = s.get(Request, d.evidence.get("request_id", 0)) if d else None
-    if d is None or req is None:  # a decision that did not come from a request
+    ev = Evidence.parse(d.evidence) if d else None
+    req = s.get(Request, ev.request_id) if ev else None
+    if d is None or ev is None or req is None:  # a decision that did not come from a request
         return
-    src = d.evidence["source"]
     if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
         enqueue_import(s, now, req, d.id)
     elif d.final_action == "repick":
-        enqueue_verify(s, now, req, d.chosen_release_mbid, d.evidence)
-    elif req.migration_id is not None:  # no other candidate to look for: the album stays out
-        req.status, req.last_error = "skipped", "rejected in review"
+        verify.again(s, now, req, d.chosen_release_mbid, ev)
+    elif req.from_files:  # no other candidate to look for: the album stays out
+        lifecycle.rejected(req)
     else:
-        retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
+        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review")
 
 
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them

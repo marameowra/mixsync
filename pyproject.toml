@@ -1,6 +1,6 @@
 [project]
 name = "mixsync"
-version = "1.0.0"
+version = "1.0.1"
 description = "Self-hosted music stack: download, verify, organize, hand off."
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -80,6 +80,25 @@ name = "core imports nothing internal"
 type = "forbidden"
 source_modules = ["mixsync.core"]
 forbidden_modules = ["mixsync.db", "mixsync.web", "mixsync.app"]
+
+[[tool.importlinter.contracts]]
+name = "domain packages do not import the wiring root"
+type = "forbidden"
+source_modules = [
+    "mixsync.core",
+    "mixsync.db",
+    "mixsync.ratelimit",
+    "mixsync.metadata",
+    "mixsync.match",
+    "mixsync.sources",
+    "mixsync.library",
+    "mixsync.acquire",
+    "mixsync.targets",
+    "mixsync.watchlist",
+    "mixsync.submit",
+    "mixsync.discovery",
+]
+forbidden_modules = ["mixsync.wiring"]
 
 [[tool.importlinter.contracts]]
 name = "db imports only core"

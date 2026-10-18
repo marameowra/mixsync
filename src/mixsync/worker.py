@@ -8,37 +8,33 @@ from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
+from mixsync.acquire.adopter import adopter
+from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.gate import DownloadGate
-from mixsync.acquire.merge import Merger
 from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
-from mixsync.core.clock import Clock, SystemClock
+from mixsync.acquire.requests import fail_request_of_job
+from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind
-from mixsync.db.engine import make_engine, make_session_factory
-from mixsync.db.journal import SqlJournal
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
-from mixsync.db.secretbox import load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.retention import Retention
 from mixsync.library import tag_undo
-from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
-from mixsync.metadata.coverart import CoverArtClient
-from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.query import queries
 from mixsync.sources.slskd import SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
+from mixsync.wiring import Services, build_services
 
 log = logging.getLogger(__name__)
 
@@ -161,17 +157,14 @@ async def run_worker(
         await run_job(queue, job, worker, handlers, lease)
 
 
-def _pipeline(
-    settings: Settings, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock
-) -> Pipeline:
-    def client(service: str) -> PoliteClient:
-        return PoliteClient(service, settings, sessions)
+def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
+    settings, sessions, clock = services.settings, services.session_factory, services.clock
 
     return Pipeline(
         sessions=sessions,
         clock=clock,
         source=SlskdSource(
-            client("slskd"),
+            PoliteClient("slskd", settings, sessions),
             settings.slskd_url,
             settings.slskd_api_key,
             downloads_dir=Path(settings.downloads_dir),
@@ -183,17 +176,17 @@ def _pipeline(
             settings.slow_download_share,
         ),
         queries=queries,
-        metadata=MusicBrainzProvider(client("musicbrainz"), settings.mb_base_url),
+        metadata=services.musicbrainz,
         fingerprint=fingerprint,
-        acoustid=AcoustIdClient(client("acoustid"), settings),
-        importer=Importer(fileops, sessions, clock, settings.path_template),
+        acoustid=acoustid,
+        importer=Importer(services.fileops, sessions, clock, settings.path_template),
         reencode=True,
         flac_level=settings.flac_level,
         canonical_media=tuple(settings.canonical_media),
         canonical_countries=tuple(settings.canonical_countries),
-        coverart=CoverArtClient(client("coverart")),
+        coverart=services.coverart,
         target=NavidromeTarget(
-            client("navidrome"),
+            services.navidrome_http,
             settings.navidrome_url,
             settings.navidrome_user,
             settings.navidrome_password,
@@ -201,29 +194,21 @@ def _pipeline(
     )
 
 
-def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
-    settings = Settings()
-    load_box(settings)  # refuse a bad key file at startup (serve_all too), not at first use
-    engine = make_engine(settings)
-    clock = SystemClock()
-    sessions = make_session_factory(engine)
-    fileops = FileOps(
-        Path(settings.data_dir), Path(settings.downloads_dir), SqlJournal(sessions, clock), clock
+def _new_queue(
+    services: Services,
+) -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
+    settings, sessions, clock, fileops = (
+        services.settings,
+        services.session_factory,
+        services.clock,
+        services.fileops,
     )
     fileops.recover()
     tag_undo.recover(sessions, fileops)
-    queue = JobQueue(engine, clock)
-    merger = Merger(
-        sessions,
-        clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
-        fileops,
-        settings.path_template,
-        tuple(settings.canonical_media),
-        tuple(settings.canonical_countries),
-        settings.trash_days,
-    )
-    pipeline = _pipeline(settings, fileops, sessions, clock)
+    queue = JobQueue(services.engine, clock, fail_request_of_job)
+    merger = services.merger
+    acoustid = AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings)
+    pipeline = _pipeline(services, acoustid)  # the submitter reuses this one client
     rechecker = Rechecker(
         sessions,
         clock,
@@ -238,7 +223,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         clock,
         fileops,
         fingerprint,
-        AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings),
+        acoustid,
         bool(settings.acoustid_app_key and settings.acoustid_user_key),
     )
     migrator = Migrator(
@@ -246,26 +231,34 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         clock,
         Path(settings.import_source_dir),
         Path(settings.config_dir),
-        Path(settings.data_dir) / "library",
+        fileops.library,
         settings.mb_rate,
+    )
+    dropper = DropFolder(sessions, clock, settings.drop_dir, Path(settings.config_dir) / "drop")
+    adopt = adopter(
+        sessions,
+        clock,
+        Path(settings.downloads_dir),
+        Path(settings.config_dir) / "adopt",
+        settings.adopt_downloads,
+        settings.adopt_settle_minutes,
     )
     watcher = Watcher(
         sessions,
         clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
+        services.musicbrainz,
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
-    navidrome_http = PoliteClient("navidrome", settings, sessions)
     discovery = Discovery(
         sessions,
         clock,
-        ListenBrainzClient(PoliteClient("listenbrainz", settings, sessions)),
+        ListenBrainzClient(services.listenbrainz_http),
         lambda user, password: NavidromeUser(
-            navidrome_http, settings.navidrome_url, user, password
+            services.navidrome_http, settings.navidrome_url, user, password
         ),
-        load_box(settings),
+        services.secret_box,
         main_library=settings.navidrome_library,
         discover_library=settings.navidrome_discover_library,
     )
@@ -281,6 +274,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         HANDLERS
         | pipeline.handlers()
         | migrator.handlers()
+        | dropper.handlers()
+        | adopt.handlers()
         | merger.handlers()
         | rechecker.handlers()
         | submitter.handlers()
@@ -298,6 +293,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
+        dropper.start_chains,
+        adopt.start_chains,
         discovery_startup,
     )
 
@@ -305,7 +302,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
 
 
 async def serve_worker() -> None:
-    queue, worker, handlers, startup = _new_queue()
+    queue, worker, handlers, startup = _new_queue(build_services(Settings()))
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
@@ -316,10 +313,13 @@ async def serve_all() -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    queue, worker, handlers, startup = _new_queue()
+    services = build_services(Settings())
+    queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     server = uvicorn.Server(
-        uvicorn.Config("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
+        uvicorn.Config(
+            lambda: create_app(services=services), factory=True, host="0.0.0.0", port=8080
+        )
     )
     task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))
 

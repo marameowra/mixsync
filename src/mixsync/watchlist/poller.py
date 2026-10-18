@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock
@@ -61,7 +62,19 @@ def owned_groups(s: Session, group_ids: list[str]) -> set[str]:
             Track.release_group_mbid.in_(group_ids), ~Track.batch_id.like("promote-%")
         )
     )
-    return {g for g in rows if g}
+    # A group whose request is still open after importing some tracks is still wanted. This is
+    # derived from the data (not the status, which shows "downloading" etc. between searches).
+    open_with_tracks = (
+        select(Request.release_group_mbid)
+        .join(Track, verify.in_request(Track.batch_id, Request.id))
+        .where(
+            Request.release_group_mbid.in_(group_ids),
+            Request.status.in_(lifecycle.OPEN),
+            Request.migration_id.is_(None),
+        )
+    )
+    partial = set(s.scalars(open_with_tracks))
+    return {g for g in rows if g} - partial
 
 
 def is_owned(s: Session, group_id: str) -> bool:

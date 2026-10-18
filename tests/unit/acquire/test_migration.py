@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from mixsync.acquire import migration as mig
-from mixsync.acquire import pipeline
+from mixsync.acquire import pipeline, verify
 from mixsync.acquire.migration import Migrator
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -31,9 +31,10 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Migration, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
+from mixsync.match import scorer
 
 from .conftest import Env, login
-from .fakes import ALBUM, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
+from .fakes import ALBUM, ALBUM_B, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
 from .test_pipeline import decision_rows, library
 
 
@@ -210,6 +211,10 @@ async def test_confirm_makes_low_priority_jobs_once(rig: Rig) -> None:
     assert p["release_mbid"] is None and p["candidate"]["username"] == ""
     assert p["candidate"]["files"][0]["extension"] == "mp3"
     assert all(Path(x).is_absolute() for x in p["paths"])
+    assert [j.idempotency_key for j in jobs] == [f"migrate:{mid}:0", f"migrate:{mid}:1"]
+    assert all(j.max_attempts == verify.VERIFY_ATTEMPTS for j in jobs)
+    await rig.env.drain()
+    assert [d.release_given for d in decision_rows(rig.env, 2)] == [False, False]  # identified
 
 
 async def test_tagged_album_imports_without_search_and_leaves_the_source_alone(
@@ -339,6 +344,24 @@ async def test_untagged_album_picks_the_best_of_the_top_three(rig: Rig) -> None:
     assert req.status == "imported" and req.release_mbid == ALBUM.release_id
 
 
+async def test_two_near_identical_releases_go_to_review_with_the_runner_up(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    twin = replace(ALBUM_B, year=ALBUM.year)  # same group, tracks and year: only the id differs
+    monkeypatch.setitem(CATALOG, str(twin.release_id), twin)
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM), ref(twin)]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status) == ("review", "pending_review")
+    assert d.evidence["runner_up"]["release_id"] == twin.release_id
+    login(web, "root")
+    assert "Close runner-up" in web.get(f"/review/{d.id}").text
+
+
 async def test_no_candidate_goes_to_review_and_reject_skips(rig: Rig, web: TestClient) -> None:
     put_album(rig.root, "Alpha Band/Alpha Album")
     rig.confirm(await rig.preflight())
@@ -370,9 +393,9 @@ async def test_reject_band_goes_to_review_not_to_search(
     put_album(rig.root, "Alpha Band/Alpha Album")
     rig.meta.refs = [ref(OTHER)]  # the wrong album is all MusicBrainz offers
     real = pipeline.score_files
-    monkeypatch.setattr(
-        pipeline, "score_files", lambda *a: replace(real(*a), band=Band.REJECT, distance=0.9)
-    )
+    reject = lambda *a: replace(real(*a), band=Band.REJECT, distance=0.9)  # noqa: E731
+    monkeypatch.setattr(pipeline, "score_files", reject)
+    monkeypatch.setattr(scorer, "score_files", reject)  # the release choice scores there
     rig.confirm(await rig.preflight())
     await rig.env.drain()
 
@@ -410,8 +433,9 @@ async def test_acoustid_outage_retries_a_migrated_album(rig: Rig) -> None:
     rig.confirm(await rig.preflight())
     rig.env.acoustid.fail = 1
     await rig.env.drain(until=lambda: rig.env.acoustid.fail == 0)
-    (verify,) = rig.env.jobs(JobKind.VERIFY)
-    assert verify.status is JobState.RETRY_WAIT and decision_rows(rig.env, 2) == []
+    first, again = rig.env.jobs(JobKind.VERIFY)
+    assert first.status is JobState.SUCCEEDED and again.status is JobState.QUEUED
+    assert decision_rows(rig.env, 2) == []
     await rig.env.drain()
     assert rig.requests()[0].status == "imported"
 
@@ -624,6 +648,49 @@ async def test_untagged_files_search_by_folder_name_and_keep_the_name(rig: Rig) 
     assert (req.status, req.album) == ("review", "Some Folder")
 
 
+async def _fail_on(rig: Rig, name: str) -> None:
+    real = rig.env.pipeline.fingerprint
+
+    async def fingerprint(path: Path) -> Any:
+        if path.name.startswith(name):
+            raise PermanentError("fpcalc failed: Invalid data")
+        return await real(path)
+
+    rig.env.pipeline = replace(rig.env.pipeline, fingerprint=fingerprint)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+
+
+async def test_one_unreadable_track_still_identifies_the_release_and_is_never_imported(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "02 ")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status, d.release_mbid) == ("review", "pending_review", ALBUM.release_id)
+    assert any("02 " in v and "Invalid data" in v for v in d.vetoes)
+    tok = login(web, "root")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await rig.env.drain()
+    assert len(library(rig.env)) == 1 and not any("02 " in x for x in library(rig.env))
+
+
+async def test_every_track_unreadable_still_fails(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM)]
+    await _fail_on(rig, "0")
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    assert req.status == "failed" and "fpcalc failed" in (req.last_error or "")
+    assert decision_rows(rig.env, 2) == []
+
+
 async def test_discard_frees_a_ready_preflight_but_not_a_running_migration(
     rig: Rig, web: TestClient
 ) -> None:
@@ -732,8 +799,11 @@ async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
     assert web.post(url, data=form).status_code == 303
     assert web.post(url, data=form).status_code == 409  # not failed any more: once only
     assert rig.requests()[0].status == "verifying"
-    assert len(rig.env.jobs(JobKind.VERIFY)) == 2
+    jobs = rig.env.jobs(JobKind.VERIFY)
+    assert len(jobs) == 2 and jobs[1].priority == mig.MIGRATION_PRIORITY
+    assert jobs[1].payload == {**jobs[0].payload, "release_mbid": None}  # the same files again
     await rig.env.drain()  # matched again: a fresh review item to repick or mark unverified
+    assert decision_rows(rig.env, 2)[-1].release_given is False
     assert rig.requests()[0].status == "review"
     assert [x.status for x in decision_rows(rig.env, 2)] == ["pending_review", "pending_review"]
     assert web.post(f"/migration/{mid}/retry/999", data=form).status_code == 404
@@ -807,6 +877,22 @@ async def test_a_skipped_album_can_be_retried(rig: Rig, web: TestClient) -> None
     assert rig.requests()[0].status == "verifying"
 
 
+async def test_retrying_a_dead_end_album_clears_the_dead_end(rig: Rig, web: TestClient) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (d,) = decision_rows(rig.env, 2)
+    form = {"csrf_token": login(web, "root")}
+    web.post(f"/review/{d.id}/reject", data=form)
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:
+        s.get_one(Request, req.id).dead_end = True
+    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
+    (req,) = rig.requests()
+    assert req.status == "verifying" and req.dead_end is False
+
+
 async def test_the_page_reports_every_running_migration_and_all_failures(
     rig: Rig, web: TestClient
 ) -> None:
@@ -831,7 +917,7 @@ async def test_the_page_reports_every_running_migration_and_all_failures(
             )
     login(web, "root")
     html = web.get("/migration").text
-    assert f"Migration {first}: running" in html and f"Migration {second}: running" in html
+    assert f"Migration {first}: completed" in html and f"Migration {second}: running" in html
     assert "first broke" in html and "fail 119" in html
 
 
@@ -1009,18 +1095,59 @@ async def test_unreadable_files_show_only_when_the_window_reaches_the_start(
         assert [r["status"] for r in mig.report(s, m, start=began + timedelta(seconds=1))] == []
 
 
-async def test_the_same_partial_album_on_a_normal_request_goes_to_review(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def to_normal_request(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, other_artist: bool = False, album: str | None = None
+) -> Any:
+    """The same files and flow as the partial migration, but an ordinary request."""
     await migrate_partial(rig, monkeypatch)
+    if album:
+        monkeypatch.setitem(CATALOG, BIG, replace(CATALOG[BIG], album=album))
+    if other_artist:
+        big = CATALOG[BIG]
+        monkeypatch.setitem(CATALOG, BIG, replace(big, artist="Zzzz Qqqq", album="Xxxx Wwww"))
     rig.confirm(await rig.preflight())
-    with rig.env.sessions.begin() as s:  # the same files and flow, but not a migration
+    with rig.env.sessions.begin() as s:
         s.execute(update(Request).values(migration_id=None, release_mbid=BIG))
         (job,) = s.scalars(select(Job).where(Job.kind == JobKind.VERIFY))
         job.payload = {**job.payload, "release_mbid": BIG}
     await rig.env.drain(until=lambda: bool(decision_rows(rig.env, 2)))
     (dec,) = decision_rows(rig.env, 2)
-    assert dec.band == "reject" and library(rig.env) == []  # not auto-accepted, not imported
+    return dec
+
+
+async def test_a_confident_single_track_on_a_normal_request_is_accepted_as_partial(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dec = await to_normal_request(rig, monkeypatch)
+    assert dec.band == "auto_accept" and dec.evidence["partial"] == "1 of 13 tracks present"
+
+
+async def test_an_unsure_single_track_on_a_normal_request_is_rejected_and_retried(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    dec = await to_normal_request(rig, monkeypatch)
+    assert dec.band == "reject" and library(rig.env) == []
+    assert rig.requests()[0].status == "searching"  # on to the next peer, as for any reject
+
+
+async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_is_rejected(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dec = await to_normal_request(rig, monkeypatch, album="The Very Best Of Alpha Band")
+    assert dec.band == "reject" and not dec.evidence["partial"] and library(rig.env) == []
+
+
+async def test_a_single_track_of_another_artist_on_a_normal_request_is_rejected(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
+        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
+    ]
+    dec = await to_normal_request(rig, monkeypatch, other_artist=True)
+    assert dec.band == "reject" and library(rig.env) == []
 
 
 async def test_a_partial_album_with_an_unsure_file_goes_to_review(

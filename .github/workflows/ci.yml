@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [main] # PR branches are covered by pull_request; pushing them too ran CI twice
+    branches: [main, dev] # PR branches are covered by pull_request; pushing them too ran CI twice
   pull_request:
 concurrency:
   group: ci-${{ github.ref }}

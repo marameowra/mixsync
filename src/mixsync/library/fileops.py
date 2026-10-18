@@ -1,6 +1,7 @@
 """The only module that writes under the data dir. See docs/design/data-safety.md.
 
-The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir,
+The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir
+(a drop-dir original is first copied into `.trash/<day>/.drop/` and checked),
 `clear_work()`, which empties MixSync's own re-encode scratch space, and
 `purge_trash()`, which deletes files in `.trash/<day>/` folders older than the retention (minus
 paths the caller says an undoable plan still needs); leftovers and trashed
@@ -94,13 +95,22 @@ def _noreplace(src: Path, dst: Path) -> bool:
 
 
 class FileOps:
-    def __init__(self, data_dir: Path, downloads_dir: Path, journal: Journal, clock: Clock) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        downloads_dir: Path,
+        journal: Journal,
+        clock: Clock,
+        drop_dir: Path | None = None,
+    ) -> None:
         self.library = data_dir / "library"
         self.roots = {"library": self.library, "discover": data_dir / "discover"}
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
         self.work = data_dir / ".work"  # scratch space for re-encoded copies of downloads
-        self._downloads = downloads_dir
+        self.data_dir = data_dir
+        self.downloads = downloads_dir
+        self.drop = drop_dir
         self._journal = journal
         self._clock = clock
 
@@ -257,10 +267,16 @@ class FileOps:
 
     def release(self, src: Path, batch_id: str, root: str = "library") -> None:
         """Delete a download once its copy under root from this batch is verified. Refuses
-        anything not strictly inside the downloads dir (symlinks and `..` included)."""
-        dl = self._downloads.resolve()
-        if ".." in src.parts or src.is_symlink() or dl not in src.resolve().parents:
-            raise SafetyError(f"{src} is not inside {dl}")
+        anything not strictly inside the downloads dir (symlinks and `..` included). A file in
+        the drop dir is not deleted: it moves to `.trash/<day>/.drop/` (copied and hash-checked
+        first, as the drop dir may be another mount), so the user can recover it."""
+        dl = self.downloads.resolve()
+        drop = self.drop.resolve() if self.drop else None
+        real = src.resolve()
+        in_drop = drop is not None and drop in real.parents
+        base = drop if in_drop and drop else dl
+        if ".." in src.parts or src.is_symlink() or base not in real.parents:
+            raise SafetyError(f"{src} is not inside {base}")
         op = self._verified_op(batch_id, src, root)
         if op is None or op.dst_hash is None:
             raise SafetyError(f"{src} has no verified import in batch {batch_id}")
@@ -268,14 +284,24 @@ class FileOps:
         self._journal.set_dst_hash(op_id, op.dst_hash)
         try:
             _hook("release")
+            if in_drop and drop and src.exists():
+                self._trash_copy(src, self._trash_rel(str(real.relative_to(drop)), "drop"))
             src.unlink(missing_ok=True)
-            if src.parent.resolve() != dl:  # never the root itself
+            if src.parent.resolve() != base:  # never the root itself
                 with suppress(OSError):  # not empty
                     src.parent.rmdir()
         except Exception as e:  # an interrupt stays pending: recover() settles it
             self._journal.fail(op_id, repr(e))
             raise
         self._journal.complete(op_id, op.dst_hash)
+
+    def _trash_copy(self, src: Path, trash_rel: str) -> None:
+        """Copy src into the trash and check it; src is untouched. Raises if the copy differs."""
+        dst = self._under(self.trash_dir, trash_rel)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        if _sha256(dst) != _sha256(src):
+            raise SafetyError(f"trash copy of {src} differs; the original stays")
 
     def clear_work(self, batch_id: str) -> None:
         """Delete the scratch files of one batch. Only ever acts inside the work dir."""

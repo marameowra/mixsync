@@ -6,6 +6,7 @@ from mixsync.core.config import Settings
 
 def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MIXSYNC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("MIXSYNC_CONFIG_DIR", raising=False)
     s = Settings()
     assert s.database_url == "sqlite:////config/mixsync.db"
     assert s.config_dir == "/config"
@@ -35,4 +36,39 @@ def test_trash_days_default_env_and_floor(monkeypatch: pytest.MonkeyPatch) -> No
     assert Settings().trash_days == 7
     monkeypatch.setenv("MIXSYNC_TRASH_DAYS", "0")
     with pytest.raises(ValidationError, match="trash_days"):
+        Settings()
+
+
+@pytest.mark.parametrize(
+    ("drop", "other"),
+    [
+        ("/data", "MIXSYNC_DATA_DIR"),
+        ("/downloads/drop", "MIXSYNC_DOWNLOADS_DIR"),
+        ("/", "MIXSYNC_IMPORT_SOURCE_DIR"),
+    ],
+)
+def test_drop_dir_must_not_overlap_other_dirs(
+    monkeypatch: pytest.MonkeyPatch, drop: str, other: str
+) -> None:
+    monkeypatch.setenv("MIXSYNC_DROP_DIR", drop)
+    with pytest.raises(ValidationError, match="must not overlap"):
+        Settings()
+
+
+def test_a_separate_drop_dir_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MIXSYNC_DROP_DIR", "/drop")
+    assert str(Settings().drop_dir) == "/drop"
+
+
+def test_adopt_downloads_default_env_and_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MIXSYNC_ADOPT_DOWNLOADS", raising=False)
+    monkeypatch.delenv("MIXSYNC_ADOPT_SETTLE_MINUTES", raising=False)
+    s = Settings()
+    assert (s.adopt_downloads, s.adopt_settle_minutes) == (False, 10)
+    monkeypatch.setenv("MIXSYNC_ADOPT_DOWNLOADS", "true")
+    monkeypatch.setenv("MIXSYNC_ADOPT_SETTLE_MINUTES", "3")
+    s = Settings()
+    assert (s.adopt_downloads, s.adopt_settle_minutes) == (True, 3)
+    monkeypatch.setenv("MIXSYNC_ADOPT_SETTLE_MINUTES", "0")
+    with pytest.raises(ValidationError, match="adopt_settle_minutes"):
         Settings()

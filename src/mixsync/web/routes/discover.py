@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
+from mixsync.acquire.lifecycle import NO_FILE
 from mixsync.core.capabilities import Capability
 from mixsync.core.clock import aware
 from mixsync.db.auth import AuthUser
@@ -40,8 +41,8 @@ def _status(h: ProvisionalHold | None, owned: bool, request_status: str | None) 
         return "expired"
     if h.provisional_track_id:
         return "in discover"
-    # a request that ended without a file (playlists.DONE minus imported/owned) found nothing
-    return "not found" if request_status in ("failed", "skipped") else "waiting for download"
+    # a request that ended without a file (lifecycle.NO_FILE) found nothing
+    return "not found" if request_status in NO_FILE else "waiting for download"
 
 
 @router.get("")

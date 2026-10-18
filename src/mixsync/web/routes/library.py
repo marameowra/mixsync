@@ -16,7 +16,6 @@ from mixsync.acquire import recheck
 from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
-from mixsync.core.clock import SystemClock
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
@@ -33,7 +32,8 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Files, Merge, require
+from mixsync.web.deps import Db, Files, Merge, Namer, require
+from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/library")
@@ -77,27 +77,33 @@ def _check_count(plan: Plan, count: str) -> None:
 
 
 @router.get("/fragments")
-def fragments(request: Request, user: User, db: Db) -> HTMLResponse:
+async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
     plans = [
         *db.scalars(select(Plan).where(stuck).order_by(Plan.id.desc())),
         *db.scalars(select(Plan).where(~stuck).order_by(Plan.id.desc()).limit(20)),
     ]
     plans.sort(key=lambda p: -p.id)
+    items = fragmentation.find(db)
+    refs = {("release-group", p.release_group_mbid) for p in plans}
+    for f in items:  # list page: local rows and the cache only, no MusicBrainz call
+        refs |= {("release-group", f.group_mbid), *(("release", r) for r in f.releases)}
+        refs |= {("release", f.canonical)} if f.canonical else set()
     return templates.TemplateResponse(
         request,
         "pages/fragments.html",
         {
             "user": user,
-            "items": fragmentation.find(db),
+            "items": items,
             "plans": plans,
+            "names": await resolve(db, namer, refs),
             "allowed": {p.id: _allowed(db, p, _days(request)) for p in plans},
         },
     )
 
 
 def _read_unverified(request: Request, db: Session) -> list[recheck.Item]:
-    return recheck.read_unverified(db, Path(request.app.state.settings.data_dir) / "library")
+    return recheck.read_unverified(db, request.app.state.services.fileops.library)
 
 
 @router.get("/unverified")
@@ -136,7 +142,7 @@ def _num(v: str | None, default: int) -> int:
 def _seed_release(
     request: Request, items: list[recheck.Item], album: str, artist: str, year: str
 ) -> SeedRelease:
-    root = Path(request.app.state.settings.data_dir) / "library"
+    root = request.app.state.services.fileops.library
     discs: dict[int, list[recheck.Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
@@ -227,14 +233,25 @@ async def build_plan(
 
 
 @router.get("/plans/{plan_id}")
-def plan_detail(plan_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
+async def plan_detail(
+    plan_id: int, request: Request, user: User, db: Db, namer: Namer
+) -> HTMLResponse:
     plan = _plan(db, plan_id)
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
+    refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
+    for op in plan.ops:
+        if op["op"] == "move":
+            refs |= {
+                ("release", op["old"].get("release_mbid") or ""),
+                ("release", op["tags"].get("release_id") or ""),
+            }
+    allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
     ctx = {
         "user": user,
         "plan": plan,
         "counts": counts,
-        "allowed": _allowed(db, plan, _days(request)),
+        "allowed": allowed,
+        "names": await resolve(db, namer, refs, MAX_LOOKUPS),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
@@ -366,7 +383,12 @@ def restore_track_tags(
         db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
         try:
             tag_undo.restore_tags(
-                fo, request.app.state.session_factory, SystemClock(), tid, rel, old
+                fo,
+                request.app.state.session_factory,
+                request.app.state.services.clock,
+                tid,
+                rel,
+                old,
             )
         except FileExistsError:
             raise HTTPException(

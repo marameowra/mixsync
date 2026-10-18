@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,80 @@ async def test_fingerprint_real_binary(tmp_path: Path) -> None:
     junk.write_bytes(b"not audio")
     with pytest.raises(PermanentError):
         await acoustid.fingerprint(junk)
+
+
+def make_flac(path: Path) -> Path:
+    subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-y"]
+        + ["-f", "lavfi", "-i", "sine=frequency=440:duration=30"]
+        + ["-f", "lavfi", "-i", "anoisesrc=d=30:a=0.1:seed=1"]
+        + ["-filter_complex", "amix=inputs=2", "-c:a", "flac", str(path)],
+        check=True,
+    )
+    return path
+
+
+async def test_fingerprint_tolerates_trailing_junk(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "tail.flac")
+    with flac.open("ab") as f:
+        f.write(b"\x55\xaa" * 2048)
+    fp = await fingerprint(flac)
+    assert fp.fingerprint
+    assert fp.duration == pytest.approx(30, abs=2)
+
+
+async def test_fingerprint_rejects_midstream_corruption(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "bad.flac")
+    data = bytearray(flac.read_bytes())
+    start = len(data) // 3
+    data[start : start + 200_000] = b"\x55\xaa" * 100_000
+    flac.write_bytes(bytes(data))
+    with pytest.raises(PermanentError):
+        await fingerprint(flac)
+
+
+@pytest.mark.parametrize("from_end", [3000, 80_000])  # plain fpcalc accepts the first
+async def test_fingerprint_rejects_corrupt_tail(tmp_path: Path, from_end: int) -> None:
+    flac = make_flac(tmp_path / "tail_bad.flac")
+    data = bytearray(flac.read_bytes())
+    for i in range(len(data) - from_end, len(data) - from_end + 100):
+        data[i] ^= 0xFF
+    flac.write_bytes(bytes(data))
+    with pytest.raises(PermanentError, match="decode"):
+        await fingerprint(flac)
+
+
+async def test_fingerprint_rejects_wrong_stored_md5(tmp_path: Path) -> None:
+    # Intact frames, but the audio is not what the stored MD5 was taken from. Depending on the
+    # ffmpeg/fpcalc version a corrupt tail can decode to the full sample count (and fpcalc can
+    # exit 0), so the MD5 is what makes the corruption cases above reject reliably.
+    flac = make_flac(tmp_path / "md5.flac")
+    data = bytearray(flac.read_bytes())
+    assert any(data[26:42])  # the encoder stored an MD5 (STREAMINFO bytes 26-41)
+    data[30] ^= 0xFF
+    flac.write_bytes(bytes(data))
+    with pytest.raises(PermanentError, match="decode"):
+        await fingerprint(flac)
+
+
+async def test_fingerprint_flac_without_total_samples(tmp_path: Path) -> None:
+    flac = make_flac(tmp_path / "nototal.flac")
+    data = bytearray(flac.read_bytes())
+    data[21] &= 0xF0  # STREAMINFO total_samples (36 bits) -> 0: unknown length, still valid
+    data[22:26] = bytes(4)
+    flac.write_bytes(bytes(data))
+    assert (await fingerprint(flac)).fingerprint
+    with flac.open("ab") as f:  # fpcalc now fails and there is no proven decode to retry on
+        f.write(b"\x55\xaa" * 2048)
+    with pytest.raises(PermanentError):
+        await fingerprint(flac)
+
+
+async def test_fingerprint_rejects_non_audio_flac(tmp_path: Path) -> None:
+    junk = tmp_path / "junk.flac"
+    junk.write_bytes(b"\x55\xaa" * 2048)
+    with pytest.raises(PermanentError):
+        await fingerprint(junk)
 
 
 def keyed(settings: Settings, key: str = "appkey") -> Settings:

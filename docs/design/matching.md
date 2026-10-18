@@ -14,7 +14,7 @@ Input: slskd search results (peer, folder, file list with names, sizes, bitrates
 | Size plausibility | File size consistent with the claimed format, bitrate, and duration |
 | Peer health | Free upload slots, queue length, reported speed |
 
-The best-scoring candidate is downloaded. The runners-up are kept as fallbacks if verification fails.
+The best-scoring candidate is downloaded. No runners-up are stored. When a candidate is dropped (failed transfer, unusable files, rejection), it is added to the request's tried list and the retry runs a fresh search that skips every tried folder.
 
 ## Stage 2: post-download verification
 | Feature | What it measures |
@@ -43,6 +43,9 @@ Users can edit their thresholds; the presets are starting points.
 
 > [!question] Threshold values
 > The numbers above are placeholders taken from beets' defaults (`strong_rec_thresh` 0.04, `medium_rec_thresh` 0.25). Tune them during phase 2 against the regression fixtures.
+
+## Close runner-up
+When several releases are scored, a match cannot auto-accept if another release, holding at least as many AcoustID-confirmed recordings as the winner, is within the profile's auto-accept limit of the winner's distance. It goes to review, and the decision's evidence names the runner-up and the gap.
 
 ## Review screen
 Laid out side by side:

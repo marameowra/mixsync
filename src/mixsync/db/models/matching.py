@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -17,6 +17,8 @@ class MatchDecision(TimestampMixin, Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # the requester
     stage: Mapped[int] = mapped_column(Integer)  # 1 pre-download, 2 post-download
     release_mbid: Mapped[str] = mapped_column(String(36))
+    # False when the VERIFY behind it had to identify the release itself (none given)
+    release_given: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     band: Mapped[str] = mapped_column(String(16))
     distance: Mapped[float] = mapped_column(Float)
     breakdown: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # key, penalty, weight, reason

@@ -26,7 +26,9 @@
 """Distance between a batch of files and a MusicBrainz release."""
 
 import datetime
+import re
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from types import MappingProxyType
 
 from mixsync.core.matching import (
@@ -37,13 +39,14 @@ from mixsync.core.matching import (
     MatchResult,
     Penalty,
     Profile,
+    RunnerUp,
     TrackInfo,
 )
-from mixsync.match.features import string_dist
-from mixsync.match.profiles import band
-from mixsync.match.vetoes import find_vetoes
+from mixsync.match.features import normalize, string_dist
+from mixsync.match.profiles import band, close_gap
+from mixsync.match.vetoes import acoustid_confirms, acoustid_contradicts, all_confident, find_vetoes
 
-SCORER_VERSION = 3  # 3: penalize year mismatches for current-year releases
+SCORER_VERSION = 5  # 5: close runner-up caps at review
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -51,6 +54,18 @@ VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
 # Seconds of length difference that cost nothing, and the further difference that costs 1.0.
 TRACK_LENGTH_GRACE = 10.0
 TRACK_LENGTH_MAX = 30.0
+
+# Splits a multi-artist credit ("A & B", "A feat. B", "A, B", "A x B"). Words split only
+# between spaces, so "Malcolm X" and "X-Ray Spex" stay whole.
+ARTIST_SPLIT = re.compile(
+    r"\s*[,;/&+]\s*|\s+\(?(?:and|x|vs|with|feat|featuring|ft|presents)\.?\s+", re.IGNORECASE
+)
+ARTIST_PART_MIN_CHARS = 3  # shorter parts ("X", "DJ") match too much to count
+# Penalty when one side's credit contains the other's artist among several; below any mismatch.
+ARTIST_PARTIAL_PENALTY = 0.2
+ARTIST_PART_MATCH_MAX = 0.1
+# Share of the title, artist, number and disc penalties kept when AcoustID confirms the recording.
+ACOUSTID_DISCOUNT = 0.1
 
 DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
     {
@@ -75,6 +90,25 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
         "medium": 1.0,
     }
 )
+
+
+def artist_partial(str1: str | None, str2: str | None) -> bool:
+    """One side is a credit naming several artists, one of which is the other side's artist."""
+    if not str1 or not str2 or string_dist(str1, str2) <= ARTIST_PARTIAL_PENALTY:
+        return False
+    parts1, parts2 = (
+        [p for p in ARTIST_SPLIT.split(s) if len(normalize(p)) >= ARTIST_PART_MIN_CHARS]
+        for s in (str1, str2)
+    )
+    if not parts1 or not parts2 or len(parts1) == len(parts2) == 1:
+        return False
+    return min(string_dist(a, b) for a in parts1 for b in parts2) <= ARTIST_PART_MATCH_MAX
+
+
+def artist_dist(str1: str | None, str2: str | None) -> float:
+    """`string_dist`, but a multi-artist credit that includes the other side is a small
+    partial penalty, not a miss."""
+    return ARTIST_PARTIAL_PENALTY if artist_partial(str1, str2) else string_dist(str1, str2)
 
 
 class Distance:
@@ -157,6 +191,8 @@ def track_distance(
 ) -> Distance:
     """`incl_artist` adds a track artist penalty (for various-artist releases)."""
     dist = Distance(weights)
+    sure = acoustid_confirms(file, track)
+    keep = ACOUSTID_DISCOUNT if sure else 1.0  # metadata differences matter less for a sure file
 
     if file.length and track.length:
         dist.add_ratio(
@@ -166,27 +202,32 @@ def track_distance(
             f"length {file.length:.0f}s vs {track.length:.0f}s",
         )
 
-    dist.add_string(
-        "track_title", file.title, track.title, f"title {file.title!r} vs {track.title!r}"
+    dist.add(
+        "track_title",
+        string_dist(file.title, track.title) * keep,
+        f"title {file.title!r} vs {track.title!r}",
     )
 
     if incl_artist and track.artist and file.artist.lower() not in VA_ARTISTS:
-        dist.add_string(
+        dist.add(
             "track_artist",
-            file.artist,
-            track.artist,
+            artist_dist(file.artist, track.artist) * keep,
             f"artist {file.artist!r} vs {track.artist!r}",
         )
 
     # Tolerates both per-disc and per-release numbering.
     if track.index and file.track:
-        dist.add_expr(
+        dist.add(
             "track_index",
-            file.track not in (track.medium_index, track.index),
+            keep * (file.track not in (track.medium_index, track.index)),
             f"track number {file.track} vs {track.medium_index or track.index}",
         )
 
-    if file.recording_id:
+    if sure:
+        dist.add("track_id", 0.0, "AcoustID confirms the recording")
+    elif acoustid_contradicts(file, track):
+        dist.add("track_id", 1.0, f"AcoustID says a different recording than {track.recording_id}")
+    elif file.recording_id:
         dist.add_expr(
             "track_id",
             file.recording_id != track.recording_id,
@@ -194,7 +235,11 @@ def track_distance(
         )
 
     if track.medium and file.disc:
-        dist.add_expr("medium", file.disc != track.medium, f"disc {file.disc} vs {track.medium}")
+        dist.add(
+            "medium",
+            keep * (file.disc != track.medium),
+            f"disc {file.disc} vs {track.medium}",
+        )
 
     return dist
 
@@ -279,10 +324,9 @@ def album_distance(
     dist = Distance(weights)
 
     if not album.va:
-        dist.add_string(
+        dist.add(
             "artist",
-            original.artist,
-            album.artist,
+            artist_dist(original.artist, album.artist),
             f"artist {original.artist!r} vs {album.artist!r}",
         )
     dist.add_string(
@@ -386,10 +430,52 @@ def score_files(
     pairs, extra_files, _ = assign_tracks(files, album.tracks, weights)
     dist = album_distance(likelies, album, pairs, len(extra_files), weights)
     vetoes = find_vetoes(pairs)
+    result_band = band(dist.distance, vetoes, profile)
+    partial_credit = (not album.va and artist_partial(likelies.artist, album.artist)) or any(
+        album.va and artist_partial(f.artist, t.artist) for f, t in pairs
+    )
+    if partial_credit and result_band is Band.AUTO_ACCEPT and not all_confident(pairs):
+        result_band = Band.REVIEW  # "Earth" is not "Earth, Wind & Fire" on tags alone
     return MatchResult(
         distance=dist.distance,
-        band=band(dist.distance, vetoes, profile),
+        band=result_band,
         breakdown=dist.breakdown(),
         vetoes=vetoes,
         scorer_version=SCORER_VERSION,
     )
+
+
+def best_release(
+    files: Sequence[FileTrack], likelies: Likelies, albums: Sequence[AlbumInfo], profile: Profile
+) -> tuple[AlbumInfo, MatchResult]:
+    """Among releases whose distance is within the profile's auto-accept threshold, the one
+    holding more AcoustID-confirmed recordings of the files wins, then the closest metadata. A
+    release the tags rule out (a compilation with every track) cannot win on confirmations
+    alone. A runner-up that AcoustID does not separate from the winner and within the
+    auto-accept limit of its distance caps the band at review.
+    `albums` must not be empty."""
+    scored = [
+        (
+            score_files(files, likelies, a, profile),
+            a,
+            sum(acoustid_confirms(f, t) for f, t in assign_tracks(files, a.tracks)[0]),
+        )
+        for a in albums
+    ]
+
+    def key(x: tuple[MatchResult, AlbumInfo, int]) -> tuple[int, int, float]:
+        if x[0].distance > profile.auto_accept_max:
+            return 1, 0, x[0].distance
+        return 0, -x[2], x[0].distance
+
+    result, album, sure = min(scored, key=key)
+    # AcoustID already separates a release with fewer confirmed recordings: not a coin flip.
+    others = [(r, a) for r, a, n in scored if a is not album and n >= sure]
+    if others:
+        near, other = min(others, key=lambda x: x[0].distance)
+        gap = near.distance - result.distance
+        if close_gap(gap, profile):
+            runner = RunnerUp(str(other.release_id), other.album, gap)
+            capped = Band.REVIEW if result.band is Band.AUTO_ACCEPT else result.band
+            result = replace(result, band=capped, runner_up=runner)
+    return album, result

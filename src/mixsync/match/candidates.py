@@ -15,6 +15,7 @@ from mixsync.core.matching import (
     FileTrack,
     MatchResult,
     Profile,
+    TrackInfo,
 )
 from mixsync.match.features import normalize, string_dist
 from mixsync.match.profiles import band
@@ -136,6 +137,13 @@ def _size_problem(f: CandidateFile, duration: float | None) -> str:
     return ""
 
 
+def present_tracks(candidate: Candidate, album: AlbumInfo) -> list[TrackInfo]:
+    """The release tracks the folder's files stand for."""
+    parsed = _dedupe([_parse(f) for f in candidate.files], album)
+    files = [FileTrack(p.title, "", p.file.duration, p.track, p.disc) for p in parsed]
+    return [t for _, t in assign_tracks(files, album.tracks)[0]]
+
+
 def score_candidate(
     candidate: Candidate,
     album: AlbumInfo,
@@ -162,8 +170,6 @@ def score_candidate(
         len(missing) / total if total else 0.0,
         f"{total - len(missing)} of {total} tracks present",
     )
-    if missing:
-        vetoes.append(f"{len(missing)} of {total} tracks missing")
     for e in extras:
         dist.add("extra_files", 1.0, f"{by_id[id(e)].name!r} has no release track")
 
@@ -212,9 +218,12 @@ def score_candidate(
         "; ".join(r for bad, _, r in reasons if bad),
     )
 
+    result_band = band(dist.distance, vetoes, profile)
+    if missing and result_band is Band.AUTO_ACCEPT:
+        result_band = Band.REVIEW  # never ahead of a complete folder; stage 2 has the AcoustID say
     return MatchResult(
         distance=dist.distance,
-        band=band(dist.distance, vetoes, profile),
+        band=result_band,
         breakdown=dist.breakdown(),
         vetoes=tuple(vetoes),
         scorer_version=SCORER_VERSION,

@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, date, timedelta, timezone
 
 import httpx
@@ -438,7 +439,7 @@ async def test_label_search_maps_releases_to_groups(make_client: Make) -> None:
 def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> None:
     watch = FakeWatch()
     watch.found = [EntityRef(ARTIST, "Radiohead", "UK band")]
-    web.app.state.watch = watch  # type: ignore[attr-defined]
+    web.app.state.services = replace(web.app.state.services, musicbrainz=watch)  # type: ignore[attr-defined]
     with env.sessions.begin() as s:
         create_user(s, "bob", "pw")
     tok = login(web, "alice")
@@ -496,7 +497,7 @@ def test_a_user_without_request_cannot_follow(web: TestClient) -> None:
 
 
 def test_bad_input_is_refused(web: TestClient) -> None:
-    web.app.state.watch = FakeWatch()  # type: ignore[attr-defined]
+    web.app.state.services = replace(web.app.state.services, musicbrainz=FakeWatch())  # type: ignore[attr-defined]
     tok = login(web, "alice")
     for data in ({"kind": "artist", "mbid": "nope"}, {"kind": "album", "mbid": ARTIST}):
         r = web.post("/watchlist/follow", data={"csrf_token": tok, **data})
@@ -555,7 +556,7 @@ def _catalog_world(env: Env, web: TestClient) -> tuple[FakeWatch, str, int]:
         ReleaseGroupHit(rid(5), "A Single", "A", "single", "2015", ()),
         ReleaseGroupHit(rid(6), "Odd", "A", "other", "", ()),
     ]
-    web.app.state.watch = watch  # type: ignore[attr-defined]
+    web.app.state.services = replace(web.app.state.services, musicbrainz=watch)  # type: ignore[attr-defined]
     tok = login(web, "alice")
     r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "artist", "mbid": ARTIST})
     assert r.status_code == 303
@@ -588,7 +589,7 @@ def test_picker_marks_owned_and_requested(env: Env, web: TestClient) -> None:
     assert page.index("<legend>album") < page.index("<legend>single") < page.index("<legend>other")
     assert re.search(r"<input[^>]* checked", page) is None
     assert page.count('" disabled>') == 2 and "owned" in page and "already requested" in page
-    assert web.app.state.watch.browsed == []  # type: ignore[attr-defined]
+    assert web.app.state.services.musicbrainz.browsed == []  # type: ignore[attr-defined]
 
 
 def test_picker_does_not_disable_a_group_with_only_a_discovery_track(
@@ -610,7 +611,7 @@ def test_picker_does_not_disable_a_group_with_only_a_discovery_track(
 
 
 def test_label_follow_redirects_to_the_follow_page(env: Env, web: TestClient) -> None:
-    web.app.state.watch = FakeWatch()  # type: ignore[attr-defined]
+    web.app.state.services = replace(web.app.state.services, musicbrainz=FakeWatch())  # type: ignore[attr-defined]
     tok = login(web, "alice")
     r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "label", "mbid": LABEL})
     assert not r.headers["location"].endswith("/catalog")
@@ -726,7 +727,8 @@ def test_mb_routes_work_on_a_real_sqlite_file_with_the_db_bucket(env: Env, web: 
     client = PoliteClient(
         "musicbrainz", env.settings, env.sessions, transport=httpx.MockTransport(handler)
     )
-    web.app.state.watch = MusicBrainzProvider(client)  # type: ignore[attr-defined]
+    state = web.app.state  # type: ignore[attr-defined]
+    state.services = replace(state.services, musicbrainz=MusicBrainzProvider(client))
     tok = login(web, "alice")
     assert "Real Name" in web.get("/watchlist/search", params={"kind": "artist", "q": "x"}).text
     r = web.post("/watchlist/follow", data={"csrf_token": tok, "kind": "artist", "mbid": ARTIST})
