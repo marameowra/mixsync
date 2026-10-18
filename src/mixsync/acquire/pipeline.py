@@ -294,7 +294,7 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                drop_candidate(s, now, self._request(s, job), cand.username, cand.folder, str(e))
+                await self._drop(cand, s, now, self._request(s, job), str(e))
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -307,11 +307,11 @@ class Pipeline:
             req = self._request(s, job)
             if info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
-                drop_candidate(s, now, req, cand.username, cand.folder, why)
+                await self._drop(cand, s, now, req, why)
                 return
             problem = _missing(cand, info.local_paths)
             if problem:  # never import a missing or partial file (SK-P04)
-                drop_candidate(s, now, req, cand.username, cand.folder, problem)
+                await self._drop(cand, s, now, req, problem)
                 return
             verify.start(
                 s,
@@ -358,12 +358,11 @@ class Pipeline:
             if why := await self._unusable(path):
                 with self.sessions.begin() as s:
                     if not _stale(s, job, self._request(s, job)):
-                        drop_candidate(
+                        await self._drop(
+                            cand,
                             s,
                             self.clock.now(),
                             self._request(s, job),
-                            cand.username,
-                            cand.folder,
                             why,
                         )
                 return
@@ -378,12 +377,11 @@ class Pipeline:
                 if not local:  # a corrupt download: another peer may have a good copy
                     with self.sessions.begin() as s:
                         if not _stale(s, job, self._request(s, job)):
-                            drop_candidate(
+                            await self._drop(
+                                cand,
                                 s,
                                 self.clock.now(),
                                 self._request(s, job),
-                                cand.username,
-                                cand.folder,
                                 f"unreadable: {path.name}: {e}",
                             )
                     return
@@ -480,18 +478,17 @@ class Pipeline:
             elif result.band is Band.REVIEW and provisional:  # discovery never fills Review
                 d.status = "rejected_auto"
                 why = "; ".join(result.vetoes) or f"distance {result.distance:.2f}"
-                drop_candidate(
+                await self._drop(
+                    cand,
                     s,
                     now,
                     req,
-                    cand.username,
-                    cand.folder,
                     f"would need review, which discovery skips: {why}",
                 )
             elif result.band is Band.REVIEW:
                 lifecycle.review(req)
             else:  # files stay in /downloads: reject never deletes
-                drop_candidate(s, now, req, cand.username, cand.folder, "rejected after download")
+                await self._drop(cand, s, now, req, "rejected after download")
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
@@ -620,9 +617,7 @@ class Pipeline:
                 if left and not req.from_files and album.release_group_id:
                     # another copy of what we have: the rest of the album is still wanted
                     text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
-                    drop_candidate(
-                        s, self.clock.now(), req, cand.username, cand.folder, text, partial=text
-                    )
+                    await self._drop(cand, s, self.clock.now(), req, text, partial=text)
                 else:
                     lifecycle.owned(req)
             return
@@ -790,9 +785,7 @@ class Pipeline:
                 req, errors, notes, unverified=bool(local and recheck), dead_end=dead_end
             )
             if partial and not errors and not local:
-                drop_candidate(
-                    s, now, req, cand.username, cand.folder, partial, partial=partial, notes=notes
-                )
+                await self._drop(cand, s, now, req, partial, partial=partial, notes=notes)
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
@@ -835,6 +828,17 @@ class Pipeline:
 
     def _imported(self, src: Path, batch: str, root: str = "library") -> bool:
         return self.importer.fileops.find_imported(batch, src, root) is not None
+
+    async def _drop(
+        self, cand: Candidate, s: Session, now: datetime, req: Request, why: str, **kw: Any
+    ) -> None:
+        """drop_candidate, after cancelling what the candidate still has moving in slskd so a
+        dropped album stops downloading. Finished files stay; a failed cancel never blocks."""
+        try:
+            await self.source.clear(cand)
+        except Exception:
+            log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
+        drop_candidate(s, now, req, cand.username, cand.folder, why, **kw)
 
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"

@@ -190,7 +190,7 @@ async def test_status_aggregates_transfers(make_client: Make) -> None:
     assert info.bytes == 880 * 125 * 200 + 1000
 
 
-async def test_clear_deletes_only_this_candidates_transfers(make_client: Make) -> None:
+async def test_clear_cancels_and_removes_only_this_candidates_transfers(make_client: Make) -> None:
     cand = Candidate("p", "d", (CandidateFile("d\\a.flac", 1, "flac"),))
     files = [{"id": "ID-A", "filename": "d\\a.flac"}, {"id": "ID-B", "filename": "d\\other.flac"}]
     body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
