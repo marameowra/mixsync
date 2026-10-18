@@ -339,8 +339,10 @@ class Pipeline:
         A migrated album has no release yet: `_identify` picks one."""
         p = job.payload
         with self.sessions() as s:
-            if _stale(s, job, self._request(s, job)):  # before spending any rate-limited calls
+            req = self._request(s, job)
+            if _stale(s, job, req):  # before spending any rate-limited calls
                 return
+            local = req.from_files
         cand = candidate_from_dict(p["candidate"])
         paths = [Path(x) for x in p["paths"]]
         album: AlbumInfo | None = None
@@ -372,7 +374,20 @@ class Pipeline:
         for path in paths:
             try:
                 fp = await self.fingerprint(path)
-            except PermanentError as e:  # one corrupt track must not hide the album
+            except PermanentError as e:
+                if not local:  # a corrupt download: another peer may have a good copy
+                    with self.sessions.begin() as s:
+                        if not _stale(s, job, self._request(s, job)):
+                            retry_search(
+                                s,
+                                self.clock.now(),
+                                self._request(s, job),
+                                cand.username,
+                                cand.folder,
+                                f"unreadable: {path.name}: {e}",
+                            )
+                    return
+                # local files cannot be fetched again: identify the album from the rest
                 first = first or e
                 unreadable.append(f"{path}: {e}")
                 continue
