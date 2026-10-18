@@ -15,7 +15,7 @@ This brief guides the redesign of the whole MixSync interface. It sets the direc
 
 ## Decisions
 
-These choices are settled. They come from the MixSync design system and are checked against home, discovery, match review, and import at phone and desktop widths in both modes.
+These choices are settled. They come from the MixSync design system. Check them on home, discovery, match review, and import at phone and desktop widths in both modes when production templates change.
 
 ### Palette
 
@@ -119,7 +119,7 @@ The order is: action bar (sticky), score breakdown, candidate (cover and trackli
 - Confident is `positive` with ●. Needs review is `caution` with ◐. Rejected is `danger` with ✕. Neutral or pending is `ink-muted` with ○.
 - Notices use the same glyphs. Warnings use ▲ and info uses i. A notice has no side stripe.
 - Destructive actions use `danger` buttons. The button is filled only for the final confirm.
-- The final confirm comes only after a consequence summary. The summary shows counts of what moves, changes, and goes to trash, and asks the person to type the count.
+- The final confirm comes only after a consequence summary. The summary shows counts of what moves, changes, and goes to trash, and, above the data-safety threshold, asks the person to type the count.
 
 ### Shared and local patterns
 
