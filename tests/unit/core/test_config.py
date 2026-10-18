@@ -6,6 +6,7 @@ from mixsync.core.config import Settings
 
 def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MIXSYNC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("MIXSYNC_CONFIG_DIR", raising=False)
     s = Settings()
     assert s.database_url == "sqlite:////config/mixsync.db"
     assert s.config_dir == "/config"

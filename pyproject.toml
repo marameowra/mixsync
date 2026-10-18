@@ -81,6 +81,25 @@ source_modules = ["mixsync.core"]
 forbidden_modules = ["mixsync.db", "mixsync.web", "mixsync.app"]
 
 [[tool.importlinter.contracts]]
+name = "domain packages do not import the wiring root"
+type = "forbidden"
+source_modules = [
+    "mixsync.core",
+    "mixsync.db",
+    "mixsync.ratelimit",
+    "mixsync.metadata",
+    "mixsync.match",
+    "mixsync.sources",
+    "mixsync.library",
+    "mixsync.acquire",
+    "mixsync.targets",
+    "mixsync.watchlist",
+    "mixsync.submit",
+    "mixsync.discovery",
+]
+forbidden_modules = ["mixsync.wiring"]
+
+[[tool.importlinter.contracts]]
 name = "db imports only core"
 type = "forbidden"
 source_modules = ["mixsync.db"]

@@ -5,10 +5,11 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync import worker
+from mixsync import wiring, worker
 from mixsync.core.config import Settings
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.web import deps
+from mixsync.wiring import build_services
 
 MIRROR = "http://mirror.test:5000"
 
@@ -32,8 +33,8 @@ def test_worker_builds_musicbrainz_on_the_configured_base_url(
         monkeypatch.setenv(f"MIXSYNC_{var}_DIR", str(tmp_path / var))
     monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
     Recorder.urls = []
-    monkeypatch.setattr(worker, "MusicBrainzProvider", Recorder)
-    worker._new_queue()  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
+    worker._new_queue(build_services(Settings()))  # pyright: ignore[reportPrivateUsage]
     assert Recorder.urls and set(Recorder.urls) == {MIRROR}
 
 
@@ -42,8 +43,8 @@ def test_web_builds_musicbrainz_on_the_configured_base_url(
 ) -> None:
     monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
     Recorder.urls = []
-    monkeypatch.setattr(deps, "MusicBrainzProvider", Recorder)
-    state = SimpleNamespace(settings=Settings(), session_factory=sessions)
+    monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
+    state = SimpleNamespace(services=build_services(Settings(), sessions))
     deps.get_watch(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
     assert Recorder.urls == [MIRROR]
 
@@ -53,8 +54,7 @@ def test_web_merger_builds_musicbrainz_on_the_configured_base_url(
 ) -> None:
     monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
     Recorder.urls = []
-    monkeypatch.setattr(deps, "MusicBrainzProvider", Recorder)
-    monkeypatch.setattr(deps, "get_fileops", lambda _request: object())
-    state = SimpleNamespace(settings=Settings(), session_factory=sessions)
+    monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
+    state = SimpleNamespace(services=build_services(Settings(), sessions))
     deps.get_merger(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
     assert Recorder.urls == [MIRROR]

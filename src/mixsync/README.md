@@ -20,6 +20,7 @@ The Python package. Every subfolder has a README describing what goes there. Rea
 
 ## Entry points (top-level files, not folders)
 - `app.py`: builds the FastAPI app. Wires config → DB → adapters → services → routes. Run with `mixsync web`.
+- `wiring.py`: composition root for the services the worker and web share (engine, `FileOps`, the one `MusicBrainzProvider`, `Merger`, HTTP clients, `SecretBox`). `build_services(settings)` only constructs: no recovery, no startup chains. `worker.py` and `app.py` both take a `Services`; `mixsync all` builds one and hands it to both. A bad key file fails here.
 - `worker.py`: the job loop. Claims jobs from the DB queue, dispatches by `JobKind`, heartbeats leases, and runs the startup journal recovery ([data safety](../../docs/design/data-safety.md#4-operation-journal)). Run with `mixsync worker`.
 - Recurring chain initializers run independently in worker threads before polling. Failed initializers retry at the polling interval until shutdown; successful initializers are not repeated.
 - Discovery and retention initialize together: discovery creates the playlists retention needs to scan.
@@ -36,11 +37,11 @@ adapters    ← core, ratelimit                sources, metadata, targets, disco
 match       ← core                           pure logic: features in, distance out
 library     ← core, db, match
 services    ← core, db, match, library       watchlist, submit, discovery services
-web, worker ← anything                       composition roots
+web, worker, wiring ← anything               composition roots
 ```
 
 - **Adapters never import `db`.** They take and return `core` domain types.
-- **Services never import adapter modules.** They depend on the `core` Protocols (`DownloadSource`, `MetadataProvider`, `LibraryTarget`, `HistorySource`), and `app.py` / `worker.py` inject the concrete adapters. This keeps the services testable with fakes and lets you swap sources and targets without touching services.
+- **Services never import adapter modules.** They depend on the `core` Protocols (`DownloadSource`, `MetadataProvider`, `LibraryTarget`, `HistorySource`), and `app.py` / `worker.py` / `wiring.py` inject the concrete adapters. This keeps the services testable with fakes and lets you swap sources and targets without touching services.
 - **`match` is pure.** No I/O. Callers gather the evidence (fingerprints, MB data) and pass it in.
 
 ## Cross-cutting rules

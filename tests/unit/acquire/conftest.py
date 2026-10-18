@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -131,7 +132,7 @@ def web(env: Env, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         s.execute(delete(UserRole).where(UserRole.user_id == uid))
         s.add(UserRole(user_id=uid, role_id=role.id))
     app = create_app(env.sessions, Settings())
-    app.state.namer = NoNames()
+    app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
 

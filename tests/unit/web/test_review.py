@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -105,7 +106,7 @@ def client(sf: sessionmaker[Session], downloads: Path) -> Iterator[TestClient]:
         s.execute(delete(UserRole).where(UserRole.user_id == uid))
         s.add(UserRole(user_id=uid, role_id=role.id))
     app = create_app(sf, Settings())
-    app.state.namer = NoNames()
+    app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
 

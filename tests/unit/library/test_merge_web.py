@@ -3,6 +3,7 @@ Lives here, not in tests/unit/web, for the `world` fixture."""
 
 import asyncio
 import re
+from dataclasses import replace
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
@@ -44,7 +45,7 @@ def _client(w: World) -> TestClient:
     with w.sessions.begin() as s:
         create_user(s, "root", "pw", admin=True)
     app = create_app(w.sessions, Settings())
-    app.state.merger = w.merger
+    app.state.services = replace(app.state.services, merger=w.merger)
     return TestClient(app, follow_redirects=False)
 
 
