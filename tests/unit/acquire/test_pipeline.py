@@ -17,7 +17,7 @@ from mixsync.acquire import pipeline, verify
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import AlbumInfo, TrackInfo, TransferStatus
+from mixsync.core.matching import AlbumInfo, Candidate, TrackInfo, TransferStatus
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
@@ -436,6 +436,23 @@ async def test_failed_transfer_marks_tried_and_picks_next(env: Env) -> None:
         req = s.get(Request, rid)
         assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
     assert status(env, rid) == "imported" and len(library(env)) == 2
+    assert env.source.cleared[0] == "peer1"  # the dropped candidate's transfers are cancelled
+
+
+async def test_a_failed_cancel_does_not_block_the_drop(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.state["peer1"] = TransferStatus.FAILED
+
+    async def down(_cand: Candidate) -> None:
+        raise TransientError("slskd unreachable")
+
+    monkeypatch.setattr(env.source, "clear", down)
+    rid = request(env)
+    await env.drain()
+    assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
 
 
 async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:

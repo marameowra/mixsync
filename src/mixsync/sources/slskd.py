@@ -187,7 +187,8 @@ class SlskdSource:
         }
 
     async def clear(self, candidate: Candidate) -> None:
-        """Drop the candidate's finished transfers from slskd's list (files are not touched)."""
+        """Cancel and remove the candidate's transfers from slskd (`remove=true` cancels one still
+        moving; files already on disk are not touched)."""
         data = await self._call("GET", f"/transfers/downloads/{candidate.username}")
         wanted = {f.path for f in candidate.files}
         for d in data["directories"]:
