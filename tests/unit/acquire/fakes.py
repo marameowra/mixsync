@@ -113,6 +113,7 @@ class FakeSource:
         self.state: dict[str, TransferStatus] = {}  # by peer; default DONE
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
+        self.landed: dict[str, int] = {}  # bytes a peer got through before its transfer ended
         self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
         self.moving: Callable[[], dict[str, int]] = dict  # the other transfers: id -> bytes
 
@@ -178,7 +179,7 @@ class FakeSource:
     async def status(self, candidate: Candidate) -> TransferInfo:
         state = self.state.get(candidate.username, TransferStatus.DONE)
         if state is not TransferStatus.DONE:
-            return TransferInfo(state, 0)
+            return TransferInfo(state, self.landed.get(candidate.username, 0))
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
         return TransferInfo(state, 1, tuple(str(self._dir(candidate) / n) for n in names))
 

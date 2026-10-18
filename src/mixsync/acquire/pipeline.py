@@ -294,7 +294,9 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                await self._drop(cand, s, now, self._request(s, job), str(e))
+                await self._drop(
+                    cand, s, now, self._request(s, job), str(e), spent=p.get("bytes", 0) > 0
+                )
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -307,11 +309,11 @@ class Pipeline:
             req = self._request(s, job)
             if info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
-                await self._drop(cand, s, now, req, why)
+                await self._drop(cand, s, now, req, why, spent=info.bytes > 0)
                 return
             problem = _missing(cand, info.local_paths)
             if problem:  # never import a missing or partial file (SK-P04)
-                await self._drop(cand, s, now, req, problem)
+                await self._drop(cand, s, now, req, problem, spent=True)  # the files landed
                 return
             verify.start(
                 s,
@@ -364,6 +366,7 @@ class Pipeline:
                             self.clock.now(),
                             self._request(s, job),
                             why,
+                            spent=True,
                         )
                 return
         files: list[FileTrack] = []
@@ -383,6 +386,7 @@ class Pipeline:
                                 self.clock.now(),
                                 self._request(s, job),
                                 f"unreadable: {path.name}: {e}",
+                                spent=True,
                             )
                     return
                 # local files cannot be fetched again: identify the album from the rest
@@ -490,11 +494,12 @@ class Pipeline:
                     now,
                     req,
                     f"would need review, which discovery skips: {why}",
+                    spent=True,
                 )
             elif result.band is Band.REVIEW:
                 lifecycle.review(req)
             else:  # files stay in /downloads: reject never deletes
-                await self._drop(cand, s, now, req, "rejected after download")
+                await self._drop(cand, s, now, req, "rejected after download", spent=True)
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF
