@@ -34,7 +34,7 @@ from mixsync.library import tags
 from mixsync.match import scorer
 
 from .conftest import Env, login
-from .fakes import ALBUM, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
+from .fakes import ALBUM, ALBUM_B, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
 from .test_pipeline import decision_rows, library
 
 
@@ -342,6 +342,24 @@ async def test_untagged_album_picks_the_best_of_the_top_three(rig: Rig) -> None:
     assert rig.meta.calls[:3] == [OTHER.release_id, ALBUM.release_id, OTHER.release_id]
     (req,) = rig.requests()
     assert req.status == "imported" and req.release_mbid == ALBUM.release_id
+
+
+async def test_two_near_identical_releases_go_to_review_with_the_runner_up(
+    rig: Rig, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    twin = replace(ALBUM_B, year=ALBUM.year)  # same group, tracks and year: only the id differs
+    monkeypatch.setitem(CATALOG, str(twin.release_id), twin)
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(ALBUM), ref(twin)]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.status) == ("review", "pending_review")
+    assert d.evidence["runner_up"]["release_id"] == twin.release_id
+    login(web, "root")
+    assert "Close runner-up" in web.get(f"/review/{d.id}").text
 
 
 async def test_no_candidate_goes_to_review_and_reject_skips(rig: Rig, web: TestClient) -> None:

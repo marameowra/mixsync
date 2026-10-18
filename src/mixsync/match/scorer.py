@@ -28,6 +28,7 @@
 import datetime
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from types import MappingProxyType
 
 from mixsync.core.matching import (
@@ -38,13 +39,14 @@ from mixsync.core.matching import (
     MatchResult,
     Penalty,
     Profile,
+    RunnerUp,
     TrackInfo,
 )
 from mixsync.match.features import normalize, string_dist
-from mixsync.match.profiles import band
+from mixsync.match.profiles import band, close_gap
 from mixsync.match.vetoes import acoustid_confirms, acoustid_contradicts, all_confident, find_vetoes
 
-SCORER_VERSION = 4  # 4: partial artist credits, AcoustID-led track scoring
+SCORER_VERSION = 5  # 5: close runner-up caps at review
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -449,7 +451,8 @@ def best_release(
     """Among releases whose distance is within the profile's auto-accept threshold, the one
     holding more AcoustID-confirmed recordings of the files wins, then the closest metadata. A
     release the tags rule out (a compilation with every track) cannot win on confirmations
-    alone. `albums` must not be empty."""
+    alone. A runner-up within the auto-accept limit of the winner caps the band at review.
+    `albums` must not be empty."""
     scored = [(score_files(files, likelies, a, profile), a) for a in albums]
 
     def key(x: tuple[MatchResult, AlbumInfo]) -> tuple[int, int, float]:
@@ -459,4 +462,12 @@ def best_release(
         return 0, -sure, x[0].distance
 
     result, album = min(scored, key=key)
+    others = [(r, a) for r, a in scored if a is not album]
+    if others:
+        near, other = min(others, key=lambda x: x[0].distance)
+        gap = near.distance - result.distance
+        if close_gap(gap, profile):
+            runner = RunnerUp(str(other.release_id), other.album, gap)
+            capped = Band.REVIEW if result.band is Band.AUTO_ACCEPT else result.band
+            result = replace(result, band=capped, runner_up=runner)
     return album, result

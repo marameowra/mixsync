@@ -11,7 +11,7 @@ import tempfile
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -405,6 +405,7 @@ class Pipeline:
             )
             if (
                 free.band is Band.AUTO_ACCEPT
+                and not result.runner_up  # the cap on a close runner-up stands
                 and all_confident(pairs)
                 and string_dist(like.album, album.album) <= PARTIAL_ALBUM_MAX_DIST
             ):
@@ -421,6 +422,8 @@ class Pipeline:
             duration_deltas=[abs((f.length or 0) - (t.length or 0)) for f, t in pairs],
             assignment=assignment,
         ).to_json()
+        if result.runner_up:
+            evidence["runner_up"] = asdict(result.runner_up)
 
         now = self.clock.now()
         with self.sessions.begin() as s:

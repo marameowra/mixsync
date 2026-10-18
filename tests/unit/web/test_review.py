@@ -162,6 +162,19 @@ def test_detail_reasons_verbatim_and_escaped(client: TestClient, sf: sessionmake
     assert "peer1" in html and "0.97" in html
 
 
+def test_detail_shows_the_runner_up_and_gap(client: TestClient, sf: sessionmaker[Session]) -> None:
+    i = _make_decision(sf, "alice", "/x")
+    with sf() as s, s.begin():
+        d = s.get_one(MatchDecision, i)
+        d.evidence = {
+            **d.evidence,
+            "runner_up": {"release_id": MBID, "title": "Album B", "gap": 0.0312},
+        }
+    _login(client, "alice")
+    html = client.get(f"/review/{i}").text
+    assert "Close runner-up" in html and "Album B" in html and "0.031" in html
+
+
 @pytest.mark.parametrize(
     ("action", "status"), [("accept", "accepted"), ("reject", "rejected"), ("repick", "repick")]
 )

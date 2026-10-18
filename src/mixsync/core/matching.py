@@ -94,12 +94,22 @@ class Penalty:
 
 
 @dataclass(frozen=True)
+class RunnerUp:
+    """The second-best release, close enough to the best to make the choice a coin flip."""
+
+    release_id: str
+    title: str
+    gap: float  # its distance minus the best's
+
+
+@dataclass(frozen=True)
 class MatchResult:
     distance: float
     band: Band
     breakdown: tuple[Penalty, ...]
     vetoes: tuple[str, ...]
     scorer_version: int
+    runner_up: RunnerUp | None = None  # set when it caps the band at review
 
 
 @dataclass(frozen=True)

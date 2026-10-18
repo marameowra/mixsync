@@ -3,9 +3,9 @@ from dataclasses import replace
 
 import pytest
 
-from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, TrackInfo
+from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, Profile, TrackInfo
 from mixsync.core.types import AcoustIdResult
-from mixsync.match.profiles import BALANCED, LOOSE, STRICT
+from mixsync.match.profiles import BALANCED, LOOSE, STRICT, close_gap
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
     SCORER_VERSION,
@@ -482,3 +482,35 @@ def test_compilation_with_more_confirmations_does_not_beat_the_tagged_album() ->
     )
     for profile in (STRICT, BALANCED, LOOSE):
         assert best_release(files, like, [b, a], profile)[0] is a
+
+
+@pytest.mark.parametrize("profile", [STRICT, BALANCED, LOOSE])
+def test_close_gap_is_inclusive_at_the_limit(profile: Profile) -> None:
+    limit = profile.auto_accept_max
+    assert close_gap(limit, profile)
+    assert close_gap(0.1 + 0.2 - 0.3 + limit, profile)  # float noise at the limit
+    assert close_gap(limit - 0.001, profile)
+    assert not close_gap(limit + 0.001, profile)
+
+
+def test_a_close_runner_up_caps_the_best_at_review() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    a = AlbumInfo(artist="artist", album="album", release_id="a", tracks=(rec_track("One", "r1"),))
+    b = replace(a, release_id="b")
+    album, result = best_release(files, like, [a, b], STRICT)
+    assert result.band is Band.REVIEW
+    assert result.runner_up is not None and result.runner_up.gap == 0.0
+    assert {album.release_id, result.runner_up.release_id} == {"a", "b"}
+    assert best_release(files, like, [a], STRICT)[1].band is Band.AUTO_ACCEPT
+
+
+def test_a_distant_runner_up_does_not_cap() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    a = AlbumInfo(artist="artist", album="album", release_id="a", tracks=(rec_track("One", "r1"),))
+    b = AlbumInfo(
+        artist="other", album="different", release_id="b", tracks=(rec_track("One", "x"),)
+    )
+    _, result = best_release(files, like, [a, b], LOOSE)
+    assert result.band is Band.AUTO_ACCEPT and result.runner_up is None
