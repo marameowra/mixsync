@@ -150,6 +150,7 @@ class TransferInfo:
     state: TransferStatus
     bytes: int
     local_paths: tuple[str, ...] = ()  # one per candidate file, same order; set once DONE
+    retry: tuple[CandidateFile, ...] = ()  # FAILED only by TimedOut/Errored files: worth another go
 
 
 def download_dir(downloads: Path, remote_path: str) -> Path:
