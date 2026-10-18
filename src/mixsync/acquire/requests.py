@@ -2,7 +2,7 @@
 marking candidates tried, coalescing rescans and applying a reviewer's decision."""
 
 import random
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -150,30 +150,49 @@ def fail_request_of_job(
             lifecycle.job_failed(req, _has_tracks(s, req), error)
             req.updated_at = now  # the queue's clock, as the job rows use
             if req.status == "partial":  # a partial request always has a repeat search queued
-                if (cand := _failed_candidate(s, payload)) and cand not in req.tried:
-                    req.tried = [*req.tried, cand]  # else the search re-picks it, hourly, forever
-                delay = NO_RESULTS_BACKOFF[
-                    min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
-                ]
-                req.no_results_attempts += 1
-                req.next_search_at = now + delay
-                enqueue_in(
-                    s,
-                    now,
-                    JobKind.SEARCH,
-                    {"request_id": rid},
-                    run_after=now + delay,
-                    priority=search_priority(req),
-                )
+                peer, folder = _failed_candidate(s, payload) or ("", "")
+                drop_candidate(s, now, req, peer, folder, error, job_failed=True)
             s.flush()
 
 
-def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
-    """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
+def drop_candidate(
+    s: Session,
+    now: datetime,
+    req: Request,
+    peer: str,
+    folder: str,
+    why: str,
+    *,
+    partial: str = "",  # "N of M tracks present": some tracks are in, keep looking with backoff
+    notes: Sequence[str] = (),
+    job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
+) -> None:
+    """The one way a candidate is dropped: it joins the request's tried list (its files stay in
+    /downloads, never deleted) and the request searches again, or fails when it has nothing to
+    search for. The next search is fresh and skips every tried [peer, folder]."""
     if req.from_files:  # nothing to search for: a person must look at the files
-        lifecycle.download_failed(req, False, why)
+        if not partial and not job_failed:
+            lifecycle.download_failed(req, False, why)
         return
-    req.tried = [*req.tried, [peer, folder]]
+    if (
+        peer and [peer, folder] not in req.tried
+    ):  # no candidate known, or else the search re-picks it, hourly, forever
+        req.tried = [*req.tried, [peer, folder]]
+    if partial or job_failed:  # part of the album is in: repeat the search with backoff
+        if partial:
+            lifecycle.keep_looking(req, partial, notes)
+        delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
+        req.no_results_attempts += 1
+        req.next_search_at = now + delay
+        enqueue_in(
+            s,
+            now,
+            JobKind.SEARCH,
+            {"request_id": req.id},
+            run_after=now + delay,
+            priority=search_priority(req),
+        )
+        return
     lifecycle.download_failed(req, _has_tracks(s, req), why)
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
@@ -214,7 +233,7 @@ def apply_review(s: Session, now: datetime, decision_id: int) -> None:
     elif req.from_files:  # no other candidate to look for: the album stays out
         lifecycle.rejected(req)
     else:
-        retry_search(s, now, req, ev.peer, ev.folder, "rejected in review")
+        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review")
 
 
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them
