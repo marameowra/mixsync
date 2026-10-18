@@ -108,8 +108,9 @@ class FileOps:
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
         self.work = data_dir / ".work"  # scratch space for re-encoded copies of downloads
-        self._downloads = downloads_dir
-        self._drop = drop_dir
+        self.data_dir = data_dir
+        self.downloads = downloads_dir
+        self.drop = drop_dir
         self._journal = journal
         self._clock = clock
 
@@ -269,8 +270,8 @@ class FileOps:
         anything not strictly inside the downloads dir (symlinks and `..` included). A file in
         the drop dir is not deleted: it moves to `.trash/<day>/.drop/` (copied and hash-checked
         first, as the drop dir may be another mount), so the user can recover it."""
-        dl = self._downloads.resolve()
-        drop = self._drop.resolve() if self._drop else None
+        dl = self.downloads.resolve()
+        drop = self.drop.resolve() if self.drop else None
         real = src.resolve()
         in_drop = drop is not None and drop in real.parents
         base = drop if in_drop and drop else dl

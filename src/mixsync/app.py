@@ -9,10 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mixsync.core.config import Settings
-from mixsync.db.engine import make_engine, make_session_factory, user_sessions
+from mixsync.db.engine import user_sessions
 from mixsync.library import tag_undo
 from mixsync.web.csrf import check_csrf
-from mixsync.web.deps import fileops_for
 from mixsync.web.routes import (
     account,
     auth,
@@ -26,22 +25,25 @@ from mixsync.web.routes import (
     watchlist,
 )
 from mixsync.web.templating import templates
+from mixsync.wiring import Services, build_services
 
 
 def create_app(
-    session_factory: sessionmaker[Session] | None = None, settings: Settings | None = None
+    session_factory: sessionmaker[Session] | None = None,
+    settings: Settings | None = None,
+    services: Services | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # a tag restore killed with the web process leaves its track missing until this puts it back
-        tag_undo.recover(app.state.session_factory, fileops_for(app.state))
+        tag_undo.recover(app.state.session_factory, app.state.services.fileops)
         yield
 
     app = FastAPI(title="mixsync", dependencies=[Depends(check_csrf)], lifespan=lifespan)
-    app.state.settings = settings or Settings()
-    app.state.session_factory = user_sessions(
-        session_factory or make_session_factory(make_engine())
-    )
+    services = services or build_services(settings or Settings(), session_factory)
+    app.state.services = services
+    app.state.settings = services.settings
+    app.state.session_factory = user_sessions(services.session_factory)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
 
     @app.exception_handler(StarletteHTTPException)

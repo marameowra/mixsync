@@ -20,11 +20,9 @@ def preview(request: Request, decision_id: int, index: int, user: User, db: Db) 
     files = Evidence.parse(d.evidence).files
     if not 0 <= index < len(files):
         raise HTTPException(404)
-    settings = request.app.state.settings
-    dirs = [settings.downloads_dir, settings.data_dir, settings.import_source_dir]
-    roots = [
-        Path(d).resolve() for d in (*dirs, *([settings.drop_dir] if settings.drop_dir else []))
-    ]
+    fo = request.app.state.services.fileops
+    dirs = [fo.downloads, fo.data_dir, request.app.state.settings.import_source_dir]
+    roots = [Path(d).resolve() for d in (*dirs, *([fo.drop] if fo.drop else []))]
     path = Path(str(files[index].get("local_path", ""))).resolve()  # follows symlinks and ..
     if not any(path.is_relative_to(r) for r in roots) or not path.is_file():
         raise HTTPException(404)

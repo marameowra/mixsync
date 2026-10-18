@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -109,7 +110,7 @@ def client(sf: sessionmaker[Session], mb: MusicBrainzProvider) -> Iterator[TestC
             )
         s.add(Plan(kind="merge", release_group_mbid=G, canonical_release_mbid=R2, ops=[]))
     app = create_app(sf, Settings())
-    app.state.namer = mb
+    app.state.services = replace(app.state.services, musicbrainz=mb)
     with TestClient(app, follow_redirects=False) as c:
         c.post("/login", data={"username": "root", "password": "pw"})
         yield c

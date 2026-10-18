@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -67,7 +68,7 @@ def box(tmp_path: Path) -> SecretBox:
 def client(sf: sessionmaker[Session], fake: FakeValidator, box: SecretBox) -> Iterator[TestClient]:
     app = create_app(sf, Settings())
     app.state.link_validator = fake
-    app.state.secret_box = box
+    app.state.services = replace(app.state.services, secret_box=box)
     with TestClient(app, follow_redirects=False) as c:
         yield c
 
@@ -200,13 +201,14 @@ def test_wrong_key_marks_needs_relink_and_shows_banner(
 ) -> None:
     tok = _login(client, "alice")
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
-    client.app.state.secret_box = SecretBox(Fernet.generate_key())  # type: ignore[attr-defined]
+    state = client.app.state  # type: ignore[attr-defined]
+    state.services = replace(state.services, secret_box=SecretBox(Fernet.generate_key()))
     page = client.get("/account")
     assert page.status_code == 200 and "can no longer be decrypted" in page.text
     assert "Needs relinking" in page.text and SECRET not in page.text
     with sf() as s:
         assert s.query(UserLink).one().needs_relink
-    client.app.state.secret_box = box  # type: ignore[attr-defined]
+    client.app.state.services = replace(client.app.state.services, secret_box=box)  # type: ignore[attr-defined]
     assert "can no longer be decrypted" not in client.get("/account").text  # key back: cleared
 
 
@@ -387,7 +389,7 @@ def test_relinking_clears_needs_relink(
     tok = _login(client, "alice")
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     new = SecretBox(Fernet.generate_key())
-    client.app.state.secret_box = new  # type: ignore[attr-defined]
+    client.app.state.services = replace(client.app.state.services, secret_box=new)  # type: ignore[attr-defined]
     assert "can no longer be decrypted" in client.get("/account").text
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     assert "can no longer be decrypted" not in client.get("/account").text

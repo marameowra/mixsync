@@ -102,14 +102,14 @@ def test_startup_paths_refuse_loose_key_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from mixsync import __main__ as cli
-    from mixsync import worker
+    from mixsync.wiring import build_services
 
     f = tmp_path / "secret.key"
     f.write_bytes(Fernet.generate_key())
     os.chmod(f, 0o644)
     monkeypatch.setenv("MIXSYNC_CONFIG_DIR", str(tmp_path))
     with pytest.raises(RuntimeError, match="readable by others"):
-        worker._new_queue()  # pyright: ignore[reportPrivateUsage]
+        build_services(Settings())
     import uvicorn
 
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("started with a bad key"))

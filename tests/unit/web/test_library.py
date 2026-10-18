@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -95,8 +96,8 @@ def client(sf: sessionmaker[Session]) -> Iterator[TestClient]:
                 )
             )
     app = create_app(sf, Settings())
-    app.state.merger = FakeMerger(sf)
-    app.state.namer = NoNames()
+    app.state.services = replace(app.state.services, merger=FakeMerger(sf))
+    app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
 
