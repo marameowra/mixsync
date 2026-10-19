@@ -1,0 +1,94 @@
+<!-- @dsCard group="Pages" height=760 width=1200 page subtitle="Home mockup: work waiting, then what is in flight, then new music" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — MixSync</title>
+<style>
+  main { max-width: var(--content-max); margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-5); margin-bottom: var(--space-6); }
+  .head h1 { font: 650 32px/36px var(--font-sans); letter-spacing: -.01em; }
+  .grid { display: grid; gap: var(--space-7) var(--space-5); }
+  h2 { font: 600 22px/28px var(--font-sans); margin-bottom: var(--space-3); }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+  .sec-head a { font-size: 13px; }
+  .covers { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--art-md), 1fr)); gap: var(--space-5); }
+  .covers li { min-width: 0; }
+  .covers .art { width: 100%; height: auto; aspect-ratio: 1; font-size: 40px; }
+  .covers .t { display: block; margin-top: var(--space-2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .covers .a { display: block; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+  .covers .tag { margin-top: var(--space-1); }
+  td .who { display: flex; gap: var(--space-3); align-items: center; }
+  td .who span span { display: block; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+  @media (min-width: 48rem) {
+    .grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .work { grid-column: span 7; }
+    .side { grid-column: span 5; }
+    .full { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="/">MixSync</a>
+  <div class="group"><span class="group-name">Find</span><a href="/discover">Discover</a><a href="/watchlist">Watchlist</a><a href="/requests">Requests</a></div>
+  <div class="group"><span class="group-name">Resume</span><a href="/review">Review<span class="count">14</span></a><a href="/library/unverified">Unverified<span class="count">3</span></a></div>
+  <div class="group"><span class="group-name">Library</span><a href="/library/fragments">Fragments</a><a href="/migration">Migration</a></div>
+  <div class="group end"><a href="/account">Account</a><form method="post" action="/logout"><button class="btn quiet" type="submit">Log out</button></form></div>
+</nav>
+
+<main>
+  <div class="head">
+    <h1>Home</h1>
+    <p class="muted">Signed in as jade · Navidrome synced 6 min ago</p>
+  </div>
+
+  <div class="grid">
+    <section class="work" aria-labelledby="h-work">
+      <h2 id="h-work">Waiting on you</h2>
+      <ul class="queue">
+        <li><span class="n">14</span><span class="what"><a href="/review">Albums awaiting review</a><span>9 need review · 5 have no MusicBrainz match · oldest 2 days</span></span><a class="btn primary" href="/review">Start reviewing</a></li>
+        <li><span class="n">3</span><span class="what"><a href="/library/unverified">Albums ready to promote to verified</a><span>Found on MusicBrainz since import</span></span><a class="btn" href="/library/unverified">Promote</a></li>
+        <li><span class="n">2</span><span class="what"><a href="/library/fragments">Fragmented release groups</a><span>Split across releases; a merge would trash 4 duplicates</span></span><a class="btn" href="/library/fragments">Preview merge</a></li>
+        <li class="empty"><span class="n">0</span><span class="what">Failed requests<span>Nothing to retry</span></span><span></span></li>
+      </ul>
+    </section>
+
+    <section class="side" aria-labelledby="h-notes">
+      <h2 id="h-notes">Since you were last here</h2>
+      <div class="stack">
+        <div class="notice ok" role="status"><strong>11 albums imported</strong><span>8 confident matches, 3 accepted by you. All in Navidrome.</span></div>
+        <div class="notice warn"><strong>Soulseek is rate-limited</strong><span>4 searches queued; next attempt in 12 min. Nothing to do.</span></div>
+        <div class="notice error" role="alert"><strong>Library disk 94% full</strong><span>/music has 38 GB free. Imports pause at 98%; .trash holds 12 GB.</span></div>
+      </div>
+    </section>
+
+    <section class="full" aria-labelledby="h-flight">
+      <div class="sec-head"><h2 id="h-flight">In progress</h2><a href="/requests">All requests</a></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Release</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col" class="n">Progress</th><th scope="col" class="n">Size</th></tr></thead>
+          <tbody>
+            <tr><td><span class="who"><span class="art xs missing" role="img" aria-label="No cover art for Dots and Loops">D</span><span>Dots and Loops<span>Stereolab · 1997</span></span></span></td><td>Soulseek · peer_m</td><td><span class="tag neutral">Downloading</span></td><td class="n">62%</td><td class="n">412 MB</td></tr>
+            <tr><td><span class="who"><span class="art xs missing" role="img" aria-label="No cover art for Tender Buttons">T</span><span>Tender Buttons<span>Broadcast · 2005</span></span></span></td><td>Usenet</td><td><span class="tag review">Needs review</span></td><td class="n">—</td><td class="n">298 MB</td></tr>
+            <tr><td><span class="who"><span class="art xs missing" role="img" aria-label="No cover art for Moon Safari">M</span><span>Moon Safari<span>Air · 1998</span></span></span></td><td>Torrent</td><td><span class="tag confident">Imported</span></td><td class="n">100%</td><td class="n">356 MB</td></tr>
+            <tr><td><span class="who"><span class="art xs missing" role="img" aria-label="No cover art for Hex">H</span><span>Hex<span>Bark Psychosis · 1994</span></span></span></td><td>Soulseek · —</td><td><span class="tag neutral">Searching</span></td><td class="n">—</td><td class="n">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="full" aria-labelledby="h-new">
+      <div class="sec-head"><h2 id="h-new">New in Discover</h2><a href="/discover">Open Discover</a></div>
+      <ul class="covers">
+        <li><span class="art lg missing" role="img" aria-label="No cover art for Felt Mountain">F</span><span class="t">Felt Mountain</span><span class="a">Goldfrapp</span><span class="tag neutral">Expires in 5 days</span></li>
+        <li><span class="art lg missing" role="img" aria-label="No cover art for Isn't Anything">I</span><span class="t">Isn't Anything</span><span class="a">My Bloody Valentine</span><span class="tag neutral">Expires in 6 days</span></li>
+        <li><span class="art lg missing" role="img" aria-label="No cover art for Souvlaki">S</span><span class="t">Souvlaki</span><span class="a">Slowdive</span><span class="tag confident">Kept</span></li>
+        <li><span class="art lg missing" role="img" aria-label="No cover art for Treasure">T</span><span class="t">Treasure</span><span class="a">Cocteau Twins</span><span class="tag neutral">Expires in 9 days</span></li>
+        <li><span class="art lg missing" role="img" aria-label="No cover art for Emperor Tomato Ketchup">E</span><span class="t">Emperor Tomato Ketchup</span><span class="a">Stereolab</span><span class="tag neutral">Expires in 12 days</span></li>
+      </ul>
+    </section>
+  </div>
+</main>
+</body>
+</html>
