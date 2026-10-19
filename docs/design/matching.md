@@ -39,7 +39,15 @@ The best-scoring candidate is downloaded. No runners-up are stored. When a candi
 Users can edit their thresholds; the presets are starting points.
 
 - **Hard vetoes** override the score. Examples: the AcoustID match is a *different* recording with a high score, or the duration is off by more than 15 seconds. These always go to review.
-- **Reject** never deletes. The file goes to quarantine and the next candidate is tried.
+- **Reject** never deletes. The files go to quarantine and the next candidate is tried. Discovery requests treat a review-band match as a rejection.
+
+## Quarantine
+Quarantine is `/data/quarantine/<rejected|review>/<YYYY-MM-DD>/<folder>/<file>`, owned by MixSync ([ADR 0007](../decisions/0007-quarantine-owned-by-mixsync.md)). slskd's retention only touches `/downloads`, so nothing a person still has to review can vanish.
+- When verify rejects a downloaded candidate (or finds an unusable file), its files move to `rejected/`. A review-band match moves to `review/`. The stored evidence and assignment paths point at the quarantine copies.
+- Each file move is a journaled verified copy, then a journaled `release` of the `/downloads` source (the mounts differ). Quarantine uses the same path-safety rules as staging and trash.
+- Accepting a review candidate imports from quarantine and then releases the quarantine copy like a released download. A person's reject leaves the files where they are; the decision's `final_action = reject` and `acted_at` mark them rejected.
+- Migration, drop-folder and adopted files are not moved, and neither are rejected folders already in `/downloads`. The adopter scans only `/downloads`, so it never sees quarantine.
+- For the purge ([#208](https://github.com/marameowra/mixsync/issues/208)): `rejected/<day>` folders are rejected entries, aged by the day in their name. `review/` entries whose decision a person rejected are rejected too, found through the decision's evidence paths and aged by `acted_at`. Other `review/` entries are never purged.
 
 > [!question] Threshold values
 > The numbers above are placeholders taken from beets' defaults (`strong_rec_thresh` 0.04, `medium_rec_thresh` 0.25). Tune them during phase 2 against the regression fixtures.

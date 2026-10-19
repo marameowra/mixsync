@@ -167,9 +167,10 @@ def drop_candidate(
     notes: Sequence[str] = (),
     job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
 ) -> None:
-    """The one way a candidate is dropped: it joins the request's tried list (its files stay in
-    /downloads, never deleted) and the request searches again, or fails when it has nothing to
-    search for. The next search is fresh and skips every tried [peer, folder]."""
+    """The one way a candidate is dropped: it joins the request's tried list (verify has already
+    moved its files into quarantine, never deleted) and the request searches again, or fails
+    when it has nothing to search for. The next search is fresh and skips every tried
+    [peer, folder]."""
     if req.from_files:  # nothing to search for: a person must look at the files
         if not partial and not job_failed:
             lifecycle.download_failed(req, False, why)

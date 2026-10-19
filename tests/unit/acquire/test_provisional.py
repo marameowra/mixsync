@@ -154,7 +154,8 @@ async def test_a_review_band_match_tries_the_next_peer_and_never_reaches_review(
     assert tried(env, rid) == [["peer1", FOLDER]]
     assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto", "auto_accepted"]
     assert len(discover(env)) == 2 and len(rows(env)) == 2
-    assert len(tree(env.downloads)) == 10 + 8  # peer1's whole folder stays, peer2's 2 released
+    assert len(tree(env.downloads)) == 8  # peer1's folder is in quarantine, peer2's 2 released
+    assert len(tree(env.data_dir / "quarantine" / "rejected")) == 10
 
 
 async def test_a_resume_records_a_copy_whose_recording_became_owned(env: Env) -> None:
