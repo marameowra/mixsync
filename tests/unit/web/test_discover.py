@@ -109,9 +109,11 @@ def _seed(sf: sessionmaker[Session]) -> int:
 
 
 def _status(text: str, key: str) -> str:
-    m = re.search(rf"T-{key}</td>\s*<td>([^<(]*)", text)
-    assert m
-    return m.group(1).strip()
+    row = next(r for r in text.split("<tr>") if f"T-{key}</span>" in r)
+    cells = re.findall(r"<td>(.*?)</td>", row, flags=re.S)
+    # Read the status text regardless of its accessible glyph/tag markup.
+    value = re.sub(r'<span aria-hidden="true">.*?</span>', "", cells[1], flags=re.S)
+    return re.sub(r"<[^>]+>", "", value).split("(")[0].strip()
 
 
 def test_page_shows_each_status_and_expiring(client: TestClient, sf: sessionmaker[Session]) -> None:

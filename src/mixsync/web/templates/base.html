@@ -1,5 +1,9 @@
 {% import "macros/forms.html" as forms with context %}
 {% import "macros/mb.html" as mb with context %}
+{% set path = request.url.path %}
+{% set can_edit = "library.edit" in user.capabilities if user else false %}
+{% set can_request = "request" in user.capabilities if user else false %}
+{% set is_admin = "admin" in user.capabilities if user else false %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -9,20 +13,31 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   {% if user %}
-  <nav>
-    <a href="/">Home</a>
-    <a href="/requests">Requests</a>
-    <a href="/review">Review</a>
-    <a href="/library/fragments">Fragments</a>
-    {% if "library.edit" in user.capabilities %}<a href="/library/unverified">Unverified</a>{% endif %}
-    {% if "request" in user.capabilities %}<a href="/watchlist">Watchlist</a> <a href="/discover">Discover</a>{% endif %}
-    {% if "admin" in user.capabilities %}<a href="/migration">Migration</a>{% endif %}
-    <a href="/account">Account</a>
-    <form method="post" action="/logout">{{ forms.csrf() }}<button type="submit">Log out</button></form>
+  {% macro link(href, label, count=none) -%}
+  <a href="{{ href }}"{% if (href == "/" and path == "/") or (href != "/" and (path == href or path.startswith(href + "/"))) %} aria-current="page"{% endif %}>{{ label }}{% if count is defined and count is not none and count > 0 %}<span class="count">{{ count }}</span>{% endif %}</a>
+  {%- endmacro %}
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="/"{% if path == "/" %} aria-current="page"{% endif %}>MixSync</a>
+    {% if can_request %}<div class="group"><span class="group-name">Find</span>
+      {%- if can_request %}{{ link("/discover", "Discover") }}{{ link("/watchlist", "Watchlist") }}{% endif %}
+      {{ link("/requests", "Requests") }}
+    </div>{% endif %}
+    {% if can_request or can_edit %}<div class="group"><span class="group-name">Resume</span>
+      {% if can_request %}{{ link("/review", "Review", waiting_counts.get("pending")) }}{% endif %}
+      {%- if can_edit %}{{ link("/library/unverified", "Unverified", waiting_counts.get("unverified")) }}{% endif %}
+    </div>
+    {% endif %}
+    {% if can_edit or is_admin %}<div class="group"><span class="group-name">Library</span>
+      {% if can_edit %}{{ link("/library/fragments", "Fragments") }}{% endif %}
+      {%- if is_admin %}{{ link("/migration", "Migration") }}{% endif %}
+    </div>
+    {% endif %}
+    <div class="group end">{{ link("/account", "Account") }}<form method="post" action="/logout">{{ forms.csrf() }}<button class="btn quiet" type="submit">Log out</button></form></div>
   </nav>
   {% endif %}
-  <main>
+  <main id="main">
   {% block content %}{% endblock %}
   </main>
 </body>

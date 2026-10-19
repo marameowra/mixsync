@@ -4,7 +4,7 @@
 {% macro plan_action(plan, action, label) %}
 {% set changes = plan.ops | selectattr("op", "in", ["move", "trash"]) | list | length %}
 <form method="post" action="/library/plans/{{ plan.id }}/{{ action }}">{{ csrf() }}
-  {% if changes > typed_above %}<label>Type {{ changes }} to confirm <input name="count" type="text" required autocomplete="off"></label>{% endif %}
-  <button type="submit">{{ label }}</button>
+  {% if changes > typed_above %}<label class="field">Type {{ changes }} to confirm <input name="count" type="text" required autocomplete="off"></label>{% endif %}
+  <button class="btn danger filled" type="submit">{{ label }}</button>
 </form>
 {% endmacro %}

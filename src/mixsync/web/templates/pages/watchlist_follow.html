@@ -1,34 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ f.name }} - MixSync{% endblock %}
+{% from "macros/media.html" import artwork %}
+{% from "macros/ui.html" import status %}
 {% block content %}
 <h1>{{ f.name }}</h1>
-{% if msg %}<p>{{ msg }}</p>{% endif %}
+{% if msg %}<p class="notice" role="status"><span aria-hidden="true">i</span> {{ msg }}</p>{% endif %}
 <p>{{ e.kind }} &middot; <a href="https://musicbrainz.org/{{ e.kind }}/{{ e.mbid }}">MusicBrainz</a>
   &middot; last check {{ e.last_checked_at or "never" }}, next {{ e.next_check_at or "-" }}</p>
 {% if e.kind == "artist" %}<p><a href="/watchlist/{{ f.id }}/catalog">Pick releases from the back catalogue</a></p>{% endif %}
-<form method="post" action="/watchlist/{{ f.id }}/check">{{ forms.csrf() }}<button type="submit">Check now</button></form>
+<form method="post" action="/watchlist/{{ f.id }}/check">{{ forms.csrf() }}<button class="primary" type="submit">Check for releases</button></form>
 
 <h2>Filters</h2>
 <form method="post" action="/watchlist/{{ f.id }}/filters">
   {{ forms.csrf() }}
-  <p>{% for t in types %}<label><input type="checkbox" name="types" value="{{ t }}"{% if t in f.release_types %} checked{% endif %}> {{ t }}</label> {% endfor %}</p>
-  <p><label>Minimum date <input name="min_date" type="text" value="{{ f.min_date or '' }}" placeholder="YYYY-MM-DD"></label></p>
-  <p><label>Weekly cap (empty = unlimited) <input name="weekly_cap" type="text" inputmode="numeric" value="{{ f.weekly_cap if f.weekly_cap is not none else '' }}"></label></p>
-  <button type="submit">Save</button>
+  <fieldset><legend>Release types</legend>{% for t in types %}<label><input type="checkbox" name="types" value="{{ t }}"{% if t in f.release_types %} checked{% endif %}> {{ t }}</label> {% endfor %}</fieldset>
+  <p class="field"><label>Minimum date <input name="min_date" type="text" value="{{ f.min_date or '' }}" placeholder="YYYY-MM-DD"></label></p>
+  <p class="field"><label>Weekly cap (empty = unlimited) <input name="weekly_cap" type="text" inputmode="numeric" value="{{ f.weekly_cap if f.weekly_cap is not none else '' }}"></label></p>
+  <button type="submit">Save filters</button>
 </form>
 
 <h2>History</h2>
 {% if hits %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Release</th><th>Date</th><th>Result</th><th></th></tr></thead>
+  <thead><tr><th>Release</th><th>Date</th><th>Result</th><th>Action</th></tr></thead>
   <tbody>
   {% for h in hits %}
   <tr>
-    <td>{{ h.artist }} - {{ h.title }}</td>
+    <td><div class="release-heading">{{ artwork(h.title, size="xs") }}<span>{{ h.artist }} - {{ h.title }}</span></div></td>
     <td>{{ h.release_date }}</td>
-    <td>{{ h.status }}{% if h.request_id %} (<a href="/requests">request {{ h.request_id }}</a>){% endif %}</td>
-    <td>{% if h.status in ("skipped_cap", "skipped_filter") %}<form method="post" action="/watchlist/{{ f.id }}/hits/{{ h.id }}/request">{{ forms.csrf() }}<button type="submit">Request</button></form>{% endif %}</td>
+    <td>{{ status(h.status) }}{% if h.request_id %} (<a href="/requests">request {{ h.request_id }}</a>){% endif %}</td>
+    <td>{% if h.status in ("skipped_cap", "skipped_filter") %}<form method="post" action="/watchlist/{{ f.id }}/hits/{{ h.id }}/request">{{ forms.csrf() }}<button type="submit">Request release</button></form>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -38,5 +40,7 @@
 <p>Nothing found yet.</p>
 {% endif %}
 
-<form method="post" action="/watchlist/{{ f.id }}/delete" onsubmit="return confirm('Stop following? The history is removed; requests are kept.')">{{ forms.csrf() }}<button type="submit">Unfollow</button></form>
+<h2>Stop following</h2>
+<p class="consequence">Unfollowing removes this follow and its history. Existing requests and music files are kept.</p>
+<form method="post" action="/watchlist/{{ f.id }}/delete" onsubmit="return confirm('Stop following? The history is removed; requests are kept.')">{{ forms.csrf() }}<button class="danger" type="submit">Unfollow {{ f.name }}</button></form>
 {% endblock %}

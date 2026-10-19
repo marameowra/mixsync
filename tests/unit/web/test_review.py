@@ -150,7 +150,8 @@ def test_list_and_home_count(client: TestClient, sf: sessionmaker[Session]) -> N
     i = _make_decision(sf, "alice", "/x")
     _login(client, "alice")
     assert f'href="/review/{i}"' in client.get("/review").text
-    assert "1 item awaiting review" in client.get("/").text
+    home = client.get("/", headers={"accept": "*/*"})
+    assert "1 item awaiting review" in home.text
 
 
 def test_detail_reasons_verbatim_and_escaped(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -648,9 +649,10 @@ def test_request_list_marks_jobs_the_worker_has_not_taken(
         rid: next(r for r in page.split("<tr") if f"<td>{rid}</td>" in r)
         for rid in (waiting, running, later)
     }
-    assert "queued (searching)" in rows[waiting]
-    assert "queued" not in rows[running] and "searching" in rows[running]
-    assert "queued" not in rows[later] and "no_results" in rows[later]
+    assert "queued" in rows[waiting].lower() and "(searching)" in rows[waiting].lower()
+    assert "queued" not in rows[running].lower() and "searching" in rows[running].lower()
+    assert "queued" not in rows[later].lower()
+    assert "no results" in rows[later].lower().replace("_", " ")
 
 
 def test_imported_delete_has_no_confirm_and_clear_button(
@@ -870,7 +872,7 @@ def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) 
     client.app.dependency_overrides[get_coverart] = lambda: fake  # type: ignore[attr-defined]
     i = _extra_decision(sf, "alice", target={"release_group_id": "rg"})
     _login(client, "alice")
-    assert f'src="/media/cover/{i}"' in client.get(f"/review/{i}").text
+    assert f'data="/media/cover/{i}"' in client.get(f"/review/{i}").text
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert fake.seen == (MBID, "rg")

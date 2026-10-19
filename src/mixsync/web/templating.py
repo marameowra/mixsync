@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -6,8 +7,11 @@ from fastapi.templating import Jinja2Templates
 from mixsync.web.csrf import csrf_token
 
 
-def _context(request: Request) -> dict[str, str]:
-    return {"csrf_token": csrf_token(request)}
+def _context(request: Request) -> dict[str, Any]:
+    return {
+        "csrf_token": csrf_token(request),
+        "waiting_counts": getattr(request.state, "waiting_counts", {}),
+    }
 
 
 def filesize(n: float | None) -> str:

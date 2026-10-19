@@ -917,7 +917,9 @@ async def test_the_page_reports_every_running_migration_and_all_failures(
             )
     login(web, "root")
     html = web.get("/migration").text
-    assert f"Migration {first}: completed" in html and f"Migration {second}: running" in html
+    first_page = html.split(f"<h2>Migration {first}</h2>", 1)[1].split("<h2>Migration ", 1)[0]
+    second_page = html.split(f"<h2>Migration {second}</h2>", 1)[1].split("<h2>Migration ", 1)[0]
+    assert ">Completed</span>" in first_page and ">Running</span>" in second_page
     assert "first broke" in html and "fail 119" in html
 
 
