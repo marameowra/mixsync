@@ -1,6 +1,6 @@
 # swiss
 
-The MixSync design system as a preview theme: calm Swiss utility style, warm-grey neutrals, one cobalt accent, light and dark from `prefers-color-scheme`. Design system: <https://claude.ai/artifact/7TKmFQqUvNGyfEyq4DTAUq>. The decisions are recorded in [`docs/design/ui-style.md`](../../../docs/design/ui-style.md).
+The MixSync design system as a preview theme: calm Swiss utility style, warm-grey neutrals, one cobalt accent, light and dark from `prefers-color-scheme`. Design system: [`design/system/`](../../system/) (published at <https://claude.ai/artifact/7TKmFQqUvNGyfEyq4DTAUq>). The decisions are recorded in [`docs/design/ui-style.md`](../../../docs/design/ui-style.md).
 
 ## View
 `uv run python -m devtools.preview`, then open `/__preview?theme=swiss`.
