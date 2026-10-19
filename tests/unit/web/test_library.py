@@ -130,7 +130,8 @@ def test_build_and_preview(client: TestClient) -> None:
     r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": G})
     assert r.status_code == 303
     html = client.get(r.headers["location"]).text
-    assert "a/0.flac" in html and "b/0.flac" in html and "1 to move" in html
+    assert "a/0.flac" in html and "b/0.flac" in html
+    assert "<dt>Move</dt><dd>1</dd>" in html and "1 file to move and retag" in html
     assert "Confirm merge" in html
     missing = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": "missing"})
     assert missing.status_code == 404

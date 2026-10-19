@@ -3,8 +3,8 @@
 {# A plan action; changes = move+trash ops, typed back when above the data-safety threshold. #}
 {% macro plan_action(plan, action, label) %}
 {% set changes = plan.ops | selectattr("op", "in", ["move", "trash"]) | list | length %}
-<form method="post" action="/library/plans/{{ plan.id }}/{{ action }}">{{ csrf() }}
-  {% if changes > typed_above %}<label class="field">Type {{ changes }} to confirm <input name="count" type="text" required autocomplete="off"></label>{% endif %}
+<form class="confirm" method="post" action="/library/plans/{{ plan.id }}/{{ action }}">{{ csrf() }}
+  {% if changes > typed_above %}<label class="field">Type {{ changes }} to confirm <input class="input num" name="count" type="text" inputmode="numeric" required autocomplete="off"></label>{% endif %}
   <button class="btn danger filled" type="submit">{{ label }}</button>
 </form>
 {% endmacro %}

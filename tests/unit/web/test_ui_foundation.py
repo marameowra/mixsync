@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,9 +12,11 @@ from mixsync.core.config import Settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
-from mixsync.db.models.auth import Role, RoleCapability, UserRole
+from mixsync.db.models.auth import Role, RoleCapability, User, UserRole
+from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Migration, Request
 from mixsync.web.templating import templates
 
 
@@ -143,6 +145,127 @@ def test_home_without_capabilities_has_no_inaccessible_work(client: TestClient) 
     assert "No work is waiting for this account." in home
     assert 'class="btn primary"' not in home
     assert "unverified track" not in home and "awaiting review" not in home
+    assert "Recent requests" not in home and "New in Discover" not in home
+    assert "In progress" not in home
+
+
+def test_home_shows_only_owned_current_requests_and_active_discover_holds(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    now = datetime.now(UTC)
+    with sf() as s, s.begin():
+        alice = s.query(User).filter_by(username="alice").one()
+        bob = s.query(User).filter_by(username="bob").one()
+        migration = Migration(user_id=alice.id, status="running")
+        alice_playlist = DiscoveryPlaylist(user_id=alice.id, name="Alice")
+        bob_playlist = DiscoveryPlaylist(user_id=bob.id, name="Bob")
+        s.add_all([migration, alice_playlist, bob_playlist])
+        s.flush()
+        for n in range(6):
+            s.add(
+                Request(
+                    user_id=alice.id,
+                    release_mbid=f"release-{n}",
+                    album=f"Own {n}",
+                    status="searching",
+                )
+            )
+        s.add_all(
+            [
+                Request(
+                    user_id=bob.id, release_mbid="other", album="Other user", status="searching"
+                ),
+                Request(
+                    user_id=alice.id,
+                    release_mbid="migration",
+                    album="Migration request",
+                    status="searching",
+                    migration_id=migration.id,
+                ),
+                Request(
+                    user_id=alice.id,
+                    release_mbid="failed",
+                    album="Failed release",
+                    status="failed",
+                    last_error="No source found",
+                ),
+            ]
+        )
+        for n in range(7):
+            track = ProvisionalTrack(
+                path=f"discover-{n}.flac",
+                recording_mbid=f"recording-{n}",
+                batch_id="test",
+                imported_at=now + (timedelta(days=3) if n == 1 else timedelta(minutes=n)),
+                status="active",
+                title=f"Track {n}" if n != 6 else None,
+                artist="Artist" if n != 6 else None,
+            )
+            s.add(track)
+            s.flush()
+            s.add(
+                ProvisionalHold(
+                    user_id=alice.id,
+                    recording_mbid=f"recording-{n}",
+                    playlist_id=alice_playlist.id,
+                    provisional_track_id=track.id,
+                    expires_at=now + timedelta(days=4),
+                    expired_at=now if n == 1 else None,
+                )
+            )
+        other_track = ProvisionalTrack(
+            path="other.flac",
+            recording_mbid="other-recording",
+            batch_id="test",
+            imported_at=now + timedelta(days=4),
+        )
+        s.add(other_track)
+        s.flush()
+        s.add(
+            ProvisionalHold(
+                user_id=bob.id,
+                recording_mbid="other-recording",
+                playlist_id=bob_playlist.id,
+                provisional_track_id=other_track.id,
+                expires_at=now + timedelta(days=4),
+            )
+        )
+        inactive_track = ProvisionalTrack(
+            path="inactive.flac",
+            recording_mbid="inactive-recording",
+            batch_id="test",
+            imported_at=now + timedelta(days=3),
+            status="trashed",
+            title="Inactive track",
+        )
+        s.add(inactive_track)
+        s.flush()
+        s.add(
+            ProvisionalHold(
+                user_id=alice.id,
+                recording_mbid="inactive-recording",
+                playlist_id=alice_playlist.id,
+                provisional_track_id=inactive_track.id,
+                expires_at=now + timedelta(days=4),
+            )
+        )
+        alice_playlist.entries = [
+            {"recording_mbid": "recording-6", "title": "Legacy title", "artist": "Legacy artist"}
+        ]
+
+    login(client, "alice")
+    home = client.get("/").text
+    for n in range(2, 6):
+        assert f"Own {n}" in home
+    for hidden in ["Own 0", "Own 1", "Other user", "Migration request"]:
+        assert hidden not in home
+    assert "Failed release" in home and "No source found" in home
+    for n in (5, 4, 3, 2):
+        assert f"Track {n}" in home
+    assert "Legacy title" in home and "Legacy artist" in home
+    for hidden in ("Track 0", "Track 1", "other-recording", "Inactive track"):
+        assert hidden not in home
+    assert home.count("Expires ") == 5
 
 
 def test_current_navigation_matches_nested_pages(client: TestClient) -> None:

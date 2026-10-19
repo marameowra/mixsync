@@ -8,34 +8,46 @@
 {% set files = src.get("files", []) %}
 {% set assigned = d.evidence.get("assignment", [])|length %}
 <h1>Review #{{ d.id }}</h1>
-<p>{{ status(d.band) }} · Distance <span class="mono">{{ "%.3f"|format(d.distance) }}</span> · Scorer v{{ d.scorer_version }} · {{ status(d.status) }}</p>
 
 {% if d.status == "pending_review" %}
-<div class="actionbar" aria-label="Review actions">
-  <section class="consequence" aria-label="Acceptance consequences">
-    <p><strong>{{ assigned }} assigned file{{ "s" if assigned != 1 else "" }}</strong> {{ "are" if assigned != 1 else "is" }} eligible for import with MusicBrainz tags. Existing owned recordings may be kept instead of imported. Unassigned files are not imported by Accept.</p>
-    <p>Imports are copied and verified before downloaded sources are released; files from the read-only import tree stay untouched.</p>
-  </section>
-  {% if d.release_mbid %}<form method="post" action="/review/{{ d.id }}/accept">{{ forms.csrf() }}<button class="btn primary" type="submit">Accept</button></form>
-  {% else %}<button class="btn primary" type="button" disabled>Accept</button><p class="notice caution">▲ No MusicBrainz release was found: pick one or mark the album unverified.</p>{% endif %}
-  <form method="post" action="/review/{{ d.id }}/reject">{{ forms.csrf() }}<button class="btn danger" type="submit">Reject</button></form>
-</div>
+<section class="review-consequence" aria-label="Acceptance consequences"><p><strong>{{ assigned }} assigned file{{ "s" if assigned != 1 else "" }}</strong> {{ "are" if assigned != 1 else "is" }} eligible for import with MusicBrainz tags. Existing owned recordings may be kept instead of imported. Unassigned files are not imported by Accept. Imports are copied and verified before downloaded sources are released; files from the read-only import tree stay untouched.</p></section>
 {% endif %}
+
+<div class="actionbar" role="region" aria-label="Decision">
+  <div class="summary">{{ status(d.band) }} <strong>{{ tgt.get("artist", "") }}{% if tgt.get("artist") and tgt.get("title") %} — {% endif %}{{ tgt.get("title", "Unknown release") }}</strong> <span class="muted">· distance <span class="num">{{ "%.3f"|format(d.distance) }}</span> · scorer v{{ d.scorer_version }}</span> · {{ status(d.status) }}</div>
+  {% if d.status == "pending_review" %}
+  <div class="actions">
+    {% if d.release_mbid %}<form method="post" action="/review/{{ d.id }}/accept">{{ forms.csrf() }}<button class="btn primary" type="submit">Accept match</button></form>
+    {% else %}<span class="muted">No MusicBrainz release found: pick one or mark the album unverified.</span>{% endif %}
+    <form method="post" action="/review/{{ d.id }}/reject">{{ forms.csrf() }}<button class="btn danger" type="submit">Reject</button></form>
+  </div>
+  {% endif %}
+</div>
 
 <section class="review-score">
   <h2>Score breakdown</h2>
+  <p class="muted score-caption">Values show each feature's weighted contribution to distance. Raw penalty, weight, and reason follow.</p>
+  {% set totals = namespace(weight=0) %}
+  {% for p in d.breakdown %}{% set totals.weight = totals.weight + p.weight %}{% endfor %}
+  <div class="score" role="list" aria-label="Weighted contribution to total distance from zero to one">
+    {% for p in d.breakdown %}
+    <div class="score-row" role="listitem"><span class="k">{{ p.key }}</span><meter min="0" max="1" value="{{ "%.3f"|format((p.penalty * p.weight / totals.weight) if totals.weight else 0) }}" aria-label="{{ p.key }} contribution to distance"></meter><span class="v">{{ "%.3f"|format((p.penalty * p.weight / totals.weight) if totals.weight else 0) }}</span>
+    {% if p.reason %}<span class="why">{{ p.reason }}</span>{% endif %}</div>
+    {% endfor %}
+  </div>
   <div class="table-wrap scroll">
   <table>
-    <thead><tr><th>Feature</th><th>Penalty</th><th>Weight</th><th>Reason</th></tr></thead>
+    <thead><tr><th scope="col">Feature</th><th scope="col" class="n">Penalty</th><th scope="col" class="n">Weight</th><th scope="col">Reason</th></tr></thead>
     <tbody>
     {% for p in d.breakdown %}
-    <tr><td>{{ p.key }}</td><td>{{ "%.3f"|format(p.penalty) }}</td><td>{{ p.weight }}</td><td>{{ p.reason }}</td></tr>
+    <tr><td>{{ p.key }}</td><td class="n">{{ "%.3f"|format(p.penalty) }}</td><td class="n">{{ p.weight }}</td><td>{{ p.reason }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 </section>
 
+<div class="review-pair">
 <section>
   <h2>Candidate</h2>
   {{ artwork(tgt.get("title") or "Unknown release", "/media/cover/" ~ d.id if d.release_mbid else none, "sm") }}
@@ -66,12 +78,15 @@
   </table>
   </div>
 </section>
+</div>
 
 <section class="previews">
   <h2>Audio preview</h2>
+  <ol>
   {% for f in files %}
-  <p>{{ f.get("name", "") }}<br><audio controls preload="none" src="/media/preview/{{ d.id }}/{{ loop.index0 }}"></audio></p>
+  <li><span class="pos">{{ loop.index }}</span><span>{{ f.get("name", "") }}{% if f.get("duration") %} <span class="muted num">· {{ f.get("duration")|duration }}</span>{% endif %}</span><audio controls preload="none" aria-label="Preview {{ f.get("name", "audio file") }}" src="/media/preview/{{ d.id }}/{{ loop.index0 }}"></audio></li>
   {% endfor %}
+  </ol>
 </section>
 
 <section>

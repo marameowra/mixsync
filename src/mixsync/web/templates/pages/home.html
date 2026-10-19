@@ -4,28 +4,92 @@
   <span class="what">{% if n == 0 %}{{ many|capitalize }}<span>Nothing to {{ idle }}</span>{% else %}<a href="{{ href }}" aria-label="{{ n }} {{ one if n == 1 else many }}">{{ one if n == 1 else many }}</a><span>{{ sub }}</span>{% endif %}</span>
   {% if n == 0 %}<span></span>{% else %}<a class="btn{% if first %} primary{% endif %}" href="{{ href }}">{{ action }}</a>{% endif %}</li>
 {%- endmacro %}
+{% from "macros/media.html" import artwork %}
+{% from "macros/ui.html" import status %}
 {% block content %}
-{# "In progress", "New in Discover" and "Since you were last here" need route data the home route does not provide. #}
 {% set rows = [(pending, "review")] if pending is not none else [] %}
 {% if promotions %}{% set rows = rows + [(promotions, "promote")] %}{% endif %}
 {% if unverified is not none %}{% set rows = rows + [(unverified, "unverified")] %}{% endif %}
+{% if fragments is not none %}{% set rows = rows + [(fragments, "fragments")] %}{% endif %}
+{% if failed_requests is not none %}{% set rows = rows + [(failed_requests, "failed")] %}{% endif %}
 {% set ns = namespace(first="") %}
 {% for n, key in rows %}{% if not ns.first and n > 0 %}{% set ns.first = key %}{% endif %}{% endfor %}
 <div class="head">
   <h1>Home</h1>
   <p class="muted">Signed in as {{ user.username }}</p>
 </div>
-<section aria-labelledby="h-work">
-  <h2 id="h-work">Waiting on you</h2>
-  <ul class="queue">
-    {% if pending is not none %}{{ row(pending, "/review", "item awaiting review", "items awaiting review", "Compare each match with the evidence, then accept or reject it", "Start reviewing", "review", ns.first == "review") }}{% endif %}
-    {%- if promotions %}
-    {{ row(promotions, "/library/unverified", "album ready to promote to verified", "albums ready to promote to verified", "Found on MusicBrainz since import", "Review promotion", "promote", ns.first == "promote") }}
-    {%- endif %}
-    {%- if unverified is not none %}
-    {{ row(unverified, "/library/unverified", "unverified track", "unverified tracks", "Imported without MusicBrainz ids", "Open unverified", "verify", ns.first == "unverified") }}
-    {%- endif %}
-  </ul>
-  {% if not rows %}<p>No work is waiting for this account.</p>{% endif %}
-</section>
+<div class="home-grid">
+  <section class="home-work{% if not can_request %} home-all{% endif %}" aria-labelledby="h-work">
+    <h2 id="h-work">Waiting on you</h2>
+    <ul class="queue">
+      {% if pending is not none %}{{ row(pending, "/review", "item awaiting review", "items awaiting review", "Compare each match with the evidence, then accept or reject it", "Start reviewing", "review", ns.first == "review") }}{% endif %}
+      {%- if promotions %}
+      {{ row(promotions, "/library/unverified", "album ready to promote to verified", "albums ready to promote to verified", "Found on MusicBrainz since import", "Review promotion", "promote", ns.first == "promote") }}
+      {%- endif %}
+      {%- if unverified is not none %}
+      {{ row(unverified, "/library/unverified", "unverified track", "unverified tracks", "Imported without MusicBrainz ids", "Open unverified", "verify", ns.first == "unverified") }}
+      {%- endif %}
+      {%- if fragments is not none %}
+      {{ row(fragments, "/library/fragments", "release group to review", "release groups to review", "Review releases and possible merges", "Preview merge", "merge", ns.first == "fragments") }}
+      {%- endif %}
+      {%- if failed_requests is not none %}
+      {{ row(failed_requests, "/requests", "failed request", "failed requests", "Open each request to see its status", "Open requests", "check", ns.first == "failed") }}
+      {%- endif %}
+    </ul>
+    {% if not rows %}<p>No work is waiting for this account.</p>{% endif %}
+  </section>
+
+  {% if can_request %}
+  <section class="home-recent" aria-labelledby="h-recent">
+    <h2 id="h-recent">Recent requests</h2>
+    {% if recent %}
+    <div class="recent-notices">
+      {% for r in recent %}
+      <div class="notice {% if r.status == "imported" %}ok{% elif r.status == "failed" %}error{% else %}warn{% endif %}">
+        <strong>{{ status(r.status) }}: {{ r.album or r.release_mbid }}</strong>
+        <span>{{ r.artist or "Unknown artist" }} · updated {{ r.updated_at.strftime("%Y-%m-%d") }}{% if r.last_error %} · {{ r.last_error }}{% endif %}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="muted">No recent requests.</p>{% endif %}
+  </section>
+
+  <section class="home-full" aria-labelledby="h-flight">
+    <div class="sec-head"><h2 id="h-flight">In progress</h2>{% if in_progress %}<a href="/requests">All requests</a>{% endif %}</div>
+    {% if in_progress %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Release</th><th scope="col">Source</th><th scope="col">Status</th></tr></thead>
+        <tbody>
+        {% for r in in_progress %}
+        <tr>
+          <td><span class="who">{{ artwork(r.album or r.release_mbid, size="xs") }}<span>{{ r.album or r.release_mbid }}<span>{{ r.artist or "Unknown artist" }}</span></span></span></td>
+          <td>{{ {"manual": "Manual", "watchlist": "Watchlist", "drop": "Drop folder", "adopt": "Adoption"}.get(r.source, r.source) }}</td>
+          <td>{{ status(r.status) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="muted">No requests in progress.</p>{% endif %}
+  </section>
+
+  <section class="home-full" aria-labelledby="h-new">
+    <div class="sec-head"><h2 id="h-new">New in Discover</h2>{% if discovery %}<a href="/discover">Open Discover</a>{% endif %}</div>
+    {% if discovery %}
+    <ul class="covers">
+      {% for hold, track, title, artist in discovery %}
+      {% set title = title or track.recording_mbid %}
+      <li>
+        {{ artwork(title, size="lg") }}
+        <span class="t">{{ title }}</span>
+        <span class="a">{{ artist or "Unknown artist" }}</span>
+        {% if hold.kept_at %}<span class="tag confident">Kept</span>{% elif hold.expires_at %}<span class="tag neutral">Expires {{ hold.expires_at.strftime("%Y-%m-%d") }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No active Discover tracks.</p>{% endif %}
+  </section>
+  {% endif %}
+</div>
 {% endblock %}
