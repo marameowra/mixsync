@@ -38,7 +38,7 @@
   <tbody>
   {% for t in tracks[p.id] %}
   <tr>
-    <td><div class="release-heading">{{ artwork(t.title, size="lg") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(t.title, size="xs") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
     <td>{{ status(t.status, t.status) }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
     <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form>{% endif %}</td>
   </tr>
