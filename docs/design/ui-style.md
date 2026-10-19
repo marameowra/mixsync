@@ -127,4 +127,4 @@ The order is: action bar (sticky), score breakdown, candidate (cover and trackli
 - Shared once a second page uses it: artwork and audio preview.
 - Kept local: the home work queue and the review score breakdown.
 
-The decisions are settled. They are prototyped as the [`swiss` preview theme](../../design/themes/swiss/). Production templates change in later work.
+The decisions are settled and implemented in the production templates and CSS. The [`swiss` preview theme](../../design/themes/swiss/) remains as a reference prototype.

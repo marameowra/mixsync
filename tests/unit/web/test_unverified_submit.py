@@ -64,9 +64,12 @@ def _hidden(html: str) -> list[tuple[str, str]]:
 
 def test_grouped_by_album_with_links(client: TestClient) -> None:
     _login(client, "root")
-    html = client.get("/library/unverified").text
+    response = client.get("/library/unverified")
+    assert response.status_code == 200
+    html = response.text
     assert "Unverified tracks (14)" in html
     assert "Band - LP" in html and "Other - EP" in html and "(no album tag)" in html
+    assert "Last checked: never. Next background check: none scheduled." in html
     assert html.count("Submit to MusicBrainz") == 7  # none for the untagged group
     assert "Band - LP (2020)" in html and "Band - LP (1999)" in html  # same name, two groups
     assert "year=1999" in html and "year=2020" in html

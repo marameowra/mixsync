@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Back catalogue - MixSync{% endblock %}
+{% from "macros/media.html" import artwork %}
 {% block content %}
 <h1>{{ f.name }}: back catalogue</h1>
 <p>New releases are requested automatically. Tick any older ones you want now, or <a href="/watchlist/{{ f.id }}">skip</a>.</p>
-{% if truncated %}<p>The list was cut short: only the first 500 release groups are shown.</p>{% endif %}
+{% if truncated %}<p class="notice caution"><span aria-hidden="true">▲</span> The list was cut short: only the first 500 release groups are shown.</p>{% endif %}
 <form method="post" action="/watchlist/{{ f.id }}/catalog">
   {{ forms.csrf() }}
   {% for kind, items in groups %}
@@ -12,11 +13,11 @@
     <label><input type="checkbox" onclick="this.closest('fieldset').querySelectorAll('input[name=groups]:not(:disabled)').forEach(c => c.checked = this.checked)"> select all</label>
     {% for h, why in items %}
     <div><label><input type="checkbox" name="groups" value="{{ h.group_id }}"{% if why %} disabled{% endif %}>
-      {{ h.title }} ({{ h.date or "undated" }}){% if why %} - {{ why }}{% endif %}</label></div>
+      {{ artwork(h.title, size="xs") }} {{ h.title }} ({{ h.date or "undated" }}){% if why %} - {{ why }}{% endif %}</label></div>
     {% endfor %}
   </fieldset>
   {% endfor %}
   {% if not groups %}<p>MusicBrainz lists no release groups for this artist.</p>{% endif %}
-  <button type="submit">Request selected</button>
+  <button class="primary" type="submit">Request selected releases</button>
 </form>
 {% endblock %}

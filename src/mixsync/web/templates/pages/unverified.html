@@ -7,11 +7,11 @@
 <h2>{{ artist or "(no artist)" }} - {{ album or "(no album tag)" }}{% if year %} ({{ year }}){% endif %}</h2>
 {% if album %}
 <p><a href="/library/unverified/submit?{{ {'albumartist': artist, 'album': album, 'year': year}|urlencode }}">Submit to MusicBrainz</a></p>
-<form method="post" action="/library/unverified/check">{{ forms.csrf() }}<input type="hidden" name="albumartist" value="{{ artist }}"><input type="hidden" name="album" value="{{ album }}"><input type="hidden" name="year" value="{{ year }}"><button type="submit">Check MusicBrainz now</button></form>
+<form method="post" action="/library/unverified/check">{{ forms.csrf() }}<input type="hidden" name="albumartist" value="{{ artist }}"><input type="hidden" name="album" value="{{ album }}"><input type="hidden" name="year" value="{{ year }}"><button class="btn" type="submit">Check MusicBrainz now</button></form>
 {% set st = status[(artist, album, year)] %}
 <p>Last checked: {{ st.last.strftime("%Y-%m-%d") if st.last else "never" }}. Next background check: {{ st.next.strftime("%Y-%m-%d") if st.next else "none scheduled" }}.{% if st.plan_id %} <a href="/library/plans/{{ st.plan_id }}">{{ "Promote plan failed: review it" if st.plan_failed else "Promote to verified: review the plan" }}</a>{% endif %}</p>
 {% endif %}
-<div class="scroll">
+<div class="table-wrap scroll">
 <table>
   <thead><tr><th>Path</th><th>Title</th><th></th></tr></thead>
   <tbody>

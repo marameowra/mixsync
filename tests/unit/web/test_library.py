@@ -121,7 +121,8 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     html = client.get("/library/fragments").text
     assert f'title="{G}">Release group 11111111</a>' in html  # unknown: short id, full id on hover
     assert f'title="{R1}">Release 11111111</a> (1)' in html and "Preview merge" in html
-    assert f"/library/plans/{pid}/undo" in html
+    assert f'href="/library/plans/{pid}#plan-actions">Review undo</a>' in html
+    assert f'action="/library/plans/{pid}/undo"' not in html
 
 
 def test_build_and_preview(client: TestClient) -> None:
@@ -304,9 +305,10 @@ def test_resume_blocked_by_live_job(client: TestClient, sf: sessionmaker[Session
 def test_discarded_is_terminal(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "discarded", [_op("move", 0)])
     tok = _login(client, "root")
-    assert "discarded" in client.get("/library/fragments").text
+    assert "discarded" in client.get("/library/fragments").text.lower()
     html = client.get(f"/library/plans/{pid}").text
-    assert "<button" not in html.split("<main>")[1]
+    main = re.search(r"<main\b[^>]*>(.*?)</main>", html, flags=re.DOTALL)
+    assert main is not None and "<button" not in main.group(1)
     for action in ("confirm", "undo"):
         r = client.post(f"/library/plans/{pid}/{action}", data={"csrf_token": tok})
         assert r.status_code == 409
@@ -344,8 +346,8 @@ def test_undo_is_offered_only_within_the_window(
     stale = _aged_plan(sf, status, 31)
     tok = _login(client, "root")
     html = client.get("/library/fragments").text
-    assert f"/library/plans/{fresh}/undo" in html
-    assert f"/library/plans/{stale}/undo" not in html
+    assert f'href="/library/plans/{fresh}#plan-actions">Review undo</a>' in html
+    assert f'href="/library/plans/{stale}#plan-actions">Review undo</a>' not in html
     assert f"/library/plans/{fresh}/undo" in client.get(f"/library/plans/{fresh}").text
     assert f"/library/plans/{stale}/undo" not in client.get(f"/library/plans/{stale}").text
     assert client.post(f"/library/plans/{stale}/undo", data={"csrf_token": tok}).status_code == 409

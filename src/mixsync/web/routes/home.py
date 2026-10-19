@@ -1,11 +1,8 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import func, select
 
 from mixsync.acquire import recheck
 from mixsync.core.capabilities import Capability
-from mixsync.db import decisions
-from mixsync.db.models.library import Track
 from mixsync.web.deps import CurrentUser, Db
 from mixsync.web.templating import templates
 
@@ -14,14 +11,12 @@ router = APIRouter()
 
 @router.get("/")
 def home(request: Request, user: CurrentUser, db: Db) -> HTMLResponse:
-    owner = None if Capability.approve in user.capabilities else user.id
-    pending = len(decisions.pending_for(db, owner))
-    unverified = promotions = None  # only for those who may open the list
+    counts = request.state.waiting_counts
+    promotions = None
     if Capability.library_edit in user.capabilities:
-        unverified = db.scalar(select(func.count(Track.id)).where(Track.status == "unverified"))
         promotions = len(recheck.promote_plans(db, "draft"))
     return templates.TemplateResponse(
         request,
         "pages/home.html",
-        {"user": user, "pending": pending, "unverified": unverified, "promotions": promotions},
+        {"user": user, **counts, "promotions": promotions},
     )

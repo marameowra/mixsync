@@ -3,12 +3,14 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.merge import Merger
 from mixsync.core.capabilities import Capability
 from mixsync.core.protocols import NameLookup, ReleaseWatch
 from mixsync.db.auth import AuthUser, user_for_session
+from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.secretbox import SecretBox
 from mixsync.library.fileops import FileOps
@@ -92,6 +94,23 @@ def current_user(request: Request, db: Db) -> AuthUser:
     user = user_for_session(db, token, datetime.now(UTC)) if token else None
     if user is None:
         raise HTTPException(303, headers={"Location": "/login"})
+    counts: dict[str, int | None] = {"pending": None, "unverified": None}
+    if request.method == "GET" and (
+        request.url.path == "/" or "text/html" in request.headers.get("accept", "")
+    ):
+        # Reuse this HTML request's transaction; a second session can deadlock SQLite.
+        if Capability.request in user.capabilities:
+            query = select(func.count(MatchDecision.id)).where(
+                MatchDecision.status == "pending_review", MatchDecision.stage == 2
+            )
+            if Capability.approve not in user.capabilities:
+                query = query.where(MatchDecision.user_id == user.id)
+            counts["pending"] = db.scalar(query) or 0
+        if Capability.library_edit in user.capabilities:
+            counts["unverified"] = (
+                db.scalar(select(func.count(Track.id)).where(Track.status == "unverified")) or 0
+            )
+    request.state.waiting_counts = counts
     return user
 
 

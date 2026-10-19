@@ -634,7 +634,7 @@ def test_picker_queues_and_the_job_requests(env: Env, web: TestClient) -> None:
         assert s.scalar(select(func.count()).select_from(Request)) == 0
         hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
         assert hit.status == "picked"
-    assert "picked" in web.get(f"/watchlist/{fid}").text
+    assert "picked" in web.get(f"/watchlist/{fid}").text.lower()
     _run_pick(env, watch)
     _run_pick(env, watch)  # a re-run adds nothing
     with env.sessions() as s:
