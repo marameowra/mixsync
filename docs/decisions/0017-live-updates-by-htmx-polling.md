@@ -1,4 +1,4 @@
-# ADR 0008: Live updates by HTMX polling, not SSE
+# ADR 0017: Live updates by HTMX polling, not SSE
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
