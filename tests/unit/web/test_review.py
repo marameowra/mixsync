@@ -1136,7 +1136,10 @@ def _reviewed(
 
 def _started(sf: sessionmaker[Session], rid: int) -> bool:
     with sf() as s:
-        return verify.started(s, rid)
+        found = select(Job.id).where(
+            Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == rid
+        )
+        return s.scalar(found.limit(1)) is not None
 
 
 def test_recheck_requeues_against_the_release(

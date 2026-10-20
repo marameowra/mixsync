@@ -56,6 +56,8 @@ def start(
 ) -> None:
     """Verify `paths` against `release_mbid`, or None to have the release identified."""
     lifecycle.verifying(req)
+    if req.from_files and req.origin is None:  # the first verify: written once, never changed
+        req.origin = {"candidate": candidate, "paths": paths}
     enqueue_in(
         s,
         now,
@@ -108,17 +110,11 @@ def recheck(s: Session, now: datetime, req: Request, d: MatchDecision) -> None:
 
 
 def rematch(s: Session, now: datetime, req: Request, priority: int) -> bool:
-    """Run the request's first VERIFY again, its release to be identified. False if it never
-    had one."""
-    first = s.scalar(select(Job).where(_of(req.id)).order_by(Job.id).limit(1))
-    if first is None:
+    """Run the request's origin again, its release to be identified. False if it has none."""
+    if req.origin is None:
         return False
-    start(s, now, req, None, first.payload["candidate"], first.payload["paths"], priority=priority)
+    start(s, now, req, None, req.origin["candidate"], req.origin["paths"], priority=priority)
     return True
-
-
-def started(s: Session, req_id: int) -> bool:
-    return s.scalar(select(Job.id).where(_of(req_id)).limit(1)) is not None
 
 
 def running(s: Session, req_id: int) -> bool:
@@ -130,17 +126,6 @@ def superseded(s: Session, job_id: int, req_id: int) -> bool:
     """A later VERIFY of the request (a repick or re-check) replaced this one."""
     later = select(Job.id).where(_of(req_id), Job.id > job_id)
     return s.scalar(later.limit(1)) is not None
-
-
-def first_of(s: Session, ids: set[int]) -> dict[int, tuple[str, int]]:
-    """(folder, file count) of the first VERIFY of each request."""
-    out: dict[int, tuple[str, int]] = {}
-    for j in s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)):
-        p = j.payload
-        if p["request_id"] in ids:
-            folder = p.get("candidate", {}).get("folder", "")
-            out.setdefault(p["request_id"], (folder, len(p.get("paths", []))))
-    return out
 
 
 def requests_of_key(s: Session, key_prefix: str) -> list[int]:
