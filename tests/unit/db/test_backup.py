@@ -5,9 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+import mixsync.db.migrate
 from mixsync.__main__ import main
 from mixsync.core.config import Settings
 from mixsync.core.jobs import JobKind
@@ -19,7 +22,13 @@ from mixsync.db.queue import JobRecord
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 OLD = "0018_request_lifecycle"
-HEAD = "0019_decision_release_given"
+_CFG = Config()
+_CFG.set_main_option(
+    "script_location", str(Path(mixsync.db.migrate.__file__).parent / "migrations")
+)
+HEAD = ScriptDirectory.from_config(_CFG).get_current_head()
+assert HEAD
+assert OLD != HEAD  # OLD must stay behind head
 
 
 class Clock:
