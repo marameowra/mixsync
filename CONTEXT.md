@@ -36,6 +36,10 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Hard veto**: A signal (e.g. AcoustID names a different recording) that forces review regardless of distance.
 
+**Transcode**: A file in a lossless format whose audio was once lossy, so the quality its format promises is not there. Suspected, never proven: it is a hard veto, not a rejection. _Avoid_: Fake FLAC, upscale
+
+**Padded preview**: A short clip (often 30 s) filled out with silence to look like the full track, so its length still matches. Suspected from trailing silence: a hard veto, not a rejection. _Avoid_: Snippet, sample
+
 **Close runner-up**: A second-best release whose distance is near enough to the best that picking between them is a coin flip, so a person must decide. _Avoid_: Tie, ambiguous match, runner-up (alone)
 
 ### Review
