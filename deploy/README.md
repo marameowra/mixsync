@@ -30,6 +30,7 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SLOW_DOWNLOAD_WINDOW`, `_FLOOR`, `_SHARE` | when a slow transfer stops counting: seconds (60), bytes/s (50000), throughput share (0.10); [services](../docs/design/services-etiquette.md#soulseek) |
 | `MIXSYNC_ACOUSTID_APP_KEY`, `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID keys; the user key is optional ([rules](../docs/design/services-etiquette.md#acoustid)) |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
+| `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
@@ -46,4 +47,5 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 - `GET /healthz` backs the web healthcheck; the worker has none yet.
 - Back up `/config` and `/data` with your host backup. Upgrade: pull → `mixsync migrate` (Alembic) → restart.
 
-> Planned — not built (#222): nightly `VACUUM INTO /config/backups`, a pre-migration DB backup, `mixsync backup`.
+- SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.
+- On Postgres none of this runs; back up with `pg_dump`. `mixsync backup` exits non-zero saying so.

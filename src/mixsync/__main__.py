@@ -22,6 +22,25 @@ def main(argv: list[str] | None = None) -> int:
         from mixsync.db.migrate import upgrade
 
         upgrade()
+    elif cmd == "backup":
+        from pathlib import Path
+
+        from mixsync.core.clock import SystemClock
+        from mixsync.core.config import Settings
+        from mixsync.db.backup import backup
+        from mixsync.db.engine import make_engine
+
+        settings = Settings()
+        try:
+            path = backup(
+                make_engine(settings),
+                settings.backup_dir or Path(settings.config_dir) / "backups",
+                SystemClock(),
+            )
+        except Exception as e:
+            print(f"backup failed: {e}", file=sys.stderr)
+            return 1
+        print(path)
     elif cmd == "user-add":
         if not args.username:
             parser.error("user-add requires a username")
