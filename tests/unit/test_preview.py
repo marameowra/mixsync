@@ -8,6 +8,12 @@ from fastapi.testclient import TestClient
 
 from devtools.preview import app as preview_app
 from devtools.preview.app import _reset, build_app, preview_env
+from devtools.preview.fakes import (
+    COVER_GROUP,
+    COVER_RELEASE,
+    GROUP_FALLBACK_RELEASE,
+    NO_COVER_RELEASE,
+)
 from mixsync.web.templating import templates
 
 THEMES = ("current", "demo", "swiss")
@@ -73,6 +79,22 @@ def test_demo_theme_changes_the_html(preview: TestClient) -> None:
     assert "demo.css" not in current and "demo.css" in demo
     assert preview.get("/themes/demo/static/demo.css").status_code == 200
     assert "demo.css" in preview.get("/").text  # the cookie keeps the theme
+
+
+def test_seeded_artwork_covers_direct_fallback_and_missing_states(preview: TestClient) -> None:
+    _login(preview, "alice")
+    requests = preview.get("/requests").text
+    assert f'data="/media/artwork/release/{COVER_RELEASE}?group={COVER_GROUP}"' in requests
+    assert f'data="/media/artwork/release/{NO_COVER_RELEASE}"' in requests
+    direct = preview.get(f"/media/artwork/release/{COVER_RELEASE}?group={COVER_GROUP}")
+    assert direct.status_code == 200 and direct.headers["content-type"] == "image/jpeg"
+    fallback = preview.get(f"/media/artwork/release/{GROUP_FALLBACK_RELEASE}?group={COVER_GROUP}")
+    assert fallback.status_code == 200 and fallback.headers["content-type"] == "image/png"
+    missing = preview.get(f"/media/artwork/release/{NO_COVER_RELEASE}")
+    assert (
+        missing.status_code == 404 and missing.headers["cache-control"] == "private, max-age=86400"
+    )
+    assert 'aria-label="No cover art for' in requests
 
 
 def test_swiss_theme_serves_css_and_gates_nav_links(preview: TestClient) -> None:

@@ -77,7 +77,7 @@ a:hover { color: var(--accent-strong); }
 .row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 
 /* Buttons: secondary by default; one .primary per view; .danger for anything that trashes or discards. */
-.btn, button { font: 500 15px/20px var(--font-sans); padding: var(--space-2) var(--space-4); min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; transition: color 120ms, border-color 120ms; }
+.btn, button { font: 500 15px/22px var(--font-sans); padding: var(--space-2) var(--space-4); min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; transition: color 120ms, border-color 120ms; }
 .btn:hover, button:hover { border-color: var(--ink); color: var(--ink); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
@@ -137,14 +137,14 @@ td .who { display: flex; gap: var(--space-3); align-items: center; }
 .consequence dt { font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
 .consequence dd { margin: 0; font: 650 32px/36px var(--font-sans); font-variant-numeric: tabular-nums; }
 .consequence dd.trash { color: var(--danger); }
-#plan-actions .confirm { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
-#plan-actions .confirm .input.num { width: 6rem; font-family: var(--font-mono); }
+.actionbar .confirm { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+.actionbar .confirm .input.num { width: 6rem; font-family: var(--font-mono); }
 
 /* Form fields: label above, help below. Bare labels and inputs get the same look. */
 .field { display: grid; gap: var(--space-1); max-width: 24rem; }
 .field label, label { font: 600 13px/18px var(--font-sans); }
 .field .help { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
-.input, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="submit"]), select, textarea { font: 400 15px/20px var(--font-sans); padding: var(--space-2) var(--space-3); min-height: 36px; width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
+.input, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="submit"]), select, textarea { font: 400 15px/22px var(--font-sans); padding: var(--space-2) var(--space-3); min-height: 36px; width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
 input[type="number"] { font-family: var(--font-mono); }
 .input.num { width: 6rem; font-family: var(--font-mono); }
 .field.invalid .input { border-color: var(--danger); border-width: 2px; }
@@ -163,12 +163,11 @@ input[type="number"] { font-family: var(--font-mono); }
 [role="alert"]:not(.notice)::before { content: "✕"; color: var(--danger); }
 
 /* Artwork with a missing-cover fallback. */
-.art { display: inline-grid; place-items: center; flex: none; width: var(--art-sm); height: var(--art-sm); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-sunken); color: var(--ink-muted); font: 600 20px/1 var(--font-sans); }
+.art { display: inline-grid; place-items: center; flex: none; width: var(--art-sm); height: var(--art-sm); border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-sunken); color: var(--ink-muted); font: 600 20px/1 var(--font-sans); }
 .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .art.xs, .art-xs { width: var(--art-xs); height: var(--art-xs); font-size: 14px; border-radius: var(--radius-sm); }
 .art.md, .art-md { width: var(--art-md); height: var(--art-md); font-size: 32px; }
 .art.lg, .art-lg { width: var(--art-md); height: var(--art-md); font-size: 32px; }
-.art.missing { border: 1px solid var(--line); }
 .cover { width: var(--art-md); height: var(--art-md); object-fit: cover; background: var(--surface-sunken); border-radius: var(--radius-md); }
 
 /* Score breakdown: each feature's weighted penalty as a bar plus the number. */

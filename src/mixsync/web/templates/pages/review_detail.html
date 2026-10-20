@@ -26,7 +26,7 @@
 
 <section class="review-score">
   <h2>Score breakdown</h2>
-  <p class="muted score-caption">Values show each feature's weighted contribution to distance. Raw penalty, weight, and reason follow.</p>
+  <p class="muted score-caption">Values show each feature's weighted contribution to distance. Raw penalty, weight, and reason are in Full evidence.</p>
   {% set totals = namespace(weight=0) %}
   {% for p in d.breakdown %}{% set totals.weight = totals.weight + p.weight %}{% endfor %}
   <div class="score" role="list" aria-label="Weighted contribution to total distance from zero to one">
@@ -34,16 +34,6 @@
     <div class="score-row" role="listitem"><span class="k">{{ p.key }}</span><meter min="0" max="1" value="{{ "%.3f"|format((p.penalty * p.weight / totals.weight) if totals.weight else 0) }}" aria-label="{{ p.key }} contribution to distance"></meter><span class="v">{{ "%.3f"|format((p.penalty * p.weight / totals.weight) if totals.weight else 0) }}</span>
     {% if p.reason %}<span class="why">{{ p.reason }}</span>{% endif %}</div>
     {% endfor %}
-  </div>
-  <div class="table-wrap scroll">
-  <table>
-    <thead><tr><th scope="col">Feature</th><th scope="col" class="n">Penalty</th><th scope="col" class="n">Weight</th><th scope="col">Reason</th></tr></thead>
-    <tbody>
-    {% for p in d.breakdown %}
-    <tr><td>{{ p.key }}</td><td class="n">{{ "%.3f"|format(p.penalty) }}</td><td class="n">{{ p.weight }}</td><td>{{ p.reason }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
   </div>
 </section>
 
@@ -57,7 +47,7 @@
     <thead><tr><th>#</th><th>Title</th><th>Length</th></tr></thead>
     <tbody>
     {% for t in tgt.get("tracks", []) %}
-    <tr><td>{{ t.get("position", "") }}</td><td>{{ t.get("title", "") }}</td><td>{{ t.get("length")|duration }}</td></tr>
+    <tr><td class="n">{{ t.get("position", "") }}</td><td>{{ t.get("title", "") }}</td><td class="n">{{ t.get("length")|duration }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -72,7 +62,7 @@
     <thead><tr><th>File</th><th>Format</th><th>Bitrate</th><th>Length</th><th>Size</th></tr></thead>
     <tbody>
     {% for f in files %}
-    <tr><td>{{ f.get("name", "") }}</td><td>{{ f.get("format", "") }}</td><td>{{ f.get("bitrate", "") }}</td><td>{{ f.get("duration")|duration }}</td><td>{{ f.get("size")|filesize }}</td></tr>
+    <tr><td><span class="path">{{ f.get("name", "") }}</span></td><td>{{ f.get("format", "") }}</td><td class="n">{{ f.get("bitrate", "") }}</td><td class="n">{{ f.get("duration")|duration }}</td><td class="n">{{ f.get("size")|filesize }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -91,6 +81,17 @@
 
 <section>
   <h2>Full evidence</h2>
+  <h3>Raw score details</h3>
+  <div class="table-wrap scroll">
+  <table>
+    <thead><tr><th scope="col">Feature</th><th scope="col" class="n">Penalty</th><th scope="col" class="n">Weight</th><th scope="col">Reason</th></tr></thead>
+    <tbody>
+    {% for p in d.breakdown %}
+    <tr><td>{{ p.key }}</td><td class="n">{{ "%.3f"|format(p.penalty) }}</td><td class="n">{{ p.weight }}</td><td>{{ p.reason }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
   {% if d.vetoes %}
   <h3>Vetoes</h3>
   <ul>{% for v in d.vetoes %}<li>{{ v }}</li>{% endfor %}</ul>
@@ -130,7 +131,7 @@
     {{ forms.csrf() }}
     <h3>Mark unverified</h3>
     {% if errors %}<ul role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-    <div class="consequence"><p>Imports <strong>{{ files|length }} files</strong> with the tags below and no MusicBrainz ids. Copies are verified before downloaded sources are released; the read-only import tree stays untouched.</p></div>
+    <div class="consequence"><p>Imports <strong>{{ files|length }} file{{ "s" if files|length != 1 else "" }}</strong> with the tags below and no MusicBrainz ids. Copies are verified before downloaded sources are released; the read-only import tree stays untouched.</p></div>
     <p>
       <label class="field">Album artist <input name="albumartist" type="text" maxlength="255" required value="{{ prefill.albumartist }}"></label>
       <label class="field">Album <input name="album" type="text" maxlength="255" required value="{{ prefill.album }}"></label>

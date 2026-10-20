@@ -45,6 +45,12 @@ def _status(h: ProvisionalHold | None, owned: bool, request_status: str | None) 
     return "not found" if request_status in NO_FILE else "waiting for download"
 
 
+def _artwork_src(release: str | None, group: str | None) -> str | None:
+    if release:
+        return f"/media/artwork/release/{release}" + (f"?group={group}" if group else "")
+    return f"/media/artwork/release-group/{group}" if group else None
+
+
 @router.get("")
 def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
     rows = db.scalars(
@@ -58,14 +64,33 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         for h in db.scalars(select(ProvisionalHold).where(ProvisionalHold.user_id == user.id))
     }
     req_ids = [h.request_id for h in holds.values() if h.request_id]
-    req_status = {
-        i: st
-        for i, st in db.execute(
-            select(WorkRequest.id, WorkRequest.status).where(WorkRequest.id.in_(req_ids))
-        )
-    }
+    requests = list(db.scalars(select(WorkRequest).where(WorkRequest.id.in_(req_ids))))
+    req_by_id = {r.id: r for r in requests}
+    req_status = {r.id: r.status for r in requests}
+    now = datetime.now(UTC)
+    due = retention.expiring_soon(db, now, user.id)
     mbids = [e["recording_mbid"] for p in rows for e in p.entries]
-    owned = set(db.scalars(select(Track.recording_mbid).where(Track.recording_mbid.in_(mbids))))
+    mbids.extend(h.recording_mbid for h in due)
+    artwork_ids: dict[str, tuple[str | None, str | None]] = {}
+    owned_tracks = list(db.scalars(select(Track).where(Track.recording_mbid.in_(mbids))))
+    for track in owned_tracks:
+        if track.recording_mbid and (track.release_mbid or track.release_group_mbid):
+            artwork_ids.setdefault(
+                track.recording_mbid, (track.release_mbid, track.release_group_mbid)
+            )
+    for track in db.scalars(
+        select(ProvisionalTrack).where(ProvisionalTrack.recording_mbid.in_(mbids))
+    ):
+        if track.release_mbid or track.release_group_mbid:
+            artwork_ids.setdefault(
+                track.recording_mbid, (track.release_mbid, track.release_group_mbid)
+            )
+    for hold in holds.values():
+        if req := req_by_id.get(hold.request_id or 0):
+            if req.release_mbid or req.release_group_mbid:
+                for recording in req.recording_mbids:
+                    artwork_ids.setdefault(recording, (req.release_mbid, req.release_group_mbid))
+    owned = {track.recording_mbid for track in owned_tracks}
     tracks: dict[int, list[dict[str, Any]]] = {}
     for p in rows:
         tracks[p.id] = []
@@ -73,9 +98,15 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
             m = e["recording_mbid"]
             h = holds.get(m)
             rs = req_status.get(h.request_id) if h and h.request_id else None
-            tracks[p.id].append({**e, "status": _status(h, m in owned, rs), "hold": h})
-    now = datetime.now(UTC)
-    due = retention.expiring_soon(db, now, user.id)
+            release, group = artwork_ids.get(m, (None, None))
+            tracks[p.id].append(
+                {
+                    **e,
+                    "status": _status(h, m in owned, rs),
+                    "hold": h,
+                    "artwork_src": _artwork_src(release, group),
+                }
+            )
     pts = {
         t.id: t
         for t in db.scalars(
@@ -96,6 +127,7 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
             {
                 "mbid": h.recording_mbid,
                 "name": f"{artist} - {title}" if artist else title,
+                "artwork_src": _artwork_src(*artwork_ids.get(h.recording_mbid, (None, None))),
                 "expires": h.expires_at,
                 "overdue": bool(h.expires_at and aware(h.expires_at) <= now),
             }

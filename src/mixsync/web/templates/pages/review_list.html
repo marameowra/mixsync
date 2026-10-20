@@ -27,7 +27,7 @@
     <td>{{ d.evidence.get("target", {}).get("artist", "") }} - {{ d.evidence.get("target", {}).get("title", "") }}</td>
     <td>{{ "Partial match" if d.release_mbid else "No match" }}</td>
     <td>{{ status(d.band) }}</td>
-    <td>{{ "%.3f"|format(d.distance) }}</td>
+    <td class="n">{{ "%.3f"|format(d.distance) }}</td>
   </tr>
   {% endfor %}
   </tbody>

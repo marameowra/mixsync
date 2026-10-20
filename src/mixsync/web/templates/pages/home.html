@@ -63,7 +63,7 @@
         <tbody>
         {% for r in in_progress %}
         <tr>
-          <td><span class="who">{{ artwork(r.album or r.release_mbid, size="xs") }}<span>{{ r.album or r.release_mbid }}<span>{{ r.artist or "Unknown artist" }}</span></span></span></td>
+          <td><span class="who">{{ artwork(r.album or r.release_mbid, "/media/artwork/release/" ~ r.release_mbid ~ ("?group=" ~ r.release_group_mbid if r.release_group_mbid else ""), "xs") }}<span>{{ r.album or r.release_mbid }}<span>{{ r.artist or "Unknown artist" }}</span></span></span></td>
           <td>{{ {"manual": "Manual", "watchlist": "Watchlist", "drop": "Drop folder", "adopt": "Adoption"}.get(r.source, r.source) }}</td>
           <td>{{ status(r.status) }}</td>
         </tr>
@@ -81,7 +81,8 @@
       {% for hold, track, title, artist in discovery %}
       {% set title = title or track.recording_mbid %}
       <li>
-        {{ artwork(title, size="lg") }}
+        {% set src = "/media/artwork/release/" ~ track.release_mbid ~ ("?group=" ~ track.release_group_mbid if track.release_group_mbid else "") if track.release_mbid else ("/media/artwork/release-group/" ~ track.release_group_mbid if track.release_group_mbid else none) %}
+        {{ artwork(title, src, "lg") }}
         <span class="t">{{ title }}</span>
         <span class="a">{{ artist or "Unknown artist" }}</span>
         {% if hold.kept_at %}<span class="tag confident">Kept</span>{% elif hold.expires_at %}<span class="tag neutral">Expires {{ hold.expires_at.strftime("%Y-%m-%d") }}</span>{% endif %}

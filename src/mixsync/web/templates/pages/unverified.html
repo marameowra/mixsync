@@ -17,7 +17,7 @@
   <tbody>
   {% for t, tg in items %}
   <tr>
-    <td>{{ t.path }}</td>
+    <td><span class="path">{{ t.path }}</span></td>
     <td>{{ tg.get("title", "") }}</td>
     <td><a href="/library/tracks/{{ t.id }}/tags">Restore earlier tags</a></td>
   </tr>

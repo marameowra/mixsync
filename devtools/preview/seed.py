@@ -24,6 +24,8 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.secretbox import SecretBox, set_secret
 from mixsync.watchlist.follows import add_follow
 
+from .fakes import COVER_GROUP, COVER_RELEASE, GROUP_FALLBACK_RELEASE, NO_COVER_RELEASE
+
 PASSWORD = "preview"
 USERS = (("admin", True), ("alice", False), ("edge", False))
 LONG = "Ünïcödé " + "very long title " * 13  # over 200 characters
@@ -60,6 +62,10 @@ def _request(
     migration_id: int | None = None,
 ) -> AlbumRequest:
     req = create_request(s, now, uid, _mbid("release", key))
+    if key == "alice-imported":
+        req.release_mbid, req.release_group_mbid = COVER_RELEASE, COVER_GROUP
+    elif key == "alice-failed":
+        req.release_mbid = NO_COVER_RELEASE
     req.status, req.artist, req.album, req.migration_id = status, artist, album, migration_id
     if status == "failed":
         req.last_error = "no peer had the files"
@@ -153,8 +159,12 @@ def seed(sf: sessionmaker[Session], box: SecretBox, downloads: Path) -> list[tup
                 s.add(
                     FollowHit(
                         follow_id=f.id,
-                        release_group_mbid=_mbid("hit", f.id, i),
-                        release_mbid=_mbid("hit-release", f.id, i),
+                        release_group_mbid=COVER_GROUP
+                        if f is f1 and i == 0
+                        else _mbid("hit", f.id, i),
+                        release_mbid=GROUP_FALLBACK_RELEASE
+                        if f is f1 and i == 0
+                        else _mbid("hit-release", f.id, i),
                         artist=f.name,
                         title=f"{title} {i}",
                         release_date="2020-01-01",

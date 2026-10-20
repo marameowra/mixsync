@@ -1,9 +1,31 @@
-"""Canned MusicBrainz answers so the watchlist pages work offline."""
+"""Canned MusicBrainz and cover art answers so preview pages work offline."""
+
+import base64
 
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 
 LONG_NAME = "The Extraordinarily Long-Named Orchestra of " + "Nowhere in Particular " * 8
 _A = "aaaaaaaa-0000-0000-0000-00000000000{}"
+COVER_RELEASE = "11111111-1111-1111-1111-111111111114"
+COVER_GROUP = "11111111-1111-1111-1111-111111111115"
+GROUP_FALLBACK_RELEASE = "11111111-1111-1111-1111-111111111116"
+NO_COVER_RELEASE = "11111111-1111-1111-1111-111111111117"
+_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l5QAAAAASUVORK5CYII="
+)
+_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////"
+    "2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AT//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//2Q=="
+)
+
+
+class FakeCoverArt:
+    async def front(self, release: str | None, group: str | None) -> bytes | None:
+        if release == COVER_RELEASE:
+            return _JPEG
+        if release == NO_COVER_RELEASE:
+            return None
+        return _PNG if group == COVER_GROUP else None
 
 
 class FakeWatch:
@@ -22,7 +44,7 @@ class FakeWatch:
     async def artist_discography(self, mbid: str) -> tuple[list[ReleaseGroupHit], bool]:
         hits = [
             ReleaseGroupHit(
-                f"bbbbbbbb-0000-0000-0000-{i:012}",
+                COVER_GROUP if i == 1 else f"bbbbbbbb-0000-0000-0000-{i:012}",
                 title,
                 "Preview Artist",
                 kind,

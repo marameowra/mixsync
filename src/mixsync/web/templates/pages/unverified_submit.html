@@ -3,7 +3,7 @@
 {% block content %}
 {% from "macros/ui.html" import status %}
 <h1>Submit to MusicBrainz: {{ albumartist or "(no artist)" }} - {{ album }}{% if year %} ({{ year }}){% endif %}</h1>
-{% if dupes %}<p class="notice danger" role="alert">✕ Warning: more than one track has the same number ({{ dupes|join(", ") }}). Check the tags before submitting.</p>{% endif %}
+{% if dupes %}<p class="notice caution" role="alert">▲ Warning: more than one track has the same number ({{ dupes|join(", ") }}). Check the tags before submitting.</p>{% endif %}
 <p>You review and submit the edit in MusicBrainz with your own account. MixSync sends nothing to MusicBrainz itself.</p>
 
 <h2>On a store or streaming service?</h2>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Follow - MixSync{% endblock %}
 {% block content %}
-<h1>Follow a {{ kind }}</h1>
+<h1>Follow {{ "an" if kind == "artist" else "a" }} {{ kind }}</h1>
 <p>Search results for “{{ q }}”. Following automatically requests new releases.</p>
 {% if results %}
 <ul>

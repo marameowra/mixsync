@@ -125,10 +125,10 @@ def build_app(
     from mixsync.db.engine import make_engine, make_session_factory
     from mixsync.db.migrate import upgrade
     from mixsync.db.secretbox import load_box
-    from mixsync.web.deps import SESSION_COOKIE, get_namer, get_watch
+    from mixsync.web.deps import SESSION_COOKIE, get_coverart, get_namer, get_watch
     from mixsync.web.templating import templates
 
-    from .fakes import FakeWatch
+    from .fakes import FakeCoverArt, FakeWatch
     from .seed import seed
 
     upgrade()  # alembic, not create_all: migration 0002 seeds the roles create_user needs
@@ -145,6 +145,7 @@ def build_app(
     app = create_app(sf, settings)
     app.dependency_overrides[get_watch] = lambda: FakeWatch()
     app.dependency_overrides[get_namer] = lambda: FakeWatch()
+    app.dependency_overrides[get_coverart] = lambda: FakeCoverArt()
     app.mount("/themes", StaticFiles(directory=themes_dir), name="themes")
 
     def names() -> list[str]:
