@@ -3,8 +3,14 @@
 {# A plan action; changes = move+trash ops, typed back when above the data-safety threshold. #}
 {% macro plan_action(plan, action, label) %}
 {% set changes = plan.ops | selectattr("op", "in", ["move", "trash"]) | list | length %}
+{% set remaining = plan.ops | selectattr("op", "in", ["move", "trash"]) | selectattr("done", "equalto", false) | list | length %}
+{% set has_trash = plan.ops | selectattr("op", "equalto", "trash") | list | length > 0 %}
+{% set has_move = plan.ops | selectattr("op", "equalto", "move") | list | length > 0 %}
 <form class="confirm" method="post" action="/library/plans/{{ plan.id }}/{{ action }}">{{ csrf() }}
   {% if changes > typed_above %}<label class="field">Type {{ changes }} to confirm <input class="input num" name="count" type="text" inputmode="numeric" required autocomplete="off"></label>{% endif %}
-  <button class="btn danger filled" type="submit">{{ label }}</button>
+  {% if action == "confirm" and has_trash %}<button class="btn danger filled" type="submit">{{ label }}</button>
+  {% elif action == "resume" and remaining or action == "undo" and has_move %}<button class="btn danger" type="submit">{{ label }}</button>
+  {% elif action in ("confirm", "resume") %}<button class="btn primary" type="submit">{{ label }}</button>
+  {% else %}<button class="btn" type="submit">{{ label }}</button>{% endif %}
 </form>
 {% endmacro %}

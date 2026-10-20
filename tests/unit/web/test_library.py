@@ -123,6 +123,8 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     assert f'title="{R1}">Release 11111111</a> (1)' in html and "Preview merge" in html
     assert f'href="/library/plans/{pid}#plan-actions">Review undo</a>' in html
     assert f'action="/library/plans/{pid}/undo"' not in html
+    plan_html = client.get(f"/library/plans/{pid}").text
+    assert 'id="plan-actions" class="actionbar"' in plan_html
 
 
 def test_build_and_preview(client: TestClient) -> None:

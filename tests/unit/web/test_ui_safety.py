@@ -1,5 +1,6 @@
 """Rendered safety information remains visible before any final file-operation action."""
 
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -40,8 +41,17 @@ def _decision(**changes: Any) -> SimpleNamespace:
         "breakdown": [{"key": "title", "penalty": 0.5, "weight": 2, "reason": "Different title"}],
         "vetoes": ["Missing track"],
         "evidence": {
-            "source": {"files": [{"name": "matched.flac"}, {"name": "extra.flac"}]},
-            "target": {"artist": "Artist", "title": "Album", "tracks": []},
+            "source": {
+                "files": [
+                    {"name": "matched.flac", "bitrate": 320, "duration": 61, "size": 1_000_000},
+                    {"name": "extra.flac"},
+                ]
+            },
+            "target": {
+                "artist": "Artist",
+                "title": "Album",
+                "tracks": [{"position": 1, "title": "Song", "length": 61}],
+            },
             "assignment": [{"local_path": "/matched.flac", "track": 0}],
             "unassigned": ["extra.flac"],
             "runner_up": {"release_id": "r2", "title": "Other album", "gap": 0.012},
@@ -61,6 +71,7 @@ def test_review_reading_order_keeps_all_matching_evidence_visible() -> None:
         "<h2>Source files</h2>",
         "<h2>Audio preview</h2>",
         "<h2>Full evidence</h2>",
+        "<h3>Raw score details</h3>",
         "<h2>Actions</h2>",
     ]
     assert [html.index(marker) for marker in markers] == sorted(
@@ -72,6 +83,7 @@ def test_review_reading_order_keeps_all_matching_evidence_visible() -> None:
     assert html.index('aria-label="Acceptance consequences"') < html.index(
         'action="/review/7/accept"'
     )
+    assert html.index("<h2>Audio preview</h2>") < html.index("<h3>Raw score details</h3>")
     for evidence in [
         "Different title",
         "Missing track",
@@ -83,7 +95,16 @@ def test_review_reading_order_keeps_all_matching_evidence_visible() -> None:
         assert evidence in html
     assert "Unassigned files are not imported by Accept" in html and "extra.flac" in html
     assert "read-only import tree stay untouched" in html
+    assert '<span class="path">matched.flac</span>' in html
+    assert '<td class="n">320</td><td class="n">1:01</td><td class="n">1.0 MB</td>' in html
+    assert '<td class="n">1</td><td>Song</td><td class="n">1:01</td>' in html
     assert "<details" not in html and "<audio controls" in html
+
+
+def test_review_list_renders_distance_as_numeric_data() -> None:
+    d = _decision(created_at=datetime(2026, 10, 20))
+    html = _render("review_list", items=[d], sort="score", order="asc")
+    assert '<td class="n">0.200</td>' in html
 
 
 def test_score_meters_show_weighted_contributions_without_losing_raw_evidence() -> None:
@@ -127,7 +148,10 @@ def test_acceptance_requires_a_release_and_pending_review(status: str) -> None:
 def test_plan_consequences_precede_confirmation_and_count_only_changed_files(
     action: str, changes: int
 ) -> None:
-    ops = [{"op": "trash", "old": {"path": f"a/{i}"}, "keeper": "keep"} for i in range(changes)]
+    ops = [
+        {"op": "trash", "done": False, "old": {"path": f"a/{i}"}, "keeper": "keep"}
+        for i in range(changes)
+    ]
     ops += [{"op": "keep", "old": {"path": "unchanged"}}]
     plan = SimpleNamespace(
         id=9,
@@ -150,8 +174,17 @@ def test_plan_consequences_precede_confirmation_and_count_only_changed_files(
     assert html.index('aria-label="Plan consequences"') < html.index(
         f'action="/library/plans/9/{action}"'
     )
+    assert 'id="plan-actions" class="actionbar" role="region" aria-label="Plan decision"' in html
+    assert 'class="tag status neutral"' in html and "Merge" in html
     assert 'class="confirm"' in html
-    assert 'class="btn danger filled"' in html
+    if action == "confirm":
+        assert 'class="btn danger filled"' in html
+    elif action == "resume":
+        assert 'class="btn danger"' in html
+        assert "filled" not in html
+    else:
+        assert 'class="btn" type="submit">Undo merge</button>' in html
+        assert "filled" not in html
     assert 'class="plan-op"' in html and 'class="plan-file"' in html
     assert 'name="csrf_token" value="test-token"' in html
     assert ('name="count"' in html) == (changes > 50)
@@ -159,3 +192,100 @@ def test_plan_consequences_precede_confirmation_and_count_only_changed_files(
         assert "Type 51 to confirm" in html
         assert 'class="input num" name="count"' in html
         assert 'inputmode="numeric"' in html
+
+
+def test_plan_confirm_without_trash_is_the_primary_action() -> None:
+    plan = SimpleNamespace(
+        id=9,
+        kind="merge",
+        status="draft",
+        error=None,
+        ops=[
+            {
+                "op": "move",
+                "done": False,
+                "old": {"path": "a/1", "status": "unverified", "release_mbid": "r1"},
+                "new_path": "b/1",
+                "tags": {
+                    "status": "verified",
+                    "release_id": "r2",
+                    "recording_id": "r3",
+                    "disc": 1,
+                    "track": 1,
+                    "title": "Song",
+                    "album": "Album",
+                },
+                "track_id": 1,
+            }
+        ],
+        release_group_mbid=None,
+        canonical_release_mbid=None,
+    )
+    html = _render(
+        "plan", plan=plan, counts={"move": 1, "trash": 0, "keep": 0}, allowed={"confirm"}
+    )
+    assert 'class="btn primary" type="submit">Confirm merge: move 1, trash 0</button>' in html
+    assert 'class="btn danger filled"' not in html
+
+
+def test_plan_undo_of_a_move_uses_outlined_danger() -> None:
+    plan = SimpleNamespace(
+        id=9,
+        kind="merge",
+        status="done",
+        error=None,
+        ops=[
+            {
+                "op": "move",
+                "done": True,
+                "old": {"path": "a/1", "status": "verified", "release_mbid": "r1"},
+                "new_path": "b/1",
+                "tags": {
+                    "status": "verified",
+                    "release_id": "r2",
+                    "recording_id": "r3",
+                    "disc": 1,
+                    "track": 1,
+                    "title": "Song",
+                    "album": "Album",
+                },
+                "track_id": 1,
+            }
+        ],
+        release_group_mbid=None,
+        canonical_release_mbid=None,
+    )
+    html = _render("plan", plan=plan, counts={"move": 1, "trash": 0, "keep": 0}, allowed={"undo"})
+    assert 'class="btn danger" type="submit">Undo merge</button>' in html
+    assert 'class="btn danger filled"' not in html
+
+
+def test_discard_plan_is_danger_outlined_and_has_fragment_target() -> None:
+    plan = SimpleNamespace(
+        id=9,
+        kind="merge",
+        status="draft",
+        error=None,
+        ops=[],
+        release_group_mbid=None,
+        canonical_release_mbid=None,
+    )
+    html = _render(
+        "plan", plan=plan, counts={"move": 0, "trash": 0, "keep": 0}, allowed={"discard"}
+    )
+    assert 'id="plan-actions" class="actionbar"' in html
+    assert 'action="/library/plans/9/discard"' in html
+    assert 'class="btn danger" type="submit">Discard plan</button>' in html
+    assert 'class="btn danger filled"' not in html
+
+
+@pytest.mark.parametrize(("file_count", "expected"), [(1, "1 file"), (2, "2 files")])
+def test_unverified_import_consequence_pluralizes_files(file_count: int, expected: str) -> None:
+    d = _decision()
+    d.evidence["source"]["files"] = [{"name": f"{i}.flac"} for i in range(file_count)]
+    html = _render("review_detail", d=d, prefill={})
+    assert (
+        f"Imports <strong>{expected}</strong> with the tags below and no MusicBrainz ids." in html
+    )
+    assert "Copies are verified before downloaded sources are released" in html
+    assert "read-only import tree stays untouched" in html

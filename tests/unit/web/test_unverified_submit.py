@@ -70,6 +70,7 @@ def test_grouped_by_album_with_links(client: TestClient) -> None:
     assert "Unverified tracks (14)" in html
     assert "Band - LP" in html and "Other - EP" in html and "(no album tag)" in html
     assert "Last checked: never. Next background check: none scheduled." in html
+    assert '<span class="path">a/1.flac</span>' in html
     assert html.count("Submit to MusicBrainz") == 7  # none for the untagged group
     assert "Band - LP (2020)" in html and "Band - LP (1999)" in html  # same name, two groups
     assert "year=1999" in html and "year=2020" in html
@@ -115,6 +116,7 @@ def test_order_fallbacks_and_non_ascii_digits(client: TestClient) -> None:
         ("mediums.0.track.3.name", "3"),  # no title: file stem
     ]
     assert not any(k == "events.0.date.year" for k, _ in f)  # "\u00b2020" is not a year
+    assert 'class="notice caution" role="alert">▲ Warning:' in r.text
     assert "disc 1 track 1" in r.text  # duplicate warning
 
 

@@ -444,7 +444,10 @@ def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> N
         create_user(s, "bob", "pw")
     tok = login(web, "alice")
     page = web.get("/watchlist/search", params={"kind": "artist", "q": "radio"})
+    assert "<h1>Follow an artist</h1>" in page.text
     assert "Radiohead" in page.text and "UK band" in page.text
+    label_page = web.get("/watchlist/search", params={"kind": "label", "q": "radio"})
+    assert "<h1>Follow a label</h1>" in label_page.text
     r = web.post(
         "/watchlist/follow",
         data={

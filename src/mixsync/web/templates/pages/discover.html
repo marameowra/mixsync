@@ -16,7 +16,7 @@
   <tbody>
   {% for h in soon %}
   <tr>
-    <td><div class="release-heading">{{ artwork(h.name, size="xs") }}<span>{{ h.name }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(h.name, h.artwork_src, "xs") }}<span>{{ h.name }}</span></div></td>
     <td>{% if h.overdue %}overdue (was {{ h.expires.date() }}){% else %}{{ h.expires.date() }}{% endif %}</td>
     <td><form method="post" action="/discover/keep/{{ h.mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form></td>
   </tr>
@@ -38,7 +38,7 @@
   <tbody>
   {% for t in tracks[p.id] %}
   <tr>
-    <td><div class="release-heading">{{ artwork(t.title, size="xs") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(t.title, t.artwork_src, "xs") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
     <td>{{ status(t.status, t.status) }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
     <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form>{% endif %}</td>
   </tr>

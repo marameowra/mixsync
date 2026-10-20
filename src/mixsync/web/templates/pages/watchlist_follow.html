@@ -27,7 +27,7 @@
   <tbody>
   {% for h in hits %}
   <tr>
-    <td><div class="release-heading">{{ artwork(h.title, size="xs") }}<span>{{ h.artist }} - {{ h.title }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(h.title, "/media/artwork/release/" ~ h.release_mbid ~ "?group=" ~ h.release_group_mbid, "xs") }}<span>{{ h.artist }} - {{ h.title }}</span></div></td>
     <td>{{ h.release_date }}</td>
     <td>{{ status(h.status) }}{% if h.request_id %} (<a href="/requests">request {{ h.request_id }}</a>){% endif %}</td>
     <td>{% if h.status in ("skipped_cap", "skipped_filter") %}<form method="post" action="/watchlist/{{ f.id }}/hits/{{ h.id }}/request">{{ forms.csrf() }}<button type="submit">Request release</button></form>{% endif %}</td>

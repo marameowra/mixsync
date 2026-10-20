@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -16,6 +17,7 @@ from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
+from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -36,7 +38,7 @@ from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.metadata.coverart import CoverArtClient
-from mixsync.web.deps import get_coverart
+from mixsync.web.deps import get_coverart, get_watch
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
@@ -876,6 +878,150 @@ def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) 
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert fake.seen == (MBID, "rg")
+
+
+def test_artwork_proxy_accepts_release_and_group_ids(client: TestClient) -> None:
+    class Fake:
+        seen: tuple[str | None, str | None] | None = None
+
+        async def front(self, release: str | None, group: str | None) -> bytes | None:
+            self.seen = (release, group)
+            return b"\x89PNGdata"
+
+    fake = Fake()
+    client.app.dependency_overrides[get_coverart] = lambda: fake  # type: ignore[attr-defined]
+    _login(client, "alice")
+    release = client.get(f"/media/artwork/release/{MBID}?group={MBID}")
+    assert release.status_code == 200 and release.headers["content-type"] == "image/png"
+    assert fake.seen == (MBID, MBID)
+    group = client.get(f"/media/artwork/release-group/{MBID}")
+    assert group.status_code == 200 and fake.seen == (None, MBID)
+
+
+def test_artwork_provider_failure_is_not_cached(client: TestClient) -> None:
+    class Failing:
+        async def front(self, _release: str | None, _group: str | None) -> bytes | None:
+            raise TransientError("offline")
+
+    client.app.dependency_overrides[get_coverart] = lambda: Failing()  # type: ignore[attr-defined]
+    _login(client, "alice")
+    response = client.get(f"/media/artwork/release/{MBID}")
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_requests_and_home_show_known_release_artwork(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        s.add(
+            AlbumRequest(
+                user_id=uid,
+                release_mbid=MBID,
+                release_group_mbid="33333333-3333-3333-3333-333333333333",
+                artist="Artist",
+                album="Album",
+                status="searching",
+            )
+        )
+    _login(client, "alice")
+    src = f"/media/artwork/release/{MBID}?group=33333333-3333-3333-3333-333333333333"
+    assert f'data="{src}"' in client.get("/requests").text
+    assert f'data="{src}"' in client.get("/").text
+
+
+def test_discover_old_entry_uses_existing_request_artwork(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    recording = "44444444-4444-4444-4444-444444444444"
+    group = "33333333-3333-3333-3333-333333333333"
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        playlist = DiscoveryPlaylist(
+            user_id=uid,
+            name="Old",
+            entries=[{"recording_mbid": recording, "artist": "Artist", "title": "Track"}],
+        )
+        s.add(playlist)
+        s.flush()
+        req = AlbumRequest(
+            user_id=uid,
+            release_mbid=MBID,
+            release_group_mbid=group,
+            recording_mbids=[recording],
+            provisional=True,
+            status="searching",
+        )
+        s.add(req)
+        s.flush()
+        s.add(
+            ProvisionalHold(
+                user_id=uid, recording_mbid=recording, playlist_id=playlist.id, request_id=req.id
+            )
+        )
+    _login(client, "alice")
+    assert f'data="/media/artwork/release/{MBID}?group={group}"' in client.get("/discover").text
+
+
+def test_watchlist_follow_artwork_uses_release_and_group(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    group = "33333333-3333-3333-3333-333333333333"
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        entity = WatchedEntity(kind="artist", mbid="55555555-5555-5555-5555-555555555555")
+        s.add(entity)
+        s.flush()
+        follow = Follow(user_id=uid, entity_id=entity.id, name="Artist")
+        s.add(follow)
+        s.flush()
+        follow_id = follow.id
+        s.add(
+            FollowHit(
+                follow_id=follow.id,
+                release_group_mbid=group,
+                release_mbid=MBID,
+                title="Album",
+                artist="Artist",
+                release_date="2020",
+                status="requested",
+            )
+        )
+    _login(client, "alice")
+    assert (
+        f'data="/media/artwork/release/{MBID}?group={group}"'
+        in client.get(f"/watchlist/{follow_id}").text
+    )
+
+
+def test_watchlist_catalog_artwork_uses_group_route(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    group = "33333333-3333-3333-3333-333333333333"
+
+    class Watch:
+        async def artist_discography(self, _mbid: str) -> tuple[list[Any], bool]:
+            return (
+                [SimpleNamespace(type="album", date="2020", group_id=group, title="Album")],
+                False,
+            )
+
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        entity = WatchedEntity(kind="artist", mbid="55555555-5555-5555-5555-555555555555")
+        s.add(entity)
+        s.flush()
+        follow = Follow(user_id=uid, entity_id=entity.id, name="Artist")
+        s.add(follow)
+        s.flush()
+        follow_id = follow.id
+    client.app.dependency_overrides[get_watch] = lambda: Watch()  # type: ignore[attr-defined]
+    _login(client, "alice")
+    assert (
+        f'data="/media/artwork/release-group/{group}"'
+        in client.get(f"/watchlist/{follow_id}/catalog").text
+    )
 
 
 def _real_cover(

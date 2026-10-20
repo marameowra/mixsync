@@ -13,7 +13,7 @@
     <label><input type="checkbox" onclick="this.closest('fieldset').querySelectorAll('input[name=groups]:not(:disabled)').forEach(c => c.checked = this.checked)"> select all</label>
     {% for h, why in items %}
     <div><label><input type="checkbox" name="groups" value="{{ h.group_id }}"{% if why %} disabled{% endif %}>
-      {{ artwork(h.title, size="xs") }} {{ h.title }} ({{ h.date or "undated" }}){% if why %} - {{ why }}{% endif %}</label></div>
+      {{ artwork(h.title, "/media/artwork/release-group/" ~ h.group_id, "xs") }} {{ h.title }} ({{ h.date or "undated" }}){% if why %} - {{ why }}{% endif %}</label></div>
     {% endfor %}
   </fieldset>
   {% endfor %}

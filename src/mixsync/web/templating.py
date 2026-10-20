@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,22 @@ def duration(sec: float | None) -> str:
     return f"{h}:{m:02}:{s:02}" if h else f"{m}:{s:02}"
 
 
+_ARTWORK_SRC = re.compile(
+    r"(?:/media/cover/[1-9][0-9]*|/media/artwork/release/"
+    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
+    r"(?:\?group=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})?"
+    r"|/media/artwork/release-group/"
+    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})\Z"
+)
+
+
+def _valid_artwork_src(src: object) -> bool:
+    return isinstance(src, str) and bool(_ARTWORK_SRC.fullmatch(src))
+
+
 templates = Jinja2Templates(
     directory=Path(__file__).parent / "templates", context_processors=[_context]
 )
 templates.env.filters["filesize"] = filesize  # pyright: ignore[reportUnknownMemberType]
 templates.env.filters["duration"] = duration  # pyright: ignore[reportUnknownMemberType]
+templates.env.tests["valid_artwork_src"] = _valid_artwork_src  # pyright: ignore[reportUnknownMemberType]
