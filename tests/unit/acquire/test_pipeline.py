@@ -26,7 +26,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import tags
+from mixsync.library import measure, tags
 from mixsync.library.fileops import WriteTags
 from mixsync.watchlist.poller import owned_groups
 
@@ -272,6 +272,25 @@ async def test_two_imports_close_together_share_one_rescan(env: Env) -> None:
     assert [status(env, i) for i in ids] == ["imported", "imported"]
     assert len(library(env)) == 4
     assert env.target.rescans == 1
+
+
+async def test_a_padded_preview_lands_in_review_with_its_veto_text(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def silent_tail(path: Path, duration: float) -> float:
+        return duration * 0.9 if "Two" in path.name else 0.0
+
+    monkeypatch.setattr(measure, "trailing_silence", silent_tail)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "review" and library(env) == []
+    (d,) = decision_rows(env, 2)
+    assert d.status == "pending_review"
+    assert d.vetoes == ["'Song Two': silent from 0:00 to the end (0:01)"]
+    login(web, "alice")
+    assert "silent from 0:00 to the end" in web.get(f"/review/{d.id}").text
 
 
 async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient) -> None:
