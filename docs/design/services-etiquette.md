@@ -60,7 +60,7 @@ Source: [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/AP
 
 Source: [AcoustID web service](https://acoustid.org/webservice)
 
-**Decided: AcoustID is always checked.** Every file gets a fingerprint and an AcoustID lookup, including files that already carry MusicBrainz tags and files processed during migration. Existing tags never skip the lookup. If AcoustID is unreachable, the job waits and retries; it never imports without the check.
+Every file is looked up, with no exceptions: [ADR 0009](../decisions/0009-acoustid-mandatory.md).
 
 ## ListenBrainz
 | Rule | What the docs say | What MixSync does |
@@ -74,7 +74,7 @@ Source: [AcoustID web service](https://acoustid.org/webservice)
 Source: [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/index.html)
 
 ## Last.fm
-**Deferred, not in v1.** These findings are kept for reference in case Last.fm is reconsidered.
+**Deferred, not in v1.** Findings are kept in case it is reconsidered. This section is the home for the deferral.
 
 | Rule | What the docs say | What MixSync does |
 |---|---|---|
@@ -87,9 +87,11 @@ Source: [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/a
 
 Source: [Last.fm API ToS](https://www.last.fm/api/tos) · [API intro](https://www.last.fm/api/intro)
 
-**Decided: deferred.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms exclude use alongside unauthorised sharing. ListenBrainz, which MetaBrainz runs with openly published data, is the only discovery source in v1.
+**Decided: deferred.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms exclude use alongside unauthorised sharing. ListenBrainz is the only discovery source in v1.
 
 ## Discogs (fallback, off by default)
+> Planned — not built (#223): Discogs and Deezer fallback providers.
+
 | Rule | What the docs say | What MixSync does |
 |---|---|---|
 | Rate | 60 req/min authenticated, 25/min unauthenticated, tracked **per source IP** over a moving 60 s window | 50/min bucket (headroom for other Discogs tools on the network) |
@@ -100,6 +102,8 @@ Source: [Last.fm API ToS](https://www.last.fm/api/tos) · [API intro](https://ww
 Source: Discogs API docs. The official page ([discogs.com/developers](https://www.discogs.com/developers)) blocked automated fetching, so these numbers come from a copy of the Discogs OpenAPI spec. Re-check them by hand before enabling Discogs.
 
 ## Deezer (fallback, off by default)
+> Planned — not built (#223).
+
 | Rule | What the terms say | What MixSync does |
 |---|---|---|
 | Rate | No published quota; Deezer may monitor usage | Self-imposed 1 req/s |
@@ -119,7 +123,7 @@ These are community norms, not written rules, and MixSync follows them:
 - **Share back.** The library is shared through slskd. Users who download without sharing get banned by peers.
 - Cap concurrent searches (default 2) and debounce duplicates. Failed searches back off: 1 h → 6 h → 24 h → weekly.
 - Don't queue many files from a single peer at once.
-- Cap concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`, default 3). The cap counts transfers (files), not albums. Only transfers slskd reports as `InProgress` count; one waiting in the peer's queue uses no bandwidth. A full cap defers a new `download` job: it goes back to the queue 30 s later as a fresh job, so no attempt is spent. A transfer whose average rate over the last `MIXSYNC_SLOW_DOWNLOAD_WINDOW` seconds (default 60) is below `MIXSYNC_SLOW_DOWNLOAD_FLOOR` bytes/s (default 50000; only while total throughput is at least cap x floor, so a saturated link exempts nothing) **or** below `MIXSYNC_SLOW_DOWNLOAD_SHARE` (default 0.10) of the total throughput of all moving downloads (never the fastest transfer) stops counting, so a stalled peer cannot block the queue. It keeps running and counts again once it speeds up.
+- Cap concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`, default 3, counting active transfers, not albums). A full cap defers a new `download` job without spending an attempt. A transfer that is too slow (`MIXSYNC_SLOW_DOWNLOAD_*`, see [deploy](../../deploy/README.md#environment-variables)) stops counting, so a stalled peer cannot block the queue.
 
 Source: [Soulseek rules](https://www.slsknet.org/news/node/681)
 

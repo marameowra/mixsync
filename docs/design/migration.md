@@ -10,27 +10,20 @@
 ## Preflight (the import refuses to start if any check fails)
 1. Walk `/import-source`: count files, total the size, and list unreadable files.
 2. **Free space on `/data/library` must be at least 1.1× the source size.**
-3. Confirm the MB rate limit and estimated duration (about 1 MB lookup per album, plus 1 AcoustID lookup per track at ≤3/s). Show an ETA before starting.
-4. Show a summary and require confirmation.
+3. Show an ETA (a lower bound: MusicBrainz requests plus one AcoustID lookup per file, at the [service limits](services-etiquette.md)).
+4. Show a summary and require confirmation: the "other MusicBrainz clients paused" checklist item ([why](services-etiquette.md#musicbrainz)) and, above 50 albums, the album count typed in.
 
 ## Flow
 - One job per album folder (or per loose-file group), resumable through the job table.
-- **Every file gets an AcoustID lookup**, even if it already has MusicBrainz tags (decided). The preflight ETA includes all of them.
+- Every file gets an AcoustID lookup ([ADR 0009](../decisions/0009-acoustid-mandatory.md)).
 - Each folder goes through [stage 2 matching](matching.md#stage-2-post-download-verification) with the admin's matching profile:
   - auto-accept → imported and canonicalized
   - review → review queue
   - no MB match → review queue with **Mark unverified** offered
-- Throughput is limited by the [service limits](services-etiquette.md).
-- MusicBrainz's 1 req/s limit is **per IP**, so **pause other MusicBrainz clients on the network** (soulsync, Picard, beets, Lidarr) during migration. Otherwise both tools get refused. Preflight shows this as a checklist item.
-- For large libraries, consider pointing MusicBrainz at a local mirror for the duration of the migration.
-
-## As built
-- Admin page `/migration`. Preflight hashes every regular file into `<config>/migrations/<id>/manifest.jsonl` and groups the audio files (mp3, flac, ogg, opus, m4a, wav, aiff) into albums (a disc subfolder joins its album folder; loose files split by album tag). Unreadable files are listed, left out, and appear as failed in the report. Audio in a format mixsync cannot take (wma, aac, ape, wv, m4b, mp4, oga...: a fixed list of extensions, no content sniffing) is listed the same way and appears as `skipped` with the reason `unsupported format`.
-- **Opus** is tagged in place through Vorbis comments, like ogg. **WAV and AIFF** are encoded to FLAC on import (their tagging is poorly supported by players), by the same path as downloads; the original is only read, never moved or written, and the byte-identical check covers it. If re-encoding is off or an encode fails, the file imports as WAV/AIFF with ID3 tags. The supported extensions live in one place, `core/audio.py` (`EXTENSIONS`), shared with the import path and the Soulseek source, which only offers these formats.
-- The ETA is the sum of the MusicBrainz requests (1 per album with a `musicbrainz_albumid` tag, 4 without) and the AcoustID lookups, and is a lower bound.
-- Confirming needs the "other MusicBrainz clients paused" box and, above 50 albums, the album count typed in. Album jobs run at lower priority than normal requests.
-- An album with the tag is scored against that release (a tag MusicBrainz does not know falls back to the search); otherwise against the top 3 search hits. A reject band, or no candidate, goes to review (Mark unverified, pick another release, or reject, which skips the album). The source files are never released, moved or written.
-- "Check old tree" re-hashes the source against the manifest.
+- Album jobs run at lower priority than normal requests. For large libraries, consider a local MusicBrainz mirror (`MIXSYNC_MB_BASE_URL`).
+- An album tagged with a `musicbrainz_albumid` is scored against that release (an unknown id falls back to search); otherwise against the top 3 search hits. A reject band or no candidate goes to review, where **Mark unverified**, pick another release, or reject (skips the album) are offered.
+- WAV and AIFF are encoded to FLAC on import (poor player tagging support); Opus is tagged in place. Formats mixsync cannot take are listed as `skipped` (`unsupported format`). Extensions live in `core/audio.py`.
+- The source tree is only read: never moved, written, or released. **Check old tree** re-hashes it against the preflight manifest.
 
 ## Report
 - Totals: imported, in review, unverified, failed (with reasons).

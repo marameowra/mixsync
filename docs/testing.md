@@ -1,48 +1,32 @@
 # Testing and validation
 
-Every change is validated automatically. Matching quality and file safety get their own dedicated suites, because they are the two things MixSync must not get wrong.
+Matching quality and file safety get dedicated suites, because they are the two things MixSync must not get wrong. The CI steps agents must run are listed in [AGENTS.md](../AGENTS.md); `.github/workflows/ci.yml` is the source. Per-folder detail lives in the READMEs under `tests/`.
 
-## CI (every push and PR)
-| Check | Tool |
-|---|---|
-| Lint + format | ruff |
-| Types | pyright (strict) |
-| Unit tests | pytest, pytest-asyncio |
-| External API tests | vcrpy cassettes for MusicBrainz, AcoustID, ListenBrainz, so CI never hits live services |
-| Property tests | Hypothesis for path templating: no collisions, no illegal characters, stable output for the same input |
-| Migrations | Alembic upgrade → downgrade → upgrade on an empty DB |
+## What CI runs beyond the AGENTS.md list
+- **`postgres` job:** the same suite with `--db=postgres`, then `pytest -m crash --db=postgres`.
+- **`crash` marker:** SIGKILL tests, excluded from the default run (`addopts` in `pyproject.toml`). See below.
+- **`integration` marker:** needs docker compose; excluded by default (no such tests yet).
+- Docs-only changes skip both jobs.
 
-Pre-commit runs ruff and pyright locally.
+## Unit tests
+- pytest, pytest-asyncio (auto mode), pytest-xdist in CI.
+- External APIs are replayed from recorded JSON responses in `tests/cassettes/<service>/*.json` ([README](../tests/cassettes/README.md)). Tests never touch live services.
+- Hypothesis property tests cover path templating: no collisions, no illegal characters, stable output.
+- Tests use fakes for the core Protocols, not mocks of adapter internals.
 
 ## Matcher regression suite
-- **Fixture set:** short CC-licensed audio clips with known MBIDs, plus recorded slskd search results (real-world filenames, folders, and bitrates).
-- **Labels:** each fixture is marked as correct match, wrong match, or not on MB.
-- **Metrics:** precision and recall per band (auto-accept / review / reject) for each matching profile.
-- **Gate:** CI fails if auto-accept precision drops below the stored baseline. Raising the baseline is a deliberate commit.
-- User overrides in production can be exported (anonymized) to grow the set. See [matching](design/matching.md#calibration).
+> Planned — not built (no issue yet): a labeled fixture set (CC-licensed clips with known MBIDs, recorded slskd results) scored per profile, with CI failing when auto-accept precision drops below a stored baseline. Raising the baseline would be a deliberate commit. Production overrides become new labels ([calibration](design/matching.md#calibration)).
+
+## Soulseek in tests
+CI never touches the Soulseek network. Unit tests feed the slskd adapter recorded JSON; the planned integration tests use a fake slskd that speaks the REST API. Fixtures should cover the [edge-case catalog](../tests/fixtures/README.md#soulseek-edge-case-catalog), tested by ID; a new real-world failure becomes a new case.
+
+## Crash-safety tests (`-m crash`)
+SIGKILL the worker at each import step (after copy, after fsync, after tag write, before rename). Assert: no partial file in `/data/library`, source intact, journal consistent, the job resumes and completes. Same pattern for trash moves and canonical-release merges.
 
 ## Integration tests (compose)
-A compose file spins up slskd, Navidrome, and MixSync with test volumes.
-
-1. Request a known album → it auto-imports with correct MBIDs.
-2. It appears in Navidrome after the rescan.
-3. A discovery playlist is pushed through the Subsonic API.
-4. Forcing expiry moves the provisional file to `.trash`.
-
-These run nightly and on demand, not on every push. They depend on the Soulseek network, so the default mode uses a local fixture share.
-
-**Soulseek in tests (decided): fake it.** CI never touches the Soulseek network.
-- Unit tests feed the slskd adapter recorded JSON responses.
-- Integration tests run a **fake slskd** service that speaks the slskd REST API and serves fixture search results and files.
-- The real network is used only for manual runs.
-- The fixture set must cover the edge-case catalog in [tests/fixtures](../tests/fixtures/README.md#soulseek-edge-case-catalog). Each case is tested by ID, and a new real-world failure becomes a new case.
-
-## Crash-safety tests
-- Kill the worker with SIGKILL at each step of an import (after copy, after fsync, after tag write, before rename).
-- Assert there is no partial file in `/data/library`, the source is intact, the journal is consistent, and the job resumes and completes.
-- Same pattern for trash moves and canonical-release merges.
+> Planned — not built (no issue yet): a compose file running slskd (or the fake), Navidrome and MixSync with throwaway volumes ([README](../tests/integration/README.md)). Flow: request an album, see it in Navidrome after rescan, push a discovery playlist, force expiry into `.trash`. On demand, not every push.
 
 ## UI tests
-- Playwright smoke test at phone (375 px) and desktop (1280 px) widths: login, request, review, playlist pages.
-- The login form has `autocomplete="username"` and `autocomplete="current-password"`, and works with a real form submit.
-- No horizontal scroll at the phone width.
+Web routes are tested with FastAPI's `TestClient`. The login form must keep `autocomplete="username"` / `"current-password"` and work with a plain form submit.
+
+> Planned — not built: browser-driven smoke tests at phone (375 px) and desktop (1280 px) widths, including no horizontal scroll.

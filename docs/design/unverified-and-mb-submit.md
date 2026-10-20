@@ -11,7 +11,9 @@
 - The file is filed under the normal [path template](library.md#path-templates), tagged `MIXSYNC_STATUS=unverified`, and flagged in the DB.
 - The library view has an "Unverified" filter and a count.
 
-**Fallback sources:** both are off by default. Discogs: 60 req/min per IP, a unique UA, and a user token. Deezer: private, family-scope, non-commercial use only. Details are in [services etiquette](services-etiquette.md#discogs-fallback-off-by-default).
+> Planned — not built (#223): the Discogs and Deezer suggestion sources below.
+
+Both fallback sources are off by default; limits and terms are in [services etiquette](services-etiquette.md#discogs-fallback-off-by-default).
 
 ## Submit to MusicBrainz
 The **Submit to MusicBrainz** button on any unverified item picks a path:
@@ -31,4 +33,4 @@ The **Submit to MusicBrainz** button on any unverified item picks a path:
 - **Primary trigger is the user:** a **Check MusicBrainz now** button on the item or album, used after the user's seeded edit has been applied in MB.
 - **Background re-check backs off**, since MB asks clients not to poll: 1 week → 2 weeks → 1 month → then quarterly, each at a random point in its interval. Checks are grouped per album (one search per album, not per track), followed by AcoustID lookups only for that album's files.
 - When a confident match appears, the item goes to the review queue as **Promote to verified**, with a diff of the tag changes. The user confirms.
-- After promotion, the fingerprint is **submitted to AcoustID** linked to the new recording MBID. This needs the deployment's AcoustID user key, one key in `MIXSYNC_ACOUSTID_USER_KEY` (decided 2026-10-10); all submissions go under that account and, without it, are skipped. Submissions are batched per plan and polled up to three times (1 min, 10 min, 1 h). An undo does not retract them: AcoustID has no retract.
+- After promotion, the fingerprint is **submitted to AcoustID** linked to the new recording MBID. This needs the deployment's AcoustID user key ([rules](services-etiquette.md#acoustid)); without it, submissions are skipped. Submissions are batched per plan and polled up to three times (1 min, 10 min, 1 h). An undo does not retract them: AcoustID has no retract.

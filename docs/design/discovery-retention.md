@@ -7,7 +7,7 @@ Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendatio
 ## Inputs
 - Navidrome scrobbles to ListenBrainz. MixSync doesn't need to collect plays itself.
 - Each user links ListenBrainz (username + token).
-- **ListenBrainz is the only discovery source in v1.** Last.fm is deferred, because its API terms exclude use alongside unauthorised sharing ([details](services-etiquette.md#lastfm)).
+- **ListenBrainz is the only discovery source** (Last.fm is [deferred](services-etiquette.md#lastfm)).
 - Navidrome plays and stars are read through the Subsonic API, per linked Navidrome account.
 
 ## Generator
@@ -26,10 +26,9 @@ Prior art to study: **Explo**, which downloads ListenBrainz weekly recommendatio
   - the track is starred in Navidrome by its user
   - it has at least N plays (default 3)
   - the user clicks Keep in MixSync
-- Keeping a track **promotes** it: it is re-imported into the main library through the normal importer, with canonicalization.
+- Keeping a track **promotes** it: it is imported into the main library through the normal importer (canonical release honoured) and its discover copy is trashed.
 - At expiry the track is moved to `.trash` ([data safety](data-safety.md)), never deleted outright.
 - A provisional track shared by several users' playlists expires only when no user wants to keep it.
-- Implementation: a daily `DISCOVERY_RETAIN` job per user; a kept track is copied into the library by the normal importer (canonical release honoured) and its discover copy is trashed; holds record `kept_at`/`keep_reason`/`expired_at`.
 - A digest page lists what expires in the next 7 days.
 
 **Defaults (decided):** 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. All of them can be changed per user or per playlist.

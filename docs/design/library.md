@@ -43,8 +43,8 @@
 
 ## Fragmentation report
 - Lists release groups whose owned tracks span more than one release, including anything imported before canonicalization existed.
-- Per group: the current releases, the proposed canonical release, and the files that would be retagged or moved.
-- **Merge** = dry-run preview → confirm → journaled retag and move (undoable, for `MIXSYNC_TRASH_DAYS` days (default 30) after it is done; a failed plan stays undoable, because its originals are NOT purged from the trash).
+- Per group: the current releases, the suggested canonical release, and the files that would be retagged or moved.
+- **Merge** = dry-run preview → confirm → journaled retag and move, undoable within the [trash window](data-safety.md#1-no-hard-deletes-in-the-normal-flow).
 
 ## Cover art
 - Fetched from the Cover Art Archive for the canonical release, falling back to the release group.

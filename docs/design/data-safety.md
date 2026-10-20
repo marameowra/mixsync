@@ -3,14 +3,19 @@
 Non-negotiable rules. Any code that touches files or the library goes through `library/fileops.py`, and `fileops.py` enforces these rules.
 
 ## 1. No hard deletes in the normal flow
-- "Delete" means **move to `/data/.trash/YYYY-MM-DD/<original relative path>`**.
-- Trash is purged after N days (default 30). The purge is itself a journaled job.
-- All trash (library entries and `.discover/`) is purged automatically by a daily job once its `<day>` folder is older than `MIXSYNC_TRASH_DAYS` (default 30; a folder exactly that old is kept). Each file is a journaled `purge` op (`fileops.purge_trash`). There is no dry-run or confirm step (user decision 2026-10-12). Age is the day folder's name, not file mtimes. Exception: entries trashed by a merge or promote plan that can still be undone are kept, because undo restores from the trash. A **done** plan is undoable for `MIXSYNC_TRASH_DAYS` days after its last change; after that the Undo button is hidden, `undo_plan` refuses ("undo window of N days has passed"), and the trash is purged one day later (the extra day keeps the purge from racing an undo that has just started). Trash belonging to **failed, running or undoing** plans is never auto-purged, and neither is the trashed original of any op that is not yet done, because it may be the only copy. One helper (`db/undo.py: undoable`) decides, so the purge and the undo never disagree.
-- Raising `MIXSYNC_TRASH_DAYS` does not bring back trash already purged; undo refuses up front in that case.
+- "Delete" means **move to `/data/.trash/YYYY-MM-DD/<original relative path>`** (discover files: `.trash/<day>/.discover/<rel>`).
+- **Auto-purge** ([ADR 0008](../decisions/0008-trash-auto-purge.md)): a daily job deletes trash whose day folder is older than `MIXSYNC_TRASH_DAYS` (default 30; a folder exactly that old is kept). Each file is a journaled `purge` op. There is no dry-run or confirm step. Age is the folder name, not file mtimes.
+- **Kept for undo:** trash belonging to plans that can still be undone, and the trashed original of any op not yet done (it may be the only copy). A done plan is undoable for `MIXSYNC_TRASH_DAYS` days after its last change, and its trash is purged one day later so the purge never races an undo. Failed, running and undoing plans are never purged. After the window the Undo button is hidden and `undo_plan` refuses.
+- Raising `MIXSYNC_TRASH_DAYS` does not bring back trash already purged.
 - Purging early from the UI requires a typed confirmation.
-- One exception: a **released download**. After an import with zero errors, `fileops.release()` hard-deletes each source file from `/downloads` (journaled, and refused unless the path is strictly inside the downloads dir with no symlink or `..` escape). `/downloads` is staging, not library data; the library copy is hash-verified first; and `/downloads` and `/data` are separate mounts, so a "trash" move would be a second full copy.
+- **Released download:** after an import with zero errors, `fileops.release()` hard-deletes each source file from `/downloads` (journaled; refused unless strictly inside the downloads dir, no symlink or `..`). `/downloads` is staging, the library copy is hash-verified first, and a "trash" move across the two mounts would be a second full copy.
+- **Quarantine** (`/data/quarantine/<rejected|review>/<YYYY-MM-DD>/<folder>/<file>`, [ADR 0007](../decisions/0007-quarantine-owned-by-mixsync.md)): MixSync-owned, so slskd retention cannot touch it.
+  - A dropped candidate's files are copied there (journaled, hash-verified), then the `/downloads` source is released. Verify rejection or an unusable file goes to `rejected/`; a review-band match goes to `review/`. Evidence and assignment paths point at the quarantine copies.
+  - Accepting a review candidate imports from quarantine and then releases the quarantine copy like a released download. A person's reject leaves the files in place; the decision's `final_action = reject` and `acted_at` mark them rejected.
+  - Migration, drop-folder and adopted files are never quarantined, nor are rejected folders already in `/downloads`. The adopter scans only `/downloads`.
+  - MixSync deletes nothing else from quarantine.
 
-- **Quarantine** (`/data/quarantine/<rejected|review>/<day>/`, see [matching](matching.md)): a dropped candidate's files are copied there (journaled, hash-verified), then the `/downloads` source is released with a journaled `release` op. Accepting a review candidate imports from quarantine and releases the quarantine copy once the library copy is verified, like a released download. MixSync never deletes anything else from quarantine; the purge of rejected entries is a separate journaled job.
+> Planned — not built (#208): a journaled purge of rejected quarantine entries (`rejected/<day>` aged by folder name; `review/` entries a person rejected, aged by `acted_at`; other `review/` entries never).
 
 ## Managed paths
 - Library, discover, staging, trash, quarantine and scratch paths reject absolute paths, `..`, and symlinked components, including the managed root itself. Resolved destinations must stay under that root; missing destination directories are allowed. Ancestor symlinks above a configured root (for example a data mount) are allowed.
@@ -32,7 +37,7 @@ A crash at any step leaves either the old state or the new state, never a partia
 - Any retag can be undone from the UI: a track's "Restore earlier tags" page (reached from the unverified list and a done plan's moves) previews the managed tags against the newest snapshot for its path and, on confirm, trashes the file and copies it back with those tags (journaled, verified), after first snapshotting the current tags so the restore can itself be undone. File location and MusicBrainz ids in the database are not changed.
 
 ## 4. Operation journal
-- Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / release / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
+- Every file operation is recorded: `op_id`, `batch_id`, `kind` (`copy` / `trash` / `release` / `restore` / `purge`; the `JournalOp` kinds in `core/protocols.py`), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
 - Each op also records its `root`: `library` (`/data/library`) or `discover` (`/data/discover`, a second Navidrome library). `recover()` resolves relative paths against the op's root. Discover trash goes to `/data/.trash/YYYY-MM-DD/.discover/<rel>` (a prefix no sanitized library path can have, since segments never start with a dot). Discover must be on the same filesystem as `.incoming` and `.trash`, otherwise every discover import fails safely with EXDEV.
 - A batch (merge, reorganize, migration) can be undone as a unit, replayed in reverse.
 - On startup, the worker scans for ops that were started but not finished and either completes or rolls back each one.
@@ -43,8 +48,9 @@ A crash at any step leaves either the old state or the new state, never a partia
 - No bulk operation runs as a side effect of a settings change.
 
 ## 6. Backups
-- Nightly `VACUUM INTO /config/backups/mixsync-YYYY-MM-DD.db`, keeping 7 copies.
-- Settings can be exported and imported as a single file.
+> Planned — not built (#222): nightly `VACUUM INTO /config/backups/mixsync-YYYY-MM-DD.db` keeping 7 copies, and a pre-migration DB backup.
+
+Settings export/import as a single file is likewise not built.
 
 ## 7. Independence
 - The library is plain, standard-tagged audio files. Navidrome or any player works with it even if MixSync is gone.

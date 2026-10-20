@@ -1,12 +1,12 @@
 # `deploy`
 
-How MixSync runs: Docker Compose on a home server, next to slskd and Navidrome. The real `compose.yml`, `Dockerfile`, and `.env.example` are phase-1 deliverables; this README is their spec.
+How MixSync runs: Docker Compose on a home server, next to slskd and Navidrome. Design rationale: [architecture](../docs/architecture.md#deployment).
 
-## Proposed files
+## Files
 | File | Contents |
 |---|---|
 | `Dockerfile` | Python 3.13 slim + `uv sync --frozen` + `chromaprint` (`fpcalc`); non-root user; one entrypoint `mixsync <role>` |
-| `compose.yml` | The services below |
+| `compose.yml` | The services below, plus a one-shot `mixsync-migrate` that web and worker wait for |
 | `.env.example` | Every env var with a comment, no real values |
 
 ## Services
@@ -27,9 +27,9 @@ mixsync-*:   /config  (rw)   /downloads (rw)   /data (rw)   /import-source (ro, 
 slskd:       /downloads (rw) /data/library (ro, shared folder)
 navidrome:   /data/library (ro)  /data/discover (ro)
 ```
-- **`/data` is one mount**, so `rename` between `library/`, `discover/`, `.trash/`, and `.incoming/` stays atomic. Never split it into separate mounts ([architecture](../docs/architecture.md#deployment)).
-- **Discovery library:** needs Navidrome 0.58+ (multiple libraries). Create `${DATA_DIR}/discover` on the same filesystem as `data/.incoming` and `data/.trash`, add `/data/discover` as Library 2 in Navidrome, and grant users access to it.
-- `/drop` is the optional drop folder (set `MIXSYNC_DROP_DIR=/drop`): album folders put there are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash` (recoverable until `trash_days`). Files younger than a minute are left alone; a rejected folder stays put and is not queued again unless its contents change.
+- **`/data` is one mount** holding `library/`, `discover/`, `.trash/`, `.incoming/` and `quarantine/`. Never split it ([why](../docs/architecture.md#deployment)); MixSync refuses a cross-device move.
+- **Discovery library:** needs Navidrome 0.58+ (multiple libraries). In Navidrome, add `/data/discover` as Library 2 (admin settings) and grant the users who should hear discovery tracks access to it.
+- `/drop` is the optional drop folder (set `MIXSYNC_DROP_DIR=/drop`): album folders put there are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash` (recoverable until `MIXSYNC_TRASH_DAYS`). Files younger than a minute are left alone; a rejected folder stays put and is not queued again unless its contents change.
 - `/import-source` is read-only at the OS level during [migration](../docs/design/migration.md).
 - **File ownership:** run all containers with the same `PUID`/`PGID` so files written by MixSync are readable by Navidrome and slskd.
 
@@ -41,8 +41,12 @@ navidrome:   /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SECRET_KEY` | Fernet key for linked-account secrets. Optional: if unset, `/config/secret.key` is used, or generated on first start. The env var wins if both exist ([details](../src/mixsync/db/README.md#conventions)). |
 | `MIXSYNC_MB_CONTACT` | contact for the MusicBrainz User-Agent. Optional; defaults to the project's GitHub URL |
 | `MIXSYNC_MB_BASE_URL` | optional local MusicBrainz mirror |
+| `MIXSYNC_MB_RATE` | MusicBrainz requests per second, above 0 and at most 1 (default 1) |
+| `MIXSYNC_TRASH_DAYS` | days before trash is purged and the undo window closes (default 30; see [data safety](../docs/design/data-safety.md)) |
+| `MIXSYNC_MAX_CONCURRENT_DOWNLOADS` | cap on active slskd transfers (default 3) |
+| `MIXSYNC_SLOW_DOWNLOAD_WINDOW`, `_FLOOR`, `_SHARE` | when a slow transfer stops counting toward the cap: window seconds (60), bytes/s floor (50000), share of total throughput (0.10). See [services](../docs/design/services-etiquette.md#soulseek) |
 | `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
-| `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID user key (from your acoustid.org account). Optional: without it fingerprints are not submitted after a promotion. All submissions go under this one account. |
+| `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID user key (from your acoustid.org account). Optional ([rules](../docs/design/services-etiquette.md#acoustid)) |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_DROP_DIR` | drop folder path inside the container (e.g. `/drop`). Unset: feature off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` that MixSync did not request (e.g. a hand download in the slskd UI) are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself, including rejected ones, are never adopted |
@@ -61,9 +65,11 @@ With `FORWARDED_ALLOW_IPS` set to the proxy's address, the session cookie gets `
 A subnet, or `*`, is only safe when 8080 is not reachable except through the proxy. `mixsync all` also runs uvicorn and reads the same variable from `.env`.
 
 ## Health and ops
-- `GET /healthz` (web) and a worker heartbeat row; compose `healthcheck` on both.
-- Backups land in `/config/backups`. Back up `/config` and `/data` with your normal host backup.
-- Upgrades: pull → `mixsync migrate` runs Alembic (with a pre-migration DB backup) → restart.
+- `GET /healthz` backs the web healthcheck. The worker has none yet (no heartbeat row).
+- Back up `/config` and `/data` with your normal host backup.
+- Upgrades: pull → `mixsync migrate` runs Alembic → restart.
+
+> Planned — not built (#222): nightly `VACUUM INTO /config/backups`, a pre-migration DB backup, and `mixsync backup`.
 
 ## Design docs
-[Architecture: deployment](../docs/architecture.md#deployment) · [Data safety](../docs/design/data-safety.md)
+[Architecture](../docs/architecture.md#deployment) · [Data safety](../docs/design/data-safety.md)
