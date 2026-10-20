@@ -19,7 +19,7 @@ Adapters for MusicBrainz (WS/2 JSON), AcoustID and the Cover Art Archive, plus l
 - AcoustID lookups need `Settings.acoustid_app_key`; submissions use the deployment key ([ADR 0013](../../../docs/decisions/0013-one-acoustid-submission-key.md)). `Settings.mb_base_url` can point at a local MusicBrainz mirror.
 - Tests replay recorded JSON from `tests/cassettes/<service>/` through `httpx.MockTransport` ([cassettes](../../../tests/cassettes/README.md)).
 
-> Planned — not built (#223): read-only fallback providers (Discogs, Deezer) that pre-fill the Mark unverified form. Off by default; terms and limits are in [services etiquette](../../../docs/design/services-etiquette.md#discogs-fallback-off-by-default).
+> Planned — not built (#223): read-only fallback providers (Discogs, Deezer) that pre-fill the Mark unverified form. Off by default; terms and limits are in [services etiquette](../../../docs/design/services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default).
 
 ## May import
 `core`, `ratelimit`.

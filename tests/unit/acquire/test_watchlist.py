@@ -135,7 +135,7 @@ def test_jitter_stays_in_range() -> None:
         samples = [jitter(base) for _ in range(200)]
         assert all(base / 2 <= j <= base * 1.5 for j in samples)
         assert len(set(samples)) > 100  # random, not a fixed point
-    assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # the roadmap's bound
+    assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # 0.5x-1.5x, per watchlist/README.md
 
 
 def test_year_only_dates_pass_a_cutoff_in_their_year() -> None:

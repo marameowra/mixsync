@@ -18,7 +18,7 @@ Released: v1.0.1 (`version` in `pyproject.toml`). GitHub issues are the roadmap.
 - [Architecture](architecture.md): components, pipeline, tech stack
 - [Testing](testing.md): how changes are validated
 - [Local development permissions](agents/local-development-permissions.md)
-- Agent docs: [domain](agents/domain.md), [issue tracker](agents/issue-tracker.md), [triage labels](agents/triage-labels.md)
+- Agent docs: [domain](agents/domain.md), [issue tracker](agents/issue-tracker.md); triage labels are in [CLAUDE.md](../CLAUDE.md)
 - [Workflow prior art](research/workflow-prior-art.md): what Lidarr, soularr and similar tools get wrong
 - [Deploy](../deploy/README.md) · UI: [design system](../design/system/README.md)
 

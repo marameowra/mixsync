@@ -54,4 +54,4 @@ web, worker, wiring, app ← anything   composition roots
 - Async wherever I/O happens. CPU-bound work (fingerprinting, hashing) runs in a thread or process pool.
 
 ## Design docs
-[Architecture](../../docs/architecture.md) · [Roadmap](../../docs/roadmap.md) · [Testing](../../docs/testing.md)
+[Architecture](../../docs/architecture.md) · [Testing](../../docs/testing.md)

@@ -1,6 +1,6 @@
 # ADR 0016: Integration tests use a fake slskd
 
-- **Status:** Accepted
+- **Status:** Accepted, not built yet (no integration tests or fake slskd exist; see [testing](../testing.md))
 - **Date:** 2026-10-20
 
 ## Context
