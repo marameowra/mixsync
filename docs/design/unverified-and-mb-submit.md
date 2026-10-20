@@ -1,36 +1,22 @@
 # Unverified imports and MusicBrainz submission
 
-**Problem:** soulsync refuses to import tracks that aren't on MusicBrainz, and gives no way to add them to MB.
+Soulsync refuses tracks that aren't on MusicBrainz and offers no way to add them. MixSync imports them as unverified and helps submit them.
 
 ## Unverified import
-- From the review screen, **Mark unverified** imports the file even without a confident MB match.
-- Tags come from:
-  1. user edits in the review form,
-  2. read-only fallback sources (Discogs, Deezer) offered as suggestions, or
-  3. the file's existing tags.
-- The file is filed under the normal [path template](library.md#path-templates), tagged `MIXSYNC_STATUS=unverified`, and flagged in the DB.
-- The library view has an "Unverified" filter and a count.
+- **Mark unverified** on the review screen imports without a confident MB match. Tags come from the user's edits, suggestions from fallback sources, or the file's existing tags.
+- Filed under the normal [path template](library.md#path-templates), tagged `MIXSYNC_STATUS=unverified`, flagged in the DB; the library view has an Unverified filter and count.
 
-> Planned — not built (#223): the Discogs and Deezer suggestion sources below.
-
-Both fallback sources are off by default; limits and terms are in [services etiquette](services-etiquette.md#discogs-fallback-off-by-default).
+> Planned — not built (#223): Discogs and Deezer as read-only suggestion sources, off by default ([terms](services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default)).
 
 ## Submit to MusicBrainz
-The **Submit to MusicBrainz** button on any unverified item picks a path:
+The **Submit to MusicBrainz** button picks a path:
+- Release on a store or streaming service (Bandcamp, Deezer, iTunes, Spotify...): open **Harmony** with the URL, which seeds the MB editor.
+- Otherwise: an **MB release-editor seed**, an HTML form submitted by the user's click (never on page load) that POSTs to `https://musicbrainz.org/release/add` in a new tab, with artist, title, tracks, durations, label, date and barcode if known. Field names verified 2026-10-10 against the [seeding docs](https://musicbrainz.org/doc/Development/Release_Editor_Seeding).
 
-| Situation | Action |
-|---|---|
-| The release is on a store or streaming service (Bandcamp, Deezer, iTunes, Spotify, etc.) | Open **Harmony** with the release URL. Harmony gathers the metadata and seeds the MB editor. |
-| Not on any store | Generate an **MB release-editor seed**: an HTML form, submitted by the user's click (never on page load), that POSTs to `https://musicbrainz.org/release/add` with artist, title, track list, durations, label, date, and barcode if known. It opens in a new tab. |
-
-- The user reviews and submits the edit in MB with their own account. MixSync never submits edits for them.
-- The seed includes an edit note crediting MixSync and saying the data came from local files.
-
-> [!note] Seeding field names
-> Verified 2026-10-10 against the MB [Release Editor Seeding](https://musicbrainz.org/doc/Development/Release_Editor_Seeding) documentation.
+The user reviews and submits the edit with their own account; MixSync never submits for them. The seed's edit note credits MixSync and says the data came from local files.
 
 ## Re-check and promote
-- **Primary trigger is the user:** a **Check MusicBrainz now** button on the item or album, used after the user's seeded edit has been applied in MB.
-- **Background re-check backs off**, since MB asks clients not to poll: 1 week → 2 weeks → 1 month → then quarterly, each at a random point in its interval. Checks are grouped per album (one search per album, not per track), followed by AcoustID lookups only for that album's files.
-- When a confident match appears, the item goes to the review queue as **Promote to verified**, with a diff of the tag changes. The user confirms.
-- After promotion, the fingerprint is **submitted to AcoustID** linked to the new recording MBID. This needs the deployment's AcoustID user key ([rules](services-etiquette.md#acoustid)); without it, submissions are skipped. Submissions are batched per plan and polled up to three times (1 min, 10 min, 1 h). An undo does not retract them: AcoustID has no retract.
+- **Check MusicBrainz now** (per item or album) is the primary trigger, used after the seeded edit is applied.
+- Background re-checks back off, since MB asks clients not to poll: 1 week → 2 weeks → 1 month → quarterly, each at a random point in its interval. One search per album, then AcoustID lookups only for that album's files.
+- A confident match enters the review queue as **Promote to verified** with a tag diff; the user confirms.
+- After promotion the fingerprint is submitted to AcoustID with the new recording MBID (key rules: [services](services-etiquette.md#acoustid)). Submissions are batched per plan and polled up to three times (1 min, 10 min, 1 h). Undo does not retract them: AcoustID has no retract.
