@@ -58,7 +58,7 @@ Rationale: ADRs [0002](decisions/0002-python-backend.md), [0003](decisions/0003-
 
 Python 3.13, uv, ruff, pyright (strict), import-linter. FastAPI, pydantic v2, Jinja2, session-cookie auth, argon2, Fernet for linked-account secrets. SQLAlchemy 2 + Alembic on SQLite (WAL) or Postgres; the job queue is a DB table with leased workers. httpx with a per-service token bucket and response cache in the DB. mutagen, rapidfuzz, `fpcalc`.
 
-> Planned — not built (#221): HTMX live regions that poll for progress on the server-rendered pages ([ADR 0008](decisions/0008-live-updates-by-htmx-polling.md); replaces the SSE plan).
+> Built, not yet used by a page (#221): HTMX live regions that poll for progress on the server-rendered pages; requests status (#233) and migration progress (#234) are the first ([ADR 0008](decisions/0008-live-updates-by-htmx-polling.md); replaces the SSE plan).
 
 ## Users and permissions
 - Local accounts with a standard login form (`autocomplete="username"` / `"current-password"`) so password managers work.

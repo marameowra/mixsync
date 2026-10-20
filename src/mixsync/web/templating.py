@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from mixsync.web.csrf import csrf_token
@@ -50,3 +51,12 @@ templates = Jinja2Templates(
 templates.env.filters["filesize"] = filesize  # pyright: ignore[reportUnknownMemberType]
 templates.env.filters["duration"] = duration  # pyright: ignore[reportUnknownMemberType]
 templates.env.tests["valid_artwork_src"] = _valid_artwork_src  # pyright: ignore[reportUnknownMemberType]
+
+
+def render(
+    request: Request, page: str, fragment: str, context: dict[str, Any] | None = None
+) -> HTMLResponse:
+    """The fragment template for an HTMX request, the full page otherwise. Routes keep their own
+    auth dependencies, so permissions and CSRF are the same either way."""
+    name = fragment if request.headers.get("HX-Request") == "true" else page
+    return templates.TemplateResponse(request, name, context or {})

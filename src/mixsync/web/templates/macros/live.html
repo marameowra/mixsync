@@ -1,0 +1,6 @@
+{# A live region (ADR 0008). Use as {% call live.region(url, in_progress) %}...{% endcall %}; url is
+   the route that returns this same region as a fragment. While in_progress it re-fetches itself every
+   5 s (tab visible) and swaps itself out; settled, it renders the same markup without the trigger. #}
+{% macro region(url, in_progress) %}
+<div class="live-region"{% if in_progress %} hx-get="{{ url }}" hx-trigger="every 5s [!document.hidden]" hx-swap="outerHTML"{% endif %}>{{ caller() }}</div>
+{% endmacro %}
