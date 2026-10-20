@@ -1,19 +1,16 @@
 # `tests/cassettes`
 
-vcrpy recordings of real HTTP exchanges with MusicBrainz, AcoustID, Cover Art Archive, and ListenBrainz. Unit tests replay them, so CI never hits live services.
+## Purpose
+Recorded JSON bodies from MusicBrainz, AcoustID and ListenBrainz. Unit tests read them and serve them through an `httpx.MockTransport` handler, so CI never hits live services. There is no replay library: a cassette is a plain `.json` file.
 
 ## Layout
-`tests/cassettes/<service>/<test_name>.yaml`
-
-## Recording
-- Default record mode in CI is `none` (fail on any unrecorded request).
-- To record or refresh locally: `uv run pytest --record-mode=once tests/unit/metadata/test_x.py`.
-- Recording respects `ratelimit`, so a refresh of many cassettes is slow on purpose.
+`tests/cassettes/<service>/<name>.json`, one response body per file.
 
 ## Rules
-- **Scrub secrets** before commit: API keys, tokens, usernames, and cookies are filtered by `vcr_config` (`filter_headers`, `filter_query_parameters`, `before_record_response`). A CI check greps cassettes for known key patterns.
-- Re-record when an API's response shape changes or a test's inputs change. Not routinely.
-- Keep cassettes small: request only the `inc=` fields the test needs.
+- Recording is manual: fetch the response by hand (respecting [rate limits](../../docs/design/services-etiquette.md)) and save the body.
+- Scrub API keys, tokens, usernames and cookies before commit. Some files are hand-written to the documented shape instead of recorded (the AcoustID fixture is).
+- Re-record when an API's response shape changes or a test's inputs change, not routinely.
+- Keep them small: request only the `inc=` fields the test needs.
 
-## Design docs
-[Testing: CI](../../docs/testing.md#ci-every-push-and-pr)
+## Design doc
+[Testing](../../docs/testing.md)

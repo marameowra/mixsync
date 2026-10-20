@@ -14,7 +14,7 @@ trackers show. Primary sources only. Code links are pinned to a commit:
 | SoulSync | [`9e35006`](https://github.com/Nezreka/SoulSync/tree/9e35006055a5161cbe26f3b7af010ab5f5f2b093) (`main`). Only the README was read, so feature claims are the project's own description and the implementation is **unverified**. |
 
 The two extra tools: **Picard** shows how MusicBrainz's own tagger matches; **SoulSync** is the tool mixsync
-replaces ([roadmap](../roadmap.md)). Headphones was left out.
+replaces ([v1 scope](../README.md#status)). Headphones was left out.
 
 ---
 
