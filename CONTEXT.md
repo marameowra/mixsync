@@ -34,6 +34,18 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Close runner-up**: A second-best release whose distance is near enough to the best that picking between them is a coin flip, so a person must decide. _Avoid_: Tie, ambiguous match, runner-up (alone)
 
+### Review
+
+**Decision**: The logged verdict on one candidate's match: the band it fell in, its evidence, and, once acted on, who acted, how and when. Kept as the audit record after its request is gone. _Avoid_: Match, result
+
+**Review**: A person acting on a decision that fell in the review band, after its files are downloaded. Each action settles the decision and moves its request on in one step. _Avoid_: Approval, moderation
+
+**Repick**: A review action naming a different release; the files are verified again against it.
+
+**Recheck**: A review action that closes a pending decision so the files are verified again with the current scorer.
+
+**Cancelled (decision)**: A pending decision closed because its request was deleted, not because anyone judged the candidate. _Avoid_: Rejected
+
 ### Library and safety
 
 **Library**: The organized tree under `/data/library` that the media server reads.
