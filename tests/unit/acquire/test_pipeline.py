@@ -96,6 +96,8 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
 
     assert status(env, rid) == "imported"
     assert library(env) == [FIRST, SECOND]
+    with env.sessions() as s:
+        assert s.get_one(Request, rid).origin is None  # found by searching
     for rel, track in zip((FIRST, SECOND), ALBUM.tracks, strict=True):
         t = tags.read_all(env.data_dir / "library" / rel)["tags"]
         assert t["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
