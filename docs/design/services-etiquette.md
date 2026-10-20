@@ -1,132 +1,70 @@
 # Respecting external services
 
-MixSync uses free, mostly community-run services. It must use them as intended and never hammer them. Every rule below was checked against the service's own documentation on **2026-10-09**. Re-check these docs before each release, because limits change.
+Use free, community-run services as intended; never hammer them. Rules below were checked against each service's docs on 2026-10-09. Re-check before each release.
 
-## Shared rate limiter
-- One **token bucket per service**, shared by all workers. State lives in the DB, so separate worker containers respect the same limits.
-- Every outbound request goes through the limiter. There is no bypass.
-- `429` / `503` → honor `Retry-After` or the service's own reset header, else exponential backoff with jitter.
-- Every request carries `User-Agent: MixSync/<version> ( https://github.com/marameowra/mixsync )`, even where a service doesn't require it. Override the contact with `MIXSYNC_MB_CONTACT`.
+## Shared rules
+- One token bucket per service, shared by all workers (state in the DB). Every outbound request goes through it; no bypass. Code: `src/mixsync/ratelimit/`.
+- `429`/`503`: honor `Retry-After` or the service's reset header, else exponential backoff with jitter.
+- Every request sends `User-Agent: MixSync/<version> ( https://github.com/marameowra/mixsync )`, never a library default. Contact override: `MIXSYNC_MB_CONTACT`.
+- Periodic jobs (watchlist, re-checks, discovery refresh) are jittered across their whole interval, never at fixed clock times.
+- Cache: persistent response cache for MB, CAA, AcoustID, ListenBrainz (MB entities 7 days, searches 1 day). A local MusicBrainz mirror (`MIXSYNC_MB_BASE_URL`) can replace the public API.
 
 ## Summary
-| Service | Documented limit | MixSync setting | Identity | Status in v1 |
-|---|---|---|---|---|
-| MusicBrainz | ~1 req/s avg **per IP** | 1 req/s (≤ 1, configurable) | UA required | core |
-| Cover Art Archive | none in place | 1 req/s (self-imposed) | UA (courtesy) | core |
-| AcoustID | ≤ 3 req/s | 3 req/s | app key + deployment user key | core |
-| ListenBrainz | ≤ 1 req/s, plus `X-RateLimit-*` headers | 1 req/s + headers | UA required + user token | core (discovery) |
-| Last.fm | no number; "several calls per second" continuously risks suspension | 1 req/s (self-imposed) | identifiable UA + API key | **deferred, not in v1** |
-| Discogs | 60/min authenticated, 25/min unauthenticated, per IP, rolling 60 s | 50/min | unique UA + user token | off by default (fallback) |
-| Deezer | none published | 1 req/s (self-imposed) | n/a | off by default (fallback) |
-| Soulseek | 5 clients per IP | 1 slskd client | Soulseek account | core |
+| Service | Limit | MixSync bucket | Status |
+|---|---|---|---|
+| MusicBrainz | ~1 req/s per IP | 1 req/s (`MIXSYNC_MB_RATE`, max 1) | core |
+| Cover Art Archive | none | 1 req/s | core |
+| AcoustID | 3 req/s | 3 req/s | core |
+| ListenBrainz | 1 req/s + `X-RateLimit-*` | 1 req/s + headers | core |
+| Last.fm | unspecified | 1 req/s | deferred |
+| Discogs | 60/min authed, 25/min not | 50/min | planned (#223) |
+| Deezer | none published | 1 req/s | planned (#223) |
+| Soulseek | 5 clients per IP | 1 slskd client | core |
 
 ## MusicBrainz
-| Rule | What MusicBrainz says | What MixSync does |
-|---|---|---|
-| Rate | About 1 req/s average **per source IP**; over it, *all* requests from that IP are refused until the rate drops | Bucket at 1 req/s (`MIXSYNC_MB_RATE`, rejected if > 1). **Shared with every MB client on your network** (soulsync, Picard, beets, Lidarr), so pause those during heavy work like migration. |
-| Refusal | HTTP **503**; no retry header documented | 503 → exponential backoff with jitter; `blocked_until` pauses all workers |
-| User-Agent | Required: `Application name/<version> ( contact-url )` | Always set |
-| Anonymous agents | A blank UA, `-`, `Python-urllib`, `Java`, etc. are throttled; some library default UAs share a cap | Never send a library default UA (`python-httpx`, `python-musicbrainz`). Unit-tested. |
-| Scheduling | Don't run jobs at fixed clock times; spread background calls randomly | No fixed-hour schedules; every periodic job is jittered across its whole interval |
-| Polling | Don't poll for metadata changes | Watchlist: one search per check with adaptive cadence ([watchlist](watchlist.md#poller)). Unverified re-checks back off and are mainly user-triggered ([details](unverified-and-mb-submit.md#re-check-and-promote)). |
-| Format | XML by default; JSON via `fmt=json` or `Accept` | Always `fmt=json` |
-| Lookups | `inc=` returns at most 25 linked entities | Lists come from browse/search, never a big `inc=` |
-| Paging | Browse `limit` max 100; release browses capped at ~500 tracks | Advance `offset` by items *received* |
-| Writes | OAuth; only tags, ratings, barcodes, ISRCs, collections via API | **No MB API writes.** Edits go through release-editor seeding in the browser. |
-| Use | Non-commercial use is free | MixSync is non-commercial, self-hosted |
+- Over the limit, *all* requests from the IP are refused (HTTP 503). The limit is per IP and shared with every MB client on the network (soulsync, Picard, beets, Lidarr): pause them during heavy work such as migration. `blocked_until` pauses all workers.
+- Never send a blank or library-default UA (`python-httpx`); unit-tested.
+- Don't poll for changes: the watchlist does one search per check ([watchlist](watchlist.md#poller)); unverified re-checks back off ([details](unverified-and-mb-submit.md#re-check-and-promote)).
+- Always `fmt=json`. `inc=` returns at most 25 linked entities, so lists come from browse/search. Advance paging `offset` by items received.
+- No MB API writes. Edits go through release-editor seeding in the browser.
+- Non-commercial use only.
 
-Sources: [Rate limiting](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting) · [API overview](https://musicbrainz.org/doc/MusicBrainz_API) · [Search](https://musicbrainz.org/doc/MusicBrainz_API/Search)
+[Rate limiting](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting)
 
 ## Cover Art Archive
-| Rule | What the docs say | What MixSync does |
-|---|---|---|
-| Rate | "There are currently no rate limiting rules in place", though a 503 for exceeding a rate limit is listed | Self-imposed 1 req/s; 503 → backoff |
-| Redirects | Image and listing endpoints answer with **307 redirects** to archive.org | The client **must follow redirects** (httpx doesn't by default) |
-| Thumbnails | Supported sizes are 250, 500, and 1200 px; a redirected thumbnail may 404 | Fetch 1200 for `cover.jpg` and 500 for the UI; on 404, fall back to the original image, then to the release group |
-| Access | All requests must go through coverartarchive.org | Never hot-link archive.org URLs directly |
-| Caching | Filenames never change | Cache downloaded art on disk indefinitely (it's saved as `cover.jpg` anyway) |
-
-Source: [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/API)
+- No documented limit; self-imposed 1 req/s, 503 backs off.
+- Image endpoints answer with 307 to archive.org: follow redirects (httpx doesn't by default), but never hot-link archive.org.
+- Thumbnails are 250/500/1200 px: fetch 1200 for `cover.jpg`, 500 for the UI; on 404 fall back to the original, then the release group. Cache art on disk indefinitely.
 
 ## AcoustID
-| Rule | What the docs say | What MixSync does |
-|---|---|---|
-| Rate | "Do not make more than 3 requests per second" | 3 req/s bucket |
-| App key | Register the application; the key goes in `client` | One MixSync app key per install (`MIXSYNC_ACOUSTID_APP_KEY`). The public example key expires, so don't ship it. |
-| User key | Needed for submissions; never store a key in app code | One deployment-wide key in `MIXSYNC_ACOUSTID_USER_KEY` (decided 2026-10-10): all submissions go under that account; no per-user storage. Without it (or the app key) submissions are skipped. |
-| Submissions | Batch with indexed params (`fingerprint.0`, …); gzip-compressed POST preferred; processed asynchronously | Batch per album; gzip POST; poll the submission status a few times with backoff; always include `mbid` |
-| Heavy traffic | Tell the operators in advance if your app will generate significant traffic | Migration preflight shows the total AcoustID lookups. For very large libraries the preflight suggests contacting AcoustID first. |
-| Use | Free for non-commercial use; must not be used with illegal products or services | Non-commercial |
+- Max 3 req/s. One app key per install (`MIXSYNC_ACOUSTID_APP_KEY`); never ship the public example key.
+- One deployment-wide user key (`MIXSYNC_ACOUSTID_USER_KEY`, decided 2026-10-10): all submissions go under that account, no per-user storage. Without it (or the app key) submissions are skipped.
+- Submissions: batch per album, gzip POST, indexed params, always include `mbid`, poll status a few times with backoff.
+- Every file is looked up, no exceptions: [ADR 0009](../decisions/0009-acoustid-mandatory.md). For very large libraries the migration preflight suggests contacting AcoustID first.
+- Non-commercial use only.
 
-Source: [AcoustID web service](https://acoustid.org/webservice)
-
-**Decided: AcoustID is always checked.** Every file gets a fingerprint and an AcoustID lookup, including files that already carry MusicBrainz tags and files processed during migration. Existing tags never skip the lookup. If AcoustID is unreachable, the job waits and retries; it never imports without the check.
+[AcoustID web service](https://acoustid.org/webservice)
 
 ## ListenBrainz
-| Rule | What the docs say | What MixSync does |
-|---|---|---|
-| Rate | Never more than **one call per second**; limits are communicated by headers | 1 req/s bucket, tightened further by the headers |
-| Headers | `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset-In` (recommended, clock-independent), `X-RateLimit-Reset` | When `Remaining` hits 0, set `blocked_until` = now + `Reset-In` |
-| Refusal | 429 Too Many Requests | Backoff using `Reset-In` |
-| User-Agent | Required, same format as MusicBrainz; requests without one may be blocked | Always set |
-| Auth | `Authorization: Token <user token>`; authenticated requests may get higher limits | Per-user token from `user_links` |
+- Max 1 call/s. On `X-RateLimit-Remaining` 0, set `blocked_until` = now + `X-RateLimit-Reset-In`; 429 backs off the same way.
+- Per-user token (`Authorization: Token ...`) from `user_links`.
 
-Source: [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/index.html)
+[ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/index.html)
 
 ## Last.fm
-**Deferred, not in v1.** These findings are kept for reference in case Last.fm is reconsidered.
+**Deferred, not in v1; this section is the home for the deferral.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms (cl. 5.1.8, 4.7) exclude use alongside unauthorised sharing. If reconsidered: self-imposed 1 req/s, honor cache headers, cache only in the HTTP cache with a 100 MB cap, show "via Last.fm" with a link. [ToS](https://www.last.fm/api/tos)
 
-| Rule | What the docs say | What MixSync does |
-|---|---|---|
-| Rate | "Be reasonable"; continuously making several calls per second risks suspension; limits are at Last.fm's discretion | Self-imposed 1 req/s |
-| User-Agent | Use an identifiable UA on all requests | Always set |
-| Caching | Implement caching according to the response's HTTP headers | The cache honors `Cache-Control` / `Expires` for Last.fm |
-| Storage cap | "Reasonable Usage Cap" of 100 MB of stored Last.fm data | Cache Last.fm only in the HTTP cache with a 100 MB size cap; never copy it into domain tables |
-| Attribution | Credit Last.fm; link artist/album/track pages to Last.fm's catalogue | Discovery entries sourced from Last.fm show "via Last.fm" with a link |
-| Use | Non-commercial only; the agreement excludes use with sites that facilitate unauthorised sharing (cl. 5.1.8) and unauthorised exploitation of IP (cl. 4.7) | See the risk note below |
+## Discogs and Deezer (fallbacks, off by default)
+> Planned — not built (#223).
 
-Source: [Last.fm API ToS](https://www.last.fm/api/tos) · [API intro](https://www.last.fm/api/intro)
-
-**Decided: deferred.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms exclude use alongside unauthorised sharing. ListenBrainz, which MetaBrainz runs with openly published data, is the only discovery source in v1.
-
-## Discogs (fallback, off by default)
-| Rule | What the docs say | What MixSync does |
-|---|---|---|
-| Rate | 60 req/min authenticated, 25/min unauthenticated, tracked **per source IP** over a moving 60 s window | 50/min bucket (headroom for other Discogs tools on the network) |
-| Headers | `X-Discogs-Ratelimit`, `-Used`, `-Remaining` | Pause when `Remaining` hits 0 |
-| User-Agent | A unique UA is required to get the full rate; generic ones are discouraged | Always set |
-| Auth | Personal access token, key/secret, or OAuth 1.0a | Per-user personal token |
-
-Source: Discogs API docs. The official page ([discogs.com/developers](https://www.discogs.com/developers)) blocked automated fetching, so these numbers come from a copy of the Discogs OpenAPI spec. Re-check them by hand before enabling Discogs.
-
-## Deezer (fallback, off by default)
-| Rule | What the terms say | What MixSync does |
-|---|---|---|
-| Rate | No published quota; Deezer may monitor usage | Self-imposed 1 req/s |
-| Use | Content use is "limited to a strictly private use within a family scope", non-commercial | Allowed only as a tag-suggestion source for a single-household install |
-| Prohibited | Bypassing measures to download content; "illegal or unauthorized use, streaming, download, or sharing of music" | MixSync never fetches Deezer audio; metadata suggestions only |
-
-Sources: [Deezer terms of use](https://developers.deezer.com/termsofuse) · [Guidelines](https://developers.deezer.com/guidelines)
+- Discogs: 60 req/min authenticated, 25 unauthenticated, per IP over 60 s; bucket at 50/min; pause when `X-Discogs-Ratelimit-Remaining` hits 0; unique UA; per-user personal token. Numbers come from an OpenAPI copy (the official page blocks fetching): re-check by hand before enabling.
+- Deezer: no quota; 1 req/s. Terms limit use to private family scope, non-commercial, so metadata suggestions only for a single-household install; never fetch audio. [Terms](https://developers.deezer.com/termsofuse)
 
 ## Soulseek
-| Rule | What the official rules say | What MixSync does |
-|---|---|---|
-| Clients | At most **5 clients from the same IP** | MixSync uses one slskd client; the docs warn if other clients run on the same network |
-| Bots | Bots and scripts that don't implement the full set of Soulseek features aren't allowed | MixSync never speaks the protocol itself; it drives **slskd, a full client** |
-| Content | Soulseek doesn't condone sharing copyrighted material; share only what you're allowed to | It's the user's responsibility; MixSync shares only the folders configured in slskd |
+- At most 5 clients per IP: MixSync uses one slskd client. Bots must implement the full protocol: MixSync drives slskd, a full client, and never speaks the protocol itself.
+- Share back through slskd (users who don't share get banned by peers). Sharing copyrighted material is the user's responsibility.
+- Cap concurrent searches (default 2), debounce duplicates; failed searches back off 1 h → 6 h → 24 h → weekly.
+- Don't queue many files from one peer at once.
+- Cap concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`, default 3, counting active transfers, not albums). A full cap defers a `download` job without spending an attempt. Slow transfers (`MIXSYNC_SLOW_DOWNLOAD_*`, see [deploy](../../deploy/README.md#environment-variables)) stop counting so a stalled peer cannot block the queue.
 
-These are community norms, not written rules, and MixSync follows them:
-- **Share back.** The library is shared through slskd. Users who download without sharing get banned by peers.
-- Cap concurrent searches (default 2) and debounce duplicates. Failed searches back off: 1 h → 6 h → 24 h → weekly.
-- Don't queue many files from a single peer at once.
-- Cap concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`, default 3). The cap counts transfers (files), not albums. Only transfers slskd reports as `InProgress` count; one waiting in the peer's queue uses no bandwidth. A full cap defers a new `download` job: it goes back to the queue 30 s later as a fresh job, so no attempt is spent. A transfer whose average rate over the last `MIXSYNC_SLOW_DOWNLOAD_WINDOW` seconds (default 60) is below `MIXSYNC_SLOW_DOWNLOAD_FLOOR` bytes/s (default 50000; only while total throughput is at least cap x floor, so a saturated link exempts nothing) **or** below `MIXSYNC_SLOW_DOWNLOAD_SHARE` (default 0.10) of the total throughput of all moving downloads (never the fastest transfer) stops counting, so a stalled peer cannot block the queue. It keeps running and counts again once it speeds up.
-
-Source: [Soulseek rules](https://www.slsknet.org/news/node/681)
-
-## Caching
-- Persistent server-side response cache in `/config` for MB, CAA, AcoustID, and ListenBrainz.
-- MB entities 7 days, searches 1 day.
-- An optional **local MusicBrainz mirror** (musicbrainz-docker) can replace the public API, which is useful for large migrations.
-
-## Jittered background jobs
-Watchlist checks, unverified re-checks, and discovery refreshes are spread randomly across their whole interval and never pinned to a clock time, so MixSync's jobs and other installs don't spike together.
+[Soulseek rules](https://www.slsknet.org/news/node/681)
