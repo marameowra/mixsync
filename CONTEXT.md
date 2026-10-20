@@ -66,6 +66,8 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Unverified**: An item imported without a confident MusicBrainz match, tagged `MIXSYNC_STATUS=unverified`.
 
+**Suggestion**: Album and track details from a service other than MusicBrainz (Deezer, later Discogs), fetched only when a reviewer asks, to pre-fill Mark unverified. The reviewer still edits and submits; a suggestion never affects matching or makes an item verified. _Avoid_: Fallback match, secondary provider
+
 ### Watchlist and discovery
 
 **Follow**: A user's subscription to an artist or label MBID whose new releases become requests.
