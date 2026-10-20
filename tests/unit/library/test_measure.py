@@ -72,3 +72,12 @@ async def test_a_file_ffmpeg_cannot_read_measures_as_none(tmp_path: Path) -> Non
     high, tail = await measure.high_band_share(junk), await measure.trailing_silence(junk, 10.0)
     assert high is None and tail is None
     assert vetoes(10.0, high, tail) == ()
+
+
+async def test_low_sample_rate_flac_is_not_checked_for_transcode(tmp_path: Path) -> None:
+    low = ff(
+        tmp_path / "low.flac",
+        *("-f", "lavfi", "-i", "anoisesrc=d=2:c=white:r=32000:a=0.3"),
+    )
+    high = await measure.high_band_share(low)
+    assert high is None and vetoes(2, high, None) == ()

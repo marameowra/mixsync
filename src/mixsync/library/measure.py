@@ -8,6 +8,8 @@ import logging
 import re
 from pathlib import Path
 
+import mutagen
+
 from mixsync.match.candidates import LOSSLESS
 
 log = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ HIGH_BAND_HZ = 16000
 SILENCE_DB = -50  # below this counts as silence
 SILENCE_MIN = 1.0  # seconds; a shorter pause is not reported by silencedetect
 _END_SLACK = 0.5  # a silence ending this close to the end of the file runs to the end
+_MIN_RATE = 40000  # below this the file cannot hold 16 kHz (Nyquist)
 _RMS = re.compile(r"Overall\s+\[[^\]]*\]\s+RMS level dB: (\S+)")
 
 
@@ -52,6 +55,9 @@ async def high_band_share(path: Path) -> float | None:
     if path.suffix.lower().lstrip(".") not in LOSSLESS:
         return None
     try:
+        info = mutagen.File(path)  # pyright: ignore[reportUnknownMemberType]
+        if info is None or info.info.sample_rate < _MIN_RATE:
+            return None
         # two passes of the 2-pole filter: steeper, so music below 16 kHz leaks less in
         high = await _rms_db(path, f"highpass=f={HIGH_BAND_HZ},highpass=f={HIGH_BAND_HZ},")
         full = await _rms_db(path, "")
