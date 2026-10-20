@@ -1,8 +1,19 @@
 # MixSync design system
 
-The design system behind the UI, copied from <https://claude.ai/artifact/7TKmFQqUvNGyfEyq4DTAUq>. `tokens.json` holds every token; `components/bundle.css` is the component stylesheet; `components/<Name>/` has each component's guidelines and a static preview. Previews are fragments: they expect the tokens as CSS custom properties and `components/bundle.css` loaded around them, as the artifact page does. Settled decisions live in [`docs/design/ui-style.md`](../../docs/design/ui-style.md); `decisions.md` is the earlier proposal.
+The design system behind the UI, copied from <https://claude.ai/artifact/7TKmFQqUvNGyfEyq4DTAUq>. `tokens.json` holds every token; `components/bundle.css` is the component stylesheet; `components/<Name>/preview.html` is each component's static preview. Previews are fragments: they expect the tokens as CSS custom properties and `components/bundle.css` loaded around them, as the artifact page does. This file is the canonical UI doc; [`docs/design/ui-style.md`](../../docs/design/ui-style.md) only points here. Production CSS is `src/mixsync/web/static/app.css`; see [web/README.md](../../src/mixsync/web/README.md) for templates and the theme preview.
 
-MixSync is a self-hosted tool that downloads music, checks it against MusicBrainz, and files it into a library. The interface uses a calm Swiss utility style: system type, a strict grid, hairline rules, one accent colour. Every screen leads with the task, the evidence and the next action. Pages are server-rendered Jinja with HTMX. There is no CSS framework, no web fonts and no runtime fetches from other origins.
+MixSync is a self-hosted tool that downloads music, checks it against MusicBrainz, and files it into a library. The interface uses a calm Swiss utility style: system type, a strict grid, hairline rules, one accent colour. Every screen leads with the task, the evidence and the next action. Pages are server-rendered Jinja. There is no CSS framework, no web fonts and no runtime fetches from other origins.
+
+> Planned — not built (#221): HTMX enhancement. Every page works without JS today.
+
+## Principles
+
+- **Organize around tasks.** Group navigation by what people do: find music, resume work, manage the library. Home surfaces actionable work (items awaiting review), not a generic dashboard.
+- **Artwork identifies; evidence decides.** Covers lead in discovery and release views. In review and import, evidence, consequences and actions outrank artwork size.
+- **Make decisions legible.** Review and import screens read in this order: release identity, matching evidence and confidence, file-operation consequences, next action. Show uncertainty. Keep the existing safety and undo paths.
+- **Balance density.** Headings, alignment and spacing before decorative containers.
+- **Reuse.** Extend existing Jinja macros and CSS. Make a shared component only for a pattern that repeats; keep one-off layouts on their page. No new UI stack.
+- **Check on change.** When production templates change, check home, discovery, match review and import at phone and desktop widths in both modes.
 
 ## Content fundamentals
 
@@ -43,6 +54,7 @@ MixSync is a self-hosted tool that downloads music, checks it against MusicBrain
 
 ### Artwork
 - Covers help people recognise music. They are large (`art-lg`) in discovery and release views, small (`art-sm`) in review and plan headers, and `art-xs` in table rows.
+- Sizes: `art-xs` 40px (table rows), `art-sm` 64px (review and plan headers), `art-md` 120px (release detail and follow on phones), `art-lg` 176px (discovery and release detail from 48rem).
 - Missing cover: a `surface-sunken` square with a hairline border and the title's first letter in `ink-muted`, labelled "No cover art for …".
 
 ### State and motion
@@ -52,6 +64,7 @@ MixSync is a self-hosted tool that downloads music, checks it against MusicBrain
 
 ### Layout behaviour
 - No page-level horizontal scroll at any width. Wide tables scroll inside `.table-wrap`.
+- Review on narrow screens, in order: ActionBar (sticky), ScoreBreakdown, candidate (cover, tracklist), source files, AudioPreview, full evidence tables, other actions. Nothing is hidden behind a toggle.
 - Nav, action bars and button rows wrap instead of collapsing into menus. Every page works without JS.
 
 ## Iconography
@@ -60,19 +73,30 @@ MixSync has no icon set. Status glyphs are Unicode geometric shapes drawn by CSS
 
 ## Components
 
-| Component | Where |
-|---|---|
-| AppNav | `base.html`: task-grouped nav (Find · Resume · Library) |
-| WorkQueue | home: work waiting on the person |
-| ActionBar | review detail, plan: sticky identity + verdict + actions |
-| ConsequenceSummary | plan, any file operation: counts, sentence, typed confirm |
-| ScoreBreakdown | review evidence: penalty per feature |
-| DataTable | every list of records |
-| StatusTag | bands and statuses |
-| Notice | action results, warnings, errors |
-| Field | every form control |
-| Button | every action |
-| Artwork | covers and their fallback |
-| AudioPreview | review: listen before deciding |
+Classes are in `components/bundle.css` and `src/mixsync/web/static/app.css`. Macros: `macros/forms.html` (`csrf`, `plan_action`), `macros/ui.html` (`status`), `macros/media.html` (`artwork`). Each component has `components/<Name>/preview.html`. No component JavaScript.
 
-`components/bundle.css` is the proposed `web/static/app.css`. Its classes map to the Jinja macros in `macros/forms.html` and the planned `macros/media.html`. Previews are static HTML. The app has no component JavaScript.
+Shared now: DataTable, StatusTag, Button, Field, Notice, ConsequenceSummary, Artwork. Local to one page: WorkQueue, ScoreBreakdown.
+
+| Component | Where | Rules |
+|---|---|---|
+| AppNav | `base.html` | `<nav aria-label="Main">`, `aria-current="page"`. Groups: **Find** (Discover, Watchlist, Requests; Discover and Watchlist need `request`), **Resume** (Review, Unverified; Unverified needs `library.edit`), **Library** (Fragments, Migration; Migration needs `admin`). Brand links home; Account and Log out sit at the end (`.end`). A group hides when all its links are hidden. Review and Unverified carry a mono `.count` when above zero. Wraps, no menu. `.group-name` is a visual label only. |
+| WorkQueue | home | `.queue`: count (`.n`), what it is, resume action. Urgency order: review, promotions, unverified, fragments, failed requests. First non-zero row's action is the page's `primary`. Zero rows stay, muted (`li.empty`), "Nothing to …". Not a dashboard: no charts. |
+| ActionBar | review detail, plan | `.actionbar`, sticky, `role="region" aria-label="Decision"`, one CSRF `<form>` per action. Order: StatusTag, identity in `body-strong`, one line of top evidence in `ink-muted` (`.summary`), then `.actions`: one `primary`, alternatives, destructive last. If the primary action is unavailable, say why in the summary and omit the button; don't disable it. |
+| ConsequenceSummary | plan, any file operation | `.consequence`: counts Move, Trash, Keep (`dd.trash` is `danger` above zero), one sentence (where files go, tags changed, originals to `.trash`, how to undo), then `forms.plan_action`. Above the data-safety threshold it asks for the typed change count. Required before any move, retag or trash. Never put a destructive confirm before it; keep "can be restored with Undo". |
+| ScoreBreakdown | review evidence | `.score`: per `breakdown` entry a feature name (`.k`), a `.bar` of weighted penalty vs the reject threshold, the number (`.v`, mono) and the `reason` (`.why`). Bars over half the threshold get `.high`; number and reason carry the meaning. Top of Evidence, before vetoes. No inline styles (CSP `default-src 'self'`): use a width class or `<meter>`; the preview's inline width is illustrative. |
+| DataTable | every record list | Wrap in `.table-wrap`. `th scope="col"` in `label` style on `surface-sunken`. Numbers: `class="n"` on `th` and `td`. IDs and timestamps: `.num`. Paths: `.path`. Sort links server-side, active header `aria-sort`. Selected row `aria-selected="true"`. Empty state is a sentence, not an empty table. No zebra, cell borders or card per row; don't hide columns on phones. |
+| StatusTag | bands, statuses | `.tag` + `confident` ● / `review` ◐ / `reject` ✕ / `neutral` ○ (`.band-auto_accept`, `-review`, `-reject` for bands). Map raw values to words (`auto_accept` is "Confident"); `macros/ui.html` `status` does this. Not a button or link; a fifth state uses `neutral`. |
+| Notice | results, warnings, errors | `.notice` with `ok`, `warn`, `error` (or `info` in the design bundle), or a bare `role="status"` / `role="alert"` element (app.css styles both). Bold headline states the fact, one sentence says what next. `status` for last-action results, `alert` for blockers. Under the title or above its form. No dismiss on errors, no more than two stacked. |
+| Field | every form control | Visible `<label for>` (in tables, `aria-label`). `.input`; `.input.num` for short numbers. `.help` linked by `aria-describedby`. Invalid: `.field.invalid`, `aria-invalid="true"`, `.error` sentence (what is wrong, what is accepted), plus a `role="alert"` Notice above the form. Attributes match the route's validation. |
+| Button | every action | Native `<button>`/`.btn`: secondary (default), `.primary` (exactly one per view, never two side by side), `.danger` (trash, discard, reject), `.danger.filled` (final confirm only, after a ConsequenceSummary), `.quiet` (reversible side actions). Label is verb + object. `<form method="post">` with `forms.csrf()`. Navigation is `<a>`, not a button. |
+| Artwork | covers | `macros/media.html` `artwork(title, src, size)` emits `.art.art-<size>`; `.art.missing` is the fallback with `role="img" aria-label="No cover art for <title>"`. Only `/media/cover/<id>` sources. Never a stock image or emoji. |
+| AudioPreview | review | Position, file name, length (mono, `ink-muted`), `<audio controls preload="none">` labelled with the file name, from `/media/preview/<id>/<n>`. Never autoplay. Beside the candidate tracklist from 48rem, after the evidence on phones. |
+| Cover | design only | The brand banner in `components/Cover/preview.html`: an SVG tile grid built from `art-sm` cells and the wordmark. Not used by the app. |
+| HomePage | design only | The home mockup in `components/HomePage/preview.html` (work queue, in flight, new music). Production home is `templates/pages/home.html`. |
+
+## Why
+
+- The positive status is blue-teal so it is not told from danger by hue (red–green).
+- Nav wraps instead of collapsing: no JS, no hidden links.
+- Review tables scroll in place and nothing sits behind a toggle, so evidence is never hidden.
+- Artwork and AudioPreview are shared only once a second page uses them; WorkQueue and ScoreBreakdown stay local.

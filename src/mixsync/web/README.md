@@ -1,49 +1,28 @@
 # `web`
 
 ## Purpose
-The FastAPI app and the HTMX UI. A **composition root**: it wires adapters into services and exposes them as pages.
+The FastAPI app and server-rendered UI. A composition root: it exposes services as pages. HTML only ([ADR 0012](../../../docs/decisions/0012-html-only-ui-in-v1.md)).
 
 ## Owns / does not own
-- **Owns:** auth, sessions, CSRF, capability checks, routing, templates, static assets, SSE progress streams.
-- **Does not own:** business logic. Routes call services and render results; nothing else.
+- **Owns:** routing (`routes/`, one module per page group), sessions and login (`routes/auth.py`), CSRF (`csrf.py`), capability checks (`deps.py`, `require(Capability.x)`), Jinja2 templates (`templates/`: `base.html`, `pages/`, `macros/`), and the hand-written stylesheet (`static/app.css`, served at `/static`).
+- **Does not own:** business logic. A route checks the capability, calls a service, renders a template.
 
-## Proposed files
-| Path | Contents |
-|---|---|
-| `deps.py` | FastAPI dependencies: DB session, current user, `require(capability)` |
-| `auth.py` | Login/logout, argon2 (`argon2-cffi`) verification, session create/rotate, login rate limit |
-| `csrf.py` | Per-session CSRF token; checked on every non-GET |
-| `sse.py` | `sse-starlette` endpoints streaming HTML fragments for downloads/imports |
-| [`routes/`](routes/README.md) | One module per page group |
-| [`templates/`](templates/README.md) | Jinja2 templates |
-| [`static/`](static/README.md) | CSS + vendored HTMX |
+## Rules / invariants
+- Every route declares its capability; the only unguarded ones are login, `/healthz` and `/static`.
+- Sessions are server-side. The cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` over HTTPS; logins lock out after 10 failures.
+- Every non-GET is CSRF-checked: the token is a hidden form field (`forms.csrf()`) or an `X-CSRF-Token` header.
+- Mutating routes are POST only and redirect. Bulk actions (merge, purge, reorganize) are two steps: render the dry-run plan, then confirm it (typed count above 50 ops) ([data safety](../../../docs/design/data-safety.md#5-dry-run-and-confirm)).
+- `media.py` serves audio and cover art only from resolved paths under the downloads, data, import-source and drop roots (no traversal).
+- Templates: autoescape on, never `|safe` on user or API data; no inline styles or scripts, so a strict CSP stays possible; every page works without JS. Tokens and components: [design/system/README.md](../../../design/system/README.md).
+- Assets are served from `'self'` only: no CDN, no web fonts, no build step.
+- Nothing under `web` calls MusicBrainz on list pages; `names.py` resolves ids from local rows and the cache first.
 
-## Auth rules
-- Real `<form method="post">` login with `autocomplete="username"` / `"current-password"` so password managers work.
-- Sessions are server-side (`sessions` table). The cookie is `HttpOnly`, `Secure` (when served over HTTPS), and `SameSite=Lax`. The session id rotates on login.
-- Lock out logins after 10 failures per 15 min per username+IP.
-- CSRF: the token goes in a hidden form field; HTMX sends it as the `X-CSRF-Token` header via `hx-headers` on `<body>`.
-- Every route declares its capability (`require(Capability.request)` etc.). There are no unguarded routes except `/login` and `/static`.
+> Planned — not built (#221): HTMX partials and SSE progress streams. Pages are plain full-page renders today.
 
-## HTMX conventions
-- Full page on normal GET; a fragment when `HX-Request` is set. One template per page, fragments in `partials/`.
-- Progress via SSE (`hx-ext="sse"`), never polling loops.
-- Pages must work without JS for reading. Actions may require HTMX.
+UI preview (dev only): see [devtools/preview](../../../devtools/preview/).
 
-**Decided: HTML only in v1.** There is no JSON API, to avoid building two interfaces. Revisit after v1 if a mobile client or automation needs one. Routes still keep their logic in services, so adding a JSON layer later is mostly new routes.
-
-## May import from
+## May import
 Anything (composition root).
 
-## Tests
-- Playwright: phone 375 px and desktop 1280 px; login with a real form submit; no horizontal scroll ([testing](../../../docs/testing.md#ui-tests)).
-- Unit: every route rejects a user missing the capability; CSRF rejects missing/invalid tokens.
-
-## UI preview
-Dev-only: the real app on a throwaway seeded SQLite DB (`.preview/`, gitignored, rebuilt on every start), with the network blocked except loopback and MusicBrainz faked.
-- Run `uv run python -m devtools.preview [--port 8090]`, then open http://127.0.0.1:8090/__preview. It auto-reloads on changes to `src`, `design` and `devtools`.
-- Users `admin`, `alice` and `edge` all have the password `preview`. `edge` holds the edge-case data (long and non-Latin text, 300 requests, no discover data). The `/__preview` page has log-in buttons, a log-out link and links to every seeded page.
-- Themes live in `design/themes/<name>/{templates,static}`. Templates there override the real ones of the same path; the rest fall through. Static files are served at `/themes/<name>/...`. Switch with `?theme=<name>` (kept in a cookie). To add one, copy `design/themes/demo` and edit; see `design/themes/current/README.md`.
-
-## Design docs
-[ADR 0003](../../../docs/decisions/0003-htmx-server-rendered-ui.md) · [Architecture: users and permissions](../../../docs/architecture.md#users-and-permissions)
+## Design doc
+[ADR 0003](../../../docs/decisions/0003-htmx-server-rendered-ui.md) · [Matching: review screen](../../../docs/design/matching.md#review-screen) · [Architecture: users and permissions](../../../docs/architecture.md#users-and-permissions)

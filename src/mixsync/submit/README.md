@@ -1,35 +1,19 @@
 # `submit`
 
 ## Purpose
-Close the loop for tracks MusicBrainz doesn't have. Help the user add them to MB, then promote them to verified once MB has them.
+Close the loop for tracks MusicBrainz doesn't have: help the user add them to MusicBrainz, then promote them to verified once it has them.
 
 ## Owns / does not own
-- **Owns:** Harmony link building, MB release-editor seed generation, the weekly re-check job, AcoustID fingerprint submission after promotion.
-- **Does not own:** submitting MB edits. The user always submits in MB with their own account.
+- **Owns:** Harmony link building (`harmony.py`) and MusicBrainz release-editor seed generation (`mb_seed.py`; `web` renders it as a form the user clicks).
+- **Does not own:** submitting MusicBrainz edits (the user always submits with their own account), or the re-check and promotion. Those live in `acquire/recheck.py`, because `submit` may not import `acquire`; AcoustID submission is `acquire/acoustid_submit.py` ([ADR 0013](../../../docs/decisions/0013-one-acoustid-submission-key.md)).
 
-## Proposed files
-| File | Contents |
-|---|---|
-| `harmony.py` | `harmony_url(store_url) -> str` |
-| `mb_seed.py` | `build_seed(SeedRelease) -> list[tuple[str, str]]` (ordered field → value, repeated keys allowed); rendered by `web` as a form the user clicks, POSTing to `https://musicbrainz.org/release/add` in a new tab |
-| `promote.py` | (not built here) fingerprint submission lives in `acquire/acoustid_submit.py`, with the deployment-wide key `MIXSYNC_ACOUSTID_USER_KEY` (decided 2026-10-10: one key in env, all submissions under that account; undo does not retract) |
+## Rules / invariants
+- The seed includes the edit note "Seeded by MixSync from local files." Field names were checked against MusicBrainz's Release Editor Seeding docs (URL in `mb_seed.py`).
+- Re-checks are user-triggered first; the background schedule backs off ([design](../../../docs/design/unverified-and-mb-submit.md#re-check-and-promote)).
+- Promotion is never automatic: a confident match only makes a draft plan the user confirms and can undo.
 
-The re-check and the promotion live in `acquire` (`acquire/recheck.py`, run by the Merger as a `promote` plan), because `submit` may not import `acquire` and a promotion reuses the merge plan machinery. A confident match makes a draft plan whose preview shows the tag diff; the user confirms and can undo.
+## May import
+`core`, `db`, `match`, `library`.
 
-## Rules
-- The seed includes an edit note: "Seeded by MixSync from local files."
-- Re-checks are **user-triggered first** (Check MusicBrainz now). The background schedule backs off, 1 week → 2 weeks → 1 month → quarterly, randomized within each interval and grouped per album ([design](../../../docs/design/unverified-and-mb-submit.md#re-check-and-promote)).
-- Promotion is never automatic; it always goes through the review queue.
-
-> [!note] Seed field names
-> Verified 2026-10-10 against the MusicBrainz "Release Editor Seeding" documentation (URL in `mb_seed.py`).
-
-## May import from
-`core`, `db`, `match`, `library` (service rule); `MetadataProvider` injected.
-
-## Tests
-- `build_seed` snapshot tests (multi-disc, missing durations, unicode).
-- Re-check with a fake provider: no match → nothing; confident match → a review item; promotion → verified + AcoustID submit called once.
-
-## Design docs
+## Design doc
 [Unverified imports and MB submission](../../../docs/design/unverified-and-mb-submit.md)

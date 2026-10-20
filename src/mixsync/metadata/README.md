@@ -1,54 +1,28 @@
 # `metadata`
 
 ## Purpose
-Adapters for metadata and fingerprint services: **MusicBrainz** (WS/2 JSON), **AcoustID**, and the **Cover Art Archive**. Read-only fallbacks live in [`fallback/`](fallback/README.md).
+Adapters for MusicBrainz (WS/2 JSON), AcoustID and the Cover Art Archive, plus local fingerprinting (`fpcalc`).
 
 ## Owns / does not own
-- **Owns:** typed clients, request building (includes, paging), response → `core` type mapping, local fingerprinting (`fpcalc`).
-- **Does not own:** deciding whether something matches (`match`), or storing results (`db`). Caching is handled by `ratelimit`.
+- **Owns:** typed clients, request building (includes, paging), mapping raw JSON to `core` types (`models.py`), `fingerprint()`.
+- **Does not own:** deciding whether something matches (`match`), storing results (`db`), or caching (`ratelimit`).
 
-## Proposed files
-| File | Contents |
-|---|---|
-| `musicbrainz.py` | `MusicBrainzProvider`: `get_release`, `search_releases` (more lookups, browse and paging land with the watchlist) |
-| `acoustid.py` | `fingerprint(path)` (async `fpcalc -json` subprocess), `AcoustIdClient.lookup(fp)`; `submit(items)`, `submission_status(ids)` |
-| `coverart.py` | Front-cover URL and download for a release, falling back to the release group |
-| `models.py` | pydantic models for the raw API JSON, mapped to `core` types at the edge |
+## Rules / invariants
+- Every call goes through `ratelimit.PoliteClient`. Limits and User-Agent: [services etiquette](../../../docs/design/services-etiquette.md).
+- Request only the `inc=` parameters needed, and always `fmt=json`.
+- **A lookup returns at most 25 linked entities per `inc=`.** Lists (an artist's release groups, a label's releases) come from browse or search, never from a lookup include.
+- **Browse results are ordered by MBID, not date**, so you cannot stop early at a date. Browse all pages at `limit=100`, advancing `offset` by the number of items received.
+- "What's new since X" is a search with a date range, one request per follow. The index can lag, so the watchlist overlaps its window by 7 days.
+- Genres come from MusicBrainz's curated genres (`inc=genres`), never folksonomy tags ([ADR 0014](../../../docs/decisions/0014-default-path-template-and-genres.md)).
+- No MusicBrainz API writes. Edits go through release-editor seeding in the browser ([submit](../submit/README.md)).
+- Raw JSON is validated with pydantic at the edge; unknown fields are ignored, never trusted.
+- AcoustID lookups need `Settings.acoustid_app_key`; submissions use the deployment key ([ADR 0013](../../../docs/decisions/0013-one-acoustid-submission-key.md)). `Settings.mb_base_url` can point at a local MusicBrainz mirror.
+- Tests replay recorded JSON from `tests/cassettes/<service>/` through `httpx.MockTransport` ([cassettes](../../../tests/cassettes/README.md)).
 
-## Key interface (`core.protocols.MetadataProvider`)
-```
-search_release_groups(artist, title) -> list[ReleaseGroupRef]
-get_release(mbid, includes=recordings,media,labels) -> Release
-get_release_group(mbid) -> ReleaseGroup (with releases)
-new_release_groups_by_artist(artist_mbid, since) -> list[ReleaseGroupRef]   # search: arid + firstreleasedate range
-new_releases_by_label(label_mbid, since) -> list[ReleaseRef]                 # search: laid + date range
-browse_release_groups(artist_mbid) -> list[ReleaseGroupRef]                  # full browse, all pages (rarely)
-(AcoustID is separate: AcoustIdClient.lookup(fp) -> list[AcoustIdResult])
-```
+> Planned — not built (#223): read-only fallback providers (Discogs, Deezer) that pre-fill the Mark unverified form. Off by default; terms and limits are in [services etiquette](../../../docs/design/services-etiquette.md#discogs-fallback-off-by-default).
 
-## Rules
-- Every call goes through `ratelimit.PoliteClient(...)`; MusicBrainz is at 1 req/s.
-- Genres come from MusicBrainz's curated genres (`inc=genres`) on release groups, releases, and artists. Folksonomy `tags` are never used for paths ([library design](../../../docs/design/library.md#path-templates)).
-- Request only the `inc=` parameters actually needed. Big includes are slow for MusicBrainz too.
-- Always send `fmt=json`.
-- **Lookups return at most 25 linked entities per `inc=`.** Lists (an artist's release groups, a label's releases) come from browse or search, never from a lookup include.
-- **Browse results are ordered by MBID, not date**, so you can't stop early at a date. A browse is all pages at `limit=100`, advancing `offset` by the number of items *received* (release browses cap at about 500 tracks per response).
-- **"What's new since X" uses search with a date range**, which is one request per follow:
-  - artist: `/ws/2/release-group?query=arid:<mbid> AND firstreleasedate:[<since> TO *]&fmt=json`
-  - label: `/ws/2/release?query=laid:<mbid> AND date:[<since> TO *]&fmt=json`
-
-  Verify the range syntax against the live API when building the MusicBrainz client. The search index can lag the database slightly; the watchlist overlaps its `since` window by 7 days to cover that.
-- **No MusicBrainz API writes.** Edits go through release-editor seeding in the browser ([submit](../submit/README.md)).
-- AcoustID submissions use the deployment-wide `Settings.acoustid_user_key` (`MIXSYNC_ACOUSTID_USER_KEY`), not a per-user key; `AcoustIdClient.submit` / `submission_status` implement them.
-- Raw API JSON is validated with pydantic at the edge. Unknown fields are ignored, never trusted.
-- `Settings.acoustid_app_key` (`MIXSYNC_ACOUSTID_APP_KEY`) is required for lookups. An optional `Settings.mb_base_url` points at a local MusicBrainz mirror.
-
-## May import from
+## May import
 `core`, `ratelimit`.
 
-## Tests
-- `tests/unit/metadata/`: recorded JSON in `tests/cassettes/<service>/` served through `httpx.MockTransport` (no vcrpy; the AcoustID fixture is hand-written); mapping tests; paging stop conditions.
-- `fpcalc` wrapper with a faked subprocess; one test runs the real binary and is skipped when it is missing.
-
-## Design docs
+## Design doc
 [Matching](../../../docs/design/matching.md) · [Respecting services](../../../docs/design/services-etiquette.md)
