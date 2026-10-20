@@ -14,6 +14,8 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Origin**: The folder and files a request made from files already on disk (migration, drop folder, adopt) started from. Set once; a request found by searching has none. _Avoid_: Source (that is who made the request), first candidate
 
+**Content key**: What identifies an album found in a drop folder across scans: the drop source plus a hash of its files. An album is taken again only while its requests are under the attempt cap and the latest failed; deleting a request forgets that attempt. _Avoid_: Idempotency key, digest
+
 **Tried list**: The candidates a request has already dropped; the retry searches afresh and skips them. Only the best candidate is downloaded, so no fallback candidates are stored.
 
 **Request budget**: The number of candidates a request may start downloading and then drop before it needs a person. _Avoid_: Retry limit, attempts
