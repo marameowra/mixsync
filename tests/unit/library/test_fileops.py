@@ -375,7 +375,8 @@ def test_only_release_deletes() -> None:
     banned = re.compile(r"\.unlink\(|os\.remove|\brmtree\b|\.rmdir\(|removedirs|os\.unlink")
     src = Path(fileops.__file__).parents[1]
     hits = [p.name for p in src.rglob("*.py") if banned.search(p.read_text())]
-    assert hits == ["fileops.py"]  # release() is the one delete
+    # release() is the one delete of user files; db/backup.py prunes only its own backups
+    assert sorted(hits) == ["backup.py", "fileops.py"]
 
 
 def test_failure_after_publish_stays_pending_and_recovers(

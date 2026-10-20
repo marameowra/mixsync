@@ -46,7 +46,13 @@ Before any tag write, the full original tag set is stored in the DB, keyed by fi
 - No bulk operation runs as a side effect of a settings change.
 
 ## 6. Backups
-> Planned — not built (#222): nightly `VACUUM INTO /config/backups/mixsync-YYYY-MM-DD.db` keeping 7, and a pre-migration DB backup. Settings export/import is not built either.
+- SQLite: a nightly `VACUUM INTO <backup dir>/mixsync-YYYY-MM-DD.db` (UTC date) keeps the 7 newest `mixsync-*.db` files and touches nothing else there. The file is written under a temporary name and renamed on success, so a half-written file never looks like a backup. `mixsync backup` takes one now.
+- `mixsync migrate` backs up first when the database has a revision and is behind head; if the backup fails the upgrade does not run. A fresh database or one at head is not backed up.
+- The backup dir is `MIXSYNC_BACKUP_DIR` (default `/config/backups`).
+- Postgres: no backups here. `mixsync backup` exits non-zero and says to use `pg_dump`; the nightly job does nothing; `migrate` logs a notice and upgrades.
+- Restore is manual: stop MixSync, copy a backup over the database file.
+
+> Planned — not built: settings export/import.
 
 ## 7. Independence
 The library is plain, standard-tagged audio. Navidrome or any player works without MixSync. Its own markers are plain text tags (e.g. `MIXSYNC_STATUS`).
