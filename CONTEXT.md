@@ -12,6 +12,8 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Candidate**: One peer's folder that might satisfy a request. _Avoid_: Result, hit, match
 
+**Origin**: The folder and files a request made from files already on disk (migration, drop folder, adopt) started from. Set once; a request found by searching has none. _Avoid_: Source (that is who made the request), first candidate
+
 **Tried list**: The candidates a request has already dropped; the retry searches afresh and skips them. Only the best candidate is downloaded, so no fallback candidates are stored.
 
 **Request budget**: The number of candidates a request may start downloading and then drop before it needs a person. _Avoid_: Retry limit, attempts
