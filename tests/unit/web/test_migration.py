@@ -205,7 +205,8 @@ def test_settled_migration_shows_completed(
 ) -> None:
     _add_request(sf, migration_id, "failed")
     text = client.get("/migration").text
-    assert f"Migration {migration_id}: completed" in text
+    assert f"<h2>Migration {migration_id}</h2>" in text
+    assert ">Completed</span>" in text
     assert f"/migration/{migration_id}/report.csv" in text
 
 
@@ -214,4 +215,6 @@ def test_unsettled_migration_shows_running(
     client: TestClient, sf: sessionmaker[Session], migration_id: int, status: str
 ) -> None:
     _add_request(sf, migration_id, status)
-    assert f"Migration {migration_id}: running" in client.get("/migration").text
+    text = client.get("/migration").text
+    assert f"<h2>Migration {migration_id}</h2>" in text
+    assert ">Running</span>" in text

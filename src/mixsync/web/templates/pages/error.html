@@ -2,6 +2,6 @@
 {% block title %}Error {{ status }} - MixSync{% endblock %}
 {% block content %}
 <h1>Error {{ status }}</h1>
-<p role="alert">{{ detail }}</p>
-<p><a href="{{ back }}">Back</a></p>
+<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ detail }}</p>
+<p><a href="{{ back }}">Go back</a></p>
 {% endblock %}

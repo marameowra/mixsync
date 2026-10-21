@@ -4,11 +4,19 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues on marameowra/mixsync (`gh` CLI). See `docs/agents/issue-tracker.md`.
+GitHub Issues on marameowra/mixsync, via `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+Skill roles map one-to-one to the repo's label names:
+
+| Label | Meaning |
+| --- | --- |
+| `needs-triage` | Maintainer needs to evaluate this issue |
+| `needs-info` | Waiting on reporter for more information |
+| `ready-for-agent` | Fully specified, ready for an AFK agent |
+| `ready-for-human` | Requires human implementation |
+| `wontfix` | Will not be actioned |
 
 ### Domain docs
 

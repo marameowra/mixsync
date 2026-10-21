@@ -91,7 +91,8 @@ async def test_a_hand_made_folder_is_queued_only_after_it_settles(rig: Rig) -> N
     await rig.scan()
     (req,) = rig.requests()
     assert (req.source, req.status) == ("adopt", "verifying")
-    assert len(rig.env.jobs(JobKind.VERIFY)) == 1
+    (job,) = rig.env.jobs(JobKind.VERIFY)
+    assert req.origin == {"candidate": job.payload["candidate"], "paths": job.payload["paths"]}
 
 
 def test_off_by_default_schedules_nothing(env: Env, tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-17
+- **Note:** the request budget (5 dropped candidates) is planned, not built (#203); the quarantine purge is planned (#208).
 
 ## Context
 Rejected and review candidates stayed in `/downloads/<peer folder>/`, where slskd put them. [matching](../design/matching.md) promised a quarantine, but none existed, and nothing ever cleaned `/downloads`. `/downloads` belongs to slskd, and slskd's `retention.files.complete` setting deletes files there by age ([slskd config](https://github.com/slskd/slskd/blob/22421286fe2216950a01fa0fb7f2a82836ff9074/docs/config.md)), so files a person still had to review could disappear without a journal entry. soularr has the same problem with its `failed_imports/` folder, which fills the disk ([soularr#137](https://github.com/mrusse/soularr/issues/137)). See [workflow prior art](../research/workflow-prior-art.md).

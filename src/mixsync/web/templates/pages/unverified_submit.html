@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Submit to MusicBrainz - MixSync{% endblock %}
 {% block content %}
+{% from "macros/ui.html" import status %}
 <h1>Submit to MusicBrainz: {{ albumartist or "(no artist)" }} - {{ album }}{% if year %} ({{ year }}){% endif %}</h1>
-{% if dupes %}<p role="alert">Warning: more than one track has the same number ({{ dupes|join(", ") }}). Check the tags before submitting.</p>{% endif %}
+{% if dupes %}<p class="notice caution" role="alert">▲ Warning: more than one track has the same number ({{ dupes|join(", ") }}). Check the tags before submitting.</p>{% endif %}
 <p>You review and submit the edit in MusicBrainz with your own account. MixSync sends nothing to MusicBrainz itself.</p>
 
 <h2>On a store or streaming service?</h2>
@@ -10,10 +11,10 @@
   <input type="hidden" name="albumartist" value="{{ albumartist }}">
   <input type="hidden" name="album" value="{{ album }}">
   <input type="hidden" name="year" value="{{ year }}">
-  <label>Release URL <input type="text" name="store_url" value="{{ store_url }}" size="60"></label>
-  <button type="submit">Look up with Harmony</button>
+  <label class="field">Release URL <input type="text" name="store_url" value="{{ store_url }}" size="60"></label>
+  <button class="btn" type="submit">Look up with Harmony</button>
 </form>
-{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if error %}<p class="notice danger" role="alert">✕ {{ error }}</p>{% endif %}
 {% if harmony %}<p><a href="{{ harmony }}" target="_blank" rel="noopener noreferrer">Open in Harmony</a></p>{% endif %}
 
 <h2>Not on any store?</h2>
@@ -21,6 +22,6 @@
   {% for name, value in seed %}
   <input type="hidden" name="{{ name }}" value="{{ value }}">
   {% endfor %}
-  <button type="submit">Open MusicBrainz release editor</button>
+  <button class="btn" type="submit">Open MusicBrainz release editor</button>
 </form>
 {% endblock %}

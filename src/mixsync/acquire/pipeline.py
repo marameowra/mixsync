@@ -64,7 +64,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import canonical, tags
+from mixsync.library import canonical, measure, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
 from mixsync.match.candidates import parse_name, present_tracks, rank
@@ -399,7 +399,15 @@ class Pipeline:
                     if not _stale(s, job, self._request(s, job)):
                         verify.wait_for_acoustid(s, self.clock.now(), self._request(s, job), job)
                 return
-            files.append(file_track(path, fp.duration, tuple(results)))
+            files.append(
+                file_track(
+                    path,
+                    fp.duration,
+                    tuple(results),
+                    await measure.high_band_share(path),
+                    await measure.trailing_silence(path, fp.duration),
+                )
+            )
         if first and not files:
             raise first
         like = likelies(readable)
@@ -914,7 +922,13 @@ def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
     return None
 
 
-def file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTrack:
+def file_track(
+    path: Path,
+    duration: float,
+    acoustid: tuple[Any, ...],
+    high_band: float | None = None,
+    trailing_silence: float | None = None,
+) -> FileTrack:
     t = tags.read_fields(path)
     disc, track, title = parse_name(path.stem)
     return FileTrack(
@@ -925,6 +939,8 @@ def file_track(path: Path, duration: float, acoustid: tuple[Any, ...]) -> FileTr
         disc=_int(t.get("discnumber")) or disc,
         recording_id=t.get("musicbrainz_trackid"),
         acoustid=acoustid,
+        high_band=high_band,
+        trailing_silence=trailing_silence,
     )
 
 

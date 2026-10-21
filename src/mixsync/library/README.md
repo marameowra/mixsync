@@ -4,48 +4,21 @@
 Everything that touches the music library on disk: where files go, how they get there safely, how they are tagged, and which release they belong to.
 
 ## Owns / does not own
-- **Owns:** path templates, **all filesystem writes under `/data`**, tag reading/writing, canonical release selection, the importer pipeline, trash, the fragmentation report.
-- **Does not own:** scoring (`match`), downloading (`sources`), or notifying Navidrome (`targets`, called by the composition root after import).
+- **Owns:** path templates (`paths.py`), **all filesystem writes under `/data`** (`fileops.py`), tags (`tags.py`, `tag_undo.py`), canonical release policy (`canonical.py`), the importer, trash purge (`purge.py`), the fragmentation report (`fragmentation.py`).
+- **Does not own:** scoring (`match`), downloading (`sources`), or notifying Navidrome (`targets`, called by the composition root after import). Merge execution and undo live in `acquire/merge.py`.
 
-## Proposed files
-| File | Contents |
-|---|---|
-| `paths.py` | Template rendering + sanitization; collision suffixes |
-| `fileops.py` | **The only module that writes files**: `import_file`, `trash`, `restore`, `release`, `purge` |
-| `tags.py` | mutagen read/write, standard MusicBrainz tag names (Picard-compatible), snapshot before write, `MIXSYNC_STATUS` |
-| `canonical.py` | Canonical release policy evaluation; the recording → canonical track mapping; bonus-track handling |
-| `importer.py` | Orchestrates: verified match → canonical release → path → `fileops.import_file` → DB `tracks` row |
-| `fragmentation.py` | Finds release groups split across releases; builds a dry-run merge plan's ops (stored as a `plans` row; fetching, execute and undo live in `acquire/merge.py`) |
-
-## `fileops.import_file` sequence (must match the design doc exactly)
-```
-1. journal.begin(copy, src, final_rel)   # staging is /data/.incoming/<op_id>; the op id is only known after begin
-2. copy → fsync file → fsync dir
-3. hash copy == hash src, else fail (src untouched)
-4. tags.snapshot(); tags.write(copy)   # then journal.set_dst_hash(op_id, hash), so recover() can tell done from abandoned
-5. rename copy → final path        # renameat2(NOREPLACE) / renameatx_np(EXCL); falls back to link(2). Fails if the destination exists
-6. journal.complete(op_id, hash)
-7. caller releases the source (sources.release)
-```
-On startup, `worker.py` calls `fileops.recover()`: each pending op is either completed or rolled back.
-
-## Rules
-- **No `os.remove` / `unlink` / `shutil.rmtree` anywhere except `purge()`**, which only acts on `/data/.trash` entries past retention. Enforced by a ruff banned-API rule (`TID251`; it cannot see `Path(...).unlink()` on an instance, so `test_nothing_in_src_deletes` greps for it). Rollback and trash only ever move files into `/data/.trash`.
-- Every bulk change returns a `Plan` first. Executing a plan above 50 ops requires the typed count from the UI.
-- `rename` only within `/data` (one mount). A cross-device error (`EXDEV`) is a `SafetyError`, never a silent copy+delete fallback.
+## Rules / invariants
+- `fileops.import_file` follows the journaled sequence in [data safety](../../../docs/design/data-safety.md). On startup the worker calls `fileops.recover()`: each pending op is completed or rolled back.
+- **No `os.remove` / `unlink` / `shutil.rmtree` outside `purge`**, which only acts on `/data/.trash` entries past `MIXSYNC_TRASH_DAYS`. Enforced by ruff `TID251`; because it cannot see `Path(...).unlink()`, `test_nothing_in_src_deletes` greps for it too. Rollback and trash only ever move files into `/data/.trash`.
+- `rename` stays within `/data` (one mount). A cross-device error (`EXDEV`) is a `SafetyError`, never a copy+delete fallback.
+- The final rename must fail if the destination exists (no overwrite).
+- The purge skips trash entries of any plan that can still be undone, and the trashed original of any not-done move/trash op. It refuses to run through a symlinked `.trash`.
+- Every bulk change returns a `Plan` first; executing one above 50 ops needs the typed count from the UI.
 - Paths in the DB are relative to the library root.
-- `purge_trash()` (the daily `TrashPurger` job) deletes only plain files in `.trash/<day>/` folders older than `MIXSYNC_TRASH_DAYS`, and skips `.trash` entries (journal `trash` ops of the batch) of a plan that can still be undone: running, undoing or failed (always), or done within `MIXSYNC_TRASH_DAYS` + 1 days of its last change (`db/undo.py`; the extra day keeps the purge from racing an undo that has just started); the trashed original of any not-done move/trash op is protected too. It refuses to run through a symlinked `.trash`.
-- Changing a template never moves files by itself; it produces a reorganize `Plan`.
+- Changing the path template never moves files by itself; it produces a reorganize `Plan`. Default template and genre source: [ADR 0014](../../../docs/decisions/0014-default-path-template-and-genres.md).
 
-**Decided:** the default template is `{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}`. `{genre}` comes from MusicBrainz genres (release group → release → artist), top 1 for paths and top 3 for tags. Details: [library design](../../../docs/design/library.md#path-templates).
+## May import
+`core`, `db`, `match`.
 
-## May import from
-`core`, `db`, `match`. (Uses mutagen, blake3/hashlib.)
-
-## Tests
-- Hypothesis property tests for `paths.py`: no collisions, no illegal characters, deterministic output.
-- **Crash-safety:** SIGKILL at each step of `import_file` → no partial file in `/data/library`, source intact, recovery completes ([testing](../../../docs/testing.md#crash-safety-tests)).
-- Canonical policy ordering; bonus-track filing; fragmentation plan correctness.
-
-## Design docs
+## Design doc
 [Data safety](../../../docs/design/data-safety.md) · [Library layout and canonicalization](../../../docs/design/library.md)

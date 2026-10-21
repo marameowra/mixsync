@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     mb_base_url: str = "https://musicbrainz.org"  # optional local mirror
     acoustid_app_key: str = ""
     acoustid_user_key: str = ""  # one key for the deployment; all submissions go under it
+    deezer_suggestions: bool = False  # Mark unverified offers on-demand Deezer lookups
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
     max_concurrent_downloads: int = Field(default=3, ge=1)
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     navidrome_password: str = ""
     navidrome_library: str = "Music Library"  # the main library's name in Navidrome
     navidrome_discover_library: str = "discover"  # the library over /data/discover
+    backup_dir: Path | None = None  # unset: config_dir/backups; SQLite only
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash

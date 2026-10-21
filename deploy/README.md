@@ -1,69 +1,52 @@
 # `deploy`
 
-How MixSync runs: Docker Compose on a home server, next to slskd and Navidrome. The real `compose.yml`, `Dockerfile`, and `.env.example` are phase-1 deliverables; this README is their spec.
+Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile`, `compose.yml` (web, worker, a one-shot `mixsync-migrate` they wait for, slskd, navidrome), `.env.example` (every var, commented). Rationale: [architecture](../docs/architecture.md#deployment).
 
-## Proposed files
-| File | Contents |
-|---|---|
-| `Dockerfile` | Python 3.13 slim + `uv sync --frozen` + `chromaprint` (`fpcalc`); non-root user; one entrypoint `mixsync <role>` |
-| `compose.yml` | The services below |
-| `.env.example` | Every env var with a comment, no real values |
-
-## Services
-| Service | Image | Notes |
-|---|---|---|
-| `mixsync-web` | this repo | `mixsync web`; port 8080 |
-| `mixsync-worker` | this repo | `mixsync worker`; scale with `--scale` once on Postgres |
-| `slskd` | `slskd/slskd` | shares `/downloads`; shares the library back read-only |
-| `navidrome` | `deluan/navidrome` | libraries `/data/library` and `/data/discover`, both read-only |
-
-Small installs can run a single `mixsync all` container instead of web + worker.
-
-`.github/workflows/image.yml` publishes the image as `ghcr.io/marameowra/mixsync:dev` on every push to `dev`. Approved releases from `main` publish `:<version>` and `:latest`.
+- Roles: `mixsync web` (port 8080), `mixsync worker` (scalable once on Postgres), or one `mixsync all` container.
+- `.github/workflows/image.yml` publishes `ghcr.io/marameowra/mixsync:dev` on every push to `dev`; approved releases from `main` publish `:<version>` and `:latest`.
 
 ## Mounts
 ```
-mixsync-*:   /config  (rw)   /downloads (rw)   /data (rw)   /import-source (ro, migration only)   /drop (rw, optional)
-slskd:       /downloads (rw) /data/library (ro, shared folder)
-navidrome:   /data/library (ro)  /data/discover (ro)
+mixsync-*:  /config (rw)  /downloads (rw)  /data (rw)  /import-source (ro, migration only)  /drop (rw, optional)
+slskd:      /downloads (rw)  /data/library (ro)
+navidrome:  /data/library (ro)  /data/discover (ro)
 ```
-- **`/data` is one mount**, so `rename` between `library/`, `discover/`, `.trash/`, and `.incoming/` stays atomic. Never split it into separate mounts ([architecture](../docs/architecture.md#deployment)).
-- **Discovery library:** needs Navidrome 0.58+ (multiple libraries). Create `${DATA_DIR}/discover` on the same filesystem as `data/.incoming` and `data/.trash`, add `/data/discover` as Library 2 in Navidrome, and grant users access to it.
-- `/drop` is the optional drop folder (set `MIXSYNC_DROP_DIR=/drop`): album folders put there are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash` (recoverable until `trash_days`). Files younger than a minute are left alone; a rejected folder stays put and is not queued again unless its contents change.
-- `/import-source` is read-only at the OS level during [migration](../docs/design/migration.md).
-- **File ownership:** run all containers with the same `PUID`/`PGID` so files written by MixSync are readable by Navidrome and slskd.
+- `/data` is one mount holding `library/`, `discover/`, `.trash/`, `.incoming/`, `quarantine/`. Never split it ([why](../docs/architecture.md#deployment)); MixSync refuses a cross-device move.
+- Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2 and grant the relevant users access.
+- `/drop` (set `MIXSYNC_DROP_DIR=/drop`): album folders are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash`. Files under a minute old are left alone; a rejected folder is not requeued unless its contents change.
+- Run all containers with the same `PUID`/`PGID`.
 
 ## Environment variables
 | Var | Purpose |
 |---|---|
 | `MIXSYNC_DATABASE_URL` | default `sqlite:////config/mixsync.db` |
-| `MIXSYNC_TIMEZONE` | IANA zone (e.g. `America/Los_Angeles`) in which the migration report reads its dates. Default `UTC` |
-| `MIXSYNC_SECRET_KEY` | Fernet key for linked-account secrets. Optional: if unset, `/config/secret.key` is used, or generated on first start. The env var wins if both exist ([details](../src/mixsync/db/README.md#conventions)). |
-| `MIXSYNC_MB_CONTACT` | contact for the MusicBrainz User-Agent. Optional; defaults to the project's GitHub URL |
-| `MIXSYNC_MB_BASE_URL` | optional local MusicBrainz mirror |
-| `MIXSYNC_ACOUSTID_APP_KEY` | AcoustID application key |
-| `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID user key (from your acoustid.org account). Optional: without it fingerprints are not submitted after a promotion. All submissions go under this one account. |
+| `MIXSYNC_TIMEZONE` | IANA zone for migration report dates; default `UTC` |
+| `MIXSYNC_SECRET_KEY` | Fernet key for linked-account secrets; else `/config/secret.key`, generated on first start. Env wins ([details](../docs/decisions/0010-secret-key-source.md)) |
+| `MIXSYNC_MB_CONTACT` | contact in the MusicBrainz User-Agent; defaults to the project URL |
+| `MIXSYNC_MB_BASE_URL` | local MusicBrainz mirror |
+| `MIXSYNC_MB_RATE` | MB requests/s, above 0 and at most 1 (default 1) |
+| `MIXSYNC_TRASH_DAYS` | trash purge age and undo window (default 30; [data safety](../docs/design/data-safety.md)) |
+| `MIXSYNC_MAX_CONCURRENT_DOWNLOADS` | active slskd transfer cap (default 3) |
+| `MIXSYNC_SLOW_DOWNLOAD_WINDOW`, `_FLOOR`, `_SHARE` | when a slow transfer stops counting: seconds (60), bytes/s (50000), throughput share (0.10); [services](../docs/design/services-etiquette.md#soulseek) |
+| `MIXSYNC_ACOUSTID_APP_KEY`, `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID keys; the user key is optional ([rules](../docs/design/services-etiquette.md#acoustid)) |
+| `MIXSYNC_DEEZER_SUGGESTIONS` | `true`: Mark unverified gets a "Suggest from Deezer" button that pre-fills the form on request (metadata only, 1 req/s, no audio). Deezer's terms allow private, non-commercial, single-household use only. Default off |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
-| `MIXSYNC_DROP_DIR` | drop folder path inside the container (e.g. `/drop`). Unset: feature off |
-| `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` that MixSync did not request (e.g. a hand download in the slskd UI) are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself, including rejected ones, are never adopted |
-| `MIXSYNC_ADOPT_SETTLE_MINUTES` | how long a folder in `/downloads` must be untouched before it is adopted (default 10). Raise it if peers queue the rest of a hand download for longer: unfinished transfers are not checked |
-| `MIXSYNC_NAVIDROME_URL` | Navidrome base URL |
-| `MIXSYNC_NAVIDROME_USER`, `MIXSYNC_NAVIDROME_PASSWORD` | a Navidrome **admin** account, used to start library rescans after imports (`startScan` needs admin) |
+| `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
+| `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
+| `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
+| `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
+| `MIXSYNC_NAVIDROME_URL`, `_USER`, `_PASSWORD` | Navidrome base URL and an **admin** account (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |
-| `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`. Default `127.0.0.1,::1`; see below |
+| `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`; default `127.0.0.1,::1` |
 
 ### Behind a TLS reverse proxy
-With `FORWARDED_ALLOW_IPS` set to the proxy's address, the session cookie gets `Secure` (the scheme comes from `X-Forwarded-Proto`) and the login rate limit sees the real client IP instead of the proxy's.
-
-1. **First stop publishing 8080**: remove `ports:` from `mixsync-web`, or bind `127.0.0.1:8080:8080`. Traffic to a published port can reach the container from the bridge gateway (e.g. `172.18.0.1`, via docker-proxy, rootless Docker, Docker Desktop), which is inside the compose subnet. A client that gets in that way could forge `X-Forwarded-For` (a fresh login-limit bucket per request) and `X-Forwarded-Proto`.
-2. Then set `FORWARDED_ALLOW_IPS` to the proxy container's fixed IP (give it a static `ipv4_address`). A whole subnet is looser; find it with `docker network inspect <network>` or pin it with compose `ipam`. Use IPs or CIDRs only: hostnames do not work, since uvicorn compares the string to the client IP with no DNS lookup.
-
-A subnet, or `*`, is only safe when 8080 is not reachable except through the proxy. `mixsync all` also runs uvicorn and reads the same variable from `.env`.
+With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` and the login rate limit sees the real client IP.
+1. **First stop publishing 8080**: remove `ports:` from `mixsync-web` or bind `127.0.0.1:8080:8080`. A published port can reach the container from the bridge gateway (inside the compose subnet), letting a client forge `X-Forwarded-For` (a fresh login-limit bucket per request) and `X-Forwarded-Proto`.
+2. Set `FORWARDED_ALLOW_IPS` to the proxy's fixed IP (static `ipv4_address`). A subnet (`docker network inspect`, or pin with `ipam`) is looser; a subnet or `*` is safe only when 8080 is reachable solely through the proxy. IPs or CIDRs only: uvicorn does no DNS lookup. `mixsync all` reads the same variable from `.env`.
 
 ## Health and ops
-- `GET /healthz` (web) and a worker heartbeat row; compose `healthcheck` on both.
-- Backups land in `/config/backups`. Back up `/config` and `/data` with your normal host backup.
-- Upgrades: pull → `mixsync migrate` runs Alembic (with a pre-migration DB backup) → restart.
+- `GET /healthz` backs the web healthcheck; the worker has none yet.
+- Back up `/config` and `/data` with your host backup. Upgrade: pull → `mixsync migrate` (Alembic) → restart.
 
-## Design docs
-[Architecture: deployment](../docs/architecture.md#deployment) · [Data safety](../docs/design/data-safety.md)
+- SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.
+- On Postgres none of this runs; back up with `pg_dump`. `mixsync backup` exits non-zero saying so.

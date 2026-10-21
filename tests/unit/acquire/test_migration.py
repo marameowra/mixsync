@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from mixsync.acquire import migration as mig
 from mixsync.acquire import pipeline, verify
@@ -213,6 +213,9 @@ async def test_confirm_makes_low_priority_jobs_once(rig: Rig) -> None:
     assert all(Path(x).is_absolute() for x in p["paths"])
     assert [j.idempotency_key for j in jobs] == [f"migrate:{mid}:0", f"migrate:{mid}:1"]
     assert all(j.max_attempts == verify.VERIFY_ATTEMPTS for j in jobs)
+    assert [r.origin for r in reqs] == [
+        {"candidate": j.payload["candidate"], "paths": j.payload["paths"]} for j in jobs
+    ]
     await rig.env.drain()
     assert [d.release_given for d in decision_rows(rig.env, 2)] == [False, False]  # identified
 
@@ -809,6 +812,52 @@ async def test_no_release_offers_no_accept_and_a_failed_album_can_be_retried(
     assert web.post(f"/migration/{mid}/retry/999", data=form).status_code == 404
 
 
+async def test_retry_runs_the_origin_again_without_reading_any_job(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    await rig.env.drain()
+    (req,) = rig.requests()
+    assert req.origin
+    with rig.env.sessions.begin() as s:
+        s.execute(delete(Job).where(Job.kind == JobKind.VERIFY))
+        r = s.get_one(Request, req.id)
+        r.status, r.release_mbid, r.last_error = "failed", ALBUM.release_id, "no release"
+        assert mig.retry(s, rig.env.clock.now(), r) is None
+    (job,) = rig.env.jobs(JobKind.VERIFY)
+    assert job.payload["release_mbid"] is None and job.priority == mig.MIGRATION_PRIORITY
+    assert (job.payload["candidate"], job.payload["paths"]) == (
+        req.origin["candidate"],
+        req.origin["paths"],
+    )
+    after = rig.requests()[0]
+    assert (after.status, after.release_mbid, after.origin) == ("verifying", "", req.origin)
+
+
+async def test_retry_of_a_request_with_no_origin_was_never_matched(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.confirm(await rig.preflight())
+    (req,) = rig.requests()
+    with rig.env.sessions.begin() as s:
+        r = s.get_one(Request, req.id)
+        r.status, r.origin = "failed", None
+        assert mig.retry(s, rig.env.clock.now(), r) == "it was never matched"
+    assert len(rig.env.jobs(JobKind.VERIFY)) == 1
+
+
+async def test_the_report_needs_no_verify_jobs_for_the_folder_and_file_count(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    mid = await rig.preflight()
+    rig.confirm(mid)
+    with rig.env.sessions() as s:
+        (before,) = mig.report(s, s.get_one(Migration, mid))
+    assert before["folder"] and before["files"] == len(ALBUM.tracks)
+    with rig.env.sessions.begin() as s:
+        s.execute(delete(Job).where(Job.kind == JobKind.VERIFY))
+    with rig.env.sessions() as s:
+        assert mig.report(s, s.get_one(Migration, mid)) == [before]
+
+
 async def test_extra_files_send_a_migrated_album_to_review_and_are_reported(
     rig: Rig, web: TestClient
 ) -> None:
@@ -917,7 +966,9 @@ async def test_the_page_reports_every_running_migration_and_all_failures(
             )
     login(web, "root")
     html = web.get("/migration").text
-    assert f"Migration {first}: completed" in html and f"Migration {second}: running" in html
+    first_page = html.split(f"<h2>Migration {first}</h2>", 1)[1].split("<h2>Migration ", 1)[0]
+    second_page = html.split(f"<h2>Migration {second}</h2>", 1)[1].split("<h2>Migration ", 1)[0]
+    assert ">Completed</span>" in first_page and ">Running</span>" in second_page
     assert "first broke" in html and "fail 119" in html
 
 

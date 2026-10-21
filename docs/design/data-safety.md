@@ -1,54 +1,61 @@
 # Data safety
 
-Non-negotiable rules. Any code that touches files or the library goes through `library/fileops.py`, and `fileops.py` enforces these rules.
+Non-negotiable rules. Code that touches files or the library goes through `library/fileops.py`, which enforces them.
 
 ## 1. No hard deletes in the normal flow
-- "Delete" means **move to `/data/.trash/YYYY-MM-DD/<original relative path>`**.
-- Trash is purged after N days (default 30). The purge is itself a journaled job.
-- All trash (library entries and `.discover/`) is purged automatically by a daily job once its `<day>` folder is older than `MIXSYNC_TRASH_DAYS` (default 30; a folder exactly that old is kept). Each file is a journaled `purge` op (`fileops.purge_trash`). There is no dry-run or confirm step (user decision 2026-10-12). Age is the day folder's name, not file mtimes. Exception: entries trashed by a merge or promote plan that can still be undone are kept, because undo restores from the trash. A **done** plan is undoable for `MIXSYNC_TRASH_DAYS` days after its last change; after that the Undo button is hidden, `undo_plan` refuses ("undo window of N days has passed"), and the trash is purged one day later (the extra day keeps the purge from racing an undo that has just started). Trash belonging to **failed, running or undoing** plans is never auto-purged, and neither is the trashed original of any op that is not yet done, because it may be the only copy. One helper (`db/undo.py: undoable`) decides, so the purge and the undo never disagree.
-- Raising `MIXSYNC_TRASH_DAYS` does not bring back trash already purged; undo refuses up front in that case.
-- Purging early from the UI requires a typed confirmation.
-- One exception: a **released download**. After an import with zero errors, `fileops.release()` hard-deletes each source file from `/downloads` (journaled, and refused unless the path is strictly inside the downloads dir with no symlink or `..` escape). `/downloads` is staging, not library data; the library copy is hash-verified first; and `/downloads` and `/data` are separate mounts, so a "trash" move would be a second full copy.
+- "Delete" moves to `/data/.trash/YYYY-MM-DD/<original relative path>` (discover files under `<day>/.discover/`).
+- **Auto-purge** ([ADR 0008](../decisions/0008-trash-auto-purge.md)): a daily job deletes trash whose day folder is older than `MIXSYNC_TRASH_DAYS` (default 30; exactly that old is kept). Each file is a journaled `purge` op; no dry-run or confirm. Age is the folder name, not mtime.
+- **Kept for undo:** trash of plans that can still be undone, and the trashed original of any op not yet done (maybe the only copy). A done plan is undoable for `MIXSYNC_TRASH_DAYS` days after its last change; its trash is purged one day later so purge never races undo. Failed, running and undoing plans are never purged. After the window, undo refuses and the button is hidden.
+- Raising `MIXSYNC_TRASH_DAYS` does not restore purged trash. Purging early from the UI needs a typed confirmation.
+- **Released download:** after an import with zero errors, `fileops.release()` hard-deletes each source from `/downloads` (journaled; refused unless strictly inside the downloads dir, no symlink or `..`). `/downloads` is staging, the library copy is hash-verified first, and a trash move across the two mounts would be a second full copy.
+- **Quarantine** (`/data/quarantine/<rejected|review>/<YYYY-MM-DD>/<folder>/<file>`, [ADR 0007](../decisions/0007-quarantine-owned-by-mixsync.md)) is MixSync-owned, out of slskd retention's reach.
+  - A dropped candidate's files are copied there (journaled, hash-verified), then the `/downloads` source is released. Rejections and unusable files go to `rejected/`, review-band matches to `review/`; evidence and assignment paths point at the quarantine copies.
+  - Accepting a review candidate imports from quarantine, then releases the quarantine copy like a released download. A person's reject leaves the files and sets the decision's `final_action = reject` and `acted_at`.
+  - Migration, drop-folder and adopted files are never quarantined, nor are rejected folders already in `/downloads`.
+  - Nothing else is deleted from quarantine.
 
-- **Quarantine** (`/data/quarantine/<rejected|review>/<day>/`, see [matching](matching.md)): a dropped candidate's files are copied there (journaled, hash-verified), then the `/downloads` source is released with a journaled `release` op. Accepting a review candidate imports from quarantine and releases the quarantine copy once the library copy is verified, like a released download. MixSync never deletes anything else from quarantine; the purge of rejected entries is a separate journaled job.
+> Planned — not built (#208): journaled purge of rejected quarantine entries (`rejected/<day>` by folder name; person-rejected `review/` entries by `acted_at`; other `review/` never).
 
 ## Managed paths
-- Library, discover, staging, trash, quarantine and scratch paths reject absolute paths, `..`, and symlinked components, including the managed root itself. Resolved destinations must stay under that root; missing destination directories are allowed. Ancestor symlinks above a configured root (for example a data mount) are allowed.
-- Recovery and verification apply the same checks to journaled paths. A rejected pending operation stays pending for inspection; files are not moved or deleted through it.
-- These checks reject existing symlinks; they do not protect against another process replacing a directory between validation and the filesystem operation.
+- Library, discover, staging, trash, quarantine and scratch paths reject absolute paths, `..`, and symlinked components, including the root itself. Destinations must resolve under the root; missing destination directories are fine. Ancestor symlinks above a configured root (a data mount) are fine.
+- Recovery and verification apply the same checks to journaled paths. A rejected pending op stays pending for inspection and nothing is moved through it.
+- Not protected: another process swapping a directory between validation and the operation.
 
 ## 2. Atomic, verified imports
-1. Copy the source to a temp file **on the same filesystem as the destination** (`/data/.incoming/`).
+1. Copy to a temp file on the destination's filesystem (`/data/.incoming/`).
 2. `fsync` the file and its directory.
-3. Verify the hash (BLAKE3 or SHA-256) of the copy against the source.
-4. Write tags to the temp copy, after taking a tag snapshot (rule 3).
-5. Atomically `rename` it to the final path. If the destination exists, the import aborts; it never overwrites.
-6. Only then release the source: `release()` re-checks that the library copy still matches the hash journaled for this batch, journals the release, deletes the download, and removes its folder if empty. Then the pipeline clears the transfers from slskd's list. A partial failure releases nothing.
+3. Verify the hash of the copy against the source.
+4. Write tags to the temp copy after a tag snapshot (rule 3).
+5. Atomically `rename` into place. An existing destination aborts the import; never overwrite.
+6. Release the source: `release()` re-checks the library copy against the journaled hash, journals the release, deletes the download, removes its folder if empty, then clears the transfers from slskd. A partial failure releases nothing.
 
-A crash at any step leaves either the old state or the new state, never a partial file in the library.
+A crash at any step leaves the old or the new state, never a partial file in the library.
 
 ## 3. Tag snapshots
-- Before any tag write, the full original tag set is serialized and stored in the DB, keyed by file and operation.
-- Any retag can be undone from the UI: a track's "Restore earlier tags" page (reached from the unverified list and a done plan's moves) previews the managed tags against the newest snapshot for its path and, on confirm, trashes the file and copies it back with those tags (journaled, verified), after first snapshotting the current tags so the restore can itself be undone. File location and MusicBrainz ids in the database are not changed.
+Before any tag write, the full original tag set is stored in the DB, keyed by file and operation. A track's "Restore earlier tags" page previews the managed tags against the newest snapshot and, on confirm, trashes the file and copies it back with those tags (journaled, verified), snapshotting the current tags first so the restore is itself undoable. DB location and MusicBrainz ids are unchanged.
 
 ## 4. Operation journal
-- Every file operation is recorded: `op_id`, `batch_id`, `kind` (copy / move / trash / release / retag), `from`, `to`, `hash`, `started_at`, `finished_at`, `status`.
-- Each op also records its `root`: `library` (`/data/library`) or `discover` (`/data/discover`, a second Navidrome library). `recover()` resolves relative paths against the op's root. Discover trash goes to `/data/.trash/YYYY-MM-DD/.discover/<rel>` (a prefix no sanitized library path can have, since segments never start with a dot). Discover must be on the same filesystem as `.incoming` and `.trash`, otherwise every discover import fails safely with EXDEV.
+- Every file op records `op_id`, `batch_id`, `kind` (`copy` / `trash` / `release` / `restore` / `purge`; see `JournalOp` in `core/protocols.py`), `from`, `to`, hashes, timestamps, `status`, and `root` (`library` or `discover`; `recover()` resolves paths against it).
+- Discover must share a filesystem with `.incoming` and `.trash`, otherwise discover imports fail safely with EXDEV.
 - A batch (merge, reorganize, migration) can be undone as a unit, replayed in reverse.
-- On startup, the worker scans for ops that were started but not finished and either completes or rolls back each one.
+- On startup the worker finds ops started but not finished and completes or rolls back each.
 
 ## 5. Dry-run and confirm
-- Every bulk operation (merge, reorganize, template change, canonical release change) shows a **dry-run plan** first: counts plus a list of every move or retag. The automatic trash purge (rule 1) is the exception: journaled, but with no plan.
-- Above a threshold (default 50 files), confirmation needs the count typed in.
+- Every bulk operation (merge, reorganize, template change, canonical release change) shows a dry-run plan first: counts and every move or retag. The auto-purge (rule 1) is the only exception.
+- Above 50 files, confirmation needs the count typed in.
 - No bulk operation runs as a side effect of a settings change.
 
 ## 6. Backups
-- Nightly `VACUUM INTO /config/backups/mixsync-YYYY-MM-DD.db`, keeping 7 copies.
-- Settings can be exported and imported as a single file.
+- SQLite: a nightly `VACUUM INTO <backup dir>/mixsync-YYYY-MM-DD.db` (UTC date) keeps the 7 newest `mixsync-*.db` files and touches nothing else there. The file is written under a temporary name and renamed on success, so a half-written file never looks like a backup. `mixsync backup` takes one now.
+- `mixsync migrate` backs up first when the database has a revision and is behind head; if the backup fails the upgrade does not run. A fresh database or one at head is not backed up.
+- The backup dir is `MIXSYNC_BACKUP_DIR` (default `/config/backups`).
+- Postgres: no backups here. `mixsync backup` exits non-zero and says to use `pg_dump`; the nightly job does nothing; `migrate` logs a notice and upgrades.
+- Restore is manual: stop MixSync, copy a backup over the database file.
+
+> Planned — not built: settings export/import.
 
 ## 7. Independence
-- The library is plain, standard-tagged audio files. Navidrome or any player works with it even if MixSync is gone.
-- MixSync never writes proprietary formats into the library. Its own markers are plain text tags (e.g. `MIXSYNC_STATUS`).
+The library is plain, standard-tagged audio. Navidrome or any player works without MixSync. Its own markers are plain text tags (e.g. `MIXSYNC_STATUS`).
 
 ## Read-only mounts
-Anything MixSync must not modify (for example the old library during [migration](migration.md)) is mounted **read-only** in compose. That is a guarantee from the operating system, not a code convention.
+Anything MixSync must not modify (the old library during [migration](migration.md)) is mounted read-only in compose: an OS guarantee, not a code convention.
