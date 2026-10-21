@@ -125,6 +125,22 @@ async def test_reset_in_blocks_when_remaining_is_zero(
     assert calls[1] - calls[0] == timedelta(seconds=7)
 
 
+async def test_discogs_remaining_zero_blocks_the_bucket_for_a_minute(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    calls: list[datetime] = []
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        calls.append(clock.now())
+        headers = {"X-Discogs-Ratelimit-Remaining": "0"}
+        return httpx.Response(200, headers=headers if len(calls) == 1 else {})
+
+    async with client("discogs", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/a")
+        await c.get("https://x.test/b")
+    assert calls[1] - calls[0] == timedelta(seconds=60)
+
+
 async def test_429_without_retry_after_uses_reset_in(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:

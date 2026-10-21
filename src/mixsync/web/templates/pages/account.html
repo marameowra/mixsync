@@ -5,7 +5,7 @@
 <h1>Account</h1>
 <p>Connect your listening services for discovery playlists. Stored secrets are never shown.</p>
 {% if links.values() | selectattr("needs_relink") | list %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The stored secret for a linked service can no longer be decrypted (the secret key changed or was lost). Link it again below.</p>{% endif %}
-{% for sv, label in (("listenbrainz", "ListenBrainz"), ("navidrome", "Navidrome")) %}
+{% for sv, label in (("listenbrainz", "ListenBrainz"), ("navidrome", "Navidrome"), ("discogs", "Discogs")) if sv != "discogs" or discogs %}
 {% set link = links[sv] %}
 <h2>{{ label }}</h2>
 {% if error and error[0] == sv %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}

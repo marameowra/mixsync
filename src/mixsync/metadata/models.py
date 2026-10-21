@@ -154,3 +154,37 @@ class DeezerTrackRaw(_Raw):
 
 class DeezerTracksRaw(_Raw):
     data: list[DeezerTrackRaw] = []
+
+
+class DiscogsIdentityRaw(_Raw):
+    username: str
+
+
+class DiscogsHitRaw(_Raw):
+    id: int
+    title: str  # "Artist - Title"
+    year: str = ""
+
+
+class DiscogsSearchRaw(_Raw):
+    results: list[DiscogsHitRaw] = []
+
+
+class DiscogsArtistRaw(_Raw):
+    name: str
+
+
+class DiscogsTrackRaw(_Raw):
+    position: str = ""
+    type_: str = "track"
+    title: str = ""
+    artists: list[DiscogsArtistRaw] = []
+    sub_tracks: list["DiscogsTrackRaw"] = []
+
+
+class DiscogsReleaseRaw(_Raw):
+    id: int
+    title: str
+    year: int = 0
+    artists: list[DiscogsArtistRaw] = []
+    tracklist: list[DiscogsTrackRaw] = []

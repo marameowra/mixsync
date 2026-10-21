@@ -6,7 +6,7 @@ Soulsync refuses tracks that aren't on MusicBrainz and offers no way to add them
 - **Mark unverified** on the review screen imports without a confident MB match. Tags come from the user's edits, suggestions from fallback sources, or the file's existing tags.
 - Filed under the normal [path template](library.md#path-templates), tagged `MIXSYNC_STATUS=unverified`, flagged in the DB; the library view has an Unverified filter and count.
 
-> Deezer can pre-fill this form on request when `MIXSYNC_DEEZER_SUGGESTIONS` is on; rows match by disc and track number, and the decision evidence records `{"provider": "deezer", "album_id": ...}` under `unverified.suggestion`. File tags get no Deezer data. Discogs is planned, not built ([terms](services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default)).
+> Deezer can pre-fill this form on request when `MIXSYNC_DEEZER_SUGGESTIONS` is on; rows match by disc and track number, and the decision evidence records `{"provider": "deezer", "album_id": ...}` under `unverified.suggestion`. Discogs does the same with `MIXSYNC_DISCOGS_SUGGESTIONS` and each reviewer's own linked token (evidence `{"provider": "discogs", "release_id": ...}`); Discogs positions are numbered per disc in listed order (`A1, A2, B1` becomes 1, 2, 3). With both on, one **Suggest** button searches both and lists up to 5 per provider. File tags get no Deezer or Discogs data ([terms](services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default)).
 
 ## Submit to MusicBrainz
 The **Submit to MusicBrainz** button picks a path:

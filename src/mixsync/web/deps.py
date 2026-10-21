@@ -16,6 +16,7 @@ from mixsync.db.secretbox import SecretBox
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.deezer import DeezerClient
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 
 SESSION_COOKIE = "mixsync_session"
@@ -143,3 +144,11 @@ def get_deezer(request: Request) -> DeezerClient:
 
 
 Deezer = Annotated[DeezerClient, Depends(get_deezer)]
+
+
+def get_discogs(request: Request) -> DiscogsClient:
+    discogs: DiscogsClient = request.app.state.services.discogs
+    return discogs
+
+
+Discogs = Annotated[DiscogsClient, Depends(get_discogs)]
