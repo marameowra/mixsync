@@ -2,6 +2,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -20,6 +21,7 @@ from mixsync.db.models.auth import User
 from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.routes import account
 from mixsync.web.routes.account import DefaultValidator, Ping, get_link
@@ -32,12 +34,19 @@ class FakeValidator:
         self.ok = True
         self.ping = Ping.ok
         self.lb_down = False
+        self.discogs_calls = 0
         self.pings = 0
 
     async def listenbrainz_username(self, token: str) -> str | None:
         if self.lb_down:
             raise TransientError("down")
         return "lb-real-name" if self.ok else None
+
+    async def discogs_username(self, token: str) -> str | None:
+        self.discogs_calls += 1
+        if self.lb_down:
+            raise TransientError("down")
+        return "discogs-real-name" if self.ok else None
 
     async def navidrome_ping(self, username: str, password: str) -> Ping:
         self.pings += 1
@@ -352,6 +361,7 @@ def _ping(settings: Settings, sf: sessionmaker[Session], handler: object) -> Def
         PoliteClient("navidrome", settings, sf, transport=t),
         "http://nd",
         ListenBrainzClient(PoliteClient("listenbrainz", settings, sf, transport=t)),
+        DiscogsClient(PoliteClient("discogs", settings, sf, transport=t)),
     )
 
 
@@ -422,3 +432,57 @@ def test_a_successful_link_leaves_no_empty_entry_in_the_limiter(client: TestClie
 
     assert _guess(client, _login(client, "alice")).status_code == 303
     assert all(auth_routes._failures.values())
+
+
+def _discogs_on(client: TestClient) -> None:
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": True})
+
+
+def test_discogs_off_shows_nothing_and_is_not_linkable(
+    client: TestClient, fake: FakeValidator, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    tok = _login(client, "alice")
+    assert "Discogs" not in client.get("/account").text
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 404 and fake.discogs_calls == 0
+    assert _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_link_validates_stores_encrypted_and_never_shows_the_token(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox, caplog: pytest.LogCaptureFixture
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    assert "Link Discogs" in client.get("/account").text
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 303
+    assert _link(sf, box, "alice", "discogs") == ("discogs-real-name", SECRET)
+    with sf() as s:
+        assert SECRET not in s.query(UserLink).filter_by(service="discogs").one().secret_encrypted
+    page = client.get("/account")
+    assert "Linked as discogs-real-name" in page.text
+    assert SECRET not in page.text and SECRET not in caplog.text
+
+
+def test_discogs_bad_token_shows_an_error_and_stores_nothing(
+    client: TestClient, fake: FakeValidator, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    fake.ok = False
+    tok = _login(client, "alice")
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 400 and "Discogs did not accept that token." in r.text
+    assert SECRET not in r.text and _link(sf, box, "alice", "discogs") is None
+
+
+async def test_default_validator_discogs(settings: Settings, sf: sessionmaker[Session]) -> None:
+    def valid(r: httpx.Request) -> httpx.Response:
+        assert (
+            r.url.path == "/oauth/identity" and r.headers["Authorization"] == "Discogs token=good"
+        )
+        return httpx.Response(200, json={"username": "vinylfan"})
+
+    assert await _ping(settings, sf, valid).discogs_username("good") == "vinylfan"
+    rejected = _ping(settings, sf, lambda r: httpx.Response(401))
+    assert await rejected.discogs_username("bad") is None

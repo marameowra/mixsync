@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,15 +32,18 @@ from mixsync.db import decisions
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
+from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import Role, User, UserRole
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.db.secretbox import SecretBox, set_secret
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.deezer import DeezerAlbum, DeezerTrack
-from mixsync.web.deps import get_coverart, get_deezer, get_watch
+from mixsync.metadata.discogs import DiscogsRelease, DiscogsTrack
+from mixsync.web.deps import get_coverart, get_deezer, get_discogs, get_watch
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
@@ -787,6 +791,200 @@ def test_deezer_choose_rejects_a_bad_album_id(
         f"/review/{i}/deezer/choose", data={**FORM, "deezer_album": "../x", "csrf_token": tok}
     )
     assert r.status_code == 400 and fake.calls == []
+
+
+class FakeDiscogs:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self.fail = fail
+
+    async def search_releases(self, artist: str, album: str, *, token: str) -> list[DiscogsRelease]:
+        self.calls.append(("search", artist, album, token))
+        if self.fail:
+            raise TransientError("discogs down")
+        return [DiscogsRelease(249504, "Discovery", "Daft Punk", 2001, None)]
+
+    async def release(self, release_id: int, *, token: str) -> DiscogsRelease:
+        self.calls.append(("release", release_id, token))
+        if self.fail:
+            raise TransientError("discogs down")
+        tracks = (
+            DiscogsTrack("One More Time", "Daft Punk", 1, 1),
+            DiscogsTrack("Aerodynamic", "Daft Punk", 1, 2),
+            DiscogsTrack("Disc Two", "Daft Punk", 2, 1),
+        )
+        return DiscogsRelease(249504, "Discovery", "Daft Punk", 2001, 3, tracks)
+
+
+DISCOGS_TOKEN = "discogs-SECRET-token"
+
+
+def _discogs_decision(
+    client: TestClient,
+    sf: sessionmaker[Session],
+    fake: FakeDiscogs,
+    *,
+    deezer: FakeDeezer | None = None,
+    linked: bool = True,
+    setting: bool = True,
+) -> int:
+    app: Any = client.app
+    s = app.state.services
+    update = {"discogs_suggestions": setting, "deezer_suggestions": deezer is not None}
+    app.state.services = replace(s, settings=s.settings.model_copy(update=update))
+    app.dependency_overrides[get_discogs] = lambda: fake
+    app.dependency_overrides[get_deezer] = lambda: deezer or FakeDeezer()
+    if linked:
+        with sf() as db, db.begin():
+            uid = db.query(User).filter_by(username="alice").one().id
+            link = UserLink(
+                user_id=uid,
+                service="discogs",
+                external_username="vinylfan",
+                verified_at=datetime.now(UTC),
+            )
+            set_secret(s.secret_box, link, DISCOGS_TOKEN)
+            db.add(link)
+    files = [{"name": n, "local_path": f"/{n}"} for n in ("a.mp3", "b.mp3", "c.mp3")]
+    return _extra_decision(sf, "alice", source={"files": files})
+
+
+def test_discogs_off_shows_nothing_and_never_calls(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDiscogs()
+    i = _discogs_decision(client, sf, fake, deezer=FakeDeezer(), setting=False)
+    tok = _login(client, "alice")
+    page = client.get(f"/review/{i}").text
+    assert "Discogs" not in page and "Suggest from Deezer" in page
+    for path, extra in (("suggest", {}), ("discogs/choose", {"discogs_album": "1"})):
+        r = client.post(f"/review/{i}/{path}", data={**FORM, **extra, "csrf_token": tok})
+        assert r.status_code in (200, 404)
+        assert "Discogs" not in r.text
+    assert fake.calls == []
+
+
+def test_discogs_on_without_a_link_offers_nothing_but_deezer_still_works(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake, deezer = FakeDiscogs(), FakeDeezer()
+    i = _discogs_decision(client, sf, fake, deezer=deezer, linked=False)
+    tok = _login(client, "alice")
+    page = client.get(f"/review/{i}").text
+    assert "Discogs" not in page and "Suggest from Deezer" in page
+    r = client.post(f"/review/{i}/deezer/search", data={**FORM, "csrf_token": tok})
+    assert "Discovery - Daft Punk" in r.text and "Discogs" not in r.text
+    assert (
+        client.post(
+            f"/review/{i}/discogs/choose", data={**FORM, "discogs_album": "1", "csrf_token": tok}
+        ).status_code
+        == 404
+    )
+    assert fake.calls == []
+
+
+def test_discogs_link_needing_relink_is_not_available(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDiscogs()
+    i = _discogs_decision(client, sf, fake)
+    app: Any = client.app
+    other = SecretBox(Fernet.generate_key())
+    app.state.services = replace(app.state.services, secret_box=other)  # the key changed
+    tok = _login(client, "alice")
+    assert "Suggest" not in client.get(f"/review/{i}").text
+    assert client.post(f"/review/{i}/suggest", data={**FORM, "csrf_token": tok}).status_code == 404
+    assert fake.calls == []
+
+
+def test_combined_suggest_lists_both_providers_and_makes_no_request_until_used(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake, deezer = FakeDiscogs(), FakeDeezer()
+    i = _discogs_decision(client, sf, fake, deezer=deezer)
+    tok = _login(client, "alice")
+    page = client.get(f"/review/{i}").text
+    assert ">Suggest</button>" in page and "Suggest from Deezer" not in page
+    assert DISCOGS_TOKEN not in page and fake.calls == [] and deezer.calls == []
+    r = client.post(f"/review/{i}/suggest", data={**FORM, "csrf_token": tok})
+    assert fake.calls == [("search", "Daft", "Disc", DISCOGS_TOKEN)]
+    assert deezer.calls == [("search", "Daft", "Disc")]
+    assert '<span class="muted">Deezer</span> Discovery - Daft Punk, 3 tracks' in r.text
+    assert '<span class="muted">Discogs</span> Discovery - Daft Punk (2001)' in r.text
+    assert f'formaction="/review/{i}/discogs/choose"' in r.text
+    assert 'value="keep me"' in r.text and DISCOGS_TOKEN not in r.text
+
+
+def test_combined_suggest_with_discogs_alone(client: TestClient, sf: sessionmaker[Session]) -> None:
+    fake = FakeDiscogs()
+    i = _discogs_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/suggest", data={**FORM, "csrf_token": tok})
+    assert "Discogs" in r.text and "Deezer" not in r.text and len(fake.calls) == 1
+
+
+@pytest.mark.parametrize("failing", ["deezer", "discogs"])
+def test_one_provider_failing_still_shows_the_other_with_a_note(
+    client: TestClient, sf: sessionmaker[Session], failing: str
+) -> None:
+    fake, deezer = FakeDiscogs(failing == "discogs"), FakeDeezer(failing == "deezer")
+    i = _discogs_decision(client, sf, fake, deezer=deezer)
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/suggest", data={**FORM, "csrf_token": tok})
+    name, other = ("Deezer", "Discogs") if failing == "deezer" else ("Discogs", "Deezer")
+    assert r.status_code == 200 and f"{name} could not be reached" in r.text
+    assert f'<span class="muted">{other}</span>' in r.text
+    assert f'<span class="muted">{name}</span>' not in r.text
+    assert DISCOGS_TOKEN not in r.text
+
+
+def test_discogs_choose_fills_the_form_and_records_provenance(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDiscogs()
+    i = _discogs_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/discogs/choose", data={**FORM, "discogs_album": "249504", "csrf_token": tok}
+    )
+    assert fake.calls == [("release", 249504, DISCOGS_TOKEN)]
+    assert "Discogs has 3 tracks, 2 matched." in r.text
+    assert 'value="Discovery"' in r.text and 'value="2001"' in r.text
+    assert 'value="One More Time"' in r.text and 'value="Aerodynamic"' in r.text
+    assert 'value="keep me"' in r.text and 'value="mine"' in r.text
+    assert 'name="discogs_release_id" value="249504"' in r.text and DISCOGS_TOKEN not in r.text
+    form = {
+        "albumartist": "Daft Punk",
+        "album": "Discovery",
+        "year": "2001",
+        "title": ["One More Time", "Aerodynamic", "keep me"],
+        "artist": ["Daft Punk", "Daft Punk", "mine"],
+        "disc": ["1", "1", "1"],
+        "track": ["1", "2", "9"],
+        "discogs_release_id": "249504",
+        "csrf_token": tok,
+    }
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+    with sf() as s:
+        d = s.get(MatchDecision, i)
+        assert d and d.status == "unverified"
+        assert d.evidence["unverified"]["suggestion"] == {
+            "provider": "discogs",
+            "release_id": 249504,
+        }
+        assert "discogs" not in str(d.evidence["unverified"]["tracks"]).lower()
+
+
+def test_discogs_choose_error_and_bad_id(client: TestClient, sf: sessionmaker[Session]) -> None:
+    fake = FakeDiscogs(fail=True)
+    i = _discogs_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    data = {**FORM, "csrf_token": tok}
+    r = client.post(f"/review/{i}/discogs/choose", data={**data, "discogs_album": "1"})
+    assert r.status_code == 200 and "Discogs could not be reached" in r.text
+    assert 'value="keep me"' in r.text
+    r = client.post(f"/review/{i}/discogs/choose", data={**data, "discogs_album": "../x"})
+    assert r.status_code == 400
 
 
 def test_request_list_marks_jobs_the_worker_has_not_taken(

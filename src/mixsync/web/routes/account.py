@@ -14,12 +14,14 @@ from mixsync.db.models.accounts import UserLink
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
     Box,
     CurrentUser,
     Db,
+    get_discogs,
     get_listenbrainz_http,
     get_navidrome_http,
 )
@@ -27,7 +29,7 @@ from mixsync.web.routes.auth import admit, forget, refund
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
-SERVICES = ("listenbrainz", "navidrome")
+SERVICES = ("listenbrainz", "navidrome", "discogs")
 
 
 class Ping(StrEnum):
@@ -44,10 +46,20 @@ class LinkValidator(Protocol):
 
     async def navidrome_ping(self, username: str, password: str) -> Ping: ...
 
+    async def discogs_username(self, token: str) -> str | None:
+        """The username the token belongs to, or None if Discogs rejects it. Raises
+        TransientError when Discogs can't be reached."""
+        ...
+
 
 class DefaultValidator:
-    def __init__(self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient) -> None:
-        self._http, self._url, self._lb = http, navidrome_url, lb
+    def __init__(
+        self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient, discogs: DiscogsClient
+    ) -> None:
+        self._http, self._url, self._lb, self._discogs = http, navidrome_url, lb, discogs
+
+    async def discogs_username(self, token: str) -> str | None:
+        return await self._discogs.username(token)  # rejection is None; the text is not shown
 
     async def listenbrainz_username(self, token: str) -> str | None:
         try:
@@ -69,10 +81,11 @@ def get_validator(
     request: Request,
     http: Annotated[PoliteClient, Depends(get_navidrome_http)],
     lb_http: Annotated[PoliteClient, Depends(get_listenbrainz_http)],
+    discogs: Annotated[DiscogsClient, Depends(get_discogs)],
 ) -> LinkValidator:
     v: LinkValidator | None = getattr(request.app.state, "link_validator", None)
     return v or DefaultValidator(
-        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http)
+        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http), discogs
     )
 
 
@@ -86,8 +99,10 @@ def get_link(s: Session, user_id: int, service: str) -> UserLink | None:
     )
 
 
-def _service(service: str) -> str:
-    if service not in SERVICES:
+def _service(request: Request, service: str) -> str:
+    if service not in SERVICES or (
+        service == "discogs" and not request.app.state.settings.discogs_suggestions
+    ):
         raise HTTPException(404, "no such service")
     return service
 
@@ -101,7 +116,8 @@ def _page(
     status: int = 400,
 ) -> HTMLResponse:
     by_service = {link.service: link for link in user_links(s, box, user.id)}
-    ctx = {"user": user, "links": by_service, "error": error}
+    discogs = request.app.state.settings.discogs_suggestions
+    ctx = {"user": user, "links": by_service, "error": error, "discogs": discogs}
     return templates.TemplateResponse(
         request, "pages/account.html", ctx, status_code=status if error else 200
     )
@@ -123,7 +139,7 @@ async def save(
     secret: Annotated[str, Form()],
     username: Annotated[str, Form()] = "",
 ) -> Response:
-    _service(service)
+    _service(request, service)
     # a Navidrome password may legitimately start or end with spaces; the rest are identifiers
     secret = secret if service == "navidrome" else secret.strip()
     username = username.strip()
@@ -136,6 +152,12 @@ async def save(
                 name = (await validator.listenbrainz_username(secret) if secret else None) or ""
             except TransientError:
                 name, msg = "", "Couldn't reach ListenBrainz; try again."
+        elif service == "discogs":
+            msg = "Discogs did not accept that token."
+            try:
+                name = (await validator.discogs_username(secret) if secret else None) or ""
+            except TransientError:
+                name, msg = "", "Couldn't reach Discogs; try again."
         else:
             name, msg = "", "Navidrome did not accept that username and password."
             keys = (("navidrome-user", str(user.id)), ("navidrome-target", username.lower()))
@@ -176,8 +198,8 @@ async def save(
 
 
 @router.post("/{service}/unlink")
-def unlink(service: str, user: CurrentUser, db: Db) -> RedirectResponse:
-    link = get_link(db, user.id, _service(service))
+def unlink(request: Request, service: str, user: CurrentUser, db: Db) -> RedirectResponse:
+    link = get_link(db, user.id, _service(request, service))
     if link is not None:
         db.delete(link)
     return RedirectResponse("/account", 303)

@@ -30,6 +30,7 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SLOW_DOWNLOAD_WINDOW`, `_FLOOR`, `_SHARE` | when a slow transfer stops counting: seconds (60), bytes/s (50000), throughput share (0.10); [services](../docs/design/services-etiquette.md#soulseek) |
 | `MIXSYNC_ACOUSTID_APP_KEY`, `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID keys; the user key is optional ([rules](../docs/design/services-etiquette.md#acoustid)) |
 | `MIXSYNC_DEEZER_SUGGESTIONS` | `true`: Mark unverified gets a "Suggest from Deezer" button that pre-fills the form on request (metadata only, 1 req/s, no audio). Deezer's terms allow private, non-commercial, single-household use only. Default off |
+| `MIXSYNC_DISCOGS_SUGGESTIONS` | `true`: Discogs joins Deezer behind one "Suggest" button on Mark unverified (release search and tracklist, on request only). Each user links their own Discogs personal token under Account (no shared token); a user without one gets no Discogs suggestions. The limits in [services](../docs/design/services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default) came from an OpenAPI copy: check them by hand before enabling. Default off |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |

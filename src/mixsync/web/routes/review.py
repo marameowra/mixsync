@@ -2,7 +2,8 @@ import re
 import unicodedata
 import uuid
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -17,9 +18,12 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.secretbox import link_secret, user_links
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
-from mixsync.web.deps import Db, Deezer, Namer, decision_for, require
+from mixsync.metadata.deezer import DeezerAlbum
+from mixsync.metadata.discogs import DiscogsRelease
+from mixsync.web.deps import Db, Deezer, Discogs, Namer, decision_for, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
@@ -113,6 +117,7 @@ async def review_detail(
     request: Request, decision_id: int, user: User, db: Db, namer: Namer
 ) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
+    flags = _flags(request, db, user)  # before `resolve`, which ends the transaction
     refs = {("release", d.release_mbid)} | {
         ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
@@ -122,7 +127,7 @@ async def review_detail(
         "d": d,
         "prefill": _prefill(d),
         "names": names,
-        "deezer": _deezer_on(request),
+        **flags,
     }
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
@@ -226,6 +231,7 @@ def unverified(
     track: Annotated[list[str], Form()],
     year: Annotated[str, Form()] = "",
     deezer_album_id: Annotated[str, Form()] = "",
+    discogs_release_id: Annotated[str, Form()] = "",
 ) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
     files = Evidence.parse(d.evidence).files
@@ -255,17 +261,24 @@ def unverified(
         ],
     }
     if errors:  # show the form again with what was typed
-        sent = _sent(files, albumartist, album, year, title, artist, disc, track, deezer_album_id)
+        sent = _sent(
+            files,
+            *(albumartist, album, year, title, artist, disc, track),
+            deezer_album_id,
+            discogs_release_id,
+        )
         ctx = {
             "user": user,
             "d": d,
             "prefill": sent,
             "errors": errors,
-            "deezer": _deezer_on(request),
+            **_flags(request, db, user),
         }
         return templates.TemplateResponse(request, "pages/review_detail.html", ctx, status_code=400)
     if _deezer_on(request) and deezer_album_id.isdecimal():  # the form came from a suggestion
         edits["suggestion"] = {"provider": "deezer", "album_id": int(deezer_album_id)}
+    elif _discogs_on(request) and discogs_release_id.isdecimal():
+        edits["suggestion"] = {"provider": "discogs", "release_id": int(discogs_release_id)}
     return _done(
         lambda: review.unverified(db, datetime.now(UTC), decision_id, user.id, edits), db, user
     )
@@ -273,6 +286,27 @@ def unverified(
 
 def _deezer_on(request: Request) -> bool:
     return bool(request.app.state.services.settings.deezer_suggestions)
+
+
+def _discogs_on(request: Request) -> bool:
+    return bool(request.app.state.services.settings.discogs_suggestions)
+
+
+def _discogs_token(request: Request, db: Db, user: AuthUser) -> str | None:
+    """The reviewer's Discogs token, or None: setting off, not linked, or needs relinking."""
+    if not _discogs_on(request):
+        return None
+    box = request.app.state.services.secret_box
+    link = next((x for x in user_links(db, box, user.id) if x.service == "discogs"), None)
+    return None if link is None or link.needs_relink else link_secret(box, link)
+
+
+def _flags(request: Request, db: Db, user: AuthUser) -> dict[str, bool]:
+    """Which suggestion providers this reviewer can use; the template shows nothing else."""
+    return {
+        "deezer": _deezer_on(request),
+        "discogs": _discogs_token(request, db, user) is not None,
+    }
 
 
 def _sent(
@@ -285,6 +319,7 @@ def _sent(
     disc: list[str],
     track: list[str],
     deezer_album_id: str,
+    discogs_release_id: str,
 ) -> dict[str, Any]:
     """The form as submitted, to show it again."""
     return {
@@ -292,6 +327,7 @@ def _sent(
         "album": album,
         "year": year,
         "deezer_album_id": deezer_album_id,
+        "discogs_release_id": discogs_release_id,
         "rows": [
             {"name": f.get("name", ""), "title": ti, "artist": ar, "disc": di, "track": tr}
             for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=False)
@@ -308,52 +344,186 @@ async def _suggest_form(
     disc: Annotated[list[str], Form()] = [],  # noqa: B006
     track: Annotated[list[str], Form()] = [],  # noqa: B006
     deezer_album_id: Annotated[str, Form()] = "",
-) -> tuple[str, str, str, list[str], list[str], list[str], list[str], str]:
-    return albumartist, album, year, title, artist, disc, track, deezer_album_id
+    discogs_release_id: Annotated[str, Form()] = "",
+) -> tuple[str, str, str, list[str], list[str], list[str], list[str], str, str]:
+    return (
+        albumartist,
+        album,
+        year,
+        title,
+        artist,
+        disc,
+        track,
+        deezer_album_id,
+        discogs_release_id,
+    )
 
 
 SuggestForm = Annotated[
-    tuple[str, str, str, list[str], list[str], list[str], list[str], str], Depends(_suggest_form)
+    tuple[str, str, str, list[str], list[str], list[str], list[str], str, str],
+    Depends(_suggest_form),
 ]
-_DEEZER_DOWN = (
-    "Deezer could not be reached or gave no usable answer. You can still fill in the form by hand."
-)
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    provider: str  # "deezer" / "discogs": the choose route and form field prefix
+    source: str  # the label shown
+    id: int
+    title: str
+    artist: str
+    year: int | None
+    track_count: int | None
+
+
+def _down(source: str) -> str:
+    return (
+        f"{source} could not be reached or gave no usable answer. "
+        "You can still fill in the form by hand."
+    )
 
 
 def _suggest_page(
     request: Request,
+    db: Db,
     user: AuthUser,
     d: MatchDecision,
     prefill: dict[str, Any],
     **extra: Any,
 ) -> HTMLResponse:
-    ctx = {"user": user, "d": d, "prefill": prefill, "deezer": True, **extra}
+    ctx = {"user": user, "d": d, "prefill": prefill, **_flags(request, db, user), **extra}
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
 
-def _suggest_target(request: Request, db: Db, user: AuthUser, decision_id: int) -> MatchDecision:
+def _suggest_target(
+    request: Request, db: Db, user: AuthUser, decision_id: int, provider: str | None
+) -> tuple[MatchDecision, str | None]:
+    """The pending review and the reviewer's Discogs token (None unless Discogs is available).
+    `provider` None means the combined search: any available provider will do."""
     d = decision_for(db, user, decision_id)
-    if not _deezer_on(request):
-        raise HTTPException(404, "Deezer suggestions are off")
+    token = _discogs_token(request, db, user)
+    have = {"deezer": _deezer_on(request), "discogs": token is not None}
+    if not (have[provider] if provider else any(have.values())):
+        raise HTTPException(404, "suggestions are off")
     if d.status != decisions.PENDING:
         raise HTTPException(409, "this review was already acted on")
-    return d
+    return d, token
+
+
+async def _lookup(source: str, found: Awaitable[list[Suggestion]]) -> tuple[list[Suggestion], str]:
+    try:
+        hits = await found
+    except (TransientError, PermanentError):
+        return [], _down(source)
+    return hits, "" if hits else f"{source} found no matching album."
+
+
+async def _deezer_hits(deezer: Deezer, artist: str, album: str) -> list[Suggestion]:
+    found = await deezer.search_albums(artist, album)
+    return [
+        Suggestion("deezer", "Deezer", a.id, a.title, a.artist, a.year, a.track_count)
+        for a in found
+    ]
+
+
+async def _discogs_hits(discogs: Discogs, artist: str, album: str, token: str) -> list[Suggestion]:
+    found = await discogs.search_releases(artist, album, token=token)
+    return [Suggestion("discogs", "Discogs", r.id, r.title, r.artist, r.year, None) for r in found]
+
+
+async def _search(
+    request: Request,
+    decision_id: int,
+    user: AuthUser,
+    db: Db,
+    form: SuggestForm,
+    provider: str | None,
+    deezer: Deezer,
+    discogs: Discogs,
+) -> HTMLResponse:
+    d, token = _suggest_target(request, db, user, decision_id, provider)
+    prefill = _sent(Evidence.parse(d.evidence).files, *form)
+    jobs: list[tuple[str, Awaitable[list[Suggestion]]]] = []
+    if provider in (None, "deezer") and _deezer_on(request):
+        jobs.append(("Deezer", _deezer_hits(deezer, form[0], form[1])))
+    if provider in (None, "discogs") and token is not None:
+        jobs.append(("Discogs", _discogs_hits(discogs, form[0], form[1], token)))
+    hits: list[Suggestion] = []
+    notes: list[str] = []
+    for source, job in jobs:  # one request per provider, one after the other
+        found, note = await _lookup(source, job)
+        hits += found
+        notes.append(note)
+    return _suggest_page(
+        request, db, user, d, prefill, suggestions=hits, note=" ".join(n for n in notes if n)
+    )
+
+
+@router.post("/{decision_id}/suggest")
+async def suggest(
+    request: Request,
+    decision_id: int,
+    user: User,
+    db: Db,
+    deezer: Deezer,
+    discogs: Discogs,
+    form: SuggestForm,
+) -> HTMLResponse:
+    """Search every available provider for the form's album artist and album."""
+    return await _search(request, decision_id, user, db, form, None, deezer, discogs)
 
 
 @router.post("/{decision_id}/deezer/search")
 async def deezer_search(
-    request: Request, decision_id: int, user: User, db: Db, deezer: Deezer, form: SuggestForm
+    request: Request,
+    decision_id: int,
+    user: User,
+    db: Db,
+    deezer: Deezer,
+    discogs: Discogs,
+    form: SuggestForm,
 ) -> HTMLResponse:
     """Search Deezer for the form's album artist and album; the form comes back as typed."""
-    d = _suggest_target(request, db, user, decision_id)
-    files = Evidence.parse(d.evidence).files
-    prefill = _sent(files, *form)
+    return await _search(request, decision_id, user, db, form, "deezer", deezer, discogs)
+
+
+_Chosen = DeezerAlbum | DiscogsRelease
+
+
+async def _choose(
+    request: Request,
+    decision_id: int,
+    user: AuthUser,
+    db: Db,
+    form: SuggestForm,
+    provider: str,
+    picked: str,
+    fetch: Callable[[int, str | None], Awaitable[_Chosen]],
+) -> HTMLResponse:
+    """Fill the form from one album: rows match on disc and track number."""
+    source = provider.capitalize()
+    d, token = _suggest_target(request, db, user, decision_id, provider)
+    if not picked.isdecimal() or len(picked) > 18:
+        raise HTTPException(400, f"not a {source} id")
+    prefill = _sent(Evidence.parse(d.evidence).files, *form)
     try:
-        found = await deezer.search_albums(form[0], form[1])
+        chosen = await fetch(int(picked), token)
     except (TransientError, PermanentError):
-        return _suggest_page(request, user, d, prefill, deezer_note=_DEEZER_DOWN)
-    note = "" if found else "Deezer found no matching album."
-    return _suggest_page(request, user, d, prefill, suggestions=found, deezer_note=note)
+        return _suggest_page(request, db, user, d, prefill, note=_down(source))
+    by_pos = {(t.disc, t.track): t for t in chosen.tracks}
+    matched = 0
+    for row in prefill["rows"]:
+        pos = (_num(row["disc"]), _num(row["track"]))
+        if (t := by_pos.get(pos)) is not None:
+            row["title"], row["artist"] = t.title, t.artist
+            matched += 1
+    prefill["albumartist"], prefill["album"] = chosen.artist, chosen.title
+    if chosen.year:
+        prefill["year"] = str(chosen.year)
+    prefill["deezer_album_id"] = prefill["discogs_release_id"] = ""  # one provenance at a time
+    prefill["deezer_album_id" if provider == "deezer" else "discogs_release_id"] = str(chosen.id)
+    note = f"{source} has {len(chosen.tracks)} tracks, {matched} matched."
+    return _suggest_page(request, db, user, d, prefill, note=note)
 
 
 @router.post("/{decision_id}/deezer/choose")
@@ -366,29 +536,27 @@ async def deezer_choose(
     form: SuggestForm,
     deezer_album: Annotated[str, Form()],
 ) -> HTMLResponse:
-    """Fill the form from one Deezer album: rows match on disc and track number."""
-    d = _suggest_target(request, db, user, decision_id)
-    if not deezer_album.isdecimal() or len(deezer_album) > 18:
-        raise HTTPException(400, "not a Deezer album id")
-    files = Evidence.parse(d.evidence).files
-    prefill = _sent(files, *form)
-    try:
-        chosen = await deezer.album(int(deezer_album))
-    except (TransientError, PermanentError):
-        return _suggest_page(request, user, d, prefill, deezer_note=_DEEZER_DOWN)
-    by_pos = {(t.disc, t.track): t for t in chosen.tracks}
-    matched = 0
-    for row in prefill["rows"]:
-        pos = (_num(row["disc"]), _num(row["track"]))
-        if (t := by_pos.get(pos)) is not None:
-            row["title"], row["artist"] = t.title, t.artist
-            matched += 1
-    prefill["albumartist"], prefill["album"] = chosen.artist, chosen.title
-    if chosen.year:
-        prefill["year"] = str(chosen.year)
-    prefill["deezer_album_id"] = str(chosen.id)
-    note = f"Deezer has {len(chosen.tracks)} tracks, {matched} matched."
-    return _suggest_page(request, user, d, prefill, deezer_note=note)
+    async def fetch(album_id: int, _token: str | None) -> _Chosen:
+        return await deezer.album(album_id)
+
+    return await _choose(request, decision_id, user, db, form, "deezer", deezer_album, fetch)
+
+
+@router.post("/{decision_id}/discogs/choose")
+async def discogs_choose(
+    request: Request,
+    decision_id: int,
+    user: User,
+    db: Db,
+    discogs: Discogs,
+    form: SuggestForm,
+    discogs_album: Annotated[str, Form()],
+) -> HTMLResponse:
+    async def fetch(release_id: int, token: str | None) -> _Chosen:
+        assert token is not None  # _suggest_target checked the link
+        return await discogs.release(release_id, token=token)
+
+    return await _choose(request, decision_id, user, db, form, "discogs", discogs_album, fetch)
 
 
 def _num(text: str) -> int:

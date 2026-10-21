@@ -16,6 +16,7 @@ from mixsync.db.secretbox import SecretBox, load_box
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.deezer import DeezerClient
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
 
@@ -31,6 +32,7 @@ class Services:
     merger: Merger
     coverart: CoverArtClient
     deezer: DeezerClient
+    discogs: DiscogsClient
     navidrome_http: PoliteClient
     listenbrainz_http: PoliteClient
     secret_box: SecretBox
@@ -74,6 +76,7 @@ def build_services(
         merger=merger,
         coverart=CoverArtClient(PoliteClient("coverart", settings, session_factory)),
         deezer=DeezerClient(PoliteClient("deezer", settings, session_factory)),
+        discogs=DiscogsClient(PoliteClient("discogs", settings, session_factory)),
         navidrome_http=PoliteClient("navidrome", settings, session_factory),
         listenbrainz_http=PoliteClient("listenbrainz", settings, session_factory),
         secret_box=load_box(settings),

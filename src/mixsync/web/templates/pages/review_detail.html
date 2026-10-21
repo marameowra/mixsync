@@ -137,12 +137,17 @@
       <label class="field">Album <input name="album" type="text" maxlength="255" required value="{{ prefill.album }}"></label>
       <label class="field">Year <input name="year" type="number" min="1" max="9999" value="{{ prefill.year }}"></label>
     </p>
-    {% if deezer %}
+    {% if deezer or discogs %}
     <input type="hidden" name="deezer_album_id" value="{{ prefill.deezer_album_id }}">
+    <input type="hidden" name="discogs_release_id" value="{{ prefill.discogs_release_id }}">
+    {% if discogs %}
+    <p><button class="btn" type="submit" formaction="/review/{{ d.id }}/suggest" formnovalidate>Suggest</button> <span class="muted">Searches {{ "Deezer and Discogs" if deezer else "Discogs" }} for the album artist and album above; nothing is sent until you press this.</span></p>
+    {% else %}
     <p><button class="btn" type="submit" formaction="/review/{{ d.id }}/deezer/search" formnovalidate>Suggest from Deezer</button> <span class="muted">Searches Deezer for the album artist and album above; nothing is sent until you press this.</span></p>
-    {% if deezer_note %}<p role="status">{{ deezer_note }}</p>{% endif %}
+    {% endif %}
+    {% if note %}<p role="status">{{ note }}</p>{% endif %}
     {% if suggestions %}
-    <ul>{% for a in suggestions %}<li>{{ a.title }} - {{ a.artist }}{% if a.year %} ({{ a.year }}){% endif %}, {{ a.track_count }} tracks <button class="btn" type="submit" name="deezer_album" value="{{ a.id }}" formaction="/review/{{ d.id }}/deezer/choose" formnovalidate>Use this album</button></li>{% endfor %}</ul>
+    <ul>{% for a in suggestions %}<li><span class="muted">{{ a.source }}</span> {{ a.title }} - {{ a.artist }}{% if a.year %} ({{ a.year }}){% endif %}{% if a.track_count %}, {{ a.track_count }} tracks{% endif %} <button class="btn" type="submit" name="{{ a.provider }}_album" value="{{ a.id }}" formaction="/review/{{ d.id }}/{{ a.provider }}/choose" formnovalidate>Use this album</button></li>{% endfor %}</ul>
     {% endif %}
     {% endif %}
     <div class="table-wrap scroll">

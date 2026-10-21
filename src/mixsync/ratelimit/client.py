@@ -18,6 +18,7 @@ from mixsync.ratelimit.services import limits, ttl_for, user_agent
 
 _BACKOFF_CAP = 300.0
 _MAX_ATTEMPTS = 5
+_DISCOGS_WINDOW = timedelta(seconds=60)
 
 
 def _reset_in(response: httpx.Response) -> timedelta | None:
@@ -92,6 +93,8 @@ class PoliteClient:
                 reset := _reset_in(response)
             ):
                 self.bucket.block(reset)
+            if response.headers.get("X-Discogs-Ratelimit-Remaining") == "0":
+                self.bucket.block(_DISCOGS_WINDOW)  # a moving 60 s window, no reset header
             if response.status_code not in (429, 503):
                 if ttl is not None and response.status_code == 200:
                     self.cache.put(request, response, self.clock.now(), ttl)
