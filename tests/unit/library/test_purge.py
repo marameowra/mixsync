@@ -9,9 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.jobs import JobKind, JobState
+from mixsync.db.auth import create_user
 from mixsync.db.journal import SqlJournal
+from mixsync.db.models.auth import User
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
+from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
@@ -321,7 +324,7 @@ def test_a_file_that_cannot_be_deleted_is_rolled_back_not_counted(
     fo: FileOps, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     p = put(fo, f"{day(40)}/a.mp3")
-    monkeypatch.setattr(fo, "_purge_file", lambda _rel: False)
+    monkeypatch.setattr(fo, "_purge_file", lambda _rel, _base=None: False)
     assert fo.purge_trash(30, "b") == 0
     assert p.exists() and [o.status for o in ops(sessions)] == ["rolled_back"]
 
@@ -438,3 +441,105 @@ def test_monitor_purge_does_not_block_the_event_loop(
 
     asyncio.run(main())
     assert seen == [True]
+
+
+def q_put(fo: FileOps, rel: str) -> Path:
+    p = fo.quarantine_dir / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"q")
+    return p
+
+
+def _decision(
+    sessions: sessionmaker[Session], path: Path, action: str | None, acted: datetime | None
+) -> None:
+    with sessions.begin() as s:
+        uid = s.scalar(select(User.id)) or create_user(s, "u", "pw").id
+        s.add(
+            MatchDecision(
+                user_id=uid,
+                stage=2,
+                release_mbid="m",
+                band="review",
+                distance=0.0,
+                breakdown=[],
+                vetoes=[],
+                scorer_version=1,
+                status="done" if action else "pending",
+                final_action=action,
+                acted_at=acted,
+                evidence={"source": {"files": [{"local_path": str(path)}]}},
+            )
+        )
+
+
+def test_rejected_quarantine_past_the_window_is_purged_and_journaled_newer_kept(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    old = q_put(fo, f"rejected/{day(31)}/F/a.mp3")
+    edge = q_put(fo, f"rejected/{day(30)}/F/b.mp3")
+    new = q_put(fo, f"rejected/{day(5)}/F/c.mp3")
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert not old.exists() and edge.exists() and new.exists()
+    assert not old.parent.parent.exists()  # the emptied day folder goes
+    assert [(o.kind, o.root, o.src, o.status) for o in ops(sessions)] == [
+        ("purge", "quarantine", f"rejected/{day(31)}/F/a.mp3", "done")
+    ]
+
+
+def test_review_quarantine_of_any_age_is_kept(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock
+) -> None:
+    pending = q_put(fo, f"review/{day(400)}/F/a.mp3")
+    accepted = q_put(fo, f"review/{day(400)}/G/a.mp3")
+    repick = q_put(fo, f"review/{day(400)}/H/a.mp3")
+    _decision(sessions, pending, None, None)
+    _decision(sessions, accepted, "accept", NOW - timedelta(days=400))
+    _decision(sessions, repick, "repick", NOW - timedelta(days=400))
+    rejected = q_put(fo, f"review/{day(400)}/I/a.mp3")  # a person's reject leaves it in review/
+    _decision(sessions, rejected, "reject", NOW - timedelta(days=400))
+    asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    assert pending.exists() and accepted.exists() and repick.exists() and rejected.exists()
+    assert ops(sessions) == []
+
+
+def test_quarantine_purge_never_follows_symlinks(
+    fo: FileOps, sessions: sessionmaker[Session], tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.mp3").write_bytes(b"precious")
+    d = fo.quarantine_dir / "rejected" / day(40)
+    d.mkdir(parents=True)
+    (d / "link.mp3").symlink_to(outside / "keep.mp3")
+    (d / "linkdir").symlink_to(outside)
+    assert fo.purge_quarantine(30, "b") == 0
+    assert (outside / "keep.mp3").read_bytes() == b"precious" and (d / "link.mp3").is_symlink()
+
+
+def test_quarantine_purge_ignores_symlinked_day_folders_and_foreign_entries(
+    fo: FileOps, sessions: sessionmaker[Session], tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.mp3").write_bytes(b"precious")
+    rejected = fo.quarantine_dir / "rejected"
+    rejected.mkdir(parents=True)
+    (rejected / day(40)).symlink_to(outside)
+    stray = q_put(fo, "rejected/not-a-date/a.mp3")
+    top = q_put(fo, f"{day(40)}/a.mp3")  # a day folder outside rejected/ and review/
+    assert fo.purge_quarantine(30, "b") == 0
+    assert (outside / "keep.mp3").read_bytes() == b"precious"
+    assert stray.exists() and top.exists() and (rejected / day(40)).is_symlink()
+    assert ops(sessions) == []
+
+
+def test_recover_will_not_purge_a_review_quarantine_row(
+    fo: FileOps, sessions: sessionmaker[Session]
+) -> None:
+    rel = f"review/{day(90)}/F/a.mp3"
+    keep = q_put(fo, rel)
+    SqlJournal(sessions, Clock()).begin("b", "purge", rel, "", root="quarantine")
+    with pytest.raises(Exception, match="dated quarantine folder"):
+        fo.recover()
+    assert keep.exists()

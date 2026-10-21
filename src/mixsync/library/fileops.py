@@ -361,22 +361,88 @@ class FileOps:
         self._journal.complete(op_id, _sha256(self.trash_dir / trash_rel))
         return trash_rel
 
-    def _purge_file(self, rel: str) -> bool:
-        """The one place the purge deletes. Only a plain file inside a dated trash folder
-        qualifies. False if the entry is not deletable (a symlink, say)."""
+    def _purge_file(self, rel: str, base: Path | None = None) -> bool:
+        """The one place the purge deletes. Only a plain file inside a dated folder of the trash
+        (or of quarantine, whose first part is the kind) qualifies. False if the entry is not
+        deletable (a symlink, say)."""
+        base = base or self.trash_dir
         parts = Path(rel).parts
-        if len(parts) < 2 or _day(parts[0]) is None or ".." in parts:
-            raise SafetyError(f"{rel!r} is not in a dated trash folder")
+        at = 0 if base == self.trash_dir else 1
+        # quarantine purges reach only rejected/; a journaled review/ path is refused too
+        if (
+            len(parts) < at + 2
+            or _day(parts[at]) is None
+            or ".." in parts
+            or (at and parts[0] != "rejected")
+        ):
+            raise SafetyError(
+                f"{rel!r} is not in a dated {'trash' if at == 0 else 'quarantine'} folder"
+            )
         try:
-            p = self._under(self.trash_dir, rel)
+            p = self._under(base, rel)
         except SafetyError:
-            return False  # symlinks remain in the trash, including during recovery
-        # the data dir may sit behind a symlinked mount, but .trash itself must be real
-        real = self.trash_dir.parent.resolve() / self.trash_dir.name / rel
-        if self.trash_dir.is_symlink() or p.is_symlink() or not p.is_file() or p.resolve() != real:
+            return False  # symlinks remain in place, including during recovery
+        # the data dir may sit behind a symlinked mount, but the base itself must be real
+        real = base.parent.resolve() / base.name / rel
+        if base.is_symlink() or p.is_symlink() or not p.is_file() or p.resolve() != real:
             return False
         p.unlink()
         return True
+
+    def _purge_one(self, rel: str, batch_id: str, root: str, base: Path | None = None) -> bool:
+        """Delete one file as a journaled `purge` op. False if it was not deletable."""
+        op_id = self._journal.begin(batch_id, "purge", rel, "", root=root)
+        try:
+            deleted = self._purge_file(rel, base)
+        except BaseException as e:
+            self._journal.fail(op_id, repr(e))
+            raise
+        if deleted:
+            self._journal.complete(op_id, "")
+        else:
+            self._journal.rolled_back(op_id)
+        return deleted
+
+    def _purge_days(
+        self, top: Path, base: Path, older_than_days: int, batch_id: str, kept: set[str]
+    ) -> int:
+        """Purge the day folders of `top` (inside `base`) strictly older than the window."""
+        cutoff = self._clock.now().date() - timedelta(days=older_than_days)
+        if base.is_symlink() or top.is_symlink():
+            log.warning("purge: %s is a symlink; refusing to purge through it", top)
+            return 0
+        if not top.is_dir():
+            return 0
+        count = 0
+        for day_dir in sorted(top.iterdir()):
+            day = _day(day_dir.name)
+            if day is None:
+                log.warning("purge: skipping entry %s: not a date folder", day_dir.name)
+                continue
+            if day >= cutoff or day_dir.is_symlink() or not day_dir.is_dir():
+                continue
+            for dirpath, dirnames, filenames in os.walk(day_dir, followlinks=False):
+                for name in filenames:
+                    f = Path(dirpath, name)
+                    rel = str(f.relative_to(base))
+                    if _norm(rel) in kept:
+                        log.info("purge: keeping %s: an undoable plan needs it", rel)
+                        continue
+                    if f.is_symlink() or not f.is_file():
+                        log.warning("purge: skipping %s: not a plain file", rel)
+                        continue
+                    if base == self.quarantine_dir:
+                        root = "quarantine"
+                    else:
+                        root = "discover" if Path(rel).parts[1] == ".discover" else "library"
+                    count += self._purge_one(rel, batch_id, root, base)
+                for name in dirnames:
+                    if Path(dirpath, name).is_symlink():
+                        log.warning("purge: skipping symlink %s/%s", dirpath, name)
+            for dirpath, _, _ in os.walk(day_dir, topdown=False, followlinks=False):
+                with suppress(OSError):  # not empty: kept or skipped entries
+                    Path(dirpath).rmdir()
+        return count
 
     def purge_trash(
         self, older_than_days: int, batch_id: str, keep: Collection[str] = frozenset()
@@ -386,50 +452,16 @@ class FileOps:
         `purge` op (root `discover` under `.discover/`, else `library`). `keep` holds
         trash-relative paths that must survive (an undoable plan still restores them). Symlinks
         and odd entries are skipped, never followed. Returns the number of files deleted."""
-        cutoff = self._clock.now().date() - timedelta(days=older_than_days)
-        if self.trash_dir.is_symlink():
-            log.warning("purge: %s is a symlink; refusing to purge through it", self.trash_dir)
-            return 0
-        if not self.trash_dir.is_dir():
-            return 0
         kept = {_norm(k) for k in keep}
-        count = 0
-        for day_dir in sorted(self.trash_dir.iterdir()):
-            day = _day(day_dir.name)
-            if day is None:
-                log.warning("purge: skipping trash entry %s: not a date folder", day_dir.name)
-                continue
-            if day >= cutoff or day_dir.is_symlink() or not day_dir.is_dir():
-                continue
-            for dirpath, dirnames, filenames in os.walk(day_dir, followlinks=False):
-                for name in filenames:
-                    f = Path(dirpath, name)
-                    rel = str(f.relative_to(self.trash_dir))
-                    if _norm(rel) in kept:
-                        log.info("purge: keeping %s: an undoable plan needs it", rel)
-                        continue
-                    if f.is_symlink() or not f.is_file():
-                        log.warning("purge: skipping %s: not a plain file", rel)
-                        continue
-                    root = "discover" if Path(rel).parts[1] == ".discover" else "library"
-                    op_id = self._journal.begin(batch_id, "purge", rel, "", root=root)
-                    try:
-                        deleted = self._purge_file(rel)
-                    except BaseException as e:
-                        self._journal.fail(op_id, repr(e))
-                        raise
-                    if deleted:
-                        self._journal.complete(op_id, "")
-                        count += 1
-                    else:
-                        self._journal.rolled_back(op_id)
-                for name in dirnames:
-                    if Path(dirpath, name).is_symlink():
-                        log.warning("purge: skipping symlink %s/%s", dirpath, name)
-            for dirpath, _, _ in os.walk(day_dir, topdown=False, followlinks=False):
-                with suppress(OSError):  # not empty: kept or skipped entries
-                    Path(dirpath).rmdir()
-        return count
+        return self._purge_days(self.trash_dir, self.trash_dir, older_than_days, batch_id, kept)
+
+    def purge_quarantine(self, older_than_days: int, batch_id: str) -> int:
+        """Purge rejected candidates the way purge_trash does (`quarantine/rejected/<day>`,
+        journaled with root `quarantine`). `review/` is never touched. Returns the number of
+        files deleted."""
+        return self._purge_days(
+            self.quarantine_dir / "rejected", self.quarantine_dir, older_than_days, batch_id, set()
+        )
 
     def restore(self, trash_rel: str, rel: str, batch_id: str, root: str = "library") -> None:
         """Move a trashed file back to path rel under root. Never replaces a file: raises
@@ -510,9 +542,10 @@ class FileOps:
 
     def _recover_purge(self, op: JournalOp) -> None:
         # Committed for purge: finish the delete, or note it is already gone.
-        if not (self.trash_dir / op.src).exists() and not (self.trash_dir / op.src).is_symlink():
+        base = self.quarantine_dir if op.root == "quarantine" else self.trash_dir
+        if not (base / op.src).exists() and not (base / op.src).is_symlink():
             self._journal.complete(op.id, "")
-        elif self._purge_file(op.src):
+        elif self._purge_file(op.src, base):
             self._journal.complete(op.id, "")
         else:
             self._journal.rolled_back(op.id)

@@ -112,6 +112,11 @@ class TrashPurger:
                 f"purge-{self.clock.now().date().isoformat()}",
                 self.protected(),
             )
+            await asyncio.to_thread(
+                self.fileops.purge_quarantine,
+                self.days,
+                f"purge-quarantine-{self.clock.now().date().isoformat()}",
+            )
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
                 s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
