@@ -126,16 +126,3 @@ def superseded(s: Session, job_id: int, req_id: int) -> bool:
     """A later VERIFY of the request (a repick or re-check) replaced this one."""
     later = select(Job.id).where(_of(req_id), Job.id > job_id)
     return s.scalar(later.limit(1)) is not None
-
-
-def requests_of_key(s: Session, key_prefix: str) -> list[int]:
-    """The requests of the VERIFY jobs whose idempotency key starts with `key_prefix`, oldest
-    first (a drop folder retries a failed album under a numbered key)."""
-    return [
-        j.payload["request_id"]
-        for j in s.scalars(
-            select(Job)
-            .where(Job.kind == JobKind.VERIFY, Job.idempotency_key.like(f"{key_prefix}%"))
-            .order_by(Job.id)
-        )
-    ]
