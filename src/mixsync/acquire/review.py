@@ -56,7 +56,7 @@ def reject(s: Session, now: datetime, decision_id: int, actor_id: int) -> None:
     if req.from_files:  # no other candidate to look for: the album stays out
         lifecycle.rejected(req)
     else:
-        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review")
+        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review", spent=True)
 
 
 def repick(s: Session, now: datetime, decision_id: int, actor_id: int, release_mbid: str) -> None:

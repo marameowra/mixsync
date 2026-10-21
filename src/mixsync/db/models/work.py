@@ -76,6 +76,9 @@ class Request(TimestampMixin, Base):
     status: Mapped[Status] = mapped_column(String(16), default="searching")
     tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # [peer, folder] pairs
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    dropped: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )  # request budget used
     next_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None]  # human-readable; state lives in the columns below
     dead_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

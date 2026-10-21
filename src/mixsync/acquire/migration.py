@@ -271,7 +271,7 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     if batch is None and req.origin is None:
         return "it was never matched"
     # SQL, not lifecycle: an atomic compare-and-set, so a double click claims the retry once
-    values = {"dead_end": False, "partial_note": None, "last_error": None} | (
+    values = {"dead_end": False, "partial_note": None, "last_error": None, "dropped": 0} | (
         {"status": "importing"} if batch else {"status": "verifying", "release_mbid": ""}
     )
     claimed = cast(

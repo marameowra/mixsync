@@ -538,6 +538,55 @@ async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
     assert status(env, rid) == "imported"
 
 
+def dropped(env: Env, rid: int) -> int:
+    with env.sessions() as s:
+        return s.get_one(Request, rid).dropped
+
+
+def offer_failing_peers(env: Env, n: int, landed: int) -> None:
+    for i in range(n):  # every peer's transfer dies, after `landed` bytes
+        env.source.add(f"peer{i}", f"Music\\Alpha Band\\Alpha Album [{i}]")
+        env.source.state[f"peer{i}"] = TransferStatus.FAILED
+        env.source.landed[f"peer{i}"] = landed
+
+
+@pytest.mark.parametrize("source", ["manual", "watchlist"])
+async def test_five_dropped_candidates_with_bytes_fail_the_request(
+    env: Env, web: TestClient, source: str
+) -> None:
+    offer_failing_peers(env, 6, landed=100)
+    with env.sessions.begin() as s:
+        rid = create_request(s, env.clock.now(), env.user_id, str(ALBUM.release_id), source).id
+    await env.drain()
+
+    assert status(env, rid) == "failed" and dropped(env, rid) == 5
+    assert "5 dropped candidates (request budget)" in (last_error(env, rid) or "")
+    assert len(env.source.enqueued) == 5  # the sixth peer is never tried
+    login(web, "alice")
+    assert "5 of 5" in web.get("/requests").text
+
+
+async def test_a_refusal_before_any_bytes_uses_no_budget(env: Env) -> None:
+    for i in range(6):
+        env.source.add(f"refuser{i}", f"Music\\Alpha Band\\Alpha Album [r{i}]")
+        env.source.refuse.add(f"refuser{i}")
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain()
+
+    assert len(tried(env, rid)) == 6 and dropped(env, rid) == 0
+    assert status(env, rid) == "imported"
+
+
+async def test_a_transfer_that_failed_before_any_bytes_uses_no_budget(env: Env) -> None:
+    offer_failing_peers(env, 6, landed=0)  # e.g. a remote-queue timeout
+    rid = request(env)
+    await env.drain(until=lambda: len(tried(env, rid)) == 6)
+
+    assert len(tried(env, rid)) == 6 and dropped(env, rid) == 0
+    assert status(env, rid) != "failed"
+
+
 @pytest.mark.parametrize("fault", ["wrong_size", "missing"])
 async def test_bad_download_is_never_imported(env: Env, fault: str) -> None:
     if fault == "wrong_size":

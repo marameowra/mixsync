@@ -117,6 +117,7 @@ class FakeSource:
         self.attempts: dict[str, int] = {}  # peer/file name -> times queued
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
+        self.landed: dict[str, int] = {}  # bytes a peer got through before its transfer ended
         self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
         self.moving: Callable[[], dict[str, int]] = dict  # the other transfers: id -> bytes
 
@@ -185,7 +186,7 @@ class FakeSource:
     async def status(self, candidate: Candidate) -> TransferInfo:
         state = self.state.get(candidate.username, TransferStatus.DONE)
         if state is not TransferStatus.DONE:
-            return TransferInfo(state, 0)
+            return TransferInfo(state, self.landed.get(candidate.username, 0))
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
         keys = [f"{candidate.username}/{n}" for n in names]
         ended = {  # the outcome of each file's latest attempt, if it failed

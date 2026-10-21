@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire import review
 from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
-from mixsync.acquire.requests import create_request
+from mixsync.acquire.requests import REQUEST_BUDGET, create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
 from mixsync.db.auth import AuthUser
@@ -76,6 +76,7 @@ async def request_list(request: Request, user: User, db: Db, namer: Namer) -> HT
             "items": items,
             "deletable": deletable,
             "queued": queued,
+            "budget": REQUEST_BUDGET,
             "names": await resolve(db, namer, {("release", r.release_mbid) for r in items}),
         },
     )

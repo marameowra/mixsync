@@ -24,6 +24,8 @@ from mixsync.db.queue import enqueue_in
 from mixsync.library import tags
 from mixsync.match.profiles import BALANCED
 
+REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
+
 NO_RESULTS_BACKOFF = (
     timedelta(hours=1),
     timedelta(hours=6),
@@ -166,6 +168,7 @@ def drop_candidate(
     partial: str = "",  # "N of M tracks present": some tracks are in, keep looking with backoff
     notes: Sequence[str] = (),
     job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
+    spent: bool = False,  # its first bytes landed: uses one unit of the request budget
 ) -> None:
     """The one way a candidate is dropped: it joins the request's tried list (verify has already
     moved its files into quarantine, never deleted) and the request searches again, or fails
@@ -179,6 +182,13 @@ def drop_candidate(
         peer and [peer, folder] not in req.tried
     ):  # no candidate known, or else the search re-picks it, hourly, forever
         req.tried = [*req.tried, [peer, folder]]
+    if spent:  # a job_failed job is the queue's fault, not the candidate's: never spends
+        req.dropped += 1
+        if req.dropped >= REQUEST_BUDGET:
+            lifecycle.failed(
+                req, f"gave up after {REQUEST_BUDGET} dropped candidates (request budget): {why}"
+            )
+            return
     if partial or job_failed:  # part of the album is in: repeat the search with backoff
         if partial:
             lifecycle.keep_looking(req, partial, notes)
