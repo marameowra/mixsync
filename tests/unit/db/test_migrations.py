@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0021_request_budget"
+    assert _version(settings) == "0022_request_content_key"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0021_request_budget"
+    assert _version(settings) == "0022_request_content_key"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
@@ -161,6 +161,48 @@ def test_request_origin_is_backfilled_from_the_first_verify(settings: Settings) 
     with make_engine(settings).connect() as c:
         cols = [col["name"] for col in inspect(c).get_columns("requests")]
     assert "origin" not in cols
+
+
+def test_request_content_key_is_backfilled_from_verify_idempotency_keys(
+    settings: Settings,
+) -> None:
+    upgrade("0020_request_origin")
+    day = "'2026-01-01'"
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
+            )
+        )
+        # (id, source): drop retried, adopt, searched, drop with no VERIFY job
+        for rid, source in ((1, "drop"), (2, "adopt"), (3, "manual"), (4, "drop")):
+            c.execute(
+                text(
+                    "INSERT INTO requests (id, user_id, release_mbid, artist, album, status,"
+                    " tried, no_results_attempts, source, provisional, recording_mbids,"
+                    f" created_at, updated_at) VALUES ({rid}, 1, '', '', '', 'review', '[]', 0,"
+                    f" :s, :prov, '[]', {day}, {day})"
+                ),
+                {"s": source, "prov": False},
+            )
+        for rid, key in ((1, "drop:abc"), (1, "drop:abc:2"), (2, "adopt:def"), (3, "other:x")):
+            c.execute(
+                text(
+                    "INSERT INTO jobs (kind, payload, status, priority, attempts, max_attempts,"
+                    " idempotency_key, run_after, created_at, updated_at) VALUES ('verify', :p,"
+                    f" 'succeeded', 0, 1, 1, :k, {day}, {day}, {day})"
+                ),
+                {"p": json.dumps({"request_id": rid}), "k": key},
+            )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        got = dict(c.execute(text("SELECT id, content_key FROM requests")).all())
+    assert got == {1: "drop:abc", 2: "adopt:def", 3: None, 4: None}
+    downgrade("0021_request_budget")
+    with make_engine(settings).connect() as c:
+        cols = [col["name"] for col in inspect(c).get_columns("requests")]
+    assert "content_key" not in cols
 
 
 def test_pre_0012_file_op_reads_back_as_library(settings: Settings) -> None:

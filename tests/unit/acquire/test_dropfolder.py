@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
-from mixsync.acquire import verify
+from mixsync.acquire import dropfolder, verify
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.app import create_app
@@ -231,6 +231,57 @@ async def test_a_failed_album_is_queued_again_but_a_settled_one_is_not(rig: Rig)
     assert [r.status for r in reqs] == ["failed", "verifying"]
     await rig.scan()  # the new attempt is live: not queued a third time
     assert len(rig.requests()) == 2
+
+
+def _delete_verify_jobs(rig: Rig) -> None:
+    with rig.env.sessions.begin() as s:
+        s.execute(delete(Job).where(Job.kind == JobKind.VERIFY))
+
+
+async def test_a_new_album_gets_a_content_key_and_a_searched_request_none(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    with rig.env.sessions.begin() as s:
+        s.add(Request(user_id=1, release_mbid="x"))
+    drop, searched = rig.requests()
+    assert drop.content_key is not None and drop.content_key.startswith("drop:")
+    assert searched.content_key is None
+
+
+async def test_attempts_are_counted_from_requests_not_verify_jobs(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    _delete_verify_jobs(rig)
+    await rig.scan()  # latest in progress: skipped
+    assert len(rig.requests()) == 1
+    with rig.env.sessions.begin() as s:
+        s.execute(update(Request).values(status="failed"))
+    await rig.scan()  # latest failed, under the cap: queued again
+    assert [r.status for r in rig.requests()] == ["failed", "verifying"]
+    with rig.env.sessions.begin() as s:
+        s.execute(update(Request).values(status="failed"))
+    _delete_verify_jobs(rig)
+    await rig.scan()  # the third attempt
+    reqs = rig.requests()
+    assert len(reqs) == dropfolder.MAX_ATTEMPTS and reqs[-1].status == "verifying"
+    with rig.env.sessions.begin() as s:
+        s.execute(update(Request).values(status="failed"))
+    _delete_verify_jobs(rig)
+    await rig.scan()  # three requests, latest failed: given up
+    assert len(rig.requests()) == dropfolder.MAX_ATTEMPTS
+
+
+async def test_deleting_the_only_request_makes_the_next_scan_queue_again(rig: Rig) -> None:
+    put_album(rig.drop, "Alpha Band/Alpha Album")
+    rig.settle()
+    await rig.scan()
+    with rig.env.sessions.begin() as s:
+        s.execute(delete(Job).where(Job.kind == JobKind.VERIFY))
+        s.execute(delete(Request))
+    await rig.scan()
+    assert len(rig.requests()) == 1
 
 
 async def test_an_unusable_file_fails_the_drop_without_a_search(

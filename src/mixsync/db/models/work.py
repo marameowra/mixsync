@@ -95,6 +95,8 @@ class Request(TimestampMixin, Base):
     recording_mbids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     # from-files requests: {"candidate": ..., "paths": [...]}, what the first VERIFY started with
     origin: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # drop/adopt: "<source>:<digest of the files>", how the drop folder finds its attempts
+    content_key: Mapped[str | None] = mapped_column(String(80), index=True)
 
     @property
     def from_files(self) -> bool:

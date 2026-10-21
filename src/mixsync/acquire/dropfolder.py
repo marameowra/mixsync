@@ -2,7 +2,7 @@
 
 Each scan reuses the migration scan to hash and group the folder, then makes one request and one
 VERIFY job per album, so the normal pipeline identifies, imports (originals go to the trash) or
-sends it to review. The job's idempotency key is the folder plus its content hash: an album
+sends it to review. The request's content key is the folder plus its content hash: an album
 already queued, imported or rejected in review is never queued again, a changed one is.
 """
 
@@ -113,7 +113,11 @@ class DropFolder:
                 return 0
             for g in groups:
                 base = f"{self.source}:{_digest(g, hashes)}"
-                earlier = verify.requests_of_key(s, base)
+                earlier = list(
+                    s.scalars(
+                        select(Request.id).where(Request.content_key == base).order_by(Request.id)
+                    )
+                )
                 key = base if not earlier else f"{base}:{len(earlier)}"
                 if earlier:
                     last = s.get(Request, earlier[-1])
@@ -136,6 +140,7 @@ class DropFolder:
                     artist=g.artist[:255],
                     album=(g.album or Path(g.folder).name)[:255],
                     source=self.source,
+                    content_key=base,
                 )
                 lifecycle.verifying(req)
                 s.add(req)
