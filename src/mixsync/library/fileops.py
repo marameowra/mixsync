@@ -368,8 +368,16 @@ class FileOps:
         base = base or self.trash_dir
         parts = Path(rel).parts
         at = 0 if base == self.trash_dir else 1
-        if len(parts) < at + 2 or _day(parts[at]) is None or ".." in parts:
-            raise SafetyError(f"{rel!r} is not in a dated folder of {base}")
+        # quarantine purges reach only rejected/; a journaled review/ path is refused too
+        if (
+            len(parts) < at + 2
+            or _day(parts[at]) is None
+            or ".." in parts
+            or (at and parts[0] != "rejected")
+        ):
+            raise SafetyError(
+                f"{rel!r} is not in a dated {'trash' if at == 0 else 'quarantine'} folder"
+            )
         try:
             p = self._under(base, rel)
         except SafetyError:
@@ -447,31 +455,13 @@ class FileOps:
         kept = {_norm(k) for k in keep}
         return self._purge_days(self.trash_dir, self.trash_dir, older_than_days, batch_id, kept)
 
-    def purge_quarantine(
-        self, older_than_days: int, batch_id: str, rejected_review: Collection[str] = ()
-    ) -> int:
+    def purge_quarantine(self, older_than_days: int, batch_id: str) -> int:
         """Purge rejected candidates the way purge_trash does (`quarantine/rejected/<day>`,
-        journaled with root `quarantine`). `rejected_review` holds quarantine-relative files
-        under `review/` whose decision a person rejected; the caller has checked their age.
-        Any other review file is refused. Returns the number of files deleted."""
-        count = self._purge_days(
+        journaled with root `quarantine`). `review/` is never touched. Returns the number of
+        files deleted."""
+        return self._purge_days(
             self.quarantine_dir / "rejected", self.quarantine_dir, older_than_days, batch_id, set()
         )
-        review = self.quarantine_dir / "review"
-        for rel in rejected_review:
-            if Path(rel).parts[:1] != ("review",) or not self._purge_one(
-                rel, batch_id, "quarantine", self.quarantine_dir
-            ):
-                continue
-            count += 1
-            for d in (self.quarantine_dir / rel).parents:  # empty folders only, up to review/
-                if d == review:
-                    break
-                try:
-                    d.rmdir()
-                except OSError:
-                    break
-        return count
 
     def restore(self, trash_rel: str, rel: str, batch_id: str, root: str = "library") -> None:
         """Move a trashed file back to path rel under root. Never replaces a file: raises

@@ -12,9 +12,8 @@ Non-negotiable rules. Code that touches files or the library goes through `libra
   - A dropped candidate's files are copied there (journaled, hash-verified), then the `/downloads` source is released. Rejections and unusable files go to `rejected/`, review-band matches to `review/`; evidence and assignment paths point at the quarantine copies.
   - Accepting a review candidate imports from quarantine, then releases the quarantine copy like a released download. A person's reject leaves the files and sets the decision's `final_action = reject` and `acted_at`.
   - Migration, drop-folder and adopted files are never quarantined, nor are rejected folders already in `/downloads`.
+  - **Auto-purge:** the same daily job deletes `rejected/<day>` folders older than `MIXSYNC_TRASH_DAYS` (by folder name; exactly that old is kept). Each file is a journaled `purge` op with root `quarantine`; symlinks are skipped. `review/` is never purged, including candidates a person rejected.
   - Nothing else is deleted from quarantine.
-
-> Planned — not built (#208): journaled purge of rejected quarantine entries (`rejected/<day>` by folder name; person-rejected `review/` entries by `acted_at`; other `review/` never).
 
 ## Managed paths
 - Library, discover, staging, trash, quarantine and scratch paths reject absolute paths, `..`, and symlinked components, including the root itself. Destinations must resolve under the root; missing destination directories are fine. Ancestor symlinks above a configured root (a data mount) are fine.
