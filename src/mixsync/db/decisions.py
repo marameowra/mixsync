@@ -19,6 +19,7 @@ _STATUS_BY_ACTION = {
     "reject": "rejected",
     "repick": "repick",
     "unverified": "unverified",
+    "cancel": "cancelled",  # the request was deleted before anyone judged the candidate
     "recheck": "rechecked",  # closed out so verify can decide again with the current scorer
 }
 
