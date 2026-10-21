@@ -8,15 +8,13 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mixsync.acquire.evidence import Evidence
+from mixsync.acquire import review
 from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
 from mixsync.acquire.requests import create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
-from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.discovery import ProvisionalHold
-from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
@@ -108,16 +106,10 @@ def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
     if not _deletable(req, _live_states(db, [req.id])):
         raise HTTPException(409, "request is in progress")
     # A decision still pending for this request would sit in /review with nothing to act on.
-    # Stage 1 decisions are never in /review and decisions.act rejects them.
-    pending = select(MatchDecision).where(
-        MatchDecision.status == decisions.PENDING, MatchDecision.stage == 2
-    )
-    for d in db.scalars(pending):
-        if Evidence.parse(d.evidence).request_id == req.id:
-            try:
-                decisions.act(db, d.id, user_id, "reject")
-            except decisions.DecisionStateError:
-                raise HTTPException(409, "a review is acting on this request") from None
+    try:
+        review.cancel(db, req.id, user_id)
+    except review.Refused as e:
+        raise HTTPException(409, str(e)) from e
     # A worker may have claimed the repeat search since _deletable checked; never delete its job.
     held = (JobState.LEASED, JobState.RUNNING)
     db.execute(delete(Job).where(_of(req.id), Job.status.not_in(held)))

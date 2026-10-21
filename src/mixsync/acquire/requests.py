@@ -1,5 +1,5 @@
 """Request state shared by the pipeline handlers and the web layer: creating a request,
-marking candidates tried, coalescing rescans and applying a reviewer's decision."""
+marking candidates tried, and coalescing rescans."""
 
 import random
 from collections.abc import Iterable, Sequence
@@ -218,23 +218,6 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
         {"request_id": req.id, "decision_id": decision_id},
         idempotency_key=f"import:{req.id}:{decision_id}",
     )
-
-
-def apply_review(s: Session, now: datetime, decision_id: int) -> None:
-    """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
-    d = s.get(MatchDecision, decision_id)
-    ev = Evidence.parse(d.evidence) if d else None
-    req = s.get(Request, ev.request_id) if ev else None
-    if d is None or ev is None or req is None:  # a decision that did not come from a request
-        return
-    if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
-        enqueue_import(s, now, req, d.id)
-    elif d.final_action == "repick":
-        verify.again(s, now, req, d.chosen_release_mbid, ev)
-    elif req.from_files:  # no other candidate to look for: the album stays out
-        lifecycle.rejected(req)
-    else:
-        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review")
 
 
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle, verify
+from mixsync.acquire import lifecycle, review, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
@@ -393,7 +393,9 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
     with sf() as s:
         assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
         d = s.get(MatchDecision, did)
-        assert d and d.status == "rejected"  # kept for the record, off the review queue
+        # kept for the record, off the review queue; nobody judged it, so not "rejected"
+        assert d and d.status == "cancelled" and d.final_action == "cancel"
+        assert d.acted_by == d.user_id and d.acted_at
 
 
 def test_delete_request_with_stage1_pending_decision(
@@ -457,9 +459,9 @@ def test_delete_request_409_when_review_acts_first(
         d.evidence = {**d.evidence, "request_id": rid}
 
     def raced(*_a: object, **_k: object) -> None:
-        raise decisions.DecisionStateError("already acted on")
+        raise review.Refused("a review is acting on this request")
 
-    monkeypatch.setattr(decisions, "act", raced)
+    monkeypatch.setattr(review, "cancel", raced)
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
@@ -478,7 +480,7 @@ def test_delete_request_409_when_job_claimed_after_check(
         assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
 
 
-def test_delete_request_409_rolls_back_decision_rejects(
+def test_delete_request_409_rolls_back_decision_cancels(
     client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rid = _req(sf, "alice", "failed", JobState.FAILED)
@@ -488,15 +490,13 @@ def test_delete_request_409_rolls_back_decision_rejects(
             d = s.get(MatchDecision, did)
             assert d
             d.evidence = {**d.evidence, "request_id": rid}
-    real, calls = decisions.act, []
+    real = review.cancel
 
-    def second_raises(*a: object, **k: object) -> object:
-        calls.append(a)
-        if len(calls) == 2:
-            raise decisions.DecisionStateError("already acted on")
-        return real(*a, **k)  # type: ignore[arg-type]
+    def cancels_then_refuses(*a: Any, **k: Any) -> None:
+        real(*a, **k)  # the decisions are cancelled in this transaction
+        raise review.Refused("a review is acting on this request")
 
-    monkeypatch.setattr(decisions, "act", second_raises)
+    monkeypatch.setattr(review, "cancel", cancels_then_refuses)
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
@@ -855,7 +855,7 @@ def test_clear_imported(
                 run_after=leased_job.run_after,
             )
         )
-    # A worker leases the row after listing: _delete rejects the decision and deletes the FAILED
+    # A worker leases the row after listing: _delete cancels the decision and deletes the FAILED
     # job, then 409s on the held one; only the savepoint undoes that.
     monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
     dec = {}
@@ -879,7 +879,7 @@ def test_clear_imported(
         for rid, want in dec.items():
             d = s.get(MatchDecision, want)
             assert d
-            assert d.status == (decisions.PENDING if rid == leased else "rejected")
+            assert d.status == (decisions.PENDING if rid == leased else "cancelled")
 
 
 def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]) -> None:
