@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     navidrome_password: str = ""
     navidrome_library: str = "Music Library"  # the main library's name in Navidrome
     navidrome_discover_library: str = "discover"  # the library over /data/discover
+    backup_dir: Path | None = None  # unset: config_dir/backups; SQLite only
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
