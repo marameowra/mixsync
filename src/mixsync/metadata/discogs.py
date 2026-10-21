@@ -46,9 +46,13 @@ def map_positions(
     """Number tracks within each disc in listed order, so vinyl `A1, A2, B1` becomes 1, 2, 3.
 
     Headings are dropped; an index track is replaced by its sub-tracks. A `2-`, `2.` or `CD2-`
-    position prefix sets the disc (an index's sub-tracks take their disc from the index)."""
+    position prefix sets the disc (an index's sub-tracks use their own, else the index's)."""
     counts: dict[int, int] = {}
     out: list[DiscogsTrack] = []
+
+    def disc_of(position: str, default: int = 1) -> int:
+        m = _DISC.match(position.strip())
+        return int(m.group(1)) if m else default
 
     def add(t: DiscogsTrackRaw, disc: int) -> None:
         counts[disc] = counts.get(disc, 0) + 1
@@ -56,13 +60,12 @@ def map_positions(
         out.append(DiscogsTrack(t.title, artist, disc, counts[disc]))
 
     for t in tracklist:
-        m = _DISC.match(t.position.strip())
-        disc = int(m.group(1)) if m else 1
+        disc = disc_of(t.position)
         if t.type_ == "track":
             add(t, disc)
         elif t.type_ == "index":
-            for sub in t.sub_tracks:
-                add(sub, disc)
+            for sub in t.sub_tracks:  # each takes its own disc prefix, else the index's
+                add(sub, disc_of(sub.position, disc))
     return tuple(out)
 
 

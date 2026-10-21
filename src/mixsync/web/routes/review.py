@@ -383,15 +383,24 @@ def _down(source: str) -> str:
     )
 
 
+def _release_lock(request: Request, db: Db, d: MatchDecision, token: str | None) -> dict[str, bool]:
+    """End the request transaction before provider calls: the rate limiter writes to the same
+    SQLite file. `d` stays readable for the page; the provider flags are read first."""
+    flags = {"deezer": _deezer_on(request), "discogs": token is not None}
+    db.expunge(d)
+    db.commit()
+    return flags
+
+
 def _suggest_page(
     request: Request,
-    db: Db,
+    flags: dict[str, bool],
     user: AuthUser,
     d: MatchDecision,
     prefill: dict[str, Any],
     **extra: Any,
 ) -> HTMLResponse:
-    ctx = {"user": user, "d": d, "prefill": prefill, **_flags(request, db, user), **extra}
+    ctx = {"user": user, "d": d, "prefill": prefill, **flags, **extra}
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
 
@@ -443,6 +452,7 @@ async def _search(
 ) -> HTMLResponse:
     d, token = _suggest_target(request, db, user, decision_id, provider)
     prefill = _sent(Evidence.parse(d.evidence).files, *form)
+    flags = _release_lock(request, db, d, token)
     jobs: list[tuple[str, Awaitable[list[Suggestion]]]] = []
     if provider in (None, "deezer") and _deezer_on(request):
         jobs.append(("Deezer", _deezer_hits(deezer, form[0], form[1])))
@@ -455,7 +465,7 @@ async def _search(
         hits += found
         notes.append(note)
     return _suggest_page(
-        request, db, user, d, prefill, suggestions=hits, note=" ".join(n for n in notes if n)
+        request, flags, user, d, prefill, suggestions=hits, note=" ".join(n for n in notes if n)
     )
 
 
@@ -506,10 +516,11 @@ async def _choose(
     if not picked.isdecimal() or len(picked) > 18:
         raise HTTPException(400, f"not a {source} id")
     prefill = _sent(Evidence.parse(d.evidence).files, *form)
+    flags = _release_lock(request, db, d, token)
     try:
         chosen = await fetch(int(picked), token)
     except (TransientError, PermanentError):
-        return _suggest_page(request, db, user, d, prefill, note=_down(source))
+        return _suggest_page(request, flags, user, d, prefill, note=_down(source))
     by_pos = {(t.disc, t.track): t for t in chosen.tracks}
     matched = 0
     for row in prefill["rows"]:
@@ -523,7 +534,7 @@ async def _choose(
     prefill["deezer_album_id"] = prefill["discogs_release_id"] = ""  # one provenance at a time
     prefill["deezer_album_id" if provider == "deezer" else "discogs_release_id"] = str(chosen.id)
     note = f"{source} has {len(chosen.tracks)} tracks, {matched} matched."
-    return _suggest_page(request, db, user, d, prefill, note=note)
+    return _suggest_page(request, flags, user, d, prefill, note=note)
 
 
 @router.post("/{decision_id}/deezer/choose")

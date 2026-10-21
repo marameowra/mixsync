@@ -99,9 +99,10 @@ def get_link(s: Session, user_id: int, service: str) -> UserLink | None:
     )
 
 
-def _service(request: Request, service: str) -> str:
+def _service(request: Request, service: str, *, linking: bool = True) -> str:
+    """`linking` False is for removing a stored link, which stays possible with Discogs off."""
     if service not in SERVICES or (
-        service == "discogs" and not request.app.state.settings.discogs_suggestions
+        linking and service == "discogs" and not request.app.state.settings.discogs_suggestions
     ):
         raise HTTPException(404, "no such service")
     return service
@@ -115,8 +116,12 @@ def _page(
     error: tuple[str, str] | None = None,
     status: int = 400,
 ) -> HTMLResponse:
-    by_service = {link.service: link for link in user_links(s, box, user.id)}
     discogs = request.app.state.settings.discogs_suggestions
+    by_service = {
+        link.service: link
+        for link in user_links(s, box, user.id)
+        if discogs or link.service != "discogs"
+    }
     ctx = {"user": user, "links": by_service, "error": error, "discogs": discogs}
     return templates.TemplateResponse(
         request, "pages/account.html", ctx, status_code=status if error else 200
@@ -155,7 +160,9 @@ async def save(
         elif service == "discogs":
             msg = "Discogs did not accept that token."
             try:
-                name = (await validator.discogs_username(secret) if secret else None) or ""
+                # a header value: control and non-ASCII characters are refused before any request
+                ok = secret.isascii() and secret.isprintable()
+                name = (await validator.discogs_username(secret) if secret and ok else None) or ""
             except TransientError:
                 name, msg = "", "Couldn't reach Discogs; try again."
         else:
@@ -199,7 +206,7 @@ async def save(
 
 @router.post("/{service}/unlink")
 def unlink(request: Request, service: str, user: CurrentUser, db: Db) -> RedirectResponse:
-    link = get_link(db, user.id, _service(request, service))
+    link = get_link(db, user.id, _service(request, service, linking=False))
     if link is not None:
         db.delete(link)
     return RedirectResponse("/account", 303)

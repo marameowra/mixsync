@@ -42,7 +42,8 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.secretbox import SecretBox, set_secret
 from mixsync.metadata.coverart import CoverArtClient
 from mixsync.metadata.deezer import DeezerAlbum, DeezerTrack
-from mixsync.metadata.discogs import DiscogsRelease, DiscogsTrack
+from mixsync.metadata.discogs import DiscogsClient, DiscogsRelease, DiscogsTrack
+from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.deps import get_coverart, get_deezer, get_discogs, get_watch
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
@@ -822,7 +823,7 @@ DISCOGS_TOKEN = "discogs-SECRET-token"
 def _discogs_decision(
     client: TestClient,
     sf: sessionmaker[Session],
-    fake: FakeDiscogs,
+    fake: object,
     *,
     deezer: FakeDeezer | None = None,
     linked: bool = True,
@@ -936,6 +937,18 @@ def test_one_provider_failing_still_shows_the_other_with_a_note(
     assert f'<span class="muted">{other}</span>' in r.text
     assert f'<span class="muted">{name}</span>' not in r.text
     assert DISCOGS_TOKEN not in r.text
+
+
+def test_discogs_non_json_answer_is_a_note_and_deezer_results_still_show(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    t = httpx.MockTransport(lambda _r: httpx.Response(200, text="<html>not json</html>"))
+    real = DiscogsClient(PoliteClient("discogs", Settings(), sf, transport=t))
+    i = _discogs_decision(client, sf, real, deezer=FakeDeezer())
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/suggest", data={**FORM, "csrf_token": tok})
+    assert r.status_code == 200 and "Discogs could not be reached" in r.text
+    assert '<span class="muted">Deezer</span>' in r.text and DISCOGS_TOKEN not in r.text
 
 
 def test_discogs_choose_fills_the_form_and_records_provenance(

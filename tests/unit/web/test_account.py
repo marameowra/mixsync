@@ -486,3 +486,48 @@ async def test_default_validator_discogs(settings: Settings, sf: sessionmaker[Se
     assert await _ping(settings, sf, valid).discogs_username("good") == "vinylfan"
     rejected = _ping(settings, sf, lambda r: httpx.Response(401))
     assert await rejected.discogs_username("bad") is None
+
+
+@pytest.mark.parametrize("token", ["ab\r\nX-Evil: 1", "tab\there", "t\u00f6ken", "nul\x00"])
+def test_discogs_token_with_header_unsafe_characters_is_refused_before_any_call(
+    client: TestClient,
+    fake: FakeValidator,
+    sf: sessionmaker[Session],
+    box: SecretBox,
+    token: str,
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    r = client.post("/account/discogs", data={"secret": token, "csrf_token": tok})
+    assert r.status_code == 400 and "Discogs did not accept that token." in r.text
+    assert fake.discogs_calls == 0 and _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_link_can_be_removed_and_is_hidden_while_the_setting_is_off(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert _link(sf, box, "alice", "discogs")
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": False})
+    assert "Discogs" not in client.get("/account").text
+    r = client.post("/account/discogs/unlink", data={"csrf_token": tok})
+    assert r.status_code == 303 and _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_relink_banner_is_hidden_while_the_setting_is_off(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": False})
+    app.state.services = replace(
+        app.state.services, secret_box=SecretBox(Fernet.generate_key())
+    )  # the key changed: the stored token can no longer be decrypted
+    assert "can no longer be decrypted" not in client.get("/account").text
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": True})
+    assert "can no longer be decrypted" in client.get("/account").text

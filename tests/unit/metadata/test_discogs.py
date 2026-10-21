@@ -72,8 +72,8 @@ def test_headings_are_dropped_and_index_sub_tracks_count() -> None:
             "type_": "index",
             "title": "Suite",
             "sub_tracks": [
-                {"position": "2.1", "title": "Suite a"},
-                {"position": "2.2", "title": "Suite b"},
+                {"position": "2a", "title": "Suite a"},
+                {"position": "2b", "title": "Suite b"},
             ],
         },
         "3",
@@ -84,6 +84,32 @@ def test_headings_are_dropped_and_index_sub_tracks_count() -> None:
         ("Suite b", 1, 3),
         ("t3", 1, 4),
     ]
+
+
+def test_index_sub_tracks_take_the_disc_from_their_own_positions() -> None:
+    rows = raw(
+        "1-1",
+        "1-2",
+        "2-1",
+        {
+            "position": "",
+            "type_": "index",
+            "title": "Suite",
+            "sub_tracks": [
+                {"position": "2-2a", "title": "Suite a"},
+                {"position": "2-2b", "title": "Suite b"},
+            ],
+        },
+        "2-3",
+    )
+    assert pos(map_positions(rows)) == [(1, 1), (1, 2), (2, 1), (2, 2), (2, 3), (2, 4)]
+
+
+async def test_non_json_body_is_permanent_and_hides_the_token(make_client: Make) -> None:
+    discogs = DiscogsClient(make_client("discogs", lambda _r: httpx.Response(200, text="<html>")))
+    with pytest.raises(PermanentError) as e:
+        await discogs.release(1, token=TOKEN)
+    assert TOKEN not in str(e.value)
 
 
 async def test_search_releases_sends_the_token_only_as_a_header(make_client: Make) -> None:
