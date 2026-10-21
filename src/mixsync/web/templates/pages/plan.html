@@ -1,31 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Plan {{ plan.id }} - MixSync{% endblock %}
 {% block content %}
+{% from "macros/ui.html" import status %}
 {% set promote = plan.kind == "promote" %}
 <h1>{{ "Promote" if promote else "Merge" }} plan {{ plan.id }}</h1>
-{% if promote %}<p>Found on MusicBrainz as release {{ mb.link("release", plan.canonical_release_mbid) }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves. Status: <strong>{{ plan.status }}</strong></p>
-{% else %}<p>Release group {{ mb.link("release-group", plan.release_group_mbid) }}: merge onto {{ mb.link("release", plan.canonical_release_mbid) }}. Status: <strong>{{ plan.status }}</strong></p>{% endif %}
-{% if plan.error %}<p class="band-reject">Error: {{ plan.error }}</p>{% endif %}
-<p>{{ counts.move }} to move, {{ counts.trash }} to trash, {{ counts.keep }} to keep. Originals go to .trash and can be restored with Undo.</p>
-{% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm promotion" if promote else "Confirm merge") }}{% endif %}
-{% if "discard" in allowed %}<form method="post" action="/library/plans/{{ plan.id }}/discard">{{ forms.csrf() }}<button type="submit">Discard plan</button></form>{% endif %}
-{% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume promotion" if promote else "Resume merge") }}{% endif %}
-{% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo promotion" if promote else "Undo merge") }}{% endif %}
-<div class="scroll">
+{% if promote %}<p>Found on MusicBrainz as release {{ mb.link("release", plan.canonical_release_mbid) }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves.</p>
+{% else %}<p>Release group {{ mb.link("release-group", plan.release_group_mbid) }}: merge onto {{ mb.link("release", plan.canonical_release_mbid) }}.</p>{% endif %}
+{% if plan.error %}<p class="notice danger" role="alert">✕ Error: {{ plan.error }}</p>{% endif %}
+<section class="consequence" aria-label="Plan consequences">
+  <h2>What this plan changes</h2>
+  <dl><div><dt>Move</dt><dd>{{ counts.move }}</dd></div><div><dt>Trash</dt><dd{% if counts.trash %} class="trash"{% endif %}>{{ counts.trash }}</dd></div><div><dt>Keep</dt><dd>{{ counts.keep }}</dd></div></dl>
+  <p>{{ counts.move }} {{ "files" if counts.move != 1 else "file" }} to move and retag; {{ counts.trash }} duplicate{{ "s" if counts.trash != 1 else "" }} to trash; {{ counts.keep }} {{ "files" if counts.keep != 1 else "file" }} to keep unchanged. Originals in .trash can be restored with Undo while recovery is available. Undo does not retract AcoustID submissions; Resume continues unfinished operations below.</p>
+</section>
+<div id="plan-actions" class="actionbar" role="region" aria-label="Plan decision">
+  <div class="summary">{{ status(plan.status) }} <strong>{% if promote %}Promote to {{ mb.link("release", plan.canonical_release_mbid) }}{% else %}Merge {{ mb.link("release-group", plan.release_group_mbid) }} onto {{ mb.link("release", plan.canonical_release_mbid) }}{% endif %}</strong> <span class="muted">· {{ counts.move }} to move · {{ counts.trash }} to trash · {{ counts.keep }} to keep</span></div>
+  <div class="actions">
+    {% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", ("Confirm promotion" if promote else "Confirm merge") ~ ": move " ~ counts.move ~ ", trash " ~ counts.trash) }}{% endif %}
+    {% if "discard" in allowed %}<form method="post" action="/library/plans/{{ plan.id }}/discard">{{ forms.csrf() }}<button class="btn danger" type="submit">Discard plan</button></form>{% endif %}
+    {% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume promotion" if promote else "Resume merge") }}{% endif %}
+    {% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo promotion" if promote else "Undo merge") }}{% endif %}
+  </div>
+</div>
+<div class="table-wrap scroll">
 <table>
   <thead><tr><th>Op</th><th>File</th><th>Detail</th></tr></thead>
   <tbody>
   {% for op in plan.ops %}
   <tr>
-    <td>{{ op.op }}{% if op.done %} (done){% endif %}</td>
+    <td class="plan-op">{{ op.op }}{% if op.done %} (done){% endif %}</td>
     {% if op.op == "move" %}
-    <td>{{ op.old.path }} &rarr; {{ op.new_path }}</td>
+    <td class="plan-file">{{ op.old.path }} &rarr; {{ op.new_path }}</td>
     <td>status {{ op.old.status }} &rarr; {{ op.tags.status }}; release {{ mb.link("release", op.old.release_mbid) }} &rarr; {{ mb.link("release", op.tags.release_id) }}; recording <a href="https://musicbrainz.org/recording/{{ op.tags.recording_id }}" title="{{ op.tags.recording_id }}">{{ op.tags.title }}</a>; new tags: {{ op.tags.disc }}-{{ op.tags.track }} {{ op.tags.title }}, album {{ op.tags.album }}{% if op.done %}; <a href="/library/tracks/{{ op.track_id }}/tags">restore earlier tags</a>{% endif %}</td>
     {% elif op.op == "trash" %}
-    <td>{{ op.old.path }}</td>
+    <td class="plan-file">{{ op.old.path }}</td>
     <td>duplicate; keeping {{ op.keeper }}</td>
     {% else %}
-    <td>{{ op.old.path }}</td>
+    <td class="plan-file">{{ op.old.path }}</td>
     <td>{{ op.reason or "not on the canonical release" }}</td>
     {% endif %}
   </tr>

@@ -1,0 +1,41 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/mb.html" as mb with context %}
+{% set path = request.url.path %}
+{% set can_edit = "library.edit" in user.capabilities if user else false %}
+{% set can_request = "request" in user.capabilities if user else false %}
+{% set is_admin = "admin" in user.capabilities if user else false %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MixSync{% endblock %}</title>
+  <link rel="stylesheet" href="/themes/swiss/static/theme.css">
+</head>
+<body>
+  {% if user %}
+  {% macro link(href, label, count=none) -%}
+  <a href="{{ href }}"{% if (href == "/" and path == "/") or (href != "/" and path.startswith(href)) %} aria-current="page"{% endif %}>{{ label }}{% if count is defined and count is not none and count > 0 %}<span class="count">{{ count }}</span>{% endif %}</a>
+  {%- endmacro %}
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="/"{% if path == "/" %} aria-current="page"{% endif %}>MixSync</a>
+    <div class="group"><span class="group-name">Find</span>
+      {%- if can_request %}{{ link("/discover", "Discover") }}{{ link("/watchlist", "Watchlist") }}{% endif %}
+      {{ link("/requests", "Requests") }}
+    </div>
+    <div class="group"><span class="group-name">Resume</span>
+      {{ link("/review", "Review", pending) }}
+      {%- if can_edit %}{{ link("/library/unverified", "Unverified", unverified) }}{% endif %}
+    </div>
+    <div class="group"><span class="group-name">Library</span>
+      {{ link("/library/fragments", "Fragments") }}
+      {%- if is_admin %}{{ link("/migration", "Migration") }}{% endif %}
+    </div>
+    <div class="group end">{{ link("/account", "Account") }}<form method="post" action="/logout">{{ forms.csrf() }}<button class="btn quiet" type="submit">Log out</button></form></div>
+  </nav>
+  {% endif %}
+  <main>
+  {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

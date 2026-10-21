@@ -3,19 +3,24 @@
 {% block content %}
 <h1>Watchlist</h1>
 <p>New releases from followed artists and labels are requested automatically.</p>
+<h2>Find an artist or label</h2>
 <form method="get" action="/watchlist/search">
-  <label>Search MusicBrainz
-    <select name="kind"><option value="artist">artist</option><option value="label">label</option></select>
-    <input name="q" type="text" required></label>
-  <button type="submit">Search</button>
+  <div class="field"><label for="search-kind">Search type</label>
+    <select id="search-kind" name="kind"><option value="artist">artist</option><option value="label">label</option></select></div>
+  <div class="field"><label for="search-query">Search MusicBrainz</label>
+    <input id="search-query" name="q" type="text" required></div>
+  <button class="primary" type="submit">Search MusicBrainz</button>
 </form>
+<h2>Follow by MusicBrainz ID</h2>
 <form method="post" action="/watchlist/follow">
   {{ forms.csrf() }}
-  <label>Or MusicBrainz URL or MBID
-    <select name="kind"><option value="artist">artist</option><option value="label">label</option></select>
-    <input name="mbid" type="text" required></label>
+  <div class="field"><label for="follow-kind">Follow type</label>
+    <select id="follow-kind" name="kind"><option value="artist">artist</option><option value="label">label</option></select></div>
+  <div class="field"><label for="follow-mbid">MusicBrainz URL or MBID</label>
+    <input id="follow-mbid" name="mbid" type="text" required></div>
   <button type="submit">Follow</button>
 </form>
+<h2>Following</h2>
 {% if rows %}
 <div class="scroll">
 <table>

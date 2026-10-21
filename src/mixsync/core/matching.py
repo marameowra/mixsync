@@ -52,6 +52,8 @@ class FileTrack:
     disc: int | None = None
     recording_id: str | None = None
     acoustid: tuple[AcoustIdResult, ...] = ()  # lookup results for the audio, any order
+    high_band: float | None = None  # share of power above 16 kHz; lossless files only
+    trailing_silence: float | None = None  # seconds of silence at the end of the file
 
 
 @dataclass(frozen=True)

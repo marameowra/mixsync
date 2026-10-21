@@ -1,22 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Discover - MixSync{% endblock %}
+{% from "macros/media.html" import artwork %}
+{% from "macros/ui.html" import status %}
 {% block content %}
 <h1>Discover</h1>
 <p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
-{% if not rows %}<p>No playlists yet.</p>{% endif %}
-{% if not linked %}<p>Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
+{% if not rows %}<p class="empty">No playlists yet. Link your listening services to start discovering music.</p>{% endif %}
+{% if not linked %}<p class="notice"><span aria-hidden="true">i</span> Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
 
 {% if soon %}
 <h2>Expiring in the next 7 days</h2>
 <div class="scroll">
 <table>
-  <thead><tr><th>Track</th><th>Expires</th><th></th></tr></thead>
+  <thead><tr><th>Track</th><th>Expires</th><th>Action</th></tr></thead>
   <tbody>
   {% for h in soon %}
   <tr>
-    <td>{{ h.name }}</td>
+    <td><div class="release-heading">{{ artwork(h.name, h.artwork_src, "xs") }}<span>{{ h.name }}</span></div></td>
     <td>{% if h.overdue %}overdue (was {{ h.expires.date() }}){% else %}{{ h.expires.date() }}{% endif %}</td>
-    <td><form method="post" action="/discover/keep/{{ h.mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form></td>
+    <td><form method="post" action="/discover/keep/{{ h.mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form></td>
   </tr>
   {% endfor %}
   </tbody>
@@ -27,33 +29,33 @@
 {% for p in rows %}
 <h2>{{ p.name }}</h2>
 <p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}.</p>
-{% if p.last_error %}<p>Note: {{ p.last_error }}</p>{% endif %}
-<form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Build now</button></form>
+{% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last build: {{ p.last_error }}</p>{% endif %}
+<form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit"{% if loop.first %} class="primary"{% endif %}>Build now</button></form>
 {% if tracks[p.id] %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Track</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Track</th><th>Status</th><th>Action</th></tr></thead>
   <tbody>
   {% for t in tracks[p.id] %}
   <tr>
-    <td>{{ t.artist }} - {{ t.title }}</td>
-    <td>{{ t.status }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
-    <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep</button></form>{% endif %}</td>
+    <td><div class="release-heading">{{ artwork(t.title, t.artwork_src, "xs") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
+    <td>{{ status(t.status, t.status) }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
+    <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 {% else %}<p>No tracks yet.</p>{% endif %}
-<h3>Settings</h3>
+<h3>Playlist settings</h3>
 <form method="post" action="/discover/{{ p.id }}/settings">
   {{ forms.csrf() }}
-  <p><label>Size <input name="size" type="text" inputmode="numeric" value="{{ p.size }}"></label></p>
-  <p><label>Unowned ratio (0 to 1) <input name="unowned_ratio" type="text" value="{{ p.unowned_ratio }}"></label></p>
-  <p><label>Cadence (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ p.cadence_days }}"></label></p>
-  <p><label>Retention (days) <input name="retention_days" type="text" inputmode="numeric" value="{{ p.retention_days }}"></label> applies to tracks imported from now on, not to ones already in discover</p>
-  <p><label>Keep after plays <input name="keep_plays" type="text" inputmode="numeric" value="{{ p.keep_plays }}"></label></p>
-  <button type="submit">Save</button>
+  <p class="field"><label>Size <input name="size" type="text" inputmode="numeric" value="{{ p.size }}"></label></p>
+  <p class="field"><label>Unowned ratio (0 to 1) <input name="unowned_ratio" type="text" value="{{ p.unowned_ratio }}"></label></p>
+  <p class="field"><label>Cadence (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ p.cadence_days }}"></label></p>
+  <p class="field"><label>Retention (days) <input name="retention_days" type="text" inputmode="numeric" value="{{ p.retention_days }}"></label> applies to tracks imported from now on, not to ones already in discover</p>
+  <p class="field"><label>Keep after plays <input name="keep_plays" type="text" inputmode="numeric" value="{{ p.keep_plays }}"></label></p>
+  <button type="submit">Save playlist settings</button>
 </form>
 {% endfor %}
 {% endblock %}

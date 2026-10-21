@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -11,11 +12,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle, verify
+from mixsync.acquire import lifecycle, review, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
+from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
@@ -36,7 +38,8 @@ from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.metadata.coverart import CoverArtClient
-from mixsync.web.deps import get_coverart
+from mixsync.metadata.deezer import DeezerAlbum, DeezerTrack
+from mixsync.web.deps import get_coverart, get_deezer, get_watch
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
@@ -150,7 +153,8 @@ def test_list_and_home_count(client: TestClient, sf: sessionmaker[Session]) -> N
     i = _make_decision(sf, "alice", "/x")
     _login(client, "alice")
     assert f'href="/review/{i}"' in client.get("/review").text
-    assert "1 item awaiting review" in client.get("/").text
+    home = client.get("/", headers={"accept": "*/*"})
+    assert "1 item awaiting review" in home.text
 
 
 def test_detail_reasons_verbatim_and_escaped(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -389,7 +393,9 @@ def test_owner_deletes_failed_request(client: TestClient, sf: sessionmaker[Sessi
     with sf() as s:
         assert s.get(AlbumRequest, rid) is None and not s.scalars(select(Job)).all()
         d = s.get(MatchDecision, did)
-        assert d and d.status == "rejected"  # kept for the record, off the review queue
+        # kept for the record, off the review queue; nobody judged it, so not "rejected"
+        assert d and d.status == "cancelled" and d.final_action == "cancel"
+        assert d.acted_by == d.user_id and d.acted_at
 
 
 def test_delete_request_with_stage1_pending_decision(
@@ -453,9 +459,9 @@ def test_delete_request_409_when_review_acts_first(
         d.evidence = {**d.evidence, "request_id": rid}
 
     def raced(*_a: object, **_k: object) -> None:
-        raise decisions.DecisionStateError("already acted on")
+        raise review.Refused("a review is acting on this request")
 
-    monkeypatch.setattr(decisions, "act", raced)
+    monkeypatch.setattr(review, "cancel", raced)
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
@@ -474,7 +480,7 @@ def test_delete_request_409_when_job_claimed_after_check(
         assert s.scalars(select(Job.status)).all() == [JobState.LEASED]
 
 
-def test_delete_request_409_rolls_back_decision_rejects(
+def test_delete_request_409_rolls_back_decision_cancels(
     client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rid = _req(sf, "alice", "failed", JobState.FAILED)
@@ -484,15 +490,13 @@ def test_delete_request_409_rolls_back_decision_rejects(
             d = s.get(MatchDecision, did)
             assert d
             d.evidence = {**d.evidence, "request_id": rid}
-    real, calls = decisions.act, []
+    real = review.cancel
 
-    def second_raises(*a: object, **k: object) -> object:
-        calls.append(a)
-        if len(calls) == 2:
-            raise decisions.DecisionStateError("already acted on")
-        return real(*a, **k)  # type: ignore[arg-type]
+    def cancels_then_refuses(*a: Any, **k: Any) -> None:
+        real(*a, **k)  # the decisions are cancelled in this transaction
+        raise review.Refused("a review is acting on this request")
 
-    monkeypatch.setattr(decisions, "act", second_raises)
+    monkeypatch.setattr(review, "cancel", cancels_then_refuses)
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
@@ -632,6 +636,159 @@ def test_unverified_409_for_stage_one_and_missing_paths(
         assert r.status_code == 409
 
 
+class FakeDeezer:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self.fail = fail
+
+    async def search_albums(self, artist: str, album: str) -> list[DeezerAlbum]:
+        self.calls.append(("search", artist, album))
+        if self.fail:
+            raise TransientError("deezer down")
+        return [DeezerAlbum(302127, "Discovery", "Daft Punk", None, 3)]
+
+    async def album(self, album_id: int) -> DeezerAlbum:
+        self.calls.append(("album", album_id))
+        if self.fail:
+            raise TransientError("deezer down")
+        tracks = (
+            DeezerTrack("One More Time", "Daft Punk", 1, 1),
+            DeezerTrack("Aerodynamic", "Daft Punk", 1, 2),
+            DeezerTrack("Disc Two", "Daft Punk", 2, 1),
+        )
+        return DeezerAlbum(302127, "Discovery", "Daft Punk", 2001, 3, tracks)
+
+
+def _deezer_decision(client: TestClient, sf: sessionmaker[Session], fake: FakeDeezer) -> int:
+    app: Any = client.app
+    s = app.state.services
+    app.state.services = replace(
+        s, settings=s.settings.model_copy(update={"deezer_suggestions": True})
+    )
+    app.dependency_overrides[get_deezer] = lambda: fake
+    files = [{"name": n, "local_path": f"/{n}"} for n in ("a.mp3", "b.mp3", "c.mp3")]
+    return _extra_decision(sf, "alice", source={"files": files})
+
+
+FORM = {
+    "albumartist": "Daft",
+    "album": "Disc",
+    "year": "",
+    "title": ["x", "y", "keep me"],
+    "artist": ["", "", "mine"],
+    "disc": ["1", "1", "1"],
+    "track": ["1", "2", "9"],
+}
+
+
+def test_deezer_off_shows_nothing_and_never_calls(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    client.app.dependency_overrides[get_deezer] = lambda: fake  # type: ignore[attr-defined]
+    i = _extra_decision(sf, "alice", source={"files": [{"name": "a.mp3", "local_path": "/a"}]})
+    tok = _login(client, "alice")
+    assert "Deezer" not in client.get(f"/review/{i}").text
+    r = client.post(f"/review/{i}/deezer/search", data={**FORM, "csrf_token": tok})
+    assert r.status_code == 404 and fake.calls == []
+
+
+def test_deezer_on_makes_no_request_until_used(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    _login(client, "alice")
+    assert "Suggest from Deezer" in client.get(f"/review/{i}").text
+    assert fake.calls == []
+
+
+def test_deezer_search_lists_albums_and_keeps_the_form(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/deezer/search", data={**FORM, "csrf_token": tok})
+    assert fake.calls == [("search", "Daft", "Disc")]
+    assert "Discovery - Daft Punk, 3 tracks" in r.text and 'value="302127"' in r.text
+    assert 'value="keep me"' in r.text and 'value="Daft"' in r.text
+
+
+def test_deezer_choose_fills_matching_rows_and_records_provenance(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/choose", data={**FORM, "deezer_album": "302127", "csrf_token": tok}
+    )
+    assert fake.calls == [("album", 302127)]
+    assert "Deezer has 3 tracks, 2 matched." in r.text
+    assert 'value="Discovery"' in r.text and 'value="2001"' in r.text
+    assert 'value="One More Time"' in r.text and 'value="Aerodynamic"' in r.text
+    assert 'value="keep me"' in r.text and 'value="mine"' in r.text  # disc 1 track 9: no match
+    assert 'name="deezer_album_id" value="302127"' in r.text
+    form = {
+        "albumartist": "Daft Punk",
+        "album": "Discovery",
+        "year": "2001",
+        "title": ["One More Time", "Aerodynamic", "keep me"],
+        "artist": ["Daft Punk", "Daft Punk", "mine"],
+        "disc": ["1", "1", "1"],
+        "track": ["1", "2", "9"],
+        "deezer_album_id": "302127",
+        "csrf_token": tok,
+    }
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+    with sf() as s:
+        d = s.get(MatchDecision, i)
+        assert d and d.status == "unverified"
+        assert d.evidence["unverified"]["suggestion"] == {"provider": "deezer", "album_id": 302127}
+        assert "deezer" not in str(d.evidence["unverified"]["tracks"]).lower()
+
+
+def test_unverified_without_suggestion_has_no_provenance(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _deezer_decision(client, sf, FakeDeezer())
+    tok = _login(client, "alice")
+    form = {**FORM, "title": ["a", "b", "c"], "csrf_token": tok}
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+    with sf() as s:
+        d = s.get(MatchDecision, i)
+        assert d and "suggestion" not in d.evidence["unverified"]
+
+
+@pytest.mark.parametrize("action", ["search", "choose"])
+def test_deezer_error_shows_message_and_form_still_submits(
+    client: TestClient, sf: sessionmaker[Session], action: str
+) -> None:
+    i = _deezer_decision(client, sf, FakeDeezer(fail=True))
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/{action}",
+        data={**FORM, "deezer_album": "302127", "csrf_token": tok},
+    )
+    assert r.status_code == 200 and "Deezer could not be reached" in r.text
+    assert 'value="keep me"' in r.text
+    form = {**FORM, "title": ["a", "b", "c"], "csrf_token": tok}
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+
+
+def test_deezer_choose_rejects_a_bad_album_id(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/choose", data={**FORM, "deezer_album": "../x", "csrf_token": tok}
+    )
+    assert r.status_code == 400 and fake.calls == []
+
+
 def test_request_list_marks_jobs_the_worker_has_not_taken(
     client: TestClient, sf: sessionmaker[Session]
 ) -> None:
@@ -648,9 +805,10 @@ def test_request_list_marks_jobs_the_worker_has_not_taken(
         rid: next(r for r in page.split("<tr") if f"<td>{rid}</td>" in r)
         for rid in (waiting, running, later)
     }
-    assert "queued (searching)" in rows[waiting]
-    assert "queued" not in rows[running] and "searching" in rows[running]
-    assert "queued" not in rows[later] and "no_results" in rows[later]
+    assert "queued" in rows[waiting].lower() and "(searching)" in rows[waiting].lower()
+    assert "queued" not in rows[running].lower() and "searching" in rows[running].lower()
+    assert "queued" not in rows[later].lower()
+    assert "no results" in rows[later].lower().replace("_", " ")
 
 
 def test_imported_delete_has_no_confirm_and_clear_button(
@@ -697,7 +855,7 @@ def test_clear_imported(
                 run_after=leased_job.run_after,
             )
         )
-    # A worker leases the row after listing: _delete rejects the decision and deletes the FAILED
+    # A worker leases the row after listing: _delete cancels the decision and deletes the FAILED
     # job, then 409s on the held one; only the savepoint undoes that.
     monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
     dec = {}
@@ -721,7 +879,7 @@ def test_clear_imported(
         for rid, want in dec.items():
             d = s.get(MatchDecision, want)
             assert d
-            assert d.status == (decisions.PENDING if rid == leased else "rejected")
+            assert d.status == (decisions.PENDING if rid == leased else "cancelled")
 
 
 def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -870,10 +1028,154 @@ def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) 
     client.app.dependency_overrides[get_coverart] = lambda: fake  # type: ignore[attr-defined]
     i = _extra_decision(sf, "alice", target={"release_group_id": "rg"})
     _login(client, "alice")
-    assert f'src="/media/cover/{i}"' in client.get(f"/review/{i}").text
+    assert f'data="/media/cover/{i}"' in client.get(f"/review/{i}").text
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert fake.seen == (MBID, "rg")
+
+
+def test_artwork_proxy_accepts_release_and_group_ids(client: TestClient) -> None:
+    class Fake:
+        seen: tuple[str | None, str | None] | None = None
+
+        async def front(self, release: str | None, group: str | None) -> bytes | None:
+            self.seen = (release, group)
+            return b"\x89PNGdata"
+
+    fake = Fake()
+    client.app.dependency_overrides[get_coverart] = lambda: fake  # type: ignore[attr-defined]
+    _login(client, "alice")
+    release = client.get(f"/media/artwork/release/{MBID}?group={MBID}")
+    assert release.status_code == 200 and release.headers["content-type"] == "image/png"
+    assert fake.seen == (MBID, MBID)
+    group = client.get(f"/media/artwork/release-group/{MBID}")
+    assert group.status_code == 200 and fake.seen == (None, MBID)
+
+
+def test_artwork_provider_failure_is_not_cached(client: TestClient) -> None:
+    class Failing:
+        async def front(self, _release: str | None, _group: str | None) -> bytes | None:
+            raise TransientError("offline")
+
+    client.app.dependency_overrides[get_coverart] = lambda: Failing()  # type: ignore[attr-defined]
+    _login(client, "alice")
+    response = client.get(f"/media/artwork/release/{MBID}")
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_requests_and_home_show_known_release_artwork(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        s.add(
+            AlbumRequest(
+                user_id=uid,
+                release_mbid=MBID,
+                release_group_mbid="33333333-3333-3333-3333-333333333333",
+                artist="Artist",
+                album="Album",
+                status="searching",
+            )
+        )
+    _login(client, "alice")
+    src = f"/media/artwork/release/{MBID}?group=33333333-3333-3333-3333-333333333333"
+    assert f'data="{src}"' in client.get("/requests").text
+    assert f'data="{src}"' in client.get("/").text
+
+
+def test_discover_old_entry_uses_existing_request_artwork(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    recording = "44444444-4444-4444-4444-444444444444"
+    group = "33333333-3333-3333-3333-333333333333"
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        playlist = DiscoveryPlaylist(
+            user_id=uid,
+            name="Old",
+            entries=[{"recording_mbid": recording, "artist": "Artist", "title": "Track"}],
+        )
+        s.add(playlist)
+        s.flush()
+        req = AlbumRequest(
+            user_id=uid,
+            release_mbid=MBID,
+            release_group_mbid=group,
+            recording_mbids=[recording],
+            provisional=True,
+            status="searching",
+        )
+        s.add(req)
+        s.flush()
+        s.add(
+            ProvisionalHold(
+                user_id=uid, recording_mbid=recording, playlist_id=playlist.id, request_id=req.id
+            )
+        )
+    _login(client, "alice")
+    assert f'data="/media/artwork/release/{MBID}?group={group}"' in client.get("/discover").text
+
+
+def test_watchlist_follow_artwork_uses_release_and_group(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    group = "33333333-3333-3333-3333-333333333333"
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        entity = WatchedEntity(kind="artist", mbid="55555555-5555-5555-5555-555555555555")
+        s.add(entity)
+        s.flush()
+        follow = Follow(user_id=uid, entity_id=entity.id, name="Artist")
+        s.add(follow)
+        s.flush()
+        follow_id = follow.id
+        s.add(
+            FollowHit(
+                follow_id=follow.id,
+                release_group_mbid=group,
+                release_mbid=MBID,
+                title="Album",
+                artist="Artist",
+                release_date="2020",
+                status="requested",
+            )
+        )
+    _login(client, "alice")
+    assert (
+        f'data="/media/artwork/release/{MBID}?group={group}"'
+        in client.get(f"/watchlist/{follow_id}").text
+    )
+
+
+def test_watchlist_catalog_artwork_uses_group_route(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    group = "33333333-3333-3333-3333-333333333333"
+
+    class Watch:
+        async def artist_discography(self, _mbid: str) -> tuple[list[Any], bool]:
+            return (
+                [SimpleNamespace(type="album", date="2020", group_id=group, title="Album")],
+                False,
+            )
+
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        entity = WatchedEntity(kind="artist", mbid="55555555-5555-5555-5555-555555555555")
+        s.add(entity)
+        s.flush()
+        follow = Follow(user_id=uid, entity_id=entity.id, name="Artist")
+        s.add(follow)
+        s.flush()
+        follow_id = follow.id
+    client.app.dependency_overrides[get_watch] = lambda: Watch()  # type: ignore[attr-defined]
+    _login(client, "alice")
+    assert (
+        f'data="/media/artwork/release-group/{group}"'
+        in client.get(f"/watchlist/{follow_id}/catalog").text
+    )
 
 
 def _real_cover(
@@ -988,7 +1290,10 @@ def _reviewed(
 
 def _started(sf: sessionmaker[Session], rid: int) -> bool:
     with sf() as s:
-        return verify.started(s, rid)
+        found = select(Job.id).where(
+            Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == rid
+        )
+        return s.scalar(found.limit(1)) is not None
 
 
 def test_recheck_requeues_against_the_release(

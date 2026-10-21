@@ -135,7 +135,7 @@ def test_jitter_stays_in_range() -> None:
         samples = [jitter(base) for _ in range(200)]
         assert all(base / 2 <= j <= base * 1.5 for j in samples)
         assert len(set(samples)) > 100  # random, not a fixed point
-    assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # the roadmap's bound
+    assert jitter(timedelta(days=3)) <= timedelta(days=4.5)  # 0.5x-1.5x, per watchlist/README.md
 
 
 def test_year_only_dates_pass_a_cutoff_in_their_year() -> None:
@@ -444,7 +444,10 @@ def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> N
         create_user(s, "bob", "pw")
     tok = login(web, "alice")
     page = web.get("/watchlist/search", params={"kind": "artist", "q": "radio"})
+    assert "<h1>Follow an artist</h1>" in page.text
     assert "Radiohead" in page.text and "UK band" in page.text
+    label_page = web.get("/watchlist/search", params={"kind": "label", "q": "radio"})
+    assert "<h1>Follow a label</h1>" in label_page.text
     r = web.post(
         "/watchlist/follow",
         data={
@@ -634,7 +637,7 @@ def test_picker_queues_and_the_job_requests(env: Env, web: TestClient) -> None:
         assert s.scalar(select(func.count()).select_from(Request)) == 0
         hit = s.scalars(select(FollowHit).where(FollowHit.release_group_mbid == rid(1))).one()
         assert hit.status == "picked"
-    assert "picked" in web.get(f"/watchlist/{fid}").text
+    assert "picked" in web.get(f"/watchlist/{fid}").text.lower()
     _run_pick(env, watch)
     _run_pick(env, watch)  # a re-run adds nothing
     with env.sessions() as s:

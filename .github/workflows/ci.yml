@@ -49,7 +49,7 @@ jobs:
       - run: uv run pyright
       - run: uv run lint-imports
       - run: uv run pytest -n auto
-  # Same suite on Postgres. Not a required check, so it just skips with `check` on docs-only changes.
+  # Same suite on Postgres. Required by the dev and main rulesets (with `check`); on docs-only changes it skips like `check`.
   postgres:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}

@@ -169,6 +169,7 @@ async def test_a_dropped_album_starts_a_verify_that_identifies_the_release(rig: 
     assert len(p["paths"]) == len(ALBUM.tracks) and all(Path(x).is_absolute() for x in p["paths"])
     assert job.max_attempts == verify.VERIFY_ATTEMPTS and job.idempotency_key
     assert req.status == "verifying"
+    assert req.origin == {"candidate": p["candidate"], "paths": p["paths"]}
     await rig.env.drain()
     assert [d.release_given for d in decision_rows(rig.env, 2)] == [False]  # identified
 

@@ -1,0 +1,7 @@
+{
+  "data": [
+    {"id": 302127, "title": "Discovery", "nb_tracks": 14, "record_type": "album", "artist": {"id": 27, "name": "Daft Punk", "type": "artist"}, "type": "album"},
+    {"id": 999, "title": "Discovery (Live)", "nb_tracks": 3, "artist": {"id": 27, "name": "Daft Punk"}}
+  ],
+  "total": 2
+}

@@ -24,6 +24,7 @@ class JobKind(StrEnum):
     DISCOVERY_BUILD = "discovery_build"
     DISCOVERY_PUSH = "discovery_push"
     DISCOVERY_RETAIN = "discovery_retain"
+    DB_BACKUP = "db_backup"
 
 
 class JobState(StrEnum):

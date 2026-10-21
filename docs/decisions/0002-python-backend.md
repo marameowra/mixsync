@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-09
+- **Note:** the beets spike mentioned under Consequences is resolved by [ADR 0006](0006-port-beets-autotag.md). `pyacoustid` and `musicbrainzngs` in the table were not adopted; the clients are httpx-based.
 
 ## Context
 The workload is I/O-bound: HTTP calls to slskd, MusicBrainz, AcoustID, and Navidrome, plus file copies. Raw CPU speed is irrelevant. What matters, in order:
