@@ -21,7 +21,7 @@ Features: AcoustID recording match (mandatory for every file, [ADR 0009](../deci
 | Balanced | 0.08 | 0.40 | reject |
 | Loose | 0.15 | 0.55 | reject |
 
-- **Hard vetoes** force review whatever the distance: a high-scoring AcoustID match to a *different* recording, duration off by more than 15 s.
+- **Hard vetoes** force review whatever the distance: a high-scoring AcoustID match to a *different* recording, duration off by more than 15 s, a lossless file with almost nothing above 16 kHz (transcode), a file silent for over half its length at the end (padded preview).
 - **Reject** never deletes: files go to quarantine ([data safety](data-safety.md#1-no-hard-deletes-in-the-normal-flow)) and the next candidate is tried. Discovery requests treat a review-band match as a rejection.
 
 ## Close runner-up
