@@ -333,6 +333,18 @@ class FileOps:
         self.release(src, batch_id, "quarantine")
         return self._under(self.quarantine_dir, rel)
 
+    def refile_rejected(self, src: Path, batch_id: str) -> Path:
+        """Move a file of a rejected review candidate from `quarantine/review/` to
+        `quarantine/rejected/<today>/` so the auto-purge reaches it. Any other path (a download,
+        an adopted or migrated file, already in rejected/) stays where it is, and so does a file
+        that is gone and was never moved. Safe to repeat for one batch."""
+        review = (self.quarantine_dir / "review").resolve()
+        if src.is_symlink() or review not in src.resolve().parents:
+            return src
+        if not src.exists() and self.find_imported(batch_id, src, "quarantine") is None:
+            return src
+        return self.quarantine(src, "rejected", batch_id)
+
     def _trash_copy(self, src: Path, trash_rel: str) -> None:
         """Copy src into the trash and check it; src is untouched. Raises if the copy differs."""
         dst = self._under(self.trash_dir, trash_rel)

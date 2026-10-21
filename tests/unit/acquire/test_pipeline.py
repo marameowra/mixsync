@@ -675,7 +675,8 @@ async def test_review_reject_tries_next_candidate_and_keeps_files(
 
     assert env.source.enqueued == ["peer1", "peer2"]
     assert status(env, rid) == "imported" and len(library(env)) == 2
-    assert len(quarantined(env, "review")) == 2  # rejected files are kept, in quarantine
+    # rejected files are kept, re-filed in quarantine/rejected for the purge (#244)
+    assert quarantined(env, "review") == [] and len(quarantined(env, "rejected")) == 2
     with env.sessions() as s:
         req = s.get(Request, rid)
         assert req and req.tried[0][0] == "peer1"

@@ -57,6 +57,22 @@ class Evidence:
     def with_unverified(self, edits: dict[str, Any]) -> "Evidence":
         return Evidence({**self.raw, "unverified": edits})
 
+    def with_paths(self, moved: dict[str, str]) -> "Evidence":
+        """The same evidence with each moved file's `local_path` (listed files and assignment)
+        pointing at its new place."""
+
+        def swap(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return [
+                {**r, "local_path": moved.get(r.get("local_path") or "", r.get("local_path"))}
+                for r in rows
+            ]
+
+        raw: dict[str, Any] = {**self.raw}
+        raw["source"] = {**raw.get("source", {}), "files": swap(self.files)}
+        if "assignment" in raw:
+            raw["assignment"] = swap(raw["assignment"])
+        return Evidence(raw)
+
     def with_switched_from(self, release_id: str) -> "Evidence":
         return Evidence({**self.raw, "canonical_switched_from": release_id})
 
