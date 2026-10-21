@@ -9,6 +9,7 @@ class JobKind(StrEnum):
     VERIFY = "verify"
     IMPORT = "import"
     RESCAN = "rescan"
+    REFILE = "refile"
     MERGE = "merge"
     UNDO_MERGE = "undo_merge"
     RECHECK = "recheck"

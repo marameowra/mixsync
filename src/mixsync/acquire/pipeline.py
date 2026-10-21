@@ -122,6 +122,7 @@ class Pipeline:
             JobKind.VERIFY: self.verify,
             JobKind.IMPORT: self.import_,
             JobKind.RESCAN: self.rescan,
+            JobKind.REFILE: self.refile,
         }
 
     def _request(self, s: Session, job: JobRecord) -> Request:
@@ -538,6 +539,28 @@ class Pipeline:
         return [
             await asyncio.to_thread(self.importer.fileops.quarantine, p, kind, batch) for p in paths
         ]
+
+    async def refile(self, job: JobRecord) -> None:
+        """A person rejected a review decision: move its files from quarantine/review/ to
+        quarantine/rejected/ (journaled, hash-verified) so the purge reaches them, then point
+        its evidence at the new paths. One batch per decision, so a retry resumes."""
+        did = job.payload["decision_id"]
+        with self.sessions() as s:
+            d = s.get(MatchDecision, did)
+            if d is None:
+                raise LookupError(f"decision {did} does not exist")
+            ev = Evidence.parse(d.evidence)
+        moved: dict[str, str] = {}
+        for path in {f["local_path"] for f in ev.files if f.get("local_path")}:
+            new = await asyncio.to_thread(
+                self.importer.fileops.refile_rejected, Path(path), f"refile-{did}"
+            )
+            if str(new) != path:
+                moved[path] = str(new)
+        if moved:
+            with self.sessions.begin() as s:
+                d = s.get_one(MatchDecision, did)
+                d.evidence = Evidence.parse(d.evidence).with_paths(moved).to_json()
 
     async def _unusable(self, path: Path) -> str | None:
         """Why this download cannot be imported (naming the file), else None. Only WAV/AIFF

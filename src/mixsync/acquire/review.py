@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import drop_candidate, enqueue_import
+from mixsync.core.jobs import JobKind
 from mixsync.db import decisions
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Request
+from mixsync.db.queue import enqueue_in
 
 RecheckOutcome = Literal["queued", "missing", "stale", "busy"]
 
@@ -51,6 +53,14 @@ def accept(s: Session, now: datetime, decision_id: int, actor_id: int) -> None:
 
 def reject(s: Session, now: datetime, decision_id: int, actor_id: int) -> None:
     _, ev, req = _claim(s, decision_id, actor_id, "reject")
+    if _files_known(s.get(MatchDecision, decision_id)):  # the job moves any from quarantine/review
+        enqueue_in(
+            s,
+            now,
+            JobKind.REFILE,
+            {"decision_id": decision_id},
+            idempotency_key=f"refile:{decision_id}",
+        )
     if req is None:
         return
     if req.from_files:  # no other candidate to look for: the album stays out

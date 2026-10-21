@@ -89,12 +89,19 @@ def test_accept_refuses_without_a_release_and_leaves_the_decision(s: Session, ui
     assert d.status == decisions.PENDING and req.status == "review"
 
 
+def refiles(s: Session) -> list[int]:
+    return [
+        j.payload["decision_id"] for j in s.scalars(select(Job).where(Job.kind == JobKind.REFILE))
+    ]
+
+
 def test_reject_drops_the_candidate_and_searches_again(s: Session, uid: int) -> None:
     d, req = reviewed(s, uid, "/x")
     review.reject(s, NOW, d.id, uid)
     assert (d.status, d.acted_by) == ("rejected", uid)
     assert req.tried == [["peer1", "Music\\Album"]] and req.status != "review"
     assert len(jobs(s, JobKind.SEARCH, req)) == 2
+    assert refiles(s) == [d.id]
 
 
 def test_reject_of_a_from_files_request_marks_it_rejected(s: Session, uid: int) -> None:
@@ -102,6 +109,7 @@ def test_reject_of_a_from_files_request_marks_it_rejected(s: Session, uid: int) 
     review.reject(s, NOW, d.id, uid)
     assert (req.status, req.last_error) == ("skipped", "rejected in review")
     assert len(jobs(s, JobKind.SEARCH, req)) == 1  # no new search
+    assert refiles(s) == [d.id]  # its files leave quarantine/review too
 
 
 def test_repick_verifies_against_the_chosen_release(s: Session, uid: int) -> None:
