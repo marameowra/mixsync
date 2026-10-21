@@ -1,5 +1,5 @@
 """Request state shared by the pipeline handlers and the web layer: creating a request,
-marking candidates tried, coalescing rescans and applying a reviewer's decision."""
+marking candidates tried, and coalescing rescans."""
 
 import random
 from collections.abc import Iterable, Sequence
@@ -170,9 +170,10 @@ def drop_candidate(
     job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
     spent: bool = False,  # its first bytes landed: uses one unit of the request budget
 ) -> None:
-    """The one way a candidate is dropped: it joins the request's tried list (its files stay in
-    /downloads, never deleted) and the request searches again, or fails when it has nothing to
-    search for. The next search is fresh and skips every tried [peer, folder]."""
+    """The one way a candidate is dropped: it joins the request's tried list (verify has already
+    moved its files into quarantine, never deleted) and the request searches again, or fails
+    when it has nothing to search for. The next search is fresh and skips every tried
+    [peer, folder]."""
     if req.from_files:  # nothing to search for: a person must look at the files
         if not partial and not job_failed:
             lifecycle.download_failed(req, False, why)
@@ -227,23 +228,6 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
         {"request_id": req.id, "decision_id": decision_id},
         idempotency_key=f"import:{req.id}:{decision_id}",
     )
-
-
-def apply_review(s: Session, now: datetime, decision_id: int) -> None:
-    """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
-    d = s.get(MatchDecision, decision_id)
-    ev = Evidence.parse(d.evidence) if d else None
-    req = s.get(Request, ev.request_id) if ev else None
-    if d is None or ev is None or req is None:  # a decision that did not come from a request
-        return
-    if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
-        enqueue_import(s, now, req, d.id)
-    elif d.final_action == "repick":
-        verify.again(s, now, req, d.chosen_release_mbid, ev)
-    elif req.from_files:  # no other candidate to look for: the album stays out
-        lifecycle.rejected(req)
-    else:
-        drop_candidate(s, now, req, ev.peer, ev.folder, "rejected in review", spent=True)
 
 
 AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them

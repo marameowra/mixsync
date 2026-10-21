@@ -26,6 +26,6 @@ If the match-review screen outgrows HTMX, it gets **one small island component**
 | React / Next.js | The biggest ecosystem | The heaviest option; pulls toward flashy design; overkill |
 
 ## Consequences
-- Live progress (downloads, imports) uses SSE fragments swapped in by HTMX.
+- Live progress (downloads, imports) uses SSE fragments swapped in by HTMX. _Superseded by [ADR 0017](0017-live-updates-by-htmx-polling.md): HTMX polling, not SSE._
 - Styling rules: system font stack, one accent color, CSS grid/flex only, `prefers-reduced-motion` respected, no transitions longer than 150 ms.
-- Playwright tests cover the phone and desktop widths ([testing](../testing.md#ui-tests)).
+- Playwright tests are to cover the phone and desktop widths ([testing](../testing.md#ui-tests)). Not built yet: `TestClient` page tests are what exist.

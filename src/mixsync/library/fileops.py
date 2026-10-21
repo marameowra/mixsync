@@ -1,6 +1,7 @@
 """The only module that writes under the data dir. See docs/design/data-safety.md.
 
 The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir
+(or an accepted review candidate from `quarantine/`, where `quarantine()` copies dropped downloads)
 (a drop-dir original is first copied into `.trash/<day>/.drop/` and checked),
 `clear_work()`, which empties MixSync's own re-encode scratch space, and
 `purge_trash()`, which deletes files in `.trash/<day>/` folders older than the retention (minus
@@ -104,7 +105,12 @@ class FileOps:
         drop_dir: Path | None = None,
     ) -> None:
         self.library = data_dir / "library"
-        self.roots = {"library": self.library, "discover": data_dir / "discover"}
+        self.quarantine_dir = data_dir / "quarantine"
+        self.roots = {
+            "library": self.library,
+            "discover": data_dir / "discover",
+            "quarantine": self.quarantine_dir,
+        }
         self.incoming = data_dir / ".incoming"
         self.trash_dir = data_dir / ".trash"
         self.work = data_dir / ".work"  # scratch space for re-encoded copies of downloads
@@ -275,6 +281,9 @@ class FileOps:
         real = src.resolve()
         in_drop = drop is not None and drop in real.parents
         base = drop if in_drop and drop else dl
+        if self.quarantine_dir.resolve() in real.parents:  # an accepted review candidate
+            base = self.quarantine_dir.resolve()
+            self._under(self.quarantine_dir, str(real.relative_to(base)))
         if ".." in src.parts or src.is_symlink() or base not in real.parents:
             raise SafetyError(f"{src} is not inside {base}")
         op = self._verified_op(batch_id, src, root)
@@ -294,6 +303,35 @@ class FileOps:
             self._journal.fail(op_id, repr(e))
             raise
         self._journal.complete(op_id, op.dst_hash)
+
+    def quarantine(self, src: Path, kind: str, batch_id: str) -> Path:
+        """Move a dropped candidate's file into `quarantine/<kind>/<day>/<folder>/<name>`
+        (kind `rejected` or `review`; a file already there is re-filed under the new kind).
+        A verified copy, then a journaled release of the source, as for a released download.
+        Safe to repeat for one batch. Returns the new path (src itself for a file that is
+        neither a download nor already quarantined, which stays where it is)."""
+        if kind not in ("rejected", "review"):
+            raise SafetyError(f"unknown quarantine kind: {kind!r}")
+        q = self.quarantine_dir.resolve()
+        real = src.resolve()
+        if src.is_symlink():
+            raise SafetyError(f"{src} is a symlink")
+        if q in real.parents:
+            old = real.relative_to(q).parts
+            if old[0] == kind:
+                return src
+            name = "/".join(old[2:])
+        elif self.downloads.resolve() in real.parents:
+            name = str(real.relative_to(self.downloads.resolve()))
+        else:  # not a download (an old library's file, say): never ours to move
+            return src
+        rel = self.find_imported(batch_id, src, "quarantine")
+        if rel is None:
+            day = self._clock.now().date().isoformat()
+            rel = unique(f"{kind}/{day}/{name}", lambda r: (self.quarantine_dir / r).exists())
+            self.import_file(src, rel, lambda _p, _i: None, batch_id, root="quarantine")
+        self.release(src, batch_id, "quarantine")
+        return self._under(self.quarantine_dir, rel)
 
     def _trash_copy(self, src: Path, trash_rel: str) -> None:
         """Copy src into the trash and check it; src is untouched. Raises if the copy differs."""

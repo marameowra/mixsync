@@ -93,6 +93,8 @@ class Request(TimestampMixin, Base):
     # discovery: import only the wanted recordings, into /data/discover
     provisional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     recording_mbids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # from-files requests: {"candidate": ..., "paths": [...]}, what the first VERIFY started with
+    origin: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     @property
     def from_files(self) -> bool:

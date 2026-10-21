@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Migration - MixSync{% endblock %}
 {% block content %}
+{% from "macros/ui.html" import status %}
 <h1>Migration from the old library</h1>
 <p>Copies the albums under the read-only import folder into the library through the matcher. The old tree is never modified.</p>
 {% if not busy %}
-<form method="post" action="/migration/preflight">{{ forms.csrf() }}<button type="submit">Start preflight</button></form>
+<form method="post" action="/migration/preflight">{{ forms.csrf() }}<button class="btn primary" type="submit">Start preflight</button></form>
 {% endif %}
 
 {% for e in migs %}{% set m = e.m %}{% set sm = m.summary %}
-<h2>Migration {{ m.id }}: {{ "completed" if e.completed else m.status }}</h2>
+<h2>Migration {{ m.id }}</h2><p>{{ status("completed" if e.completed else m.status) }}</p>
 {% if m.status == "preflight" %}<p>Scanning and hashing the old library. Reload to see the result.</p>{% endif %}
 {% if sm.get("files") is not none and m.status != "preflight" %}
 <ul>
@@ -19,18 +20,19 @@
 </ul>
 {% if sm.get("unreadable") %}<ul>{% for u in sm["unreadable"][:100] %}<li>{{ u.path }}: {{ u.why }}</li>{% endfor %}</ul>{% endif %}
 {% endif %}
-{% if sm.get("reason") %}<p class="band-reject">Preflight failed: {{ sm["reason"] }}</p>{% endif %}
+{% if sm.get("reason") %}<p class="notice danger" role="alert">✕ Preflight failed: {{ sm["reason"] }}</p>{% endif %}
 
 {% if m.status == "ready" %}
+<section class="consequence" aria-label="Migration consequences"><h3>Before starting</h3><p><strong>{{ sm.get("albums", 0) }} albums / {{ sm.get("files", 0) }} files</strong> enter matching. Accepted files are copied into the library and retagged; uncertain matches wait for review. The old tree stays read-only and is never modified.</p></section>
 <form method="post" action="/migration/{{ m.id }}/confirm">
   {{ forms.csrf() }}
-  <p><label><input type="checkbox" name="paused" value="1" required> I paused other MusicBrainz clients (soulsync, Picard, beets, Lidarr)</label></p>
-  {% if e.typed_needed %}<p><label>Type {{ sm["albums"] }} to confirm <input name="count" type="text" required autocomplete="off"></label></p>{% endif %}
-  <button type="submit">Start migration</button>
+  <p><label class="field"><input type="checkbox" name="paused" value="1" required> I paused other MusicBrainz clients (soulsync, Picard, beets, Lidarr)</label></p>
+  {% if e.typed_needed %}<p><label class="field">Type {{ sm["albums"] }} to confirm <input name="count" type="text" required autocomplete="off"></label></p>{% endif %}
+  <button class="btn primary" type="submit">Start migration</button>
 </form>
 {% endif %}
 {% if m.status == "ready" or (m.status == "preflight" and not e.preflight_live) %}
-<form method="post" action="/migration/{{ m.id }}/discard">{{ forms.csrf() }}<button type="submit">Discard preflight</button></form>
+<form method="post" action="/migration/{{ m.id }}/discard">{{ forms.csrf() }}<button class="btn danger" type="submit">Discard preflight</button></form>
 {% endif %}
 
 {% if m.status == "running" %}
@@ -41,19 +43,19 @@
   {% endfor %}
 </ul>
 <form method="get" action="/migration">
-  <label>Start <input type="date" name="start" value="{{ e.start }}"></label>
-  <label>End <input type="date" name="end" value="{{ e.end }}"></label>
-  <button type="submit">Show</button>
+  <label class="field">Start <input type="date" name="start" value="{{ e.start }}"></label>
+  <label class="field">End <input type="date" name="end" value="{{ e.end }}"></label>
+  <button class="btn" type="submit">Show</button>
 </form>
 <p><a href="/review">Albums in review</a> &middot; <a href="/migration/{{ m.id }}/report.csv?start={{ e.start }}{% if e.csv_end %}&amp;end={{ e.csv_end }}{% endif %}">Download report (CSV)</a></p>
 {% if e.failures %}<ul>{% for r in e.failures %}<li>{{ r.folder }}: {{ r.reason }}
-  {% if r.request_id %}<form method="post" action="/migration/{{ m.id }}/retry/{{ r.request_id }}">{{ forms.csrf() }}<button type="submit">Retry</button></form>{% endif %}
+  {% if r.request_id %}<form method="post" action="/migration/{{ m.id }}/retry/{{ r.request_id }}">{{ forms.csrf() }}<button class="btn" type="submit">Retry</button></form>{% endif %}
 </li>{% endfor %}</ul>{% endif %}
 {% endif %}
 
 {% if m.manifest_path %}
 <h3>Old tree</h3>
-<form method="post" action="/migration/{{ m.id }}/check">{{ forms.csrf() }}<button type="submit">Check old tree</button></form>
+<form method="post" action="/migration/{{ m.id }}/check">{{ forms.csrf() }}<button class="btn" type="submit">Check old tree</button></form>
 {% if e.checking %}<p>Checking...</p>{% endif %}
 {% if m.verify %}
 <p>Last check {{ m.verify["checked_at"] }}: <strong>{{ "byte-identical" if m.verify["identical"] else "CHANGED" }}</strong>

@@ -1,19 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Account - MixSync{% endblock %}
+{% from "macros/ui.html" import status %}
 {% block content %}
 <h1>Account</h1>
-{% if links.values() | selectattr("needs_relink") | list %}<p role="alert">The stored secret for a linked service can no longer be decrypted (the secret key changed or was lost). Link it again below.</p>{% endif %}
+<p>Connect your listening services for discovery playlists. Stored secrets are never shown.</p>
+{% if links.values() | selectattr("needs_relink") | list %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The stored secret for a linked service can no longer be decrypted (the secret key changed or was lost). Link it again below.</p>{% endif %}
 {% for sv, label in (("listenbrainz", "ListenBrainz"), ("navidrome", "Navidrome")) %}
 {% set link = links[sv] %}
 <h2>{{ label }}</h2>
-{% if error and error[0] == sv %}<p role="alert">{{ error[1] }}</p>{% endif %}
-{% if link and link.needs_relink %}<p>Needs relinking (was {{ link.external_username }})</p>{% elif link %}<p>Linked as {{ link.external_username }}</p>{% else %}<p>Not linked.</p>{% endif %}
+{% if error and error[0] == sv %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
+{% if link and link.needs_relink %}<p>{{ status("review", "Needs relinking") }} Previously {{ link.external_username }}.</p>{% elif link %}<p>{{ status("verified", "Linked as " ~ link.external_username) }}</p>{% else %}<p>{{ status("pending", "Not linked") }}</p>{% endif %}
 <form method="post" action="/account/{{ sv }}">
   {{ forms.csrf() }}
-  {% if sv == "navidrome" %}<p><label>Username <input name="username" type="text" value="{{ link.external_username if link else '' }}" required autocomplete="off"></label></p>{% endif %}
-  <p><label>{{ "Password" if sv == "navidrome" else "User token" }} <input name="secret" type="password" value="" required autocomplete="off"></label></p>
-  <button type="submit">{{ "Replace" if link else "Link" }}</button>
+  {% if sv == "navidrome" %}<p class="field"><label>Username <input name="username" type="text" value="{{ link.external_username if link else '' }}" required autocomplete="off"></label></p>{% endif %}
+  <p class="field"><label>{{ "Password" if sv == "navidrome" else "User token" }} <input name="secret" type="password" value="" required autocomplete="off"></label></p>
+  <button type="submit">{{ "Replace" if link else "Link" }} {{ label }}</button>
 </form>
-{% if link %}<form method="post" action="/account/{{ sv }}/unlink">{{ forms.csrf() }}<button type="submit">Unlink</button></form>{% endif %}
+{% if link %}<form method="post" action="/account/{{ sv }}/unlink">{{ forms.csrf() }}<button class="danger" type="submit">Unlink {{ label }}</button></form>{% endif %}
 {% endfor %}
 {% endblock %}

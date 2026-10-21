@@ -1,0 +1,78 @@
+# Default for trusted MixSync checkouts and worktrees containing this file.
+default_permissions = "mixsync-local-dev"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
+[features]
+network_proxy = true
+
+[permissions.mixsync-local-dev]
+description = "MixSync local development with reviewed Git and disposable database operations."
+extends = ":workspace"
+
+[permissions.mixsync-local-dev.filesystem]
+"~/.cache/uv" = "write"
+
+[permissions.mixsync-local-dev.network]
+enabled = true
+mode = "full"
+allow_local_binding = false
+allow_upstream_proxy = false
+
+[permissions.mixsync-local-dev.network.domains]
+"github.com" = "allow"
+"api.github.com" = "allow"
+"localhost" = "allow"
+"127.0.0.1" = "allow"
+
+[auto_review]
+extra_policy = """
+# MixSync local development
+This supplements the base review policy; it does not replace it. Apply only to
+local development in the verified MixSync repository and its task worktrees.
+Repository instructions and existing hooks remain applicable. Inspect every
+operation in compound commands; an allowed prefix alone is not sufficient.
+
+Approve ordinary development operations needed for the current user task:
+- Read, edit, format and test code; create virtual environments; use the uv cache;
+  run the repository CI checks. Review dependency downloads separately, limiting
+  them to the checked-in lockfile and required toolchain's official sources.
+- Create isolated Git worktrees from origin/dev; fetch; merge dev into a feature
+  branch; stage and commit task changes; push ordinary feature branches to the
+  verified repository origin. Keep .git protections; approve individual Git
+  escalations after checking repository, branch, arguments and changed files.
+- Create and update PRs with base dev; queue auto-merge only after every required
+  local check passes (or the documented docs-only exemption applies); verify
+  merger into dev before closing the corresponding fixed issues. These steps
+  must belong to the user's authorized implementation task.
+- Run previews bound to loopback ports 8090 or 8091 using synthetic data only.
+  Stop only a PID verified by command, working directory and task provenance as
+  this task's preview process; do not use broad process-name termination.
+- Run SQLite tests in task-owned temporary directories. Run PostgreSQL tests
+  only against a verified disposable local mixsync_test database at loopback
+  port 55435, using MIXSYNC_TEST_DATABASE_URL. Database/schema reset is authorized
+  only after proving it is the synthetic database created for this task.
+- Review Docker commands individually: use a dedicated, task-owned, explicitly
+  named ephemeral mixsync test container with postgres:16 (review a required
+  pull from the official image registry separately), test-only credentials,
+  mixsync_test, and only 127.0.0.1:55435:5432 published. No privileged mode,
+  capabilities, host networking, host bind mounts, Docker socket mounts, or
+  mounts containing existing data. Verify provenance before stopping/removing
+  the exact container. Do not grant broad Docker daemon/socket access or Docker
+  prefix rules. Never manage another task's container.
+- Reset synthetic .preview contents only after proving the exact canonical
+  directory belongs to this task inside its checkout, is not a symlink, and
+  contains no user data. Preserve needed work first. Delete temporary directories
+  only under the repository's documented task ownership and canonical-path checks.
+
+Do not infer authorization for production or homelab mutations, user music
+changes, deployment, release approval, merging/pushing main, v* tags, GitHub
+releases, force pushes, destructive resets, discarded work, or agent/hook/security
+configuration changes. Existing instructions requiring human authorization for
+exact destructive actions still apply. Network use is limited to the verified
+repository's GitHub HTTPS operations and task-owned loopback services, except
+for separately reviewed lockfile/toolchain downloads and official postgres:16
+image pulls described above; localhost access is not authorization to manage
+unrelated services. Preserve other active chats' files and processes. If evidence is missing, inspect first and reject an
+escalation that cannot be shown to meet these conditions.
+"""

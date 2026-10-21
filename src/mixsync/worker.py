@@ -21,6 +21,7 @@ from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind
+from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
@@ -251,6 +252,12 @@ def _new_queue(
         countries=tuple(settings.canonical_countries),
     )
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
+    nightly = NightlyBackup(
+        sessions,
+        clock,
+        services.engine,
+        settings.backup_dir or Path(settings.config_dir) / "backups",
+    )
     discovery = Discovery(
         sessions,
         clock,
@@ -281,6 +288,7 @@ def _new_queue(
         | submitter.handlers()
         | watcher.handlers()
         | purger.handlers()
+        | nightly.handlers()
         | discovery.handlers()
         | retention.handlers()
     )
@@ -293,6 +301,7 @@ def _new_queue(
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
+        nightly.start_chains,
         dropper.start_chains,
         adopt.start_chains,
         discovery_startup,

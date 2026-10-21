@@ -268,7 +268,7 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     )
     if batch is None and copied is not None:  # a re-match could copy back what a merge removed
         return "its imported files were later merged or removed"
-    if batch is None and not verify.started(s, req.id):
+    if batch is None and req.origin is None:
         return "it was never matched"
     # SQL, not lifecycle: an atomic compare-and-set, so a double click claims the retry once
     values = {"dead_end": False, "partial_note": None, "last_error": None, "dropped": 0} | (
@@ -312,7 +312,6 @@ def report(
         )
     )
     ids = {r.id for r in reqs}
-    first = verify.first_of(s, ids)  # (folder, files) each request started with
     partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
     # every decision since the migration began, not just the window: a row shows its current state
     since = select(MatchDecision).where(MatchDecision.created_at >= began)
@@ -322,12 +321,12 @@ def report(
             partial[ev.request_id] = ev.partial
     rows: list[dict[str, Any]] = [
         {
-            "folder": first.get(r.id, ("", 0))[0],
+            "folder": (r.origin or {}).get("candidate", {}).get("folder", ""),
             "status": "partial" if r.status == "imported" and partial.get(r.id) else r.status,
             "artist": r.artist,
             "album": r.album,
             "release_mbid": r.release_mbid,
-            "files": first.get(r.id, ("", 0))[1],
+            "files": len((r.origin or {}).get("paths", [])),
             "reason": (r.status == "imported" and partial.get(r.id)) or r.last_error or "",
             "request_id": r.id,
         }

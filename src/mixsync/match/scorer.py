@@ -46,7 +46,7 @@ from mixsync.match.features import normalize, string_dist
 from mixsync.match.profiles import band, close_gap
 from mixsync.match.vetoes import acoustid_confirms, acoustid_contradicts, all_confident, find_vetoes
 
-SCORER_VERSION = 5  # 5: close runner-up caps at review
+SCORER_VERSION = 6  # 6: transcode and padded-preview vetoes
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")

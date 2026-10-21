@@ -26,7 +26,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import tags
+from mixsync.library import measure, tags
 from mixsync.library.fileops import WriteTags
 from mixsync.watchlist.poller import owned_groups
 
@@ -68,6 +68,10 @@ def library(env: Env) -> list[str]:
     return sorted(str(p.relative_to(lib)) for p in lib.rglob("*.mp3"))
 
 
+def quarantined(env: Env, kind: str) -> list[Path]:
+    return sorted((env.data_dir / "quarantine" / kind).rglob("*.mp3"))
+
+
 def decision_rows(env: Env, stage: int) -> list[MatchDecision]:
     with env.sessions() as s:
         return list(
@@ -92,6 +96,8 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
 
     assert status(env, rid) == "imported"
     assert library(env) == [FIRST, SECOND]
+    with env.sessions() as s:
+        assert s.get_one(Request, rid).origin is None  # found by searching
     for rel, track in zip((FIRST, SECOND), ALBUM.tracks, strict=True):
         t = tags.read_all(env.data_dir / "library" / rel)["tags"]
         assert t["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
@@ -266,6 +272,25 @@ async def test_two_imports_close_together_share_one_rescan(env: Env) -> None:
     assert [status(env, i) for i in ids] == ["imported", "imported"]
     assert len(library(env)) == 4
     assert env.target.rescans == 1
+
+
+async def test_a_padded_preview_lands_in_review_with_its_veto_text(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def silent_tail(path: Path, duration: float) -> float:
+        return duration * 0.9 if "Two" in path.name else 0.0
+
+    monkeypatch.setattr(measure, "trailing_silence", silent_tail)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "review" and library(env) == []
+    (d,) = decision_rows(env, 2)
+    assert d.status == "pending_review"
+    assert d.vetoes == ["'Song Two': silent from 0:00 to the end (0:01)"]
+    login(web, "alice")
+    assert "silent from 0:00 to the end" in web.get(f"/review/{d.id}").text
 
 
 async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient) -> None:
@@ -613,7 +638,7 @@ async def test_review_reject_tries_next_candidate_and_keeps_files(
 
     assert env.source.enqueued == ["peer1", "peer2"]
     assert status(env, rid) == "imported" and len(library(env)) == 2
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2  # rejected files are kept
+    assert len(quarantined(env, "review")) == 2  # rejected files are kept, in quarantine
     with env.sessions() as s:
         req = s.get(Request, rid)
         assert req and req.tried[0][0] == "peer1"
@@ -1165,7 +1190,7 @@ async def test_unverified_partial_failure_releases_nothing(
     assert web.post(f"/review/{did}/unverified", data=form).status_code == 303
     await env.drain()
     assert status(env, rid) == "failed"
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
+    assert len(quarantined(env, "review")) == 2  # nothing released: the review copies remain
     assert env.source.cleared == []
 
 

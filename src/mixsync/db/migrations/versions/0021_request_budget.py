@@ -1,14 +1,14 @@
 """requests: how many candidates each has dropped after bytes landed (the request budget)
 
-Revision ID: 0020_request_budget
-Revises: 0019_decision_release_given
+Revision ID: 0021_request_budget
+Revises: 0020_request_origin
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0020_request_budget"
-down_revision: str | None = "0019_decision_release_given"
+revision = "0021_request_budget"
+down_revision: str | None = "0020_request_origin"
 branch_labels = None
 depends_on = None
 

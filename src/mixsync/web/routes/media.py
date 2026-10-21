@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
@@ -8,10 +9,25 @@ from mixsync.acquire.evidence import Evidence
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db.auth import AuthUser
+from mixsync.metadata.coverart import CoverArtClient
 from mixsync.web.deps import Cover, Db, decision_for, require
 
 router = APIRouter(prefix="/media")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
+
+
+async def _artwork_response(
+    art: CoverArtClient, release: str | None, group: str | None
+) -> Response:
+    headers = {"Cache-Control": "private, max-age=86400"}
+    try:
+        data = await art.front(release, group)
+    except (TransientError, PermanentError):
+        raise HTTPException(404, headers={"Cache-Control": "no-store"}) from None
+    if data is None:
+        raise HTTPException(404, headers=headers)
+    media_type = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
+    return Response(data, media_type=media_type, headers=headers)
 
 
 @router.get("/preview/{decision_id}/{index}")
@@ -36,12 +52,23 @@ async def cover(decision_id: int, user: User, db: Db, art: Cover) -> Response:
     mbid = d.release_mbid
     group = Evidence.parse(d.evidence).release_group_id
     db.commit()  # the login's last_seen write must not hold the SQLite lock during the bucket's
-    headers = {"Cache-Control": "private, max-age=86400"}
-    try:
-        data = await art.front(mbid, group) if mbid else None
-    except (TransientError, PermanentError):  # an outage must not hide the art for a day
-        raise HTTPException(404, headers={"Cache-Control": "no-store"}) from None
-    if data is None:
-        raise HTTPException(404, headers=headers)
-    kind = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
-    return Response(data, media_type=kind, headers=headers)
+    if not mbid:
+        raise HTTPException(404, headers={"Cache-Control": "private, max-age=86400"})
+    return await _artwork_response(art, mbid, group)
+
+
+@router.get("/artwork/{kind}/{mbid}")
+async def artwork(
+    kind: Literal["release", "release-group"],
+    mbid: UUID,
+    user: User,
+    db: Db,
+    art: Cover,
+    group: UUID | None = None,
+) -> Response:
+    """Cover art for a known MusicBrainz id; deliberately does not look up private rows."""
+    release, release_group = (
+        (str(mbid), str(group) if group else None) if kind == "release" else (None, str(mbid))
+    )
+    db.commit()  # keep the login write out of the cover-art bucket transaction
+    return await _artwork_response(art, release, release_group)
