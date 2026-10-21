@@ -94,6 +94,13 @@ def _state(slskd_state: str) -> TransferStatus:
     return TransferStatus.QUEUED
 
 
+def _retryable(slskd_state: str) -> bool:
+    # Soulseek.NET TransferStates flags: Completed, then Succeeded | Cancelled | TimedOut |
+    # Errored | Rejected | Aborted. Only TimedOut/Errored are a flaky transfer; Cancelled
+    # (stopped on purpose), Rejected and Aborted drop the candidate.
+    return "TimedOut" in slskd_state or "Errored" in slskd_state
+
+
 class SlskdSource:
     def __init__(
         self,
@@ -154,6 +161,7 @@ class SlskdSource:
         raise TransientError(f"slskd search {search_id} reports {expected} responses but gave none")
 
     async def enqueue(self, candidate: Candidate) -> None:
+        """Queue the candidate's files; a candidate with fewer files re-queues just those."""
         body = [{"filename": f.path, "size": f.size} for f in candidate.files]
         result = await self._call("POST", f"/transfers/downloads/{candidate.username}", json=body)
         if result and result.get("failed"):
@@ -162,12 +170,26 @@ class SlskdSource:
     async def status(self, candidate: Candidate) -> TransferInfo:
         data = await self._call("GET", f"/transfers/downloads/{candidate.username}")
         wanted = {f.path for f in candidate.files}
-        mine = [t for d in data["directories"] for t in d["files"] if t["filename"] in wanted]
+        latest: dict[str, dict[str, Any]] = {}  # a re-enqueued file has an older failed record
+        for t in (t for d in data["directories"] for t in d["files"] if t["filename"] in wanted):
+            if t["filename"] not in latest or t.get("requestedAt", "") >= latest[t["filename"]].get(
+                "requestedAt", ""
+            ):
+                latest[t["filename"]] = t
+        mine = list(latest.values())
         sent = sum(t["bytesTransferred"] for t in mine)
         states = {_state(t["state"]) for t in mine}
         if len(mine) < len(wanted):  # slskd has not listed every file yet
             return TransferInfo(TransferStatus.QUEUED, sent)
-        for s in (TransferStatus.FAILED, TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
+        if TransferStatus.FAILED in states:
+            failed = [t for t in mine if _state(t["state"]) is TransferStatus.FAILED]
+            retry = tuple(
+                f for f in candidate.files if any(f.path == t["filename"] for t in failed)
+            )
+            if all(_retryable(t["state"]) for t in failed):
+                return TransferInfo(TransferStatus.FAILED, sent, retry=retry)
+            return TransferInfo(TransferStatus.FAILED, sent)
+        for s in (TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
             if s in states:
                 return TransferInfo(s, sent)
         return TransferInfo(

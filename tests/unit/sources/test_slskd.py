@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -226,6 +227,62 @@ async def test_status_states(
     body = {"username": "peer-001", "directories": [{"directory": "d", "files": files}]}
     src = source(make_client, lambda r: httpx.Response(200, json=body))
     assert (await src.status(cand)).state is expected
+
+
+@pytest.mark.parametrize(
+    ("failure", "retry"),
+    [
+        ("Completed, Errored", True),
+        ("Completed, TimedOut", True),
+        ("Completed, Rejected", False),
+        ("Completed, Cancelled", False),
+    ],
+)
+async def test_only_timed_out_or_errored_files_are_worth_a_retry(
+    make_client: Make, failure: str, retry: bool
+) -> None:
+    cand = candidate()
+    states = ["Completed, Succeeded"] * 3 + [failure]
+    files = [
+        {"filename": f.path, "state": s, "bytesTransferred": 0}
+        for f, s in zip(cand.files, states, strict=True)
+    ]
+    body = {"username": "peer-001", "directories": [{"directory": "d", "files": files}]}
+    info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+    assert info.state is TransferStatus.FAILED
+    assert info.retry == ((cand.files[3],) if retry else ())
+
+
+async def test_a_requeued_file_is_judged_by_its_newest_transfer(make_client: Make) -> None:
+    cand = candidate()
+    files = [
+        {"filename": f.path, "state": "Completed, Succeeded", "bytesTransferred": 0}
+        for f in cand.files
+    ]
+    old = {**files[3], "state": "Completed, Errored", "requestedAt": "2026-01-01T00:00:00Z"}
+    new = {**files[3], "state": "Queued, Remotely", "requestedAt": "2026-01-01T00:05:00Z"}
+    body = {
+        "username": "peer-001",
+        "directories": [{"directory": "d", "files": [*files[:3], old, new]}],
+    }
+    info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+    assert info.state is TransferStatus.QUEUED
+
+
+async def test_a_retry_enqueues_only_the_failed_files(make_client: Make) -> None:
+    cand = candidate()
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(201, json={"enqueued": [], "failed": []})
+
+    await source(make_client, handler).enqueue(replace(cand, files=cand.files[3:]))
+    (post,) = seen
+    assert post.url.path == "/api/v0/transfers/downloads/peer-001"
+    assert json.loads(post.content) == [
+        {"filename": cand.files[3].path, "size": cand.files[3].size}
+    ]
 
 
 async def test_done_reports_local_paths_by_each_files_own_folder(make_client: Make) -> None:

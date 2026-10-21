@@ -92,6 +92,7 @@ IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, rele
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
 DOWNLOAD_BUSY_DELAY = timedelta(seconds=30)  # each look at a full cap is also a rate sample
 MONITOR_EVERY = timedelta(seconds=30)
+FILE_RETRIES = 3  # re-enqueues of one TimedOut/Errored file before the candidate is dropped
 DOWNLOAD_STALL = timedelta(hours=2)  # no new bytes for this long -> the peer has failed us
 ACOUSTID_ID_SCORE = 0.9  # an AcoustID id is written to the tags only above this
 
@@ -290,6 +291,14 @@ class Pipeline:
                 self._monitor(job, now, 0, now)
                 return
             info = await self.source.status(cand)
+            if info.retry:  # a flaky file: queue it again, on the monitor's own cadence
+                tries = dict(p.get("retries", {}))
+                if all(tries.get(f.path, 0) < FILE_RETRIES for f in info.retry):
+                    for f in info.retry:
+                        tries[f.path] = tries.get(f.path, 0) + 1
+                    await self.source.enqueue(replace(cand, files=info.retry))
+                    self._monitor(job, now, info.bytes, now, retries=tries)
+                    return
         except AuthError:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
@@ -323,13 +332,15 @@ class Pipeline:
                 idempotency_key=f"verify:{job.id}",
             )
 
-    def _monitor(self, job: JobRecord, now: datetime, sent: int, since: datetime) -> None:
+    def _monitor(
+        self, job: JobRecord, now: datetime, sent: int, since: datetime, **more: Any
+    ) -> None:
         with self.sessions.begin() as s:
             enqueue_in(
                 s,
                 now,
                 JobKind.DOWNLOAD,
-                {**job.payload, "bytes": sent, "since": since.isoformat()},
+                {**job.payload, "bytes": sent, "since": since.isoformat(), **more},
                 run_after=now + MONITOR_EVERY,
                 idempotency_key=f"monitor:{job.id}",
             )

@@ -471,6 +471,43 @@ async def test_failed_transfer_marks_tried_and_picks_next(env: Env) -> None:
     assert env.source.cleared[0] == "peer1"  # the dropped candidate's transfers are cancelled
 
 
+def first_file(cand: Candidate) -> str:
+    return f"{cand.username}/{cand.files[0].path.rsplit('\\', 1)[-1]}"
+
+
+async def test_a_file_that_errors_twice_then_succeeds_completes_the_candidate(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.outcomes[first_file(cand)] = ["Errored", "TimedOut"]
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 3
+    assert status(env, rid) == "imported" and len(library(env)) == 2
+    assert env.source.cleared == ["peer1"]  # only the release after import, never a drop
+
+
+async def test_a_file_that_fails_a_fourth_time_drops_the_candidate(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.outcomes[first_file(cand)] = ["Errored"] * 4
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 4  # queued once, retried three times
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert env.source.cleared[0] == "peer1" and status(env, rid) == "imported"
+
+
+async def test_a_rejected_file_drops_the_candidate_at_once(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.outcomes[first_file(cand)] = ["Rejected"]
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 1
+    assert env.source.cleared[0] == "peer1" and status(env, rid) == "imported"
+
+
 async def test_a_failed_cancel_does_not_block_the_drop(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
