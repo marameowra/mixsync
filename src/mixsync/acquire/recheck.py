@@ -35,7 +35,7 @@ from mixsync.core.protocols import AcoustIdLookup, Fingerprinter, MetadataProvid
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
-from mixsync.library import paths
+from mixsync.library import measure, paths
 from mixsync.library.fileops import FileOps
 from mixsync.library.fragmentation import row_dict
 from mixsync.library.importer import render_path, tagset_for
@@ -156,7 +156,13 @@ class Rechecker:
             path = self.fileops.library / t.path
             try:
                 fp = await self.fingerprint(path)
-                files[t.id] = file_track(path, fp.duration, tuple(await self.acoustid.lookup(fp)))
+                files[t.id] = file_track(
+                    path,
+                    fp.duration,
+                    tuple(await self.acoustid.lookup(fp)),
+                    await measure.high_band_share(path),
+                    await measure.trailing_silence(path, fp.duration),
+                )
             except Exception as e:  # a bad file is skipped; an outage must retry the job
                 if isinstance(e, TransientError):
                     raise

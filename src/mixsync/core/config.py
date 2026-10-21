@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     mb_base_url: str = "https://musicbrainz.org"  # optional local mirror
     acoustid_app_key: str = ""
     acoustid_user_key: str = ""  # one key for the deployment; all submissions go under it
+    deezer_suggestions: bool = False  # Mark unverified offers on-demand Deezer lookups
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
     max_concurrent_downloads: int = Field(default=3, ge=1)

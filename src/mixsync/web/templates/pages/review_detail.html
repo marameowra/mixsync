@@ -137,6 +137,14 @@
       <label class="field">Album <input name="album" type="text" maxlength="255" required value="{{ prefill.album }}"></label>
       <label class="field">Year <input name="year" type="number" min="1" max="9999" value="{{ prefill.year }}"></label>
     </p>
+    {% if deezer %}
+    <input type="hidden" name="deezer_album_id" value="{{ prefill.deezer_album_id }}">
+    <p><button class="btn" type="submit" formaction="/review/{{ d.id }}/deezer/search" formnovalidate>Suggest from Deezer</button> <span class="muted">Searches Deezer for the album artist and album above; nothing is sent until you press this.</span></p>
+    {% if deezer_note %}<p role="status">{{ deezer_note }}</p>{% endif %}
+    {% if suggestions %}
+    <ul>{% for a in suggestions %}<li>{{ a.title }} - {{ a.artist }}{% if a.year %} ({{ a.year }}){% endif %}, {{ a.track_count }} tracks <button class="btn" type="submit" name="deezer_album" value="{{ a.id }}" formaction="/review/{{ d.id }}/deezer/choose" formnovalidate>Use this album</button></li>{% endfor %}</ul>
+    {% endif %}
+    {% endif %}
     <div class="table-wrap scroll">
     <table>
       <thead><tr><th>File</th><th>Disc</th><th>Track</th><th>Title</th><th>Artist</th></tr></thead>

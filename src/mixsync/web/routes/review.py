@@ -13,12 +13,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from mixsync.acquire import review
 from mixsync.acquire.evidence import Evidence
 from mixsync.core.capabilities import Capability
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
-from mixsync.web.deps import Db, Namer, decision_for, require
+from mixsync.web.deps import Db, Deezer, Namer, decision_for, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.templating import templates
 
@@ -116,7 +117,13 @@ async def review_detail(
         ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
     names = await resolve(db, namer, refs, MAX_LOOKUPS)
-    ctx = {"user": user, "d": d, "prefill": _prefill(d), "names": names}
+    ctx = {
+        "user": user,
+        "d": d,
+        "prefill": _prefill(d),
+        "names": names,
+        "deezer": _deezer_on(request),
+    }
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
 
 
@@ -218,6 +225,7 @@ def unverified(
     disc: Annotated[list[str], Form()],
     track: Annotated[list[str], Form()],
     year: Annotated[str, Form()] = "",
+    deezer_album_id: Annotated[str, Form()] = "",
 ) -> RedirectResponse | HTMLResponse:
     d = decision_for(db, user, decision_id)
     files = Evidence.parse(d.evidence).files
@@ -247,17 +255,141 @@ def unverified(
         ],
     }
     if errors:  # show the form again with what was typed
-        sent = {
-            "albumartist": albumartist,
-            "album": album,
-            "year": year,
-            "rows": [
-                {"name": f.get("name", ""), "title": ti, "artist": ar, "disc": di, "track": tr}
-                for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=False)
-            ],
+        sent = _sent(files, albumartist, album, year, title, artist, disc, track, deezer_album_id)
+        ctx = {
+            "user": user,
+            "d": d,
+            "prefill": sent,
+            "errors": errors,
+            "deezer": _deezer_on(request),
         }
-        ctx = {"user": user, "d": d, "prefill": sent, "errors": errors}
         return templates.TemplateResponse(request, "pages/review_detail.html", ctx, status_code=400)
+    if _deezer_on(request) and deezer_album_id.isdecimal():  # the form came from a suggestion
+        edits["suggestion"] = {"provider": "deezer", "album_id": int(deezer_album_id)}
     return _done(
         lambda: review.unverified(db, datetime.now(UTC), decision_id, user.id, edits), db, user
     )
+
+
+def _deezer_on(request: Request) -> bool:
+    return bool(request.app.state.services.settings.deezer_suggestions)
+
+
+def _sent(
+    files: list[dict[str, Any]],
+    albumartist: str,
+    album: str,
+    year: str,
+    title: list[str],
+    artist: list[str],
+    disc: list[str],
+    track: list[str],
+    deezer_album_id: str,
+) -> dict[str, Any]:
+    """The form as submitted, to show it again."""
+    return {
+        "albumartist": albumartist,
+        "album": album,
+        "year": year,
+        "deezer_album_id": deezer_album_id,
+        "rows": [
+            {"name": f.get("name", ""), "title": ti, "artist": ar, "disc": di, "track": tr}
+            for f, ti, ar, di, tr in zip(files, title, artist, disc, track, strict=False)
+        ],
+    }
+
+
+async def _suggest_form(
+    albumartist: Annotated[str, Form()] = "",
+    album: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+    title: Annotated[list[str], Form()] = [],  # noqa: B006
+    artist: Annotated[list[str], Form()] = [],  # noqa: B006
+    disc: Annotated[list[str], Form()] = [],  # noqa: B006
+    track: Annotated[list[str], Form()] = [],  # noqa: B006
+    deezer_album_id: Annotated[str, Form()] = "",
+) -> tuple[str, str, str, list[str], list[str], list[str], list[str], str]:
+    return albumartist, album, year, title, artist, disc, track, deezer_album_id
+
+
+SuggestForm = Annotated[
+    tuple[str, str, str, list[str], list[str], list[str], list[str], str], Depends(_suggest_form)
+]
+_DEEZER_DOWN = (
+    "Deezer could not be reached or gave no usable answer. You can still fill in the form by hand."
+)
+
+
+def _suggest_page(
+    request: Request,
+    user: AuthUser,
+    d: MatchDecision,
+    prefill: dict[str, Any],
+    **extra: Any,
+) -> HTMLResponse:
+    ctx = {"user": user, "d": d, "prefill": prefill, "deezer": True, **extra}
+    return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
+
+
+def _suggest_target(request: Request, db: Db, user: AuthUser, decision_id: int) -> MatchDecision:
+    d = decision_for(db, user, decision_id)
+    if not _deezer_on(request):
+        raise HTTPException(404, "Deezer suggestions are off")
+    if d.status != decisions.PENDING:
+        raise HTTPException(409, "this review was already acted on")
+    return d
+
+
+@router.post("/{decision_id}/deezer/search")
+async def deezer_search(
+    request: Request, decision_id: int, user: User, db: Db, deezer: Deezer, form: SuggestForm
+) -> HTMLResponse:
+    """Search Deezer for the form's album artist and album; the form comes back as typed."""
+    d = _suggest_target(request, db, user, decision_id)
+    files = Evidence.parse(d.evidence).files
+    prefill = _sent(files, *form)
+    try:
+        found = await deezer.search_albums(form[0], form[1])
+    except (TransientError, PermanentError):
+        return _suggest_page(request, user, d, prefill, deezer_note=_DEEZER_DOWN)
+    note = "" if found else "Deezer found no matching album."
+    return _suggest_page(request, user, d, prefill, suggestions=found, deezer_note=note)
+
+
+@router.post("/{decision_id}/deezer/choose")
+async def deezer_choose(
+    request: Request,
+    decision_id: int,
+    user: User,
+    db: Db,
+    deezer: Deezer,
+    form: SuggestForm,
+    deezer_album: Annotated[str, Form()],
+) -> HTMLResponse:
+    """Fill the form from one Deezer album: rows match on disc and track number."""
+    d = _suggest_target(request, db, user, decision_id)
+    if not deezer_album.isdecimal() or len(deezer_album) > 18:
+        raise HTTPException(400, "not a Deezer album id")
+    files = Evidence.parse(d.evidence).files
+    prefill = _sent(files, *form)
+    try:
+        chosen = await deezer.album(int(deezer_album))
+    except (TransientError, PermanentError):
+        return _suggest_page(request, user, d, prefill, deezer_note=_DEEZER_DOWN)
+    by_pos = {(t.disc, t.track): t for t in chosen.tracks}
+    matched = 0
+    for row in prefill["rows"]:
+        pos = (_num(row["disc"]), _num(row["track"]))
+        if (t := by_pos.get(pos)) is not None:
+            row["title"], row["artist"] = t.title, t.artist
+            matched += 1
+    prefill["albumartist"], prefill["album"] = chosen.artist, chosen.title
+    if chosen.year:
+        prefill["year"] = str(chosen.year)
+    prefill["deezer_album_id"] = str(chosen.id)
+    note = f"Deezer has {len(chosen.tracks)} tracks, {matched} matched."
+    return _suggest_page(request, user, d, prefill, deezer_note=note)
+
+
+def _num(text: str) -> int:
+    return int(text) if text.strip().isdecimal() else 0

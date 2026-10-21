@@ -38,7 +38,8 @@ from mixsync.db.models.watchlist import Follow, FollowHit, WatchedEntity
 from mixsync.db.models.work import Job, Migration
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.metadata.coverart import CoverArtClient
-from mixsync.web.deps import get_coverart, get_watch
+from mixsync.metadata.deezer import DeezerAlbum, DeezerTrack
+from mixsync.web.deps import get_coverart, get_deezer, get_watch
 from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
@@ -633,6 +634,159 @@ def test_unverified_409_for_stage_one_and_missing_paths(
     for i in (stage1, nopath):
         r = client.post(f"/review/{i}/unverified", data={**GOOD, "csrf_token": tok})
         assert r.status_code == 409
+
+
+class FakeDeezer:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self.fail = fail
+
+    async def search_albums(self, artist: str, album: str) -> list[DeezerAlbum]:
+        self.calls.append(("search", artist, album))
+        if self.fail:
+            raise TransientError("deezer down")
+        return [DeezerAlbum(302127, "Discovery", "Daft Punk", None, 3)]
+
+    async def album(self, album_id: int) -> DeezerAlbum:
+        self.calls.append(("album", album_id))
+        if self.fail:
+            raise TransientError("deezer down")
+        tracks = (
+            DeezerTrack("One More Time", "Daft Punk", 1, 1),
+            DeezerTrack("Aerodynamic", "Daft Punk", 1, 2),
+            DeezerTrack("Disc Two", "Daft Punk", 2, 1),
+        )
+        return DeezerAlbum(302127, "Discovery", "Daft Punk", 2001, 3, tracks)
+
+
+def _deezer_decision(client: TestClient, sf: sessionmaker[Session], fake: FakeDeezer) -> int:
+    app: Any = client.app
+    s = app.state.services
+    app.state.services = replace(
+        s, settings=s.settings.model_copy(update={"deezer_suggestions": True})
+    )
+    app.dependency_overrides[get_deezer] = lambda: fake
+    files = [{"name": n, "local_path": f"/{n}"} for n in ("a.mp3", "b.mp3", "c.mp3")]
+    return _extra_decision(sf, "alice", source={"files": files})
+
+
+FORM = {
+    "albumartist": "Daft",
+    "album": "Disc",
+    "year": "",
+    "title": ["x", "y", "keep me"],
+    "artist": ["", "", "mine"],
+    "disc": ["1", "1", "1"],
+    "track": ["1", "2", "9"],
+}
+
+
+def test_deezer_off_shows_nothing_and_never_calls(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    client.app.dependency_overrides[get_deezer] = lambda: fake  # type: ignore[attr-defined]
+    i = _extra_decision(sf, "alice", source={"files": [{"name": "a.mp3", "local_path": "/a"}]})
+    tok = _login(client, "alice")
+    assert "Deezer" not in client.get(f"/review/{i}").text
+    r = client.post(f"/review/{i}/deezer/search", data={**FORM, "csrf_token": tok})
+    assert r.status_code == 404 and fake.calls == []
+
+
+def test_deezer_on_makes_no_request_until_used(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    _login(client, "alice")
+    assert "Suggest from Deezer" in client.get(f"/review/{i}").text
+    assert fake.calls == []
+
+
+def test_deezer_search_lists_albums_and_keeps_the_form(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(f"/review/{i}/deezer/search", data={**FORM, "csrf_token": tok})
+    assert fake.calls == [("search", "Daft", "Disc")]
+    assert "Discovery - Daft Punk, 3 tracks" in r.text and 'value="302127"' in r.text
+    assert 'value="keep me"' in r.text and 'value="Daft"' in r.text
+
+
+def test_deezer_choose_fills_matching_rows_and_records_provenance(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/choose", data={**FORM, "deezer_album": "302127", "csrf_token": tok}
+    )
+    assert fake.calls == [("album", 302127)]
+    assert "Deezer has 3 tracks, 2 matched." in r.text
+    assert 'value="Discovery"' in r.text and 'value="2001"' in r.text
+    assert 'value="One More Time"' in r.text and 'value="Aerodynamic"' in r.text
+    assert 'value="keep me"' in r.text and 'value="mine"' in r.text  # disc 1 track 9: no match
+    assert 'name="deezer_album_id" value="302127"' in r.text
+    form = {
+        "albumartist": "Daft Punk",
+        "album": "Discovery",
+        "year": "2001",
+        "title": ["One More Time", "Aerodynamic", "keep me"],
+        "artist": ["Daft Punk", "Daft Punk", "mine"],
+        "disc": ["1", "1", "1"],
+        "track": ["1", "2", "9"],
+        "deezer_album_id": "302127",
+        "csrf_token": tok,
+    }
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+    with sf() as s:
+        d = s.get(MatchDecision, i)
+        assert d and d.status == "unverified"
+        assert d.evidence["unverified"]["suggestion"] == {"provider": "deezer", "album_id": 302127}
+        assert "deezer" not in str(d.evidence["unverified"]["tracks"]).lower()
+
+
+def test_unverified_without_suggestion_has_no_provenance(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    i = _deezer_decision(client, sf, FakeDeezer())
+    tok = _login(client, "alice")
+    form = {**FORM, "title": ["a", "b", "c"], "csrf_token": tok}
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+    with sf() as s:
+        d = s.get(MatchDecision, i)
+        assert d and "suggestion" not in d.evidence["unverified"]
+
+
+@pytest.mark.parametrize("action", ["search", "choose"])
+def test_deezer_error_shows_message_and_form_still_submits(
+    client: TestClient, sf: sessionmaker[Session], action: str
+) -> None:
+    i = _deezer_decision(client, sf, FakeDeezer(fail=True))
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/{action}",
+        data={**FORM, "deezer_album": "302127", "csrf_token": tok},
+    )
+    assert r.status_code == 200 and "Deezer could not be reached" in r.text
+    assert 'value="keep me"' in r.text
+    form = {**FORM, "title": ["a", "b", "c"], "csrf_token": tok}
+    assert client.post(f"/review/{i}/unverified", data=form).status_code == 303
+
+
+def test_deezer_choose_rejects_a_bad_album_id(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    fake = FakeDeezer()
+    i = _deezer_decision(client, sf, fake)
+    tok = _login(client, "alice")
+    r = client.post(
+        f"/review/{i}/deezer/choose", data={**FORM, "deezer_album": "../x", "csrf_token": tok}
+    )
+    assert r.status_code == 400 and fake.calls == []
 
 
 def test_request_list_marks_jobs_the_worker_has_not_taken(
