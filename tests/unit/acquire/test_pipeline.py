@@ -472,7 +472,7 @@ async def test_failed_transfer_marks_tried_and_picks_next(env: Env) -> None:
 
 
 def first_file(cand: Candidate) -> str:
-    return cand.files[0].path.rsplit("\\", 1)[-1]
+    return f"{cand.username}/{cand.files[0].path.rsplit('\\', 1)[-1]}"
 
 
 async def test_a_file_that_errors_twice_then_succeeds_completes_the_candidate(env: Env) -> None:

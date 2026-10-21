@@ -96,7 +96,8 @@ def _state(slskd_state: str) -> TransferStatus:
 
 def _retryable(slskd_state: str) -> bool:
     # Soulseek.NET TransferStates flags: Completed, then Succeeded | Cancelled | TimedOut |
-    # Errored | Rejected | Aborted. Only the first two failures are a flaky transfer.
+    # Errored | Rejected | Aborted. Only TimedOut/Errored are a flaky transfer; Cancelled
+    # (stopped on purpose), Rejected and Aborted drop the candidate.
     return "TimedOut" in slskd_state or "Errored" in slskd_state
 
 

@@ -111,8 +111,10 @@ class FakeSource:
         self.queries: list[str] = []
         self.enqueued: list[str] = []
         self.state: dict[str, TransferStatus] = {}  # by peer; default DONE
-        self.outcomes: dict[str, list[str]] = {}  # file name -> how each attempt ends, in order
-        self.attempts: dict[str, int] = {}  # file name -> times queued
+        self.outcomes: dict[
+            str, list[str]
+        ] = {}  # peer/file name -> how each attempt ends, in order
+        self.attempts: dict[str, int] = {}  # peer/file name -> times queued
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
         self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
@@ -170,8 +172,8 @@ class FakeSource:
             raise PermanentError("peer refused")
         self.enqueued.append(candidate.username)
         for f in candidate.files:
-            name = f.path.rsplit("\\", 1)[-1]
-            self.attempts[name] = self.attempts.get(name, 0) + 1
+            key = f"{candidate.username}/{f.path.rsplit('\\', 1)[-1]}"
+            self.attempts[key] = self.attempts.get(key, 0) + 1
         d = self._dir(candidate)
         d.mkdir(parents=True, exist_ok=True)
         if not self.write_nothing:
@@ -185,10 +187,11 @@ class FakeSource:
         if state is not TransferStatus.DONE:
             return TransferInfo(state, 0)
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
+        keys = [f"{candidate.username}/{n}" for n in names]
         ended = {  # the outcome of each file's latest attempt, if it failed
-            f: self.outcomes[n][self.attempts[n] - 1]
-            for f, n in zip(candidate.files, names, strict=True)
-            if 0 < self.attempts.get(n, 0) <= len(self.outcomes.get(n, []))
+            f: self.outcomes[k][self.attempts[k] - 1]
+            for f, k in zip(candidate.files, keys, strict=True)
+            if 0 < self.attempts.get(k, 0) <= len(self.outcomes.get(k, []))
         }
         if ended:
             flaky = all(o in ("TimedOut", "Errored") for o in ended.values())
