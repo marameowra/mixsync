@@ -17,8 +17,8 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 | AcoustID | 3 req/s | 3 req/s | core |
 | ListenBrainz | 1 req/s + `X-RateLimit-*` | 1 req/s + headers | core |
 | Last.fm | unspecified | 1 req/s | deferred |
-| Discogs | 60/min authed, 25/min not | 50/min | planned (#223) |
-| Deezer | none published | 1 req/s | planned (#223) |
+| Discogs | 60/min authed, 25/min not | 50/min | planned |
+| Deezer | none published | 1 req/s | album search and tracklist, on demand ([Mark unverified](unverified-and-mb-submit.md)) |
 | Soulseek | 5 clients per IP | 1 slskd client | core |
 
 ## MusicBrainz
@@ -55,10 +55,8 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 **Deferred, not in v1; this section is the home for the deferral.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms (cl. 5.1.8, 4.7) exclude use alongside unauthorised sharing. If reconsidered: self-imposed 1 req/s, honor cache headers, cache only in the HTTP cache with a 100 MB cap, show "via Last.fm" with a link. [ToS](https://www.last.fm/api/tos)
 
 ## Discogs and Deezer (fallbacks, off by default)
-> Planned — not built (#223).
-
-- Discogs: 60 req/min authenticated, 25 unauthenticated, per IP over 60 s; bucket at 50/min; pause when `X-Discogs-Ratelimit-Remaining` hits 0; unique UA; per-user personal token. Numbers come from an OpenAPI copy (the official page blocks fetching): re-check by hand before enabling.
-- Deezer: no quota; 1 req/s. Terms limit use to private family scope, non-commercial, so metadata suggestions only for a single-household install; never fetch audio. [Terms](https://developers.deezer.com/termsofuse)
+- Discogs (planned, not built): 60 req/min authenticated, 25 unauthenticated, per IP over 60 s; bucket at 50/min; pause when `X-Discogs-Ratelimit-Remaining` hits 0; unique UA; per-user personal token. Numbers come from an OpenAPI copy (the official page blocks fetching): re-check by hand before enabling.
+- Deezer (`MIXSYNC_DEEZER_SUGGESTIONS`, default off): no quota; service `deezer`, 1 req/s, cached a day. Only a reviewer pressing "Suggest from Deezer" on Mark unverified causes requests (a search, then an album and its tracks); never on page load, in VERIFY or in a job. Terms limit use to private family scope, non-commercial, so metadata suggestions only for a single-household install; never fetch audio. [Terms](https://developers.deezer.com/termsofuse)
 
 ## Soulseek
 - At most 5 clients per IP: MixSync uses one slskd client. Bots must implement the full protocol: MixSync drives slskd, a full client, and never speaks the protocol itself.

@@ -15,6 +15,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.secretbox import SecretBox
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
+from mixsync.metadata.deezer import DeezerClient
 from mixsync.ratelimit.client import PoliteClient
 
 SESSION_COOKIE = "mixsync_session"
@@ -134,3 +135,11 @@ def require(cap: Capability) -> Callable[..., AuthUser]:
         return user
 
     return dep
+
+
+def get_deezer(request: Request) -> DeezerClient:
+    deezer: DeezerClient = request.app.state.services.deezer
+    return deezer
+
+
+Deezer = Annotated[DeezerClient, Depends(get_deezer)]

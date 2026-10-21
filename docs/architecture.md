@@ -49,7 +49,7 @@ Each external system sits behind a small interface (`core/protocols.py`).
 | Interface | v1 | Later |
 |---|---|---|
 | `DownloadSource` | slskd | Prowlarr + qBittorrent/SABnzbd, yt-dlp |
-| `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs, Deezer (#223) |
+| `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs (planned), Deezer (`metadata/deezer.py`) |
 | `LibraryTarget` | Navidrome | Jellyfin, Plex, Music Assistant |
 | `HistorySource` | ListenBrainz, Navidrome plays | |
 
