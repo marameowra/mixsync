@@ -2,14 +2,14 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import review
-from mixsync.acquire.lifecycle import DONE, is_busy, is_dead_end, is_waiting
+from mixsync.acquire.lifecycle import DONE, IN_PROGRESS, is_busy, is_dead_end, is_waiting
 from mixsync.acquire.requests import REQUEST_BUDGET, create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
@@ -21,7 +21,7 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.deps import Db, Namer, require
 from mixsync.web.names import resolve
 from mixsync.web.routes.review import parse_release_mbid
-from mixsync.web.templating import templates
+from mixsync.web.templating import render
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/requests")
@@ -59,21 +59,31 @@ def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
 
 
 @router.get("")
-async def request_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
-    items = db.scalars(
-        select(AlbumRequest)
-        .where(AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None))
-        .order_by(AlbumRequest.id.desc())
-    ).all()
+async def request_list(
+    request: Request,
+    user: User,
+    db: Db,
+    namer: Namer,
+    ids: Annotated[list[int] | None, Query()] = None,  # the live region polls for the rows shown
+) -> HTMLResponse:
+    query = select(AlbumRequest).where(
+        AlbumRequest.user_id == user.id, AlbumRequest.migration_id.is_(None)
+    )
+    if ids is not None:
+        query = query.where(AlbumRequest.id.in_(ids))
+    items = db.scalars(query.order_by(AlbumRequest.id.desc())).all()
     live = _live_states(db, [r.id for r in items])
     deletable = {r.id for r in items if _deletable(r, live)}
     queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
-    return templates.TemplateResponse(
+    return render(
         request,
         "pages/requests.html",
+        "pages/requests_table.html",
         {
             "user": user,
             "items": items,
+            "in_progress": any(r.status in IN_PROGRESS for r in items),
+            "live_url": "/requests?" + "&".join(f"ids={r.id}" for r in items),
             "deletable": deletable,
             "queued": queued,
             "budget": REQUEST_BUDGET,

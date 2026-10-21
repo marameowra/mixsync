@@ -1,0 +1,24 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/mb.html" as mb with context %}
+{% import "macros/live.html" as live %}
+{% from "macros/media.html" import artwork %}
+{% from "macros/ui.html" import status %}
+{% call live.region(live_url, in_progress) %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Release</th><th>Status</th><th>Budget</th><th>Last error</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for r in items %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td><div class="release-heading">{{ artwork(r.album or r.release_mbid, "/media/artwork/release/" ~ r.release_mbid ~ ("?group=" ~ r.release_group_mbid if r.release_group_mbid else ""), "xs") }}<span>{% if r.album %}{{ r.artist }} - {{ r.album }}{% else %}{{ mb.link("release", r.release_mbid) }}{% endif %}</span></div></td>
+    <td>{% if r.status == "review" %}<a href="/review">{{ status("review", "Needs review") }}</a>{% elif r.id in queued %}{{ status("pending", "Queued") }} ({{ r.status | replace("_", " ") }}){% else %}{{ status(r.status) }}{% endif %}</td>
+    <td>{{ r.dropped }} of {{ budget }}</td>
+    <td>{{ r.last_error or "" }}</td>
+    <td>{% if r.id in deletable %}<form method="post" action="/requests/{{ r.id }}/delete" {% if r.status != "imported" %}onsubmit="return confirm('Delete this request? Files are kept.')"{% endif %}>{{ forms.csrf() }}<button class="danger" type="submit">Delete request</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endcall %}
