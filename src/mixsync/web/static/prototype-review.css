@@ -1,0 +1,23 @@
+/* PROTOTYPE (throwaway): see prototype-review.js */
+.proto-switcher { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; align-items: center; gap: var(--space-4); background: var(--ink); color: var(--canvas); padding: var(--space-2) var(--space-4); border-radius: 999px; box-shadow: 0 4px 16px rgb(0 0 0 / 40%); font-weight: 600; }
+.proto-switcher button { background: none; border: 0; color: inherit; font: inherit; font-size: 1.25rem; cursor: pointer; padding: 0 var(--space-2); }
+.proto-toast { position: fixed; top: var(--space-4); left: 50%; transform: translateX(-50%); z-index: 10001; background: var(--caution-tint); color: var(--caution); border: 1px solid var(--caution); padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); }
+tr.proto-selected { background: var(--accent-tint); outline: 2px solid var(--accent); }
+.proto-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); background: var(--surface-sunken); border-bottom: 1px solid var(--line); }
+.proto-head .proto-title { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto-body { overflow: auto; padding: var(--space-4); flex: 1; }
+.proto-body h1 { display: none; }
+/* A */
+dialog.proto-dialog { width: min(60rem, 92vw); height: 90vh; padding: 0; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: var(--radius-md); }
+dialog.proto-dialog[open] { display: flex; flex-direction: column; }
+dialog.proto-dialog::backdrop { background: rgb(0 0 0 / 50%); }
+/* B */
+.proto-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 55vw; z-index: 9000; display: flex; flex-direction: column; background: var(--surface); color: var(--ink); border-left: 1px solid var(--line-strong); box-shadow: -4px 0 16px rgb(0 0 0 / 25%); transform: translateX(100%); transition: transform 0.2s; }
+.proto-drawer.open { transform: none; }
+body.proto-split main { margin-right: 55vw; }
+/* C */
+.proto-win { position: fixed; z-index: 9000; width: 34rem; height: 28rem; display: flex; flex-direction: column; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 6px 24px rgb(0 0 0 / 35%); resize: both; overflow: hidden; }
+.proto-win .proto-head { cursor: move; touch-action: none; user-select: none; }
+.proto-win.min { display: none; }
+.proto-tray { position: fixed; bottom: var(--space-4); left: var(--space-4); z-index: 9999; display: flex; gap: var(--space-2); }
+.proto-tray button { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

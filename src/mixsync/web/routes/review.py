@@ -78,6 +78,7 @@ def review_list(
     missing: str = "",
     busy: str = "",
     stale: str = "",
+    variant: str = "",
 ) -> HTMLResponse:
     items = decisions.pending_for(db, _owner(user))
     key = _SORTS.get(sort, _SORTS["date"])
@@ -94,6 +95,9 @@ def review_list(
             )
         }
         ctx["n"] = n
+    if getattr(request.app.state, "prototype_review", False):  # set only by devtools/preview
+        ctx["variant"] = variant if variant in ("A", "B", "C") else ""
+        return templates.TemplateResponse(request, "pages/prototype_review_list.html", ctx)
     return templates.TemplateResponse(request, "pages/review_list.html", ctx)
 
 
@@ -114,7 +118,7 @@ def recheck(user: User, db: Db) -> RedirectResponse:
 
 @router.get("/{decision_id}")
 async def review_detail(
-    request: Request, decision_id: int, user: User, db: Db, namer: Namer
+    request: Request, decision_id: int, user: User, db: Db, namer: Namer, partial: bool = False
 ) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
     flags = _flags(request, db, user)  # before `resolve`, which ends the transaction
@@ -129,7 +133,8 @@ async def review_detail(
         "names": names,
         **flags,
     }
-    return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
+    page = "review_detail_body" if partial else "review_detail"  # partial: prototype windows
+    return templates.TemplateResponse(request, f"pages/{page}.html", ctx)
 
 
 def _prefill(d: MatchDecision) -> dict[str, Any]:

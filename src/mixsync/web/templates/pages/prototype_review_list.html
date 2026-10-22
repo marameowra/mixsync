@@ -1,0 +1,7 @@
+{% extends "pages/review_list.html" %}
+{% block content %}
+{{ super() }}
+<link rel="stylesheet" href="/static/prototype-review.css">
+<div id="proto-root" data-variant="{{ variant }}" hidden></div>
+<script src="/static/prototype-review.js" defer></script>
+{% endblock %}

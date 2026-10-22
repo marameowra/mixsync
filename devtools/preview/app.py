@@ -146,6 +146,7 @@ def build_app(
     app.dependency_overrides[get_watch] = lambda: FakeWatch()
     app.dependency_overrides[get_namer] = lambda: FakeWatch()
     app.dependency_overrides[get_coverart] = lambda: FakeCoverArt()
+    app.state.prototype_review = True  # enables the review-window prototype on /review
     app.mount("/themes", StaticFiles(directory=themes_dir), name="themes")
 
     def names() -> list[str]:

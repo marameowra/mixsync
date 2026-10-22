@@ -131,6 +131,13 @@ def seed(sf: sessionmaker[Session], box: SecretBox, downloads: Path) -> list[tup
         ok = [{"local_path": str(downloads / "a.mp3"), "name": "a.mp3", "format": "mp3"}]
         d1 = _decision(s, uid["alice"], "Preview Album", "Preview Artist", ok)
         _decision(s, uid["alice"], "Second Album", "Other Artist", ok)
+        for artist, title in (
+            ("Boards of Canada", "Geogaddi"),
+            ("Aphex Twin", "Drukqs"),
+            ("Autechre", "Tri Repetae"),
+            ("Burial", "Untrue"),
+        ):
+            _decision(s, uid["alice"], title, artist, ok)
         d_long = _decision(s, uid["edge"], LONG, NON_LATIN, ok * 3)
         d_none = _decision(s, uid["edge"], "No Evidence Files", "Nobody", [])
         links += [
