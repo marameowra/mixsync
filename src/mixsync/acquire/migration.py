@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import stat
+import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
@@ -107,8 +108,14 @@ def _album_dir(path: Path) -> Path:
     return path.parent.parent if DISC_DIR.match(path.parent.name) else path.parent
 
 
-def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -> dict[str, Any]:
-    """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
+def scan(
+    root: Path,
+    out: Path,
+    exclude: Callable[[Path], bool] | None = None,
+    progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
+    """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`.
+    `progress(files, bytes)` is called after each hashed file."""
     out.mkdir(parents=True, exist_ok=True)
     unreadable: list[dict[str, str]] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
@@ -123,6 +130,8 @@ def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -
                 continue
             manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
+            if progress:
+                progress(count, total)
             ext = path.suffix.lower()
             if ext in UNSUPPORTED:
                 unreadable.append(_skip(rel, UNSUPPORTED_WHY))
@@ -365,9 +374,26 @@ class Migrator:
     config_dir: Path
     library: Path
     mb_rate: float
+    progress_every: float = 5.0  # seconds between progress writes during a scan
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.MIGRATE_PREFLIGHT: self.preflight, JobKind.MIGRATE_CHECK: self.check}
+
+    def _progress(self, mid: int) -> Callable[[int, int], None]:
+        """Runs in the scan thread, so it opens its own session."""
+        last = time.monotonic()
+
+        def save(files: int, size: int) -> None:
+            nonlocal last
+            if time.monotonic() - last < self.progress_every:
+                return
+            last = time.monotonic()
+            with self.sessions.begin() as s:
+                m = s.get(Migration, mid)
+                if m is not None and m.status == "preflight":
+                    m.summary = {"progress": {"files": files, "bytes": size}}  # a new dict: JSON
+
+        return save
 
     async def preflight(self, job: JobRecord) -> None:
         mid = job.payload["migration_id"]
@@ -381,7 +407,8 @@ class Migrator:
         try:
             if not self.source.is_dir():
                 raise ValueError(f"{self.source} is not a folder")
-            found = await asyncio.to_thread(scan, self.source, out)  # the heartbeat keeps running
+            # the heartbeat keeps running
+            found = await asyncio.to_thread(scan, self.source, out, None, self._progress(mid))
             scanned = True
             groups: list[Group] = found["groups"]
             free = shutil.disk_usage(self.library if self.library.exists() else self.library.parent)

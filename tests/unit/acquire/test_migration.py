@@ -179,6 +179,36 @@ async def test_preflight_groups_manifest_and_eta(rig: Rig, monkeypatch: pytest.M
     assert sm["eta_seconds"] == pytest.approx(17 + 9 / 3)
 
 
+async def test_preflight_saves_progress_while_scanning_at_most_every_interval(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album", ALBUM)
+    real = mig.scan
+    seen: list[dict[str, Any]] = []
+    current = [1]
+
+    def scan(root: Path, out: Path, exclude: Any = None, progress: Any = None) -> dict[str, Any]:
+        def spy(files: int, size: int) -> None:
+            progress(files, size)
+            seen.append(dict(rig.get(current[0]).summary))
+
+        return real(root, out, exclude, spy)
+
+    monkeypatch.setattr(mig, "scan", scan)
+    assert (await rig.preflight()) == 1
+    assert seen and all(s == {} for s in seen)  # default 5 s: nothing written in a quick scan
+    assert "progress" not in rig.get(1).summary
+
+    seen.clear()
+    current[0] = 2
+    rig.migrator = replace(rig.migrator, progress_every=0)
+    rig.env.handlers = rig.env.pipeline.handlers() | rig.migrator.handlers()
+    assert (await rig.preflight()) == 2
+    last = seen[-1]["progress"]
+    assert last["files"] == 2 and last["bytes"] > 0
+    assert "progress" not in rig.get(2).summary  # the final summary replaces it
+
+
 async def test_preflight_refuses_without_free_space(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:

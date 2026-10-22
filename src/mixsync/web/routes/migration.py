@@ -2,6 +2,7 @@ import csv
 import io
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Annotated, Any, cast
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -18,7 +19,7 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.queue import enqueue_in
 from mixsync.web.deps import Db, require
 from mixsync.web.routes.library import TYPED_ABOVE
-from mixsync.web.templating import templates
+from mixsync.web.templating import render
 
 router = APIRouter(prefix="/migration")
 Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
@@ -128,7 +129,14 @@ def _zone(request: Request) -> ZoneInfo:
 
 
 @router.get("")
-def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") -> HTMLResponse:
+def page(
+    request: Request,
+    user: Admin,
+    db: Db,
+    start: str = "",
+    end: str = "",
+    id: int | None = None,  # a live region polls for its own migration
+) -> HTMLResponse:
     tz = _zone(request)
     first, last = _window(start, end, tz)
     latest = _latest(db)
@@ -136,13 +144,18 @@ def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") 
         select(Migration).where(Migration.status == "running").order_by(Migration.id.desc())
     ).all()
     shown = [latest, *running] if latest and latest.status != "running" else list(running)
+    if id is not None:
+        shown = [_get(db, id)]
     entries: list[dict[str, Any]] = []
     for m in shown:
         rows = mig.report(db, m, first, last) if m.status == "running" else []
+        pending = m.status == "running" and _pending(db, m)
         entries.append(
             {
                 "m": m,
-                "completed": m.status == "running" and not _pending(db, m),
+                "in_progress": m.status == "preflight" or pending,
+                "live_url": "/migration?" + urlencode({"id": m.id, "start": start, "end": end}),
+                "completed": m.status == "running" and not pending,
                 "start": _local_day(first or m.created_at, tz),
                 "end": _local_day(last, tz),
                 "csv_end": end and _local_day(last, tz),  # unset: the CSV runs up to its own now
@@ -153,8 +166,13 @@ def page(request: Request, user: Admin, db: Db, start: str = "", end: str = "") 
                 "typed_needed": m.summary.get("albums", 0) > TYPED_ABOVE,
             }
         )
-    ctx = {"user": user, "migs": entries, "busy": _busy(db, latest)}
-    return templates.TemplateResponse(request, "pages/migration.html", ctx)
+    ctx = {
+        "user": user,
+        "migs": entries,
+        "busy": _busy(db, latest),
+        "e": entries[0] if entries else None,
+    }
+    return render(request, "pages/migration.html", "pages/migration_live.html", ctx)
 
 
 @router.post("/preflight")
