@@ -218,3 +218,52 @@ def test_unsettled_migration_shows_running(
     text = client.get("/migration").text
     assert f"<h2>Migration {migration_id}</h2>" in text
     assert ">Running</span>" in text
+
+
+def _set(sf: sessionmaker[Session], mid: int, status: str, summary: dict[str, object]) -> None:
+    with sf() as s, s.begin():
+        m = s.get(Migration, mid)
+        assert m
+        m.status, m.summary = status, summary
+
+
+TRIGGER = 'hx-trigger="every 5s [!document.hidden]"'
+
+
+def test_preflight_polls_and_shows_progress(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int
+) -> None:
+    _set(sf, migration_id, "preflight", {})
+    text = client.get("/migration").text
+    assert TRIGGER in text and "Scanning&hellip;" in text
+    assert "Reload to see the result" not in text
+    _set(sf, migration_id, "preflight", {"progress": {"files": 1204, "bytes": 38 * 10**9}})
+    text = client.get("/migration").text
+    assert TRIGGER in text and "1204 files, 38.0 GB hashed so far" in text
+
+
+def test_running_polls_only_while_albums_are_pending(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int
+) -> None:
+    assert TRIGGER not in client.get("/migration").text
+    _add_request(sf, migration_id, "verifying")
+    assert TRIGGER in client.get("/migration").text
+
+
+@pytest.mark.parametrize("status", ["ready", "failed"])
+def test_settled_preflight_does_not_poll(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int, status: str
+) -> None:
+    _set(sf, migration_id, status, {"files": 1, "albums": 1})
+    assert TRIGGER not in client.get("/migration").text
+
+
+def test_htmx_request_gets_only_the_fragment(
+    client: TestClient, sf: sessionmaker[Session], migration_id: int
+) -> None:
+    _set(sf, migration_id, "preflight", {})
+    full = client.get("/migration")
+    assert "<html" in full.text
+    frag = client.get(f"/migration?id={migration_id}", headers={"HX-Request": "true"})
+    assert "<html" not in frag.text and f"Migration {migration_id}" in frag.text
+    assert f'hx-get="/migration?id={migration_id}' in frag.text

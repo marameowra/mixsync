@@ -1,0 +1,25 @@
+{% import "macros/live.html" as live %}
+{% from "macros/ui.html" import status %}
+{% set m = e.m %}{% set sm = m.summary %}
+{% call live.region(e.live_url, e.in_progress) %}
+<h2>Migration {{ m.id }}</h2><p>{{ status("completed" if e.completed else m.status) }}</p>
+{% if m.status == "preflight" %}<p>{% if sm.get("progress") %}Scanning and hashing the old library: {{ sm["progress"]["files"] }} files, {{ sm["progress"]["bytes"]|filesize }} hashed so far.{% else %}Scanning&hellip;{% endif %}</p>{% endif %}
+{% if sm.get("files") is not none and m.status != "preflight" %}
+<ul>
+  <li>{{ sm.get("files", 0) }} files, {{ sm.get("bytes", 0)|filesize }}, in {{ sm.get("albums", 0) }} albums ({{ sm.get("tagged_albums", 0) }} carry a MusicBrainz album id)</li>
+  <li>Free space on the library: {{ sm.get("free", 0)|filesize }}; needed: {{ sm.get("required", 0)|filesize }} (1.1 &times; the source)</li>
+  <li>Estimated duration: at least {{ sm.get("eta_seconds", 0)|duration }} (MusicBrainz requests at their rate limit, then one AcoustID lookup per track at 3 per second)</li>
+  <li>{{ sm.get("unreadable", [])|length }} unreadable or unsupported file(s), left out of the import and listed in the report as failed (unreadable) or skipped (unsupported format)</li>
+</ul>
+{% if sm.get("unreadable") %}<ul>{% for u in sm["unreadable"][:100] %}<li>{{ u.path }}: {{ u.why }}</li>{% endfor %}</ul>{% endif %}
+{% endif %}
+{% if sm.get("reason") %}<p class="notice danger" role="alert">✕ Preflight failed: {{ sm["reason"] }}</p>{% endif %}
+{% if m.status == "running" %}
+<h3>Report</h3>
+<ul>
+  {% for key in ["imported", "partial", "owned", "review", "unverified", "skipped", "failed", "in progress"] %}
+  <li>{{ key }}: {{ e.totals.get(key, 0) }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endcall %}
