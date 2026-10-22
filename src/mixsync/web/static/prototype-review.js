@@ -113,6 +113,7 @@
     const step = (d) => { const n = neighbour(cur, d); if (n) show(n); };
     pane.append(header(btn("←", "Previous review", () => step(-1)), btn("→", "Next review", () => step(1)), title, btn("✕", "Close", close)), body);
     document.body.append(pane);
+    if (modal) pane.addEventListener("close", () => { cur = null; unselect(); }); // Esc closes natively
     onRowClick((id) => {
       if (modal) pane.showModal();
       else { pane.classList.add("open"); document.body.classList.add("proto-split"); }
