@@ -8,6 +8,7 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 import mixsync.db.migrate
@@ -132,7 +133,7 @@ def test_a_failed_backup_leaves_nothing_and_prunes_nothing(
         (d / f"mixsync-2026-09-{day:02}.db").write_text("old")
     d.chmod(stat.S_IRUSR | stat.S_IXUSR)
     try:
-        with pytest.raises(Exception, match=r".+"):
+        with pytest.raises(OperationalError, match=r".+"):
             backup(make_engine(settings), d, Clock())
     finally:
         d.chmod(stat.S_IRWXU)
@@ -166,7 +167,7 @@ def test_a_failed_backup_stops_the_upgrade(
     monkeypatch.setenv("MIXSYNC_BACKUP_DIR", str(d))
     _readonly(d)
     try:
-        with pytest.raises(Exception, match=r".+"):
+        with pytest.raises(OperationalError, match=r".+"):
             upgrade()
     finally:
         d.chmod(stat.S_IRWXU)
@@ -197,7 +198,7 @@ def test_a_failing_nightly_still_chains(
     d = tmp_path / "b"
     _readonly(d)
     try:
-        with pytest.raises(Exception, match=r".+"):
+        with pytest.raises(OperationalError, match=r".+"):
             asyncio.run(NightlyBackup(sessions, Clock(), make_engine(settings), d).run(_job(1)))
     finally:
         d.chmod(stat.S_IRWXU)

@@ -809,7 +809,7 @@ def test_undo_refuses_up_front_when_only_some_trashed_originals_are_gone(world: 
     (world.ops.trash_dir / trashed.dst).unlink()
     with pytest.raises(SafetyError, match="is gone"):
         world.merger.undo_plan(pid)
-    assert world.lib() == lib and world.plan(pid).status != "undoing"
+    assert world.lib() == lib and world.plan(pid).status == "failed"
 
 
 def test_import_after_a_failed_move_does_not_take_the_trashed_path_so_undo_works(

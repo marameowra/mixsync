@@ -153,12 +153,6 @@ def test_exdev_is_a_safety_error_not_a_copy_fallback(
     assert src.exists() and files(data_dir / "library") == []
 
 
-@pytest.mark.parametrize("rel", ["../escape.flac", "/abs.flac", ""])
-def test_rejects_paths_outside_library(ops: FileOps, make_src: MakeSrc, rel: str) -> None:
-    with pytest.raises(SafetyError):
-        ops.import_file(make_src(), rel, noop_tags, "b1")
-
-
 def test_trash(ops: FileOps, data_dir: Path, make_src: MakeSrc) -> None:
     src = make_src()
     ops.import_file(src, REL, noop_tags, "b1")
@@ -292,12 +286,13 @@ def test_recover_discover_trash_not_moved_rolls_back(
     assert (data_dir / "discover/b.flac").read_bytes() == b"b"
 
 
+@pytest.mark.parametrize("root", ["library", "discover"])
 @pytest.mark.parametrize("rel", ["../escape.flac", "/abs.flac", ""])
-def test_discover_rejects_paths_outside_root(ops: FileOps, make_src: MakeSrc, rel: str) -> None:
+def test_rejects_paths_outside_root(ops: FileOps, make_src: MakeSrc, rel: str, root: str) -> None:
     with pytest.raises(SafetyError):
-        ops.import_file(make_src(), rel, noop_tags, "b1", root="discover")
+        ops.import_file(make_src(), rel, noop_tags, "b1", root=root)
     with pytest.raises(SafetyError):
-        ops.trash(rel, "b1", root="discover")
+        ops.trash(rel, "b1", root=root)
 
 
 @pytest.mark.parametrize("root", ["other", "", "../library", "/tmp"])

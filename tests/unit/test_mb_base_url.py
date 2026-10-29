@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -22,7 +23,23 @@ class Recorder(MusicBrainzProvider):
         super().__init__(client, base_url)
 
 
-def test_worker_builds_musicbrainz_on_the_configured_base_url(
+def _worker(services: Any) -> None:
+    worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]
+
+
+def _web_watch(services: Any) -> None:
+    state = SimpleNamespace(services=services)
+    deps.get_watch(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
+
+
+def _web_merger(services: Any) -> None:
+    state = SimpleNamespace(services=services)
+    deps.get_merger(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("consumer", [_worker, _web_watch, _web_merger])
+def test_musicbrainz_is_built_on_the_configured_base_url(
+    consumer: Callable[[Any], None],
     settings: Settings,
     sessions: sessionmaker[Session],
     tmp_path: Path,
@@ -34,27 +51,5 @@ def test_worker_builds_musicbrainz_on_the_configured_base_url(
     monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
     Recorder.urls = []
     monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
-    worker._new_queue(build_services(Settings()))  # pyright: ignore[reportPrivateUsage]
+    consumer(build_services(Settings(), sessions))
     assert Recorder.urls and set(Recorder.urls) == {MIRROR}
-
-
-def test_web_builds_musicbrainz_on_the_configured_base_url(
-    settings: Settings, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
-    Recorder.urls = []
-    monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
-    state = SimpleNamespace(services=build_services(Settings(), sessions))
-    deps.get_watch(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
-    assert Recorder.urls == [MIRROR]
-
-
-def test_web_merger_builds_musicbrainz_on_the_configured_base_url(
-    settings: Settings, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("MIXSYNC_MB_BASE_URL", MIRROR)
-    Recorder.urls = []
-    monkeypatch.setattr(wiring, "MusicBrainzProvider", Recorder)
-    state = SimpleNamespace(services=build_services(Settings(), sessions))
-    deps.get_merger(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
-    assert Recorder.urls == [MIRROR]

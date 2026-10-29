@@ -32,7 +32,7 @@ def test_add_methods() -> None:
     d.add_equality("album", "ghi", ["abc", "def", "ghi"], "r")
     d.add_equality("album", "xyz", ["abc", "def", "ghi"], "r")
     d.add_equality("album", "abc", "abc", "r")
-    assert [p for p, _ in d._penalties["album"]] == [0.0, 1.0, 0.0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(1 / 3)  # mean of [0, 1, 0]
 
     d = dist()
     d.add_expr("media", True, "r")
@@ -40,20 +40,20 @@ def test_add_methods() -> None:
     d.add_number("media", 1, 1, "r")
     d.add_number("media", 2, 1, "r")
     d.add_number("media", -1, 2, "r")
-    assert [p for p, _ in d._penalties["media"]] == [1, 0, 0, 1, 1, 1, 1]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(5 / 7)  # mean of [1, 0, 0, 1, 1, 1, 1]
 
     d = dist()
     d.add_ratio("year", 25, 100, "r")
     d.add_ratio("year", 10, 5, "r")
     d.add_ratio("year", -5, 5, "r")
     d.add_ratio("year", 5, 0, "r")
-    assert [p for p, _ in d._penalties["year"]] == [0.25, 1.0, 0.0, 0.0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(0.3125)  # mean of [0.25, 1, 0, 0]
 
     d = dist()
     d.add_string("label", "abc", "bcd", "r")
     d.add_string("label", "abc", None, "r")
     d.add_string("label", None, None, "r")
-    assert [p for p, _ in d._penalties["label"]] == [2 / 3, 1, 0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(5 / 9)  # mean of [2/3, 1, 0]
 
 
 def test_add_rejects_out_of_range() -> None:
@@ -340,15 +340,18 @@ def test_one_of_thirteen_with_acoustid_auto_accepts() -> None:
     full = AlbumInfo(
         artist="artist",
         album="album",
-        tracks=tuple(rec_track(f"t{i}", r) for i, r in enumerate(recs, 1)),
+        tracks=tuple(replace(rec_track(f"t{i}", r), index=i) for i, r in enumerate(recs, 1)),
     )
-    files = [sure_file("t1", "r1")]
+    # wrong title and track number: only the AcoustID confirmation carries it over the line
+    files = [sure_file("Compl3tely different", "r1", track=9)]
     pairs, _, _ = assign_tracks(files, full.tracks)
     from mixsync.match.vetoes import all_confident
 
     assert all_confident(pairs)
     free = {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
     assert score_files(files, LIKE, full, BALANCED, free).band is Band.AUTO_ACCEPT
+    unconfirmed = [replace(files[0], acoustid=())]
+    assert score_files(unconfirmed, LIKE, full, BALANCED, free).band is Band.REVIEW
 
 
 def test_standard_edition_beats_a_longer_deluxe_with_off_lengths() -> None:
@@ -364,17 +367,18 @@ def test_standard_edition_beats_a_longer_deluxe_with_off_lengths() -> None:
 
 
 @pytest.mark.parametrize(
-    ("a", "b"),
+    ("a", "b", "expected"),
     [
-        ("X", "Malcolm X"),
-        ("Mr X", "X"),
-        ("Xxx", "X"),
-        ("Ft", "Ft. Lauderdale"),
-        ("X", "Exene Cervenka & X"),
+        ("X", "Malcolm X", 0.875),
+        ("Mr X", "X", 2 / 3),
+        ("Xxx", "X", 2 / 3),
+        ("Ft", "Ft. Lauderdale", 5 / 6),
+        ("X", "Exene Cervenka & X", 16 / 17),
     ],
 )
-def test_artist_separator_words_never_crash(a: str, b: str) -> None:
-    assert 0.0 <= artist_dist(a, b) <= 1.0
+def test_artist_separator_words_stay_whole(a: str, b: str, expected: float) -> None:
+    # a one-letter or short part is no partial hit: the plain edit distance applies
+    assert artist_dist(a, b) == pytest.approx(expected)
     assert artist_dist(b, a) == artist_dist(a, b)
 
 

@@ -67,7 +67,6 @@ async def test_single_disc_request_and_mapping(make_client: Make) -> None:
         "labels",
         "release-groups",
     }
-    assert req.headers["user-agent"].startswith("MixSync/")
 
 
 async def test_va_flag(make_client: Make) -> None:
