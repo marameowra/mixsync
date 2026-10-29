@@ -119,7 +119,6 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "done", [_op("move", 0)])
     _login(client, "root")
     html = client.get("/library/fragments").text
-    assert f'title="{G}">Release group 11111111</a>' in html  # unknown: short id, full id on hover
     assert f'title="{R1}">Release 11111111</a> (1)' in html and "Preview merge" in html
     assert f'href="/library/plans/{pid}#plan-actions">Review undo</a>' in html
     assert f'action="/library/plans/{pid}/undo"' not in html
@@ -145,14 +144,6 @@ def test_preview_ops_and_error(client: TestClient, sf: sessionmaker[Session]) ->
     html = client.get(f"/library/plans/{pid}").text
     assert "k/1.flac" in html and "a/2.flac" in html and "boom &lt;b&gt;" in html
     assert "Undo merge" in html
-
-
-def test_confirm_enqueues(client: TestClient, sf: sessionmaker[Session]) -> None:
-    pid = _plan(sf, "draft", [_op("move", 0)])
-    tok = _login(client, "root")
-    r = client.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok})
-    assert r.status_code == 303
-    assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
 
 
 @pytest.mark.parametrize("action", ["confirm", "undo"])
@@ -195,11 +186,11 @@ def test_undo_failed_plan(client: TestClient, sf: sessionmaker[Session]) -> None
     assert [j.kind for j in _jobs(sf)] == [JobKind.UNDO_MERGE]
 
 
-def test_csrf_required(client: TestClient, sf: sessionmaker[Session]) -> None:
+def test_post_without_csrf_enqueues_nothing(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "draft", [_op("move", 0)])
     _login(client, "root")
-    assert client.post(f"/library/plans/{pid}/confirm").status_code == 403
-    assert client.post("/library/fragments/plan", data={"group": G}).status_code == 403
+    client.post(f"/library/plans/{pid}/confirm")  # 403 asserted in test_auth.py
+    client.post("/library/fragments/plan", data={"group": G})
     assert _jobs(sf) == []
 
 

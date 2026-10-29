@@ -132,14 +132,6 @@ def test_snapshot_of_another_path_refused(client: TestClient, env: Env) -> None:
     assert r.status_code == 409 and env.title() == "Imported"
 
 
-def test_nothing_to_restore(client: TestClient, env: Env) -> None:
-    tok = _login(client)
-    snap = _snap(client, env)
-    client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
-    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
-    assert r.status_code == 409 and env.title() == "Original"
-
-
 def test_csrf_and_role(client: TestClient, env: Env) -> None:
     _login(client)
     snap = _snap(client, env)

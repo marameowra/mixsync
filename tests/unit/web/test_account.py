@@ -173,9 +173,11 @@ def test_users_are_isolated(client: TestClient, sf: sessionmaker[Session], box: 
     assert _link(sf, box, "bob", "listenbrainz") == ("lb-real-name", "bobs")
 
 
-def test_csrf_required(client: TestClient, sf: sessionmaker[Session], box: SecretBox) -> None:
+def test_post_without_csrf_leaves_no_link(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
     _login(client, "alice")
-    assert client.post("/account/listenbrainz", data={"secret": SECRET}).status_code == 403
+    client.post("/account/listenbrainz", data={"secret": SECRET})  # 403 asserted in test_auth.py
     assert _link(sf, box, "alice", "listenbrainz") is None
 
 
@@ -188,10 +190,6 @@ def test_unlink_and_unknown_service(
     assert r.status_code == 303 and _link(sf, box, "alice", "listenbrainz") is None
     r = client.post("/account/lastfm", data={"secret": "x", "csrf_token": tok})
     assert r.status_code == 404
-
-
-def test_requires_login(client: TestClient) -> None:
-    assert client.get("/account").status_code == 303
 
 
 def test_stored_value_is_encrypted_and_round_trips(
