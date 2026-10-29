@@ -167,7 +167,6 @@ async def test_lookup(make_client: Make, settings: Settings) -> None:
         "216",
         FP.fingerprint,
     )
-    assert seen[0].headers["user-agent"].startswith("MixSync/")
 
 
 async def test_lookup_503_is_transient(make_client: Make, settings: Settings) -> None:

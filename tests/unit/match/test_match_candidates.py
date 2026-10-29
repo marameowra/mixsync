@@ -1,5 +1,7 @@
+import json
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +9,9 @@ from mixsync.core.matching import AlbumInfo, Band, Candidate, CandidateFile, Mat
 from mixsync.match.candidates import parse_name, rank, score_candidate
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT
 from mixsync.match.scorer import SCORER_VERSION
+from mixsync.sources.slskd import map_responses
+
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 TITLES = ["Opening", "Second Song", "Third Song", "Closing"]
 LENGTHS = [200.0, 240.0, 180.0, 300.0]
@@ -96,7 +101,6 @@ def check_rejected(r: MatchResult) -> None:
     assert r.band is Band.REJECT and r.vetoes and r.vetoes[0] in r.breakdown[0].reason
 
 
-NFD = "Björk"
 CASES = [
     pytest.param(cand(album_files()), check_clean, id="SK-F01"),
     pytest.param(
@@ -191,8 +195,11 @@ def test_stage1_sk_n01_nfd_folder_matches() -> None:
 
 
 def test_stage1_sk_f03_non_audio_not_counted() -> None:
-    # The adapter drops non-audio files; four audio files still make a complete album.
-    r = score(cand(album_files()))
+    # peer-001's raw response also lists non-audio files; the adapter drops them, so the
+    # four audio files still make a complete album.
+    responses = json.loads((FIXTURES / "slskd" / "responses.json").read_text())
+    (c,) = [c for c in map_responses(responses) if (c.username, c.folder) == ("peer-001", FOLDER)]
+    r = score(c)
     assert "extra_files" not in keys(r) and "folder_completeness" not in keys(r)
 
 
@@ -216,8 +223,6 @@ def test_stage1_sk_f05_disc_track_numbering() -> None:
         flac("2-02 Closing", 300),
     ]
     assert score(cand(files), TWO_DISCS).band is Band.AUTO_ACCEPT
-    assert parse_name("1-01 Opening") == (1, 1, "Opening")
-    assert parse_name("2-13 - Title") == (2, 13, "Title")
 
 
 @pytest.mark.parametrize(
@@ -232,6 +237,8 @@ def test_stage1_sk_f05_disc_track_numbering() -> None:
         ("Test Artist - 03 - Third Song", (None, 3, "Third Song")),
         ("Test Artist - Third Song", (None, None, "Test Artist - Third Song")),
         ("1979", (None, None, "1979")),
+        ("1-01 Opening", (1, 1, "Opening")),
+        ("2-13 - Title", (2, 13, "Title")),
     ],
 )
 def test_parse_name(stem: str, expected: tuple[int | None, int | None, str]) -> None:

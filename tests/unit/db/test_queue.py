@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -187,25 +188,18 @@ def test_handler_error_after_job_deleted_does_not_raise(
     asyncio.run(run_job(q, job, "w", {JobKind.NOOP: delete_then_boom}, LEASE))  # no LeaseLostError
 
 
-def test_job_that_keeps_killing_its_worker_fails(q: JobQueue, clock: FakeClock) -> None:
-    j = enq(q, JobKind.NOOP, max_attempts=1)
-    q.claim("w1", LEASE)
-    q.start(j.id, "w1")  # w1 dies here, and no attempts are left
-    clock.advance(LEASE + timedelta(seconds=1))
-    assert q.reap() == 1
-    assert q.get(j.id).status is JobState.FAILED
-
-
 class Failures:
     """Records what the queue hands to its final-failure hook."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[int, dict[str, Any], str]] = []
+        self.states: list[JobState] = []  # the job's status as the hook sees it
 
     def __call__(
-        self, _c: Connection, job_id: int, payload: dict[str, Any], error: str, _now: datetime
+        self, c: Connection, job_id: int, payload: dict[str, Any], error: str, _now: datetime
     ) -> None:
         self.calls.append((job_id, payload, error))
+        self.states.append(c.execute(select(Job.status).where(Job.id == job_id)).scalar_one())
 
 
 @pytest.fixture
@@ -218,10 +212,13 @@ def fq(engine: Engine, clock: FakeClock, failures: Failures) -> JobQueue:
     return JobQueue(engine, clock, failures)
 
 
-def test_permanent_failure_hands_the_job_to_the_hook(fq: JobQueue, failures: Failures) -> None:
-    j = enq(fq, JobKind.NOOP, {"request_id": 7})
+@pytest.mark.parametrize("payload", [{"request_id": 7}, {}])  # a job without a request too
+def test_permanent_failure_hands_the_job_to_the_hook(
+    fq: JobQueue, failures: Failures, payload: dict[str, Any]
+) -> None:
+    j = enq(fq, JobKind.NOOP, payload)
     _run(fq, PermanentError("404"))
-    assert failures.calls == [(j.id, {"request_id": 7}, "PermanentError('404')")]
+    assert failures.calls == [(j.id, payload, "PermanentError('404')")]
 
 
 def test_the_hook_commits_or_rolls_back_with_the_state_change(
@@ -254,12 +251,6 @@ def test_a_retry_does_not_call_the_hook(fq: JobQueue, failures: Failures) -> Non
     assert failures.calls == []
 
 
-def test_a_job_without_a_request_still_reaches_the_hook(fq: JobQueue, failures: Failures) -> None:
-    j = enq(fq, JobKind.NOOP, {})
-    _run(fq, PermanentError("gone"))
-    assert failures.calls == [(j.id, {}, "PermanentError('gone')")]
-
-
 def test_reaped_dead_job_is_handed_to_the_hook(
     fq: JobQueue, failures: Failures, clock: FakeClock
 ) -> None:
@@ -267,24 +258,10 @@ def test_reaped_dead_job_is_handed_to_the_hook(
     fq.claim("w1", LEASE)
     fq.start(j.id, "w1")
     clock.advance(LEASE + timedelta(seconds=1))
-    fq.reap()
+    assert fq.reap() == 1
     assert fq.get(j.id).status is JobState.FAILED
     assert failures.calls == [(j.id, {"request_id": 7}, "lease expired with no attempts left")]
-
-
-def test_the_hook_sees_a_reaped_job_as_failed(engine: Engine, clock: FakeClock) -> None:
-    seen: list[JobState] = []
-
-    def hook(c: Connection, job_id: int, *_: Any) -> None:
-        seen.append(c.execute(select(Job.status).where(Job.id == job_id)).scalar_one())
-
-    q = JobQueue(engine, clock, hook)
-    j = enq(q, JobKind.NOOP, max_attempts=1)
-    q.claim("w1", LEASE)
-    q.start(j.id, "w1")
-    clock.advance(LEASE + timedelta(seconds=1))
-    q.reap()
-    assert seen == [JobState.FAILED]
+    assert failures.states == [JobState.FAILED]  # the hook runs in the same transaction
 
 
 def _locked() -> OperationalError:
@@ -367,27 +344,26 @@ def _complete_raises(
     return j.id, calls
 
 
-def test_any_error_while_completing_leaves_the_job_for_reap(
-    q: JobQueue, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("make_exc", "tries", "logged"),
+    [
+        (lambda: ValueError("bad transition"), 1, None),
+        (_locked, worker.COMPLETE_TRIES, "will run again after the lease expires"),
+        (LeaseLostError, 1, "lost lease"),
+    ],
+)
+def test_an_error_while_completing_leaves_the_job_for_reap(
+    q: JobQueue,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    make_exc: Callable[[], Exception],
+    tries: int,
+    logged: str | None,
 ) -> None:
-    jid, calls = _complete_raises(q, monkeypatch, ValueError("bad transition"))
-    assert calls == [1] and q.get(jid).status is JobState.RUNNING
-
-
-def test_exhausted_completion_retries_say_the_job_will_run_again(
-    q: JobQueue, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    jid, calls = _complete_raises(q, monkeypatch, _locked())
-    assert len(calls) == worker.COMPLETE_TRIES and q.get(jid).status is JobState.RUNNING
-    assert "will run again after the lease expires" in caplog.text
-
-
-def test_a_lost_lease_while_completing_is_only_logged(
-    q: JobQueue, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    jid, calls = _complete_raises(q, monkeypatch, LeaseLostError())
-    assert calls == [1] and q.get(jid).status is JobState.RUNNING
-    assert "lost lease" in caplog.text
+    jid, calls = _complete_raises(q, monkeypatch, make_exc())
+    assert len(calls) == tries and q.get(jid).status is JobState.RUNNING
+    if logged:
+        assert logged in caplog.text
 
 
 def test_a_failed_heartbeat_keeps_beating() -> None:

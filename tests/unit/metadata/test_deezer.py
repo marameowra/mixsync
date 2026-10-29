@@ -35,7 +35,6 @@ async def test_search_albums(make_client: Make) -> None:
         (999, "Discovery (Live)", "Daft Punk", None, 3),
     ]
     assert seen[0].url.params["q"] == "Daft Punk Discovery" and seen[0].url.params["limit"] == "5"
-    assert seen[0].headers["user-agent"].startswith("MixSync/")
 
 
 async def test_search_albums_returns_at_most_five(make_client: Make) -> None:

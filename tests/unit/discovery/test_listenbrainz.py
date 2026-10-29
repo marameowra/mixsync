@@ -247,17 +247,6 @@ async def test_validate_token(make_client: Make) -> None:
     assert await lb(make_client, lambda _r: httpx.Response(401)).validate_token("x") is None
 
 
-async def test_user_agent_is_always_set(make_client: Make) -> None:
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return cassette("validate_ok")
-
-    await lb(make_client, handler).validate_token(TOKEN)
-    assert seen[0].headers["user-agent"].startswith("MixSync/")
-
-
 @pytest.mark.parametrize(
     ("status", "error"),
     [

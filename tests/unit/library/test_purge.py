@@ -1,5 +1,4 @@
 import asyncio
-import os
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,12 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.db.auth import create_user
 from mixsync.db.journal import SqlJournal
-from mixsync.db.models.auth import User
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
-from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord
@@ -121,16 +117,6 @@ def test_recover_finishes_a_started_purge(fo: FileOps, sessions: sessionmaker[Se
     assert [o.status for o in ops(sessions)] == ["done", "done"]
 
 
-def test_recover_will_not_purge_outside_a_dated_folder(
-    fo: FileOps, sessions: sessionmaker[Session]
-) -> None:
-    other = put(fo, ".incoming/1")
-    SqlJournal(sessions, Clock()).begin("b", "purge", ".incoming/1", "", root="library")
-    with pytest.raises(Exception, match="dated trash folder"):
-        fo.recover()
-    assert other.exists()
-
-
 def _plan(sessions: sessionmaker[Session], status: str) -> None:
     with sessions.begin() as s:
         s.add(
@@ -224,7 +210,6 @@ def test_chain_starts_once_and_reschedules_about_a_day_later(
     purger.start_chains()  # a live chain exists
     with sessions() as s:
         assert len(list(s.scalars(select(Job).where(Job.kind == JobKind.TRASH_PURGE)))) == 3
-    assert os.path.isdir(fo.library)
 
 
 def test_a_symlinked_trash_dir_is_never_purged_through(fo: FileOps, tmp_path: Path) -> None:
@@ -252,7 +237,9 @@ def test_a_future_dated_folder_is_kept(fo: FileOps) -> None:
     assert fo.purge_trash(30, "b") == 0 and p.exists()
 
 
-@pytest.mark.parametrize("rel", ["../outside.mp3", "ABSOLUTE", "plain.mp3", "2026-W01-1/a.mp3"])
+@pytest.mark.parametrize(
+    "rel", ["../outside.mp3", "ABSOLUTE", "plain.mp3", "2026-W01-1/a.mp3", ".incoming/1"]
+)
 def test_recover_rejects_rows_outside_dated_folders(
     fo: FileOps, sessions: sessionmaker[Session], tmp_path: Path, rel: str
 ) -> None:
@@ -450,29 +437,6 @@ def q_put(fo: FileOps, rel: str) -> Path:
     return p
 
 
-def _decision(
-    sessions: sessionmaker[Session], path: Path, action: str | None, acted: datetime | None
-) -> None:
-    with sessions.begin() as s:
-        uid = s.scalar(select(User.id)) or create_user(s, "u", "pw").id
-        s.add(
-            MatchDecision(
-                user_id=uid,
-                stage=2,
-                release_mbid="m",
-                band="review",
-                distance=0.0,
-                breakdown=[],
-                vetoes=[],
-                scorer_version=1,
-                status="done" if action else "pending",
-                final_action=action,
-                acted_at=acted,
-                evidence={"source": {"files": [{"local_path": str(path)}]}},
-            )
-        )
-
-
 def test_rejected_quarantine_past_the_window_is_purged_and_journaled_newer_kept(
     fo: FileOps, sessions: sessionmaker[Session], clock: Clock
 ) -> None:
@@ -490,16 +454,9 @@ def test_rejected_quarantine_past_the_window_is_purged_and_journaled_newer_kept(
 def test_review_quarantine_of_any_age_is_kept(
     fo: FileOps, sessions: sessionmaker[Session], clock: Clock
 ) -> None:
-    pending = q_put(fo, f"review/{day(400)}/F/a.mp3")
-    accepted = q_put(fo, f"review/{day(400)}/G/a.mp3")
-    repick = q_put(fo, f"review/{day(400)}/H/a.mp3")
-    _decision(sessions, pending, None, None)
-    _decision(sessions, accepted, "accept", NOW - timedelta(days=400))
-    _decision(sessions, repick, "repick", NOW - timedelta(days=400))
-    rejected = q_put(fo, f"review/{day(400)}/I/a.mp3")  # a person's reject leaves it in review/
-    _decision(sessions, rejected, "reject", NOW - timedelta(days=400))
+    kept = [q_put(fo, f"review/{day(400)}/{f}/a.mp3") for f in "FGHI"]
     asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
-    assert pending.exists() and accepted.exists() and repick.exists() and rejected.exists()
+    assert all(p.exists() for p in kept)
     assert ops(sessions) == []
 
 

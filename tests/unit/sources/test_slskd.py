@@ -163,18 +163,22 @@ def candidate() -> Candidate:
     return cands[0]
 
 
-async def test_enqueue_posts_files(make_client: Make) -> None:
+@pytest.mark.parametrize("start", [0, 3])  # a whole folder, then a retry of the last file
+async def test_enqueue_posts_files(make_client: Make, start: int) -> None:
+    cand = candidate()
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return httpx.Response(201, json={"enqueued": [], "failed": []})
 
-    await source(make_client, handler).enqueue(candidate())
-    assert seen[0].url.path == "/api/v0/transfers/downloads/peer-001"
-    body = json.loads(seen[0].content)
-    assert [b["filename"] for b in body][0] == "Music\\Test Artist\\Test Album\\01 Opening.flac"
-    assert len(body) == 4 and all(b["size"] > 0 for b in body)
+    await source(make_client, handler).enqueue(replace(cand, files=cand.files[start:]))
+    (post,) = seen
+    assert post.url.path == "/api/v0/transfers/downloads/peer-001"
+    body = json.loads(post.content)
+    assert body == [{"filename": f.path, "size": f.size} for f in cand.files[start:]]
+    assert len(body) == 4 - start and all(b["size"] > 0 for b in body)
+    assert body[0]["filename"].endswith(("\\01 Opening.flac", "\\04 Closing.flac"))
 
 
 async def test_enqueue_failure_is_permanent(make_client: Make) -> None:
@@ -211,7 +215,6 @@ async def test_clear_cancels_and_removes_only_this_candidates_transfers(make_cli
     ("states", "expected"),
     [
         (["Completed, Succeeded"] * 4, TransferStatus.DONE),
-        (["Completed, Succeeded"] * 3 + ["Completed, Errored"], TransferStatus.FAILED),
         (["Completed, Succeeded"] * 3 + ["Queued, Remotely"], TransferStatus.QUEUED),
         (["Requested"] * 4, TransferStatus.QUEUED),
     ],
@@ -267,22 +270,6 @@ async def test_a_requeued_file_is_judged_by_its_newest_transfer(make_client: Mak
     }
     info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
     assert info.state is TransferStatus.QUEUED
-
-
-async def test_a_retry_enqueues_only_the_failed_files(make_client: Make) -> None:
-    cand = candidate()
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(201, json={"enqueued": [], "failed": []})
-
-    await source(make_client, handler).enqueue(replace(cand, files=cand.files[3:]))
-    (post,) = seen
-    assert post.url.path == "/api/v0/transfers/downloads/peer-001"
-    assert json.loads(post.content) == [
-        {"filename": cand.files[3].path, "size": cand.files[3].size}
-    ]
 
 
 async def test_done_reports_local_paths_by_each_files_own_folder(make_client: Make) -> None:

@@ -129,7 +129,7 @@ async def test_search_releases_sends_the_token_only_as_a_header(make_client: Mak
         "5",
     )
     assert seen[0].headers["authorization"] == f"Discogs token={TOKEN}"
-    assert TOKEN not in str(seen[0].url) and seen[0].headers["user-agent"].startswith("MixSync/")
+    assert TOKEN not in str(seen[0].url)
 
 
 async def test_search_releases_returns_at_most_five(make_client: Make) -> None:

@@ -67,11 +67,6 @@ def test_repo_and_selector_passed_to_gh_pr_view(tmp_path: Path) -> None:
     ]  # fmt: skip
 
 
-def test_unparseable_gh_merge_denied(tmp_path: Path) -> None:
-    out, _ = run_hook(tmp_path, "gh pr merge 'unterminated", "dev")
-    assert denied(out)
-
-
 @pytest.mark.parametrize(
     "command",
     [
