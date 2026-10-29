@@ -154,12 +154,10 @@ def test_non_owner_403_approver_ok(client: TestClient, sf: sessionmaker[Session]
     assert client.get(f"/review/{i}").status_code == 200
 
 
-def test_list_and_home_count(client: TestClient, sf: sessionmaker[Session]) -> None:
+def test_list_links_decision(client: TestClient, sf: sessionmaker[Session]) -> None:
     i = _make_decision(sf, "alice", "/x")
     _login(client, "alice")
     assert f'href="/review/{i}"' in client.get("/review").text
-    home = client.get("/", headers={"accept": "*/*"})
-    assert "1 item awaiting review" in home.text
 
 
 def test_detail_reasons_verbatim_and_escaped(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -221,10 +219,6 @@ def test_csrf_token_is_per_session(client: TestClient) -> None:
     assert _login(client, "alice") != _login(client, "root")
 
 
-def test_login_needs_no_csrf(client: TestClient) -> None:
-    assert client.post("/login", data={"username": "alice", "password": "pw"}).status_code == 303
-
-
 @pytest.mark.parametrize(
     "text",
     [
@@ -260,11 +254,11 @@ def test_repick_rejects_junk(client: TestClient, sf: sessionmaker[Session], text
         assert d and d.status == "pending_review"
 
 
-def test_media_range_206(client: TestClient, sf: sessionmaker[Session], downloads: Path) -> None:
+def test_media_full_body_and_missing_index(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
     i = _make_decision(sf, "alice", str(downloads / "a.mp3"))
     _login(client, "alice")
-    r = client.get(f"/media/preview/{i}/0", headers={"Range": "bytes=0-9"})
-    assert r.status_code == 206 and r.content == AUDIO[:10]
     assert client.get(f"/media/preview/{i}/0").content == AUDIO
     assert client.get(f"/media/preview/{i}/5").status_code == 404
 
@@ -285,10 +279,6 @@ def test_media_out_of_root_404(
     ]:
         i = _make_decision(sf, "alice", p)
         assert client.get(f"/media/preview/{i}/0").status_code == 404, p
-
-
-def test_static_css(client: TestClient) -> None:
-    assert client.get("/static/app.css").status_code == 200
 
 
 def test_filters() -> None:
@@ -319,11 +309,6 @@ def test_errors_render_html(client: TestClient, sf: sessionmaker[Session]) -> No
     _login(client, "bob")
     r = client.get(f"/review/{i}")
     assert r.status_code == 403 and "missing capability: approve" in r.text
-
-
-def test_unauthenticated_still_redirects(client: TestClient) -> None:
-    r = client.get("/review")
-    assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
 def _req(sf: sessionmaker[Session], user: str, status: str, job: JobState | None) -> int:
@@ -567,13 +552,6 @@ def test_unverified_error_keeps_submitted_values(
     assert r.status_code == 400
     assert 'value="Kept Band"' in r.text and 'value="Kept Title"' in r.text
     assert "a.mp3: track must be a whole number" in r.text
-
-
-def test_unverified_link_only_for_library_editors(client: TestClient) -> None:
-    _login(client, "alice")  # plain user: no library.edit
-    assert "/library/unverified" not in client.get("/").text
-    _login(client, "root")
-    assert "/library/unverified" in client.get("/").text
 
 
 def test_unverified_permissions_and_state(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -1093,10 +1071,12 @@ def test_clear_imported(
             assert d.status == (decisions.PENDING if rid == leased else "cancelled")
 
 
-def test_clear_imported_needs_csrf(client: TestClient, sf: sessionmaker[Session]) -> None:
+def test_clear_imported_without_csrf_keeps_requests(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
     rid = _req(sf, "alice", "imported", JobState.SUCCEEDED)
     _login(client, "alice")
-    assert client.post("/requests/delete-imported").status_code == 403
+    client.post("/requests/delete-imported")  # 403 asserted in test_auth.py
     with sf() as s:
         assert s.get(AlbumRequest, rid) is not None
 

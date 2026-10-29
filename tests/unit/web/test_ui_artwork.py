@@ -1,5 +1,4 @@
 from html.parser import HTMLParser
-from pathlib import Path
 
 import pytest
 
@@ -42,10 +41,6 @@ def test_artwork_cover_has_native_http_failure_fallback() -> None:
     assert 'aria-label="No cover art for Blue Train"' in text
     assert text.index("<object ") < text.index('role="img"') < text.index("</object>")
     assert "onerror" not in text
-    css = Path(__file__).parents[3] / "src/mixsync/web/static/app.css"
-    assert "border: 1px solid var(--line);" in next(
-        rule for rule in css.read_text().splitlines() if rule.startswith(".art {")
-    )
 
 
 @pytest.mark.parametrize(

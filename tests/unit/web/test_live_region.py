@@ -78,3 +78,4 @@ def test_base_template_loads_vendored_htmx_from_static(client: TestClient) -> No
     html = client.get("/login").text
     assert 'src="/static/htmx-2.0.4.min.js"' in html
     assert client.get("/static/htmx-2.0.4.min.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200

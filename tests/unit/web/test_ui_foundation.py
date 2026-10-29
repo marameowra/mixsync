@@ -276,11 +276,15 @@ def test_current_navigation_matches_nested_pages(client: TestClient) -> None:
 
 
 def test_non_html_authenticated_request_skips_navigation_counts(client: TestClient) -> None:
-    login(client, "alice")
+    login(client, "editor")  # has library.edit, so only the accept gating hides the count
+    html = client.get("/account", headers={"accept": "text/html"})
+    assert 'Unverified<span class="count">1</span>' in nav(html.text)
     response = client.get("/account", headers={"accept": "application/json"})
     assert response.status_code == 200
-    assert 'Review<span class="count">' not in nav(response.text)
     assert 'Unverified<span class="count">' not in nav(response.text)
+    login(client, "alice")
+    response = client.get("/account", headers={"accept": "application/json"})
+    assert 'Review<span class="count">' not in nav(response.text)
 
 
 @pytest.mark.parametrize(
