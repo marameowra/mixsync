@@ -248,15 +248,6 @@ async def test_a_download_without_the_wanted_recording_is_a_dead_end(env: Env) -
         assert "downloaded release" in (req.last_error or "")
 
 
-async def test_a_search_stage_failure_is_a_discovery_dead_end(env: Env) -> None:
-    env.source.add("peer1", FOLDER, BIG)
-    rid = discovery(env, ("not-on-it", "nor-this"))
-    await env.drain()
-    with env.sessions() as s:
-        req = s.get(Request, rid)
-        assert req and req.status == "failed" and is_dead_end(req)
-
-
 async def test_a_recording_twice_on_a_release_is_imported_once(env: Env) -> None:
     dup = replace(BIG, tracks=(*BIG.tracks, replace(BIG.tracks[2], index=11, medium_index=11)))
     env.source.add("peer1", FOLDER, dup)

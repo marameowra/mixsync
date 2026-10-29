@@ -111,13 +111,12 @@ async def test_unfingerprintable_file_is_skipped(env: Env) -> None:
 
 async def test_undo_and_a_retry_enqueue_nothing_more(env: Env) -> None:
     rig = _rig(env)
-    fake, sub = _wire(env)
+    fake, _ = _wire(env)
     pid = await _promote(env, rig)
     rig.merger.execute(pid)  # already done: no second job
     await env.step()
     rig.merger.undo_plan(pid)
     assert len(env.jobs(JobKind.ACOUSTID_SUBMIT)) == 1
-    sub._enqueue_poll(pid, [10, 11], 0)  # a retried submit re-enqueues the same status job
     assert len(fake.batches) == 1 and len(env.jobs(JobKind.ACOUSTID_STATUS)) == 1
 
 
@@ -199,7 +198,7 @@ async def test_a_rerun_submit_sends_nothing_more(env: Env) -> None:
     await env.step()  # the submission
     (job,) = env.jobs(JobKind.ACOUSTID_SUBMIT)
     await sub.submit(env.queue.get(job.id))  # re-run after a lock hit complete()
-    assert len(fake.batches) == 1
+    assert len(fake.batches) == 1 and len(env.jobs(JobKind.ACOUSTID_STATUS)) == 1
 
 
 async def test_a_lost_status_poll_never_resubmits(

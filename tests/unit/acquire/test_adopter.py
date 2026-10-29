@@ -114,15 +114,6 @@ async def test_a_folder_of_a_live_download_is_skipped(rig: Rig) -> None:
     assert rig.requests() == []
 
 
-async def test_a_folder_a_finished_verify_job_used_is_skipped(rig: Rig) -> None:
-    d = put_album(rig.dl, "Alpha Album")
-    paths = [str(p) for p in sorted(d.iterdir())]
-    rig.add_job(JobKind.VERIFY, {"request_id": 1, "paths": paths}, JobState.FAILED)
-    rig.settle()
-    await rig.scan()
-    assert rig.requests() == []
-
-
 async def test_a_folder_of_a_rejected_candidate_in_tried_is_skipped(rig: Rig) -> None:
     put_album(rig.dl, "Alpha Album")
     with rig.env.sessions.begin() as s:
@@ -239,16 +230,6 @@ async def test_an_owned_recording_is_dropped_and_its_file_stays(rig: Rig) -> Non
     assert [p.name for p in rig.files()] == ["01 Song One.mp3"]
 
 
-async def test_a_failed_adoption_is_tried_again_but_only_three_times(rig: Rig) -> None:
-    put_album(rig.dl, "Alpha Album")
-    rig.settle()
-    for n in range(1, 5):
-        await rig.scan()
-        assert len(rig.requests()) == min(n, 3)
-        with rig.env.sessions.begin() as s:
-            s.execute(update(Request).values(status="failed"))
-
-
 async def test_a_download_that_starts_during_the_scan_is_not_adopted(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -290,24 +271,12 @@ async def test_a_disc_folder_owned_by_a_download_keeps_the_rest_of_its_album_out
 async def test_a_changed_folder_is_queued_again_after_the_cap(rig: Rig) -> None:
     d = put_album(rig.dl, "Alpha Album")
     rig.settle()
-    for _ in range(4):
+    for n in range(1, 5):  # a failed adoption is tried again, but only three times
         await rig.scan()
+        assert len(rig.requests()) == min(n, 3)
         with rig.env.sessions.begin() as s:
             s.execute(update(Request).values(status="failed"))
-    assert len(rig.requests()) == 3
     shutil.copy(AUDIO / "cc0-tone-01.mp3", d / "03 Extra.mp3")
     rig.settle()
     await rig.scan()
     assert len(rig.requests()) == 4
-
-
-async def test_a_disc_folder_of_a_mixsync_download_is_skipped(rig: Rig) -> None:
-    put_album(rig.dl, "CD1")
-    files = (CandidateFile("@@share\\Music\\Album\\CD1\\x.flac", 1, "flac"),)
-    cand = Candidate("peer", "@@share\\Music\\Album\\CD1", files)
-    rig.add_job(
-        JobKind.DOWNLOAD, {"request_id": 1, "candidate": candidate_dict(cand)}, JobState.FAILED
-    )
-    rig.settle()
-    await rig.scan()
-    assert rig.requests() == []

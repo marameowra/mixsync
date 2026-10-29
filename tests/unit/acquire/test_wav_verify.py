@@ -184,4 +184,5 @@ async def test_readable_formats_never_reach_ffprobe_or_to_flac(
     rid = request(env)
     await env.drain(until=lambda: bool(decision_rows(env, 2)))
     assert [d.status for d in decision_rows(env, 2)] == ["auto_accepted"]
-    assert status(env, rid) == "importing"
+    await env.drain()  # through the import: with re-encoding off, MP3s are not handed to to_flac
+    assert status(env, rid) == "imported"

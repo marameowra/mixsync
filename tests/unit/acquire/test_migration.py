@@ -942,7 +942,9 @@ async def test_retry_of_a_partly_imported_album_imports_the_same_decision_again(
     assert len(decision_rows(rig.env, 2)) == 1  # the same decision, not a new match
 
 
-async def test_a_skipped_album_can_be_retried(rig: Rig, web: TestClient) -> None:
+async def test_a_skipped_album_can_be_retried_with_a_fresh_budget(
+    rig: Rig, web: TestClient
+) -> None:
     put_album(rig.root, "Alpha Band/Alpha Album")
     mid = await rig.preflight()
     rig.confirm(mid)
@@ -952,40 +954,13 @@ async def test_a_skipped_album_can_be_retried(rig: Rig, web: TestClient) -> None
     web.post(f"/review/{d.id}/reject", data=form)
     (req,) = rig.requests()
     assert req.status == "skipped" and "Retry" in web.get("/migration").text
-    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
-    assert rig.requests()[0].status == "verifying"
-
-
-async def test_retrying_a_dead_end_album_clears_the_dead_end(rig: Rig, web: TestClient) -> None:
-    put_album(rig.root, "Alpha Band/Alpha Album")
-    mid = await rig.preflight()
-    rig.confirm(mid)
-    await rig.env.drain()
-    (d,) = decision_rows(rig.env, 2)
-    form = {"csrf_token": login(web, "root")}
-    web.post(f"/review/{d.id}/reject", data=form)
-    (req,) = rig.requests()
     with rig.env.sessions.begin() as s:
-        s.get_one(Request, req.id).dead_end = True
+        row = s.get_one(Request, req.id)
+        row.dead_end, row.dropped = True, 5
     assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
     (req,) = rig.requests()
-    assert req.status == "verifying" and req.dead_end is False
+    assert (req.status, req.dead_end, req.dropped) == ("verifying", False, 0)
 
-
-async def test_retry_grants_a_fresh_request_budget(rig: Rig, web: TestClient) -> None:
-    put_album(rig.root, "Alpha Band/Alpha Album")
-    mid = await rig.preflight()
-    rig.confirm(mid)
-    await rig.env.drain()
-    (d,) = decision_rows(rig.env, 2)
-    form = {"csrf_token": login(web, "root")}
-    web.post(f"/review/{d.id}/reject", data=form)
-    (req,) = rig.requests()
-    with rig.env.sessions.begin() as s:
-        s.get_one(Request, req.id).dropped = 5
-    assert web.post(f"/migration/{mid}/retry/{req.id}", data=form).status_code == 303
-    (req,) = rig.requests()
-    assert req.dropped == 0
 
 
 async def test_the_page_reports_every_running_migration_and_all_failures(
@@ -1201,7 +1176,7 @@ async def to_normal_request(
         monkeypatch.setitem(CATALOG, BIG, replace(CATALOG[BIG], album=album))
     if other_artist:
         big = CATALOG[BIG]
-        monkeypatch.setitem(CATALOG, BIG, replace(big, artist="Zzzz Qqqq", album="Xxxx Wwww"))
+        monkeypatch.setitem(CATALOG, BIG, replace(big, artist="Zzzz Qqqq"))
     rig.confirm(await rig.preflight())
     with rig.env.sessions.begin() as s:
         s.execute(update(Request).values(migration_id=None, release_mbid=BIG))
@@ -1240,9 +1215,6 @@ async def test_a_confident_single_track_whose_album_tag_contradicts_the_release_
 async def test_a_single_track_of_another_artist_on_a_normal_request_is_rejected(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    rig.env.acoustid.override["Alpha Album/01 Song One.mp3"] = [
-        AcoustIdResult("aid", 0.5, (RECORDINGS["Song One"],))
-    ]
     dec = await to_normal_request(rig, monkeypatch, other_artist=True)
     assert dec.band == "reject" and library(rig.env) == []
 
