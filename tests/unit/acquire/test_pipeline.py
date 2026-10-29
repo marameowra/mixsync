@@ -888,9 +888,7 @@ async def test_import_skips_recordings_the_group_already_has(
                 ALBUM,
                 release_id="55555555-5555-5555-5555-555555555555",
                 year=1999,
-                tracks=tuple(
-                    replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)
-                ),
+                tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
             )
             monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
             canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))

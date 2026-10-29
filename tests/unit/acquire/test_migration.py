@@ -962,7 +962,6 @@ async def test_a_skipped_album_can_be_retried_with_a_fresh_budget(
     assert (req.status, req.dead_end, req.dropped) == ("verifying", False, 0)
 
 
-
 async def test_the_page_reports_every_running_migration_and_all_failures(
     rig: Rig, web: TestClient
 ) -> None:
