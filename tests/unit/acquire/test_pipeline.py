@@ -862,9 +862,36 @@ async def test_search_stops_when_every_recording_is_owned(env: Env) -> None:
         }
 
 
-async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+@pytest.mark.parametrize(
+    ("state", "year"),
+    [
+        ("other_release_canonical", "2020"),
+        ("own_release_canonical", "2020"),
+        ("canonical_shares_no_recording", "2021"),
+        ("no_canonical", "2021"),
+    ],
+)
+async def test_import_skips_recordings_the_group_already_has(
+    env: Env, monkeypatch: pytest.MonkeyPatch, state: str, year: str
+) -> None:
+    offered = ALBUM if state == "own_release_canonical" else ALBUM_B
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", offered)
+    if state == "no_canonical":
+
+        async def nothing(_group: str) -> list[ReleaseRef]:
+            return []
+
+        env.metadata.browse_group_releases = nothing  # type: ignore[method-assign]
     with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
+        if state == "canonical_shares_no_recording":
+            foreign = replace(
+                ALBUM,
+                release_id="55555555-5555-5555-5555-555555555555",
+                year=1999,
+                tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
+            )
+            monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
+            canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))
         s.add(
             Track(
                 path="elsewhere.mp3",
@@ -875,30 +902,11 @@ async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
                 imported_at=env.clock.now(),
             )
         )
-    rid = request(env, str(ALBUM_B.release_id))
+    rid = request(env, str(offered.release_id))
     await env.drain()
 
-    assert status(env, rid) == "imported" and library(env) == [SECOND]
-    assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
-
-
-async def test_import_skips_owned_recordings_when_own_release_is_canonical(env: Env) -> None:
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM)
-    with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported" and library(env) == [SECOND]
+    assert status(env, rid) == "imported"
+    assert library(env) == [SECOND.replace("(2020)", f"({year})")]
     assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
 
 
@@ -997,36 +1005,6 @@ async def test_canonical_without_shared_recordings_is_ignored(
     assert release_tags(env, rels[0])["TXXX:MusicBrainz Album Id"] == [ALBUM_B.release_id]
 
 
-async def test_owned_recordings_are_skipped_when_the_canonical_shares_none(
-    env: Env, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    foreign = replace(
-        ALBUM,
-        release_id="55555555-5555-5555-5555-555555555555",
-        year=1999,
-        tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
-    )
-    monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
-    with env.sessions.begin() as s:
-        canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM_B.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported"
-    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
-
-
 async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     async def nothing(_group: str) -> list[ReleaseRef]:
         return []
@@ -1039,30 +1017,6 @@ async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     assert library(env) == [FIRST.replace("(2020)", "(2021)"), SECOND.replace("(2020)", "(2021)")]
     with env.sessions() as s:
         assert canonical_db.get(s, str(ALBUM.release_group_id)) is None
-
-
-async def test_owned_recordings_are_skipped_when_the_group_has_no_canonical(env: Env) -> None:
-    async def nothing(_group: str) -> list[ReleaseRef]:
-        return []
-
-    env.metadata.browse_group_releases = nothing  # type: ignore[method-assign]
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
-    with env.sessions.begin() as s:
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM_B.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported"
-    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
 
 
 def test_store_keeps_an_existing_choice(env: Env) -> None:
@@ -1219,10 +1173,12 @@ async def test_unverified_partial_failure_releases_nothing(
     rid, did, form = await _review_form(env, web)
     real = env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+    def flaky(
+        src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path, root: str = "library"
+    ) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch)
+        return real(src, rel, write_tags, batch, origin, root)
 
     monkeypatch.setattr(env.ops, "import_file", flaky)
     assert web.post(f"/review/{did}/unverified", data=form).status_code == 303

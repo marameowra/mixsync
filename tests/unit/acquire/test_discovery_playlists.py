@@ -407,12 +407,14 @@ async def test_an_unscanned_song_is_skipped_then_pushed_after_the_import_hook(ri
     assert h.expires_at.replace(tzinfo=UTC) == rig.env.clock.now() + timedelta(days=10)
     pushes = [j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued"]
     assert len(pushes) == 2 and {j.payload["playlist_id"] for j in pushes} == {pid}  # early, late
+    early, late = pushes
+    assert late.run_after > early.run_after
     await rig.run(JobKind.DISCOVERY_PUSH)  # ...but Navidrome has not scanned it
     assert rig.lib.playlists["pl1"] == ["s1"]
     rig.lib.disc[rec(2)] = "s2"  # the rescan ran
     with rig.env.sessions.begin() as s:
         hold_imports(s, rig.env.clock.now(), "batch-2")  # same key: still one push waiting
-    await rig.disc.push(_record(rig, pid))
+    await rig.run(JobKind.DISCOVERY_PUSH)  # the later push finds it
     assert rig.lib.playlists["pl1"] == ["s1", "s2"]
 
 
@@ -584,27 +586,6 @@ async def test_picks_on_one_release_make_one_request(rig: Rig) -> None:
     }
 
 
-async def test_the_import_hook_alone_repushes_once_navidrome_has_scanned(rig: Rig) -> None:
-    rig.link(rig.env.user_id)
-    rig.playlist()
-    own(rig.env, 1)
-    rig.lib.main = {rec(1): "s1"}
-    rig.history.weekly = [ref(1), ref(2)]
-    rig.disc.start_chains()
-    await rig.run(JobKind.DISCOVERY_BUILD)
-    await rig.run(JobKind.DISCOVERY_PUSH)
-    provisional(rig.env, 2, batch="batch-2")
-    with rig.env.sessions.begin() as s:
-        hold_imports(s, rig.env.clock.now(), "batch-2")
-    early, late = (j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued")
-    assert late.run_after > early.run_after
-    await rig.run(JobKind.DISCOVERY_PUSH)  # the scan is still running
-    assert rig.lib.playlists["pl1"] == ["s1"]
-    rig.lib.disc[rec(2)] = "s2"  # ...and has finished by the later push
-    await rig.run(JobKind.DISCOVERY_PUSH)
-    assert rig.lib.playlists["pl1"] == ["s1", "s2"]
-
-
 async def test_a_main_library_track_resolves_to_the_main_copy(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     rig.playlist()
@@ -642,19 +623,6 @@ async def test_a_rejected_listenbrainz_token_is_recorded_not_retried(rig: Rig) -
     await rig.run(JobKind.DISCOVERY_BUILD)  # does not raise
     assert "rejected the token" in (rig.pl(pid).last_error or "")
     assert any(j.status == "queued" for j in rig.env.jobs(JobKind.DISCOVERY_BUILD))
-
-
-async def test_navidrome_refusing_the_account_is_recorded_not_retried(rig: Rig) -> None:
-    rig.link(rig.env.user_id)
-    pid = rig.playlist()
-    own(rig.env, 1)
-    rig.lib.main = {rec(1): "s1"}
-    rig.history.weekly = [ref(1)]
-    rig.disc.start_chains()
-    await rig.run(JobKind.DISCOVERY_BUILD)
-    rig.lib.error = AuthError("Navidrome rejected the credentials")
-    await rig.run(JobKind.DISCOVERY_PUSH)  # does not raise
-    assert (rig.pl(pid).last_error or "").startswith("Navidrome: Navidrome rejected")
 
 
 async def test_a_recording_known_not_to_be_on_the_release_is_not_asked_for_again(rig: Rig) -> None:
@@ -696,7 +664,7 @@ async def test_a_good_push_clears_an_earlier_push_error(rig: Rig) -> None:
     await rig.run(JobKind.DISCOVERY_BUILD)
     rig.lib.error = AuthError("Navidrome rejected the credentials")
     await rig.run(JobKind.DISCOVERY_PUSH)
-    assert (rig.pl(pid).last_error or "").startswith("Navidrome: ")
+    assert (rig.pl(pid).last_error or "").startswith("Navidrome: Navidrome rejected")
     rig.lib.error = None  # relinked
     await rig.disc.push(_record(rig, pid))
     assert rig.pl(pid).last_error is None and rig.lib.playlists == {"pl1": ["s1"]}

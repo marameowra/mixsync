@@ -24,9 +24,12 @@ def test_a_slow_transfer_stops_counting_and_counts_again_when_it_recovers() -> N
 
 def test_a_finished_transfer_forgets_its_samples() -> None:
     gate = DownloadGate()
-    gate.counted(at(0), {"a": 0})
-    gate.counted(at(60), {})
-    assert gate.counted(at(120), {"a": 0}) == 1  # a fresh transfer: no history, counts
+    fast = 2_000_000
+    gate.counted(at(0), {"a": 0, "b": 0})
+    gate.counted(at(60), {"b": 60 * fast})  # "a" finished
+    # "a" is back with no progress: a fresh transfer with no history counts; remembered
+    # samples would show it stalled next to "b" and exempt it
+    assert gate.counted(at(120), {"a": 0, "b": 120 * fast}) == 2
 
 
 def run(gate: DownloadGate, rates: list[int]) -> int:

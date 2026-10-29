@@ -13,6 +13,7 @@ from sqlalchemy import delete, select, update
 from mixsync.acquire import dropfolder, verify
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.pipeline import Pipeline
+from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
 from mixsync.core.clock import aware
 from mixsync.core.config import Settings
@@ -243,7 +244,7 @@ async def test_a_new_album_gets_a_content_key_and_a_searched_request_none(rig: R
     rig.settle()
     await rig.scan()
     with rig.env.sessions.begin() as s:
-        s.add(Request(user_id=1, release_mbid="x"))
+        create_request(s, rig.env.clock.now(), rig.env.user_id, "x")
     drop, searched = rig.requests()
     assert drop.content_key is not None and drop.content_key.startswith("drop:")
     assert searched.content_key is None
