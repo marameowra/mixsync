@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  Repo rules live in AGENTS.md; follow them. The ones that shape artifacts:
+  - Use the domain terms in CONTEXT.md exactly (Request, Candidate, Distance, Band, Quarantine...), never their _Avoid_ synonyms.
+  - Decisions with lasting trade-offs become an ADR in docs/decisions/ (next free NNNN number); design.md links it instead of re-arguing it. Read existing ADRs before proposing anything that contradicts one.
+  - Data safety: any change that deletes, overwrites or moves user music files needs a safeguard (dry run, journal/undo, trash/quarantine, or confirmation). See docs/design/data-safety.md.
+  - External APIs (MusicBrainz, AcoustID, Discogs, Deezer, ListenBrainz, slskd) go through mixsync.ratelimit; respect docs/design/services-etiquette.md.
+  - Work tracks a GitHub issue on marameowra/mixsync; name it in the proposal when one exists.
+
+rules:
+  proposal:
+    - State what is out of scope.
+    - Reference the GitHub issue number if there is one.
+  design:
+    - Call out any file-safety or external-API impact explicitly, or say there is none.
+  tasks:
+    - Branch from origin/dev; the PR targets dev, never main.
+    - End with a task that runs every CI step - uv run ruff check, uv run ruff format --check, uv run pyright, uv run lint-imports, uv run pytest - unless every changed file is docs-only.
+    - Tests go under tests/ and test public behavior; never add skip, skipif or xfail markers.
+
+operations:
+  apply:
+    guidance:
+      - Follow AGENTS.md delegation - implementation goes to the implementer subagent in its own worktree.
+  archive:
+    guidance:
+      - Archive only after the PR has merged into dev, then close its issue with gh issue close.
