@@ -22,12 +22,13 @@ from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset(e[1:] for e in EXTENSIONS)  # only what import takes
 RESPONSE_TRIES = 10
-# slskd defaults stop a search at 100 responses; ask for more. Timeout is seconds since the last
-# response (slskd minimum 5), so a slow search keeps going while it still gets hits.
+# slskd defaults stop a search at 100 responses; ask for more. Timeout is
+# milliseconds since the last response (slskd minimum 5000), so a slow search keeps going while
+# it still gets hits.
 SEARCH_SETTINGS = {
     "responseLimit": 1000,
     "fileLimit": 20000,
-    "searchTimeout": 15,
+    "searchTimeout": 15000,
     "minimumPeerUploadSpeed": 0,  # keep slow peers: they may be the only ones with the album
     "maximumPeerQueueLength": 1000,  # a queue this deep will not start within our patience
 }
