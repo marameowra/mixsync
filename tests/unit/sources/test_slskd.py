@@ -105,6 +105,7 @@ async def test_search_polls_until_complete(make_client: Make) -> None:
         "maximumPeerQueueLength",
     } <= body.keys()
     assert body["responseLimit"] > 100
+    assert body["searchTimeout"] >= 5000  # slskd reads milliseconds
     assert seen[-1].url.path == f"/api/v0/searches/{body['id']}/responses"
 
 
