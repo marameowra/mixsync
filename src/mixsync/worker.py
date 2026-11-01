@@ -56,7 +56,7 @@ async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
         try:
-            if not queue.heartbeat(job_id, worker, lease):
+            if not await asyncio.to_thread(queue.heartbeat, job_id, worker, lease):
                 return
         except Exception:  # a dead heartbeat lets the lease expire and the job run twice
             log.exception("heartbeat for job %s failed; trying again", job_id)
@@ -66,7 +66,7 @@ async def _complete(queue: JobQueue, job_id: int, worker: str) -> None:
     """The work is done: a locked database must never send it to retry (it would run twice)."""
     for attempt in range(COMPLETE_TRIES):
         try:
-            queue.complete(job_id, worker)
+            await asyncio.to_thread(queue.complete, job_id, worker)
             return
         except LeaseLostError:
             log.warning("lost lease on job %s", job_id)
@@ -94,7 +94,7 @@ async def run_job(
 ) -> None:
     hb = asyncio.create_task(_heartbeat(queue, job.id, worker, lease))
     try:
-        queue.start(job.id, worker)
+        await asyncio.to_thread(queue.start, job.id, worker)
         await handlers[job.kind](job)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
@@ -102,10 +102,10 @@ async def run_job(
         try:
             # A locked database is momentary, never a reason to fail finished work.
             if isinstance(e, TransientError | OperationalError):
-                queue.retry(job.id, worker, str(e))
+                await asyncio.to_thread(queue.retry, job.id, worker, str(e))
             else:  # PermanentError, SafetyError, bugs: never retried
                 log.exception("job %s failed", job.id)
-                queue.fail(job.id, worker, repr(e))
+                await asyncio.to_thread(queue.fail, job.id, worker, repr(e))
         except LeaseLostError:  # the job row was deleted or reaped while the handler ran
             log.warning("lost lease on job %s", job.id)
         except Exception:  # the bookkeeping failed too: reap() requeues it once the lease expires
@@ -128,7 +128,6 @@ async def run_worker(
     pending = list(startup)
     loop = asyncio.get_running_loop()
     retry_at = loop.time()
-    # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
     while not stop.is_set():
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
@@ -144,8 +143,8 @@ async def run_worker(
         if stop.is_set():
             return
         try:
-            queue.reap()
-            job = queue.claim(worker, lease)
+            await asyncio.to_thread(queue.reap)
+            job = await asyncio.to_thread(queue.claim, worker, lease)
         except Exception:  # e.g. "database is locked": a dead loop leaves every job queued
             log.exception("polling the job queue failed; trying again")
             job = None
