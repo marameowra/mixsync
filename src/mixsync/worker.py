@@ -3,11 +3,13 @@ import logging
 import os
 import signal
 import socket
+import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
 from mixsync.acquire.adopter import adopter
@@ -20,13 +22,14 @@ from mixsync.acquire.requests import fail_request_of_job
 from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
-from mixsync.core.jobs import DEFAULT_LEASE, JobKind
+from mixsync.core.jobs import DEFAULT_LEASE, JobKind, backoff
 from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.retention import Retention
 from mixsync.library import tag_undo
+from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
@@ -194,6 +197,31 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
     )
 
 
+RECOVERY_ATTEMPTS = 7  # delays 5+10+20+30+30+30 s: about 2 minutes in total
+
+
+def _recover(
+    fileops: FileOps,
+    sessions: sessionmaker[Session],
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Startup recovery, retried while the database is locked. Idempotent, so safe to re-run."""
+    for attempt in range(1, RECOVERY_ATTEMPTS + 1):
+        try:
+            fileops.recover()
+            tag_undo.recover(sessions, fileops)
+            return
+        except OperationalError:
+            if attempt == RECOVERY_ATTEMPTS:
+                log.error("startup recovery could not commit: database stayed locked")
+                raise
+            delay = backoff(attempt, timedelta(seconds=5), timedelta(seconds=30))
+            log.warning(
+                "startup recovery attempt %d failed (locked); retrying in %s", attempt, delay
+            )
+            sleep(delay.total_seconds())
+
+
 def _new_queue(
     services: Services,
 ) -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
@@ -203,8 +231,7 @@ def _new_queue(
         services.clock,
         services.fileops,
     )
-    fileops.recover()
-    tag_undo.recover(sessions, fileops)
+    _recover(fileops, sessions)
     queue = JobQueue(services.engine, clock, fail_request_of_job)
     merger = services.merger
     acoustid = AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings)
