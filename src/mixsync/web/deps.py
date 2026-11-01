@@ -28,7 +28,7 @@ def get_db(request: Request) -> Iterator[Session]:
 
 
 # Commit before the response goes out: a streamed preview would otherwise hold the write lock
-# (every request writes last_seen_at) for the whole playback, locking out the worker.
+# (a request may write last_seen_at) for the whole playback, locking out the worker.
 Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
