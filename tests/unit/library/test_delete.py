@@ -368,3 +368,15 @@ def test_path_outside_the_library_is_refused(world: World, tmp_path: Path, where
     assert _plan_ids(world) == [] and world.lib() == before and not world.trashed()
     assert (world.ops.data_dir / "outside.flac").read_bytes() == b"keep"
     assert (world.ops.data_dir / "discover" / "x.flac").read_bytes() == b"keep"
+
+
+def test_merge_trash_op_without_keeper_trashes_nothing(world: World) -> None:  # noqa: F811
+    pid = build(world)
+    with world.sessions.begin() as s:
+        plan = s.get_one(Plan, pid)
+        plan.ops = [
+            {k: v for k, v in op.items() if k != "keeper"} for op in plan.ops if op["op"] == "trash"
+        ]
+    with pytest.raises(KeyError):
+        world.merger.execute(pid)
+    assert world.trashed() == [] and world.plan(pid).status == "failed"

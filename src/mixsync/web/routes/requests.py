@@ -77,12 +77,15 @@ async def request_list(
     live = _live_states(db, [r.id for r in items])
     deletable = {r.id for r in items if _deletable(r, live)}
     queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
-    music = {  # requests with library tracks from their imports
-        r.id
-        for r in items
-        if r.status not in BUSY
-        and db.scalar(select(Track.id).where(verify.in_request(Track.batch_id, r.id)).limit(1))
-    }
+    candidates = [r.id for r in items if r.status not in BUSY]
+    music = set(  # requests with library tracks from their imports: one query for the page
+        db.scalars(
+            select(AlbumRequest.id)
+            .join(Track, verify.in_request(Track.batch_id, AlbumRequest.id))
+            .where(AlbumRequest.id.in_(candidates))
+            .distinct()
+        )
+    )
     return render(
         request,
         "pages/requests.html",

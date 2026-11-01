@@ -188,7 +188,13 @@ class Merger:
                 if not present:
                     raise DeleteRefused(f"{t.path} is missing from the library")
             ops: list[dict[str, Any]] = [
-                {"op": "trash", "track_id": t.id, "old": fragmentation.row_dict(t), "done": False}
+                {
+                    "op": "trash",
+                    "keeper": None,
+                    "track_id": t.id,
+                    "old": fragmentation.row_dict(t),
+                    "done": False,
+                }
                 for t in tracks
             ]
             if request is not None:
@@ -332,7 +338,7 @@ class Merger:
     def _trash(self, plan_id: int, batch: str, i: int, op: dict[str, Any]) -> None:
         fo, old = self.fileops, op["old"]["path"]
         self._row(op)
-        if "keeper" in op:  # a delete plan's ops have none: removing the music is the point
+        if op["keeper"] is not None:  # None on a delete plan's ops: removing the music is the point
             with self.sessions() as s:
                 keeper = s.scalar(select(Track.id).where(Track.path == op["keeper"]))
             if keeper is None or not fo.has(op["keeper"]):  # never trash the last copy
