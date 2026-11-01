@@ -13,13 +13,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import recheck
-from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
+from mixsync.acquire.merge import (
+    DeleteRefused,
+    Merger,
+    PlanInProgress,
+    enqueue_merge,
+    enqueue_undo,
+    live_job,
+    stale_delete_draft,
+)
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.undo import undoable
 from mixsync.library import fragmentation, tag_undo, tags
 from mixsync.library.fileops import FileOps
@@ -32,8 +41,9 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Files, Merge, Namer, require
+from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
+from mixsync.web.routes.requests import delete_row
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/library")
@@ -47,8 +57,15 @@ def _changes(plan: Plan) -> int:
     return sum(op["op"] in ("move", "trash") for op in plan.ops)
 
 
-def _plan(db: Db, plan_id: int) -> Plan:
+def _plan(db: Db, plan_id: int, user: AuthUser) -> Plan:
+    """The plan, if the user may act on it: `library.edit`, or the owner of the request whose
+    music a delete plan removes (and nothing else)."""
     plan = db.get(Plan, plan_id)
+    mine = plan is not None and any(
+        op["op"] == "request" and op["user_id"] == user.id for op in plan.ops
+    )
+    if not (mine or Capability.library_edit in user.capabilities):
+        raise HTTPException(403, f"missing capability: {Capability.library_edit.value}")
     if plan is None:
         raise HTTPException(404, "no such plan")
     return plan
@@ -234,9 +251,9 @@ async def build_plan(
 
 @router.get("/plans/{plan_id}")
 async def plan_detail(
-    plan_id: int, request: Request, user: User, db: Db, namer: Namer
+    plan_id: int, request: Request, user: CurrentUser, db: Db, namer: Namer
 ) -> HTMLResponse:
-    plan = _plan(db, plan_id)
+    plan = _plan(db, plan_id, user)
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
     refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
     for op in plan.ops:
@@ -258,30 +275,39 @@ async def plan_detail(
 
 def _act(
     request: Request,
+    user: AuthUser,
     plan_id: int,
     action: str,
     db: Session,
     count: str,
     enqueue: Callable[[Session, datetime, int], None],
 ) -> RedirectResponse:
-    plan = _plan(db, plan_id)
+    plan = _plan(db, plan_id, user)
+    if action == "confirm" and stale_delete_draft(db, plan, request.app.state.services.clock.now()):
+        plan.status = "discarded"
+        db.commit()  # the refusal below would roll the discard back
+        raise HTTPException(409, "this delete preview is over a week old; make a new one")
     if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)
+    if action == "confirm":  # a request-page plan also deletes its request; a refusal aborts all
+        for op in plan.ops:
+            if op["op"] == "request" and (req := db.get(AlbumRequest, op["request_id"])):
+                delete_row(db, req, user.id)
     enqueue(db, datetime.now(UTC), plan.id)
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
 @router.post("/plans/{plan_id}/confirm")
 def confirm(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "confirm", db, count, enqueue_merge)
+    return _act(request, user, plan_id, "confirm", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/discard")
-def discard(plan_id: int, request: Request, user: User, db: Db) -> RedirectResponse:
-    plan = _plan(db, plan_id)
+def discard(plan_id: int, request: Request, user: CurrentUser, db: Db) -> RedirectResponse:
+    plan = _plan(db, plan_id, user)
     if "discard" not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     plan.status = "discarded"  # a preview that never ran: DB only
@@ -292,14 +318,47 @@ def discard(plan_id: int, request: Request, user: User, db: Db) -> RedirectRespo
 def resume(
     plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "resume", db, count, enqueue_merge)
+    return _act(request, user, plan_id, "resume", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/undo")
 def undo(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "undo", db, count, enqueue_undo)
+    return _act(request, user, plan_id, "undo", db, count, enqueue_undo)
+
+
+def _delete_plan(merger: Merger, track_ids: list[int]) -> RedirectResponse:
+    try:
+        plan_id = merger.build_delete(track_ids)
+    except (PlanInProgress, DeleteRefused) as e:
+        raise HTTPException(409, str(e)) from None
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+
+
+@router.post("/unverified/delete")
+def delete_unverified_album(
+    request: Request,
+    user: User,
+    db: Db,
+    merger: Merge,
+    album: Annotated[str, Form()],
+    albumartist: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    items = recheck.group(_read_unverified(request, db)).get((albumartist, album, year))
+    if not items:
+        raise HTTPException(404, "no unverified tracks for that album")
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    return _delete_plan(merger, [t.id for t, _ in items])
+
+
+@router.post("/tracks/{track_id}/delete")
+def delete_track(track_id: int, user: User, db: Db, merger: Merge) -> RedirectResponse:
+    if db.get(Track, track_id) is None:
+        raise HTTPException(404, "no such track")
+    db.commit()
+    return _delete_plan(merger, [track_id])
 
 
 _tag_lock = threading.Lock()  # one restore at a time: a double click must not run twice

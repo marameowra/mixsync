@@ -8,17 +8,19 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import review
-from mixsync.acquire.lifecycle import DONE, IN_PROGRESS, is_busy, is_dead_end, is_waiting
+from mixsync.acquire import review, verify
+from mixsync.acquire.lifecycle import BUSY, DONE, IN_PROGRESS, is_busy, is_dead_end, is_waiting
+from mixsync.acquire.merge import DeleteRefused, PlanInProgress
 from mixsync.acquire.requests import REQUEST_BUDGET, create_request
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobState
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.discovery import ProvisionalHold
+from mixsync.db.models.library import Track
 from mixsync.db.models.watchlist import FollowHit
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.web.deps import Db, Namer, require
+from mixsync.web.deps import CurrentUser, Db, Merge, Namer, require
 from mixsync.web.names import resolve
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import render
@@ -75,6 +77,15 @@ async def request_list(
     live = _live_states(db, [r.id for r in items])
     deletable = {r.id for r in items if _deletable(r, live)}
     queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
+    candidates = [r.id for r in items if r.status not in BUSY]
+    music = set(  # requests with library tracks from their imports: one query for the page
+        db.scalars(
+            select(AlbumRequest.id)
+            .join(Track, verify.in_request(Track.batch_id, AlbumRequest.id))
+            .where(AlbumRequest.id.in_(candidates))
+            .distinct()
+        )
+    )
     return render(
         request,
         "pages/requests.html",
@@ -85,6 +96,7 @@ async def request_list(
             "in_progress": any(r.status in IN_PROGRESS for r in items),
             "live_url": "/requests?" + "&".join(f"ids={r.id}" for r in items),
             "deletable": deletable,
+            "music": music,
             "queued": queued,
             "budget": REQUEST_BUDGET,
             "names": await resolve(db, namer, {("release", r.release_mbid) for r in items}),
@@ -107,7 +119,7 @@ def new_request(user: User, db: Db, release: Annotated[str, Form()]) -> Redirect
     return RedirectResponse("/requests", status_code=303)
 
 
-def _delete(db: Session, req: AlbumRequest, user_id: int) -> None:
+def delete_row(db: Session, req: AlbumRequest, user_id: int) -> None:
     """Drops the row and its finished jobs; files on disk and decisions (the audit record) stay.
     Raises HTTPException(409) when the request cannot be deleted; the caller rolls back."""
     if req.migration_id is not None:
@@ -144,7 +156,7 @@ def delete_imported(user: User, db: Db) -> RedirectResponse:
             # On SQLite (no pysqlite SAVEPOINT recipe in db/engine.py) this may open the transaction
             # itself when the request has not written yet; a refused row still undoes only its own.
             with db.begin_nested():  # a refused row rolls back only its own changes
-                _delete(db, req, user.id)
+                delete_row(db, req, user.id)
         except HTTPException:
             continue
         except IntegrityError as e:
@@ -157,5 +169,26 @@ def delete_request(request_id: int, user: User, db: Db) -> RedirectResponse:
     req = db.get(AlbumRequest, request_id)
     if req is None or req.user_id != user.id:
         raise HTTPException(403 if req else 404, "not your request")
-    _delete(db, req, user.id)
+    delete_row(db, req, user.id)
     return RedirectResponse("/requests", status_code=303)
+
+
+@router.post("/{request_id}/delete-with-music")
+def delete_with_music(
+    request_id: int, user: CurrentUser, db: Db, merger: Merge
+) -> RedirectResponse:
+    """The dry run of "delete this request and its music"; the request goes on confirm."""
+    req = db.get(AlbumRequest, request_id)
+    if req is None:
+        raise HTTPException(404, "no such request")
+    if req.user_id != user.id and Capability.library_edit not in user.capabilities:
+        raise HTTPException(403, "not your request")
+    ids = list(db.scalars(select(Track.id).where(verify.in_request(Track.batch_id, req.id))))
+    if not ids:
+        raise HTTPException(404, "this request imported no music")
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    try:
+        plan_id = merger.build_delete(ids, req)
+    except (PlanInProgress, DeleteRefused) as e:
+        raise HTTPException(409, str(e)) from None
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
