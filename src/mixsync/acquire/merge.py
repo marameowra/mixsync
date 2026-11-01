@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle
 from mixsync.acquire.acoustid_submit import enqueue_submit
 from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
 from mixsync.acquire.requests import group as by_album
@@ -27,6 +28,7 @@ from mixsync.db import canonical as canonical_db
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import undoable
 from mixsync.library import canonical, fragmentation
@@ -53,6 +55,22 @@ def _open_plan(s: Session, group: str) -> str | None:
     for p in plans:
         if p.status != "draft" or live_job(s, p.id):
             return f"plan {p.id} for release group {group} is {p.status}"
+    return _delete_blocking(s, {group}, set(), "delete")  # a delete plan blocks merges too
+
+
+def _delete_blocking(s: Session, groups: set[str], ids: set[int], kind: str | None) -> str | None:
+    """Why these release groups or tracks cannot get a plan: a plan (of this kind, if given)
+    that is confirmed, running, undoing or failed touches them. Unlike `_open_plan`, a failed
+    plan blocks too."""
+    q = select(Plan).where(Plan.status.in_(["draft", "running", "undoing", "failed"]))
+    for p in s.scalars(q if kind is None else q.where(Plan.kind == kind)):
+        if p.status == "draft" and not live_job(s, p.id):
+            continue
+        theirs = {p.release_group_mbid} | {
+            o["old"]["release_group_mbid"] for o in p.ops if "old" in o
+        }
+        if groups & theirs or ids & {o["track_id"] for o in p.ops if "track_id" in o}:
+            return f"plan {p.id} is {p.status} for the same music"
     return None
 
 
@@ -73,6 +91,11 @@ def enqueue_undo(s: Session, now: datetime, plan_id: int) -> None:
 
 class PlanInProgress(ValueError):
     """The group has a merge plan that is running or being undone."""
+
+
+class DeleteRefused(ValueError):
+    """A delete plan cannot be made: a request is still working on the group, or a file is
+    missing or outside the library."""
 
 
 @dataclass(frozen=True)
@@ -137,6 +160,50 @@ class Merger:
             plan.batch_id = f"merge-{plan.id}"
             return plan.id
 
+    def build_delete(self, track_ids: list[int], request: AlbumRequest | None = None) -> int:
+        """Store a draft delete plan for these library tracks and return its id (the dry run: no
+        side effects). Confirm trashes the files and drops the rows; undo restores both. With a
+        request, a last `request` op records it for the route to delete on confirm."""
+        with self.sessions.begin() as s:
+            tracks = list(
+                s.scalars(select(Track).where(Track.id.in_(track_ids)).order_by(Track.id))
+            )
+            if not tracks or len(tracks) != len(set(track_ids)):
+                raise LookupError("no such tracks")
+            groups = {t.release_group_mbid for t in tracks if t.release_group_mbid}
+            busy = select(AlbumRequest.id).where(
+                AlbumRequest.status.in_(lifecycle.BUSY),
+                AlbumRequest.release_group_mbid.in_(groups)
+                | (AlbumRequest.id == (request.id if request else None)),
+            )
+            if s.scalar(busy.limit(1)) is not None:
+                raise DeleteRefused("a request for this release group is downloading or importing")
+            if blocked := _delete_blocking(s, groups, {t.id for t in tracks}, None):
+                raise PlanInProgress(blocked)
+            for t in tracks:
+                try:  # inside the library root, no symlinks
+                    present = self.fileops.has(t.path)
+                except SafetyError:
+                    raise DeleteRefused(f"{t.path} is outside the library") from None
+                if not present:
+                    raise DeleteRefused(f"{t.path} is missing from the library")
+            ops: list[dict[str, Any]] = [
+                {"op": "trash", "track_id": t.id, "old": fragmentation.row_dict(t), "done": False}
+                for t in tracks
+            ]
+            if request is not None:
+                ops.append({"op": "request", "request_id": request.id, "user_id": request.user_id})
+            plan = Plan(
+                kind="delete",
+                release_group_mbid=min(groups, default=""),
+                canonical_release_mbid="",
+                ops=ops,
+            )
+            s.add(plan)
+            s.flush()
+            plan.batch_id = f"delete-{plan.id}"
+            return plan.id
+
     def _size(self, rel: str) -> int:
         try:
             return (self.fileops.library / rel).stat().st_size
@@ -164,9 +231,10 @@ class Merger:
                 raise SafetyError(f"plan {plan_id} is {plan.status}")
             plan.status, plan.error = "running", None
             promote = plan.kind == "promote"  # files move onto a release; canonical is left alone
+            merge = plan.kind == "merge"  # only a merge changes the canonical release
             before = canonical_db.get(s, plan.release_group_mbid)
-            ok = promote or self._set_canonical(s, plan)
-            if ok and not promote and before != plan.canonical_release_mbid:
+            ok = not merge or self._set_canonical(s, plan)
+            if ok and merge and before != plan.canonical_release_mbid:
                 plan.canonical_set = True
             batch, ops = plan.batch_id, plan.ops
         try:
@@ -174,7 +242,7 @@ class Merger:
                 raise SafetyError("the canonical release changed since the plan was built")
             for i, op in enumerate(ops):
                 if op["op"] in ("move", "trash") and not op["done"]:
-                    if not promote:
+                    if merge:
                         self._canonical_unchanged(plan_id)
                     (self._move if op["op"] == "move" else self._trash)(plan_id, batch, i, op)
         except Exception as e:  # a crash (BaseException) leaves "running": a retry resumes
@@ -264,10 +332,11 @@ class Merger:
     def _trash(self, plan_id: int, batch: str, i: int, op: dict[str, Any]) -> None:
         fo, old = self.fileops, op["old"]["path"]
         self._row(op)
-        with self.sessions() as s:
-            keeper = s.scalar(select(Track.id).where(Track.path == op["keeper"]))
-        if keeper is None or not fo.has(op["keeper"]):  # never trash the last copy
-            raise SafetyError(f"the copy to keep ({op['keeper']}) is missing")
+        if "keeper" in op:  # a delete plan's ops have none: removing the music is the point
+            with self.sessions() as s:
+                keeper = s.scalar(select(Track.id).where(Track.path == op["keeper"]))
+            if keeper is None or not fo.has(op["keeper"]):  # never trash the last copy
+                raise SafetyError(f"the copy to keep ({op['keeper']}) is missing")
         if self._journaled(batch, "trash", src=old) is None:
             if not fo.has(old):
                 raise SafetyError(f"{old} is gone")

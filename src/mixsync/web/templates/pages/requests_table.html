@@ -15,7 +15,8 @@
     <td>{% if r.status == "review" %}<a href="/review">{{ status("review", "Needs review") }}</a>{% elif r.id in queued %}{{ status("pending", "Queued") }} ({{ r.status | replace("_", " ") }}){% else %}{{ status(r.status) }}{% endif %}</td>
     <td>{{ r.dropped }} of {{ budget }}</td>
     <td>{{ r.last_error or "" }}</td>
-    <td>{% if r.id in deletable %}<form method="post" action="/requests/{{ r.id }}/delete" {% if r.status != "imported" %}onsubmit="return confirm('Delete this request? Files are kept.')"{% endif %}>{{ forms.csrf() }}<button class="danger" type="submit">Delete request</button></form>{% endif %}</td>
+    <td>{% if r.id in deletable %}<form method="post" action="/requests/{{ r.id }}/delete" {% if r.status != "imported" %}onsubmit="return confirm('Delete this request? Files are kept.')"{% endif %}>{{ forms.csrf() }}<button class="danger" type="submit">Delete request</button></form>{% endif %}
+      {% if r.id in music %}<form method="post" action="/requests/{{ r.id }}/delete-with-music">{{ forms.csrf() }}<button class="danger" type="submit">Delete request and its music</button></form>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

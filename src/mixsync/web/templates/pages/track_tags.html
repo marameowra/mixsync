@@ -22,4 +22,5 @@
 {% else %}
 <p>The file already has these tags.</p>
 {% endif %}
+<form method="post" action="/library/tracks/{{ track.id }}/delete">{{ forms.csrf() }}<button class="btn danger" type="submit">Delete this track from the library</button></form>
 {% endblock %}
