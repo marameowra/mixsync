@@ -58,6 +58,8 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Library**: The organized tree under `/data/library` that the media server reads.
 
+**Album (in the library)**: Every verified library track filed under one release group, whichever edition it came from. Unverified tracks often have no release group, so they form albums by their artist, album and year tags instead. _Avoid_: Release (that is one edition), folder
+
 **Trash**: `/data/.trash/<day>/`, where "delete" moves files; purged by a journaled job after `MIXSYNC_TRASH_DAYS`. _Avoid_: Recycle bin
 
 **Journal**: The record of every file operation, which makes imports and undo recoverable after a crash.
