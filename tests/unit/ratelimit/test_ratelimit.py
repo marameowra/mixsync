@@ -1,6 +1,10 @@
+import asyncio
+import sqlite3
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 import pytest
@@ -8,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import aware
 from mixsync.core.config import Settings
+from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models import infra  # noqa: F401
 from mixsync.db.models.infra import RateBucket
@@ -330,3 +335,32 @@ def test_first_use_race_does_not_raise(
     assert fut.result(timeout=10) == timedelta(0)
     with sessions() as s:
         assert s.get(RateBucket, "acoustid").tokens == 2  # type: ignore[union-attr]
+
+
+async def test_request_does_not_block_loop_on_db_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    db = tmp_path / "lock.db"
+    monkeypatch.setenv("MIXSYNC_DATABASE_URL", f"sqlite:///{db}")
+    settings = Settings()
+    engine = make_engine(settings)
+    Base.metadata.create_all(engine)
+    sessions = make_session_factory(engine)
+    holder = sqlite3.connect(db, isolation_level=None, check_same_thread=False)
+    holder.execute("BEGIN IMMEDIATE")
+    threading.Timer(0.5, lambda: holder.execute("COMMIT")).start()
+    ticks = 0
+
+    async def ticker() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.05)
+            ticks += 1
+
+    task = asyncio.create_task(ticker())
+    handler = httpx.MockTransport(lambda r: httpx.Response(200, json={}))
+    async with client("acoustid", settings, sessions, clock, handler) as c:
+        assert (await c.get("https://example.test/x")).status_code == 200
+    task.cancel()
+    holder.close()
+    assert ticks >= 5  # a blocked loop would have ticked ~0 times during the 0.5 s lock

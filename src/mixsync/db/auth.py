@@ -76,6 +76,9 @@ def create_session(
     return token
 
 
+_LAST_SEEN_EVERY = timedelta(seconds=60)
+
+
 def user_for_session(s: Session, token: str, now: datetime) -> AuthUser | None:
     row = s.get(SessionRow, _hash_token(token))
     if row is None:
@@ -87,7 +90,8 @@ def user_for_session(s: Session, token: str, now: datetime) -> AuthUser | None:
     user = s.get(User, row.user_id)
     if user is None or user.status != "active":
         return None
-    row.last_seen_at = now
+    if now - aware(row.last_seen_at) > _LAST_SEEN_EVERY:  # every request writing holds the lock
+        row.last_seen_at = now
     caps = s.scalars(
         select(RoleCapability.capability)
         .join(UserRole, UserRole.role_id == RoleCapability.role_id)

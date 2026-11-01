@@ -83,23 +83,31 @@ class PoliteClient:
         request = self._http.build_request(method, url, **kwargs)
         ttl = ttl_for(self.lim, request) if cacheable(request) else None
         fresh = request.headers.get("cache-control") == "no-cache"  # skips the read, not the put
-        if ttl is not None and not fresh and (hit := self.cache.get(request, self.clock.now())):
+        if (
+            ttl is not None
+            and not fresh
+            and (hit := await asyncio.to_thread(self.cache.get, request, self.clock.now()))
+        ):
             return hit
         for attempt in range(_MAX_ATTEMPTS):
-            while (wait := self.bucket.reserve()) > timedelta(0):
+            while (wait := await asyncio.to_thread(self.bucket.reserve)) > timedelta(0):
                 await self._sleep(wait.total_seconds())
             response = await self._http.send(request)
             if response.headers.get("X-RateLimit-Remaining") == "0" and (
                 reset := _reset_in(response)
             ):
-                self.bucket.block(reset)
+                await asyncio.to_thread(self.bucket.block, reset)
             if response.headers.get("X-Discogs-Ratelimit-Remaining") == "0":
-                self.bucket.block(_DISCOGS_WINDOW)  # a moving 60 s window, no reset header
+                await asyncio.to_thread(
+                    self.bucket.block, _DISCOGS_WINDOW
+                )  # a moving 60 s window, no reset header
             if response.status_code not in (429, 503):
                 if ttl is not None and response.status_code == 200:
-                    self.cache.put(request, response, self.clock.now(), ttl)
+                    await asyncio.to_thread(
+                        self.cache.put, request, response, self.clock.now(), ttl
+                    )
                 return response
-            self.bucket.block(self._delay(response, attempt))
+            await asyncio.to_thread(self.bucket.block, self._delay(response, attempt))
         raise TransientError(f"{request.url.host} still refusing after {_MAX_ATTEMPTS} attempts")
 
     def _delay(self, response: httpx.Response, attempt: int) -> timedelta:
