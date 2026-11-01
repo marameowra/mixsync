@@ -380,3 +380,51 @@ def test_merge_trash_op_without_keeper_trashes_nothing(world: World) -> None:  #
     with pytest.raises(KeyError):
         world.merger.execute(pid)
     assert world.trashed() == [] and world.plan(pid).status == "failed"
+
+
+def _age(w: World, pid: int, days: int) -> None:
+    with w.sessions.begin() as s:
+        s.get_one(Plan, pid).created_at = datetime.now(UTC) - timedelta(days=days)
+
+
+def test_stale_delete_draft_is_discarded_by_a_new_preview(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    first, second = _ids(world, Track.release_mbid == OLD)[:2]
+    with c:
+        tok = _login(c, "root")
+        old = _preview(c, tok, f"/library/tracks/{first}/delete")
+        fresh = _preview(c, tok, f"/library/tracks/{second}/delete")
+        merge = build(world)
+        _age(world, old, 8)
+        _age(world, merge, 30)
+        _age(world, fresh, 6)
+        _preview(c, tok, f"/library/tracks/{second}/delete")
+        assert world.plan(old).status == "discarded"
+        assert world.plan(fresh).status == "draft"
+        assert world.plan(merge).status == "draft"  # merge drafts are not swept
+
+
+def test_stale_delete_draft_cannot_be_confirmed(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    (tid,) = _ids(world, Track.release_mbid != OLD)
+    before, rows = world.lib(), _rows(world)
+    with c:
+        tok = _login(c, "root")
+        pid = _preview(c, tok, f"/library/tracks/{tid}/delete")
+        _age(world, pid, 8)
+        assert _post(c, tok, f"/library/plans/{pid}/confirm") == 409
+        assert world.plan(pid).status == "discarded"
+        _drain(world)
+        assert world.lib() == before and _rows(world) == rows and not world.trashed()
+
+
+def test_six_day_old_delete_draft_still_confirms(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    (tid,) = _ids(world, Track.release_mbid != OLD)
+    with c:
+        tok = _login(c, "root")
+        pid = _preview(c, tok, f"/library/tracks/{tid}/delete")
+        _age(world, pid, 6)
+        assert _post(c, tok, f"/library/plans/{pid}/confirm") == 303
+        _drain(world)
+        assert world.plan(pid).status == "done"

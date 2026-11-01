@@ -20,6 +20,7 @@ from mixsync.acquire.merge import (
     enqueue_merge,
     enqueue_undo,
     live_job,
+    stale_delete_draft,
 )
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
@@ -282,6 +283,10 @@ def _act(
     enqueue: Callable[[Session, datetime, int], None],
 ) -> RedirectResponse:
     plan = _plan(db, plan_id, user)
+    if action == "confirm" and stale_delete_draft(db, plan, request.app.state.services.clock.now()):
+        plan.status = "discarded"
+        db.commit()  # the refusal below would roll the discard back
+        raise HTTPException(409, "this delete preview is over a week old; make a new one")
     if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)

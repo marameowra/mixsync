@@ -10,7 +10,7 @@ flag. A validation failure marks the plan failed and stops: nothing is guessed.
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select, update
@@ -20,7 +20,7 @@ from mixsync.acquire import lifecycle
 from mixsync.acquire.acoustid_submit import enqueue_submit
 from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
 from mixsync.acquire.requests import group as by_album
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import SafetyError
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.protocols import MetadataProvider
@@ -56,6 +56,19 @@ def _open_plan(s: Session, group: str) -> str | None:
         if p.status != "draft" or live_job(s, p.id):
             return f"plan {p.id} for release group {group} is {p.status}"
     return _delete_blocking(s, {group}, set(), "delete")  # a delete plan blocks merges too
+
+
+DELETE_DRAFT_DAYS = 7  # an unconfirmed delete preview older than this is stale
+
+
+def stale_delete_draft(s: Session, plan: Plan, now: datetime) -> bool:
+    """A delete preview nobody confirmed (no job waiting) for over DELETE_DRAFT_DAYS days."""
+    return (
+        plan.kind == "delete"
+        and plan.status == "draft"
+        and now - aware(plan.created_at) > timedelta(days=DELETE_DRAFT_DAYS)
+        and not live_job(s, plan.id)
+    )
 
 
 def _delete_blocking(s: Session, groups: set[str], ids: set[int], kind: str | None) -> str | None:
@@ -165,6 +178,10 @@ class Merger:
         side effects). Confirm trashes the files and drops the rows; undo restores both. With a
         request, a last `request` op records it for the route to delete on confirm."""
         with self.sessions.begin() as s:
+            now = self.clock.now()
+            for p in s.scalars(select(Plan).where(Plan.kind == "delete", Plan.status == "draft")):
+                if stale_delete_draft(s, p, now):  # never executed, so DB only
+                    p.status = "discarded"
             tracks = list(
                 s.scalars(select(Track).where(Track.id.in_(track_ids)).order_by(Track.id))
             )
