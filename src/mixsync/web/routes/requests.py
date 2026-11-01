@@ -141,8 +141,8 @@ def delete_imported(user: User, db: Db) -> RedirectResponse:
     )
     for req in db.scalars(mine).all():
         try:
-            # On SQLite the savepoint nests only because the session already began a transaction
-            # (the last_seen_at autoflush); db/engine.py has no pysqlite SAVEPOINT recipe.
+            # On SQLite (no pysqlite SAVEPOINT recipe in db/engine.py) this may open the transaction
+            # itself when the request has not written yet; a refused row still undoes only its own.
             with db.begin_nested():  # a refused row rolls back only its own changes
                 _delete(db, req, user.id)
         except HTTPException:
