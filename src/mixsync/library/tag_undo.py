@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
+from mixsync.db.models.library import Track
 from mixsync.db.models.safety import FileOp
 from mixsync.library import tags
 from mixsync.library.fileops import FileOps
@@ -43,6 +44,9 @@ def restore_tags(
             except Exception:  # e.g. the database is locked: recover() retries at startup
                 log.exception("tag undo: could not put %s back; the worker will", rel)
         raise
+    with sessions.begin() as s:  # the file now holds the old tags
+        if (row := s.get(Track, track_id)) is not None:
+            row.album_artist, row.album, row.year = tags.file_names(fo.library / rel)
 
 
 def unfinished(sessions: sessionmaker[Session], fo: FileOps) -> list[FileOp]:

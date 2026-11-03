@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Library - MixSync{% endblock %}
+{% block content %}
+{% from "macros/ui.html" import status %}
+<h1>Library ({{ total }} albums)</h1>
+<form method="get" action="/library/albums">
+  <div class="field"><label for="album-q">Search album artist or album</label>
+  <input id="album-q" name="q" value="{{ q }}"></div>
+  <button class="btn" type="submit">Search</button>
+</form>
+{% if pending %}<p>Names pending for {{ pending }} tracks: a background job is reading their tags.</p>{% endif %}
+<div class="table-wrap scroll">
+<table>
+  <thead><tr><th>Album artist</th><th>Album</th><th>Year</th><th></th><th>Tracks</th></tr></thead>
+  <tbody>
+  {% for a in albums %}
+  <tr>
+    <td>{{ "Untagged" if a.kind == "untagged" else "Names pending" if a.kind == "pending" else a.artist or "(no album artist)" }}</td>
+    <td><a href="/library/album?{{ {'kind': a.kind, 'group': a.group, 'albumartist': a.artist, 'album': a.album, 'year': a.year}|urlencode }}">{{ (a.album or "(no album tag)") if a.kind in ("verified", "unverified") else "Show tracks" }}</a></td>
+    <td>{{ a.year }}</td>
+    <td>{% if a.kind in ("verified", "unverified") %}{{ status(a.kind) }}{% endif %}</td>
+    <td>{{ a.tracks }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5">No albums.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p>Page {{ page }} of {{ pages }}
+  {% if page > 1 %}<a href="/library/albums?{{ {'q': q, 'page': page - 1}|urlencode }}">Previous</a>{% endif %}
+  {% if page < pages %}<a href="/library/albums?{{ {'q': q, 'page': page + 1}|urlencode }}">Next</a>{% endif %}
+</p>
+{% endblock %}

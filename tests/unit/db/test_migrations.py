@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0022_request_content_key"
+    assert _version(settings) == "0023_track_album_names"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0022_request_content_key"
+    assert _version(settings) == "0023_track_album_names"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
@@ -258,3 +258,24 @@ def test_0018_backfills_dead_end_and_partial_from_last_error(settings: Settings)
         "1 of 3 tracks present",
         None,
     ]
+
+
+def test_0023_adds_null_name_columns_without_touching_rows(settings: Settings) -> None:
+    upgrade("0022_request_content_key")
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO tracks (path, artist_mbids, status, batch_id, imported_at,"
+                " created_at, updated_at) VALUES ('a.flac', '[]', 'verified', 'b',"
+                " '2026-01-01', '2026-01-01', '2026-01-01')"
+            )
+        )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        row = c.execute(text("SELECT album_artist, album, year FROM tracks")).one()
+    assert tuple(row) == (None, None, None)  # unfilled: the backfill job reads the files
+    downgrade("0022_request_content_key")
+    with make_engine(settings).connect() as c:
+        cols = {col["name"] for col in inspect(c).get_columns("tracks")}
+        assert c.execute(text("SELECT path FROM tracks")).scalar() == "a.flac"
+    assert not cols & {"album_artist", "album", "year"}

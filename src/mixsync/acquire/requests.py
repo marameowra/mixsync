@@ -5,7 +5,6 @@ import random
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Connection, select
@@ -21,7 +20,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
-from mixsync.library import tags
+from mixsync.library import albums
 from mixsync.match.profiles import BALANCED
 
 REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
@@ -230,16 +229,7 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
     )
 
 
-AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them
-
-
-def year_of(tg: dict[str, str]) -> str:
-    y = tg.get("date", "")[:4]
-    return y if y.isascii() and y.isdigit() and y != "0000" else ""
-
-
-def album_key(tg: dict[str, str]) -> AlbumKey:
-    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), year_of(tg)
+AlbumKey = tuple[str, str, str]  # (album artist, album, year) as the unverified list groups them
 
 
 def all_live_rechecks(s: Session) -> list[Job]:
@@ -292,30 +282,24 @@ def add_recheck(
     )
 
 
-Item = tuple[Track, dict[str, str]]
+def read_unverified(db: Session) -> list[Track]:
+    """Unverified tracks whose names are filled in (ADR 0018): no file is read."""
+    return list(
+        db.scalars(
+            select(Track)
+            .where(Track.status == "unverified", Track.album.is_not(None))
+            .order_by(Track.id)
+        )
+    )
 
 
-def read_unverified(db: Session, root: Path) -> list[Item]:
-    # shortcut: reads the tags of every unverified file per call; move the album fields
-    # into DB columns when unverified sets get large.
-    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
-    items: list[Item] = []
-    for t in rows:
-        try:
-            items.append((t, tags.read_fields(root / t.path)))
-        except Exception:  # file moved or unreadable: the path alone still identifies it
-            items.append((t, {}))
-    return items
-
-
-def group(items: list[Item]) -> dict[AlbumKey, list[Item]]:
-    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
-    dated group with the same artist and album, if there is exactly one."""
-    albums: dict[AlbumKey, list[Item]] = {}
-    for it in items:
-        albums.setdefault(album_key(it[1]), []).append(it)
-    for key in [k for k in albums if not k[2]]:
-        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
-        if len(dated) == 1:
-            albums[dated[0]] += albums.pop(key)
-    return albums
+def group(tracks: list[Track]) -> dict[AlbumKey, list[Track]]:
+    """Group by the name columns, not import batch (a batch can mix albums)."""
+    raw: dict[AlbumKey, list[Track]] = {}
+    for t in tracks:
+        raw.setdefault((t.album_artist or "", t.album or "", t.year or ""), []).append(t)
+    into = albums.fold(raw)
+    out: dict[AlbumKey, list[Track]] = {}
+    for key, ts in raw.items():
+        out.setdefault(into[key], []).extend(ts)
+    return out

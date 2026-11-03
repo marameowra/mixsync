@@ -31,7 +31,7 @@ from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import undoable
-from mixsync.library import canonical, fragmentation
+from mixsync.library import canonical, fragmentation, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
@@ -345,6 +345,9 @@ class Merger:
             tg = op["tags"]
             row.path, row.release_mbid = new, tg["release_id"]
             row.artist_mbids = list(tg["artist_ids"])
+            row.album_artist, row.album, row.year = tags.names_of(
+                fragmentation.tagset_from_dict(tg)
+            )
             if s.get_one(Plan, plan_id).kind == "promote":  # a merge keeps the rest of the row
                 row.recording_mbid = tg["recording_id"]
                 row.release_group_mbid = tg["release_group_id"]
@@ -456,8 +459,8 @@ class Merger:
             enqueue_rescan(s, self.clock.now())
             if kind == "promote":  # unverified again: look for them on MusicBrainz later
                 ids = {op["track_id"] for op in ops}
-                for key, items in by_album(read_unverified(s, self.fileops.library)).items():
-                    if key[1] and ids & {t.id for t, _ in items}:
+                for key, items in by_album(read_unverified(s)).items():
+                    if key[1] and ids & {t.id for t in items}:
                         enqueue_recheck(s, self.clock.now(), key, None)
 
     def _undo_op(self, plan_id: int, batch: str, ubatch: str, i: int, op: dict[str, Any]) -> None:
@@ -488,9 +491,12 @@ class Merger:
         if trash_new and new != path:
             fo.trash(str(new), ubatch)
 
+        names = tags.file_names(fo.library / path)  # the restored original's own tags
+
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
             row.artist_mbids = list(old["artist_mbids"])
+            row.album_artist, row.album, row.year = names
             if s.get_one(Plan, plan_id).kind == "promote":
                 row.recording_mbid = old["recording_mbid"]
                 row.release_group_mbid = old["release_group_mbid"]
@@ -498,5 +504,13 @@ class Merger:
 
         if row is None:  # a trash op deleted the row
             with self.sessions.begin() as s:
-                s.add(Track(**{**old, "imported_at": datetime.fromisoformat(old["imported_at"])}))
+                at = datetime.fromisoformat(old["imported_at"])
+                s.add(
+                    Track(
+                        **{**old, "imported_at": at},
+                        album_artist=names[0],
+                        album=names[1],
+                        year=names[2],
+                    )
+                )
         self._commit_op(plan_id, i, op, apply, done=False)

@@ -30,11 +30,11 @@
       {%- if can_edit %}{{ link("/library/unverified", "Unverified", waiting_counts.get("unverified")) }}{% endif %}
     </div>
     {% endif %}
-    {% if can_edit or is_admin %}<div class="group"><span class="group-name">Library</span>
-      {% if can_edit %}{{ link("/library/fragments", "Fragments") }}{% endif %}
+    <div class="group"><span class="group-name">Library</span>
+      {{ link("/library/albums", "Browse") }}
+      {%- if can_edit %}{{ link("/library/fragments", "Fragments") }}{% endif %}
       {%- if is_admin %}{{ link("/migration", "Migration") }}{% endif %}
     </div>
-    {% endif %}
     <div class="group end">{{ link("/account", "Account") }}<form method="post" action="/logout">{{ forms.csrf() }}<button class="btn quiet" type="submit">Log out</button></form></div>
   </nav>
   {% endif %}

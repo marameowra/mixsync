@@ -19,7 +19,6 @@ from mixsync.acquire.merge import live_job
 from mixsync.acquire.pipeline import Handler, acoustid_id, file_track, likelies
 from mixsync.acquire.requests import (
     AlbumKey,
-    Item,
     add_recheck,
     all_live_rechecks,
     enqueue_recheck,
@@ -63,7 +62,7 @@ def _has(plan: Plan, ids: set[int]) -> bool:
     return bool(ids & {o["track_id"] for o in plan.ops})
 
 
-def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, Status]:
+def statuses(s: Session, albums: dict[AlbumKey, list[Track]]) -> dict[AlbumKey, Status]:
     # The album sits in a JSON payload with no portable equality (Postgres json has none), so
     # filter by status in SQL and group by album once here.
     by_album: dict[AlbumKey, list[Job]] = {}
@@ -81,7 +80,7 @@ def statuses(s: Session, albums: dict[AlbumKey, list[Item]]) -> dict[AlbumKey, S
         due = [
             j.run_after for j in mine if j.status is JobState.QUEUED and not j.payload["user_id"]
         ]
-        ids = {t.id for t, _ in items}
+        ids = {t.id for t in items}
         plan = max((p for p in drafts if _has(p, ids)), key=lambda p: p.id, default=None)
         out[key] = Status(
             max(done, default=None),
@@ -120,9 +119,9 @@ class Rechecker:
 
         try:
             with self.sessions() as s:
-                items = group(read_unverified(s, self.fileops.library)).get(key, [])
+                items = group(read_unverified(s)).get(key, [])
                 profile = profile_for(s, uid) if uid else BALANCED
-            items = [i for i in items if self.fileops.has(i[0].path)]
+            items = [t for t in items if self.fileops.has(t.path)]
             if not items or not key[1]:  # nothing unverified left: the chain ends
                 return
             found = await self._match(key, items, profile)
@@ -140,7 +139,7 @@ class Rechecker:
             next_check()
 
     async def _match(
-        self, key: AlbumKey, items: list[Item], profile: Profile
+        self, key: AlbumKey, items: list[Track], profile: Profile
     ) -> tuple[AlbumInfo, dict[int, FileTrack]] | None:
         """The best of the top releases, if it is confident enough to promote to. A file that
         cannot be fingerprinted or looked up is skipped (an outage retries the job); none left
@@ -152,7 +151,7 @@ class Rechecker:
         if not albums:
             return None
         files: dict[int, FileTrack] = {}  # by track id
-        for t, _ in items:
+        for t in items:
             path = self.fileops.library / t.path
             try:
                 fp = await self.fingerprint(path)
@@ -169,17 +168,17 @@ class Rechecker:
                 log.warning("re-check of %s skipped", t.path, exc_info=True)
         if not files:
             return None
-        like = likelies([self.fileops.library / t.path for t, _ in items])
+        like = likelies([self.fileops.library / t.path for t in items])
         scored = [(score_files(list(files.values()), like, a, profile), a) for a in albums]
         result, best = min(scored, key=lambda x: x[0].distance)
         return (best, files) if result.band is Band.AUTO_ACCEPT else None
 
     def _draft(
-        self, s: Session, items: list[Item], album: AlbumInfo, files: dict[int, FileTrack]
+        self, s: Session, items: list[Track], album: AlbumInfo, files: dict[int, FileTrack]
     ) -> bool:
         """Store the draft plan. True if it promotes every file; False if some stay unverified
         (or no plan was made), so the caller keeps checking."""
-        rows = [t for t, _ in items]
+        rows = items
         ids = {t.id for t in rows}
         mine = [
             p
@@ -246,6 +245,6 @@ class Rechecker:
                 for j in all_live_rechecks(s)
                 if j.payload["user_id"] is None
             }
-            for key in group(read_unverified(s, self.fileops.library)):
+            for key in group(read_unverified(s)):
                 if key[1] and key not in waiting:
                     add_recheck(s, self.clock.now(), key, None)

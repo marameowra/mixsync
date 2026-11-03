@@ -42,7 +42,15 @@ class Env:
         ops = FileOps(self.data, tmp_path / "dl", SqlJournal(self.sf, clock), clock)
         ops.import_file(src, REL, snapshotting_writer(self.sf, clock, REL, NEW), "b1")
         with self.sf() as s, s.begin():
-            row = Track(path=REL, status="verified", batch_id="b1", imported_at=datetime.now(UTC))
+            row = Track(
+                path=REL,
+                status="verified",
+                batch_id="b1",
+                imported_at=datetime.now(UTC),
+                album_artist="X",
+                album="Al",
+                year="",
+            )
             s.add(row)
             create_user(s, "alice", "pw")
             create_user(s, "root", "pw", admin=True)
@@ -53,6 +61,13 @@ class Env:
 
     def title(self) -> str:
         return tags.read_fields(self.file)["title"]
+
+    def names(self) -> tuple[str | None, str | None, str | None]:
+        """The row's album columns; they must equal the file's tags."""
+        with self.sf() as s:
+            row = s.scalars(select(Track)).one()
+        assert (row.album_artist, row.album, row.year) == tags.file_names(self.file)
+        return row.album_artist, row.album, row.year
 
     def snapshots(self) -> int:
         with self.sf() as s:
@@ -99,11 +114,13 @@ def test_restore_then_undo_the_restore(client: TestClient, env: Env) -> None:
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": _snap(client, env)})
     assert r.status_code == 303
     assert env.title() == "Original"
+    assert env.names() == ("OA", "OA", "")
     assert env.snapshots() == before + 1
     # the newest snapshot now holds the pre-undo tags, so the same action reverses it
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": _snap(client, env)})
     assert r.status_code == 303
     assert env.title() == "Imported"
+    assert env.names() == ("X", "Al", "")
     with env.sf() as s:
         assert s.scalars(select(Track)).one().path == REL
     assert len(list((env.data / ".trash").rglob("*.flac"))) == 2  # each replaced copy is kept

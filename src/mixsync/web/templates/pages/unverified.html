@@ -14,12 +14,11 @@
 {% endif %}
 <div class="table-wrap scroll">
 <table>
-  <thead><tr><th>Path</th><th>Title</th><th></th></tr></thead>
+  <thead><tr><th>Path</th><th></th></tr></thead>
   <tbody>
-  {% for t, tg in items %}
+  {% for t in items %}
   <tr>
     <td><span class="path">{{ t.path }}</span></td>
-    <td>{{ tg.get("title", "") }}</td>
     <td><a href="/library/tracks/{{ t.id }}/tags">Restore earlier tags</a></td>
   </tr>
   {% endfor %}

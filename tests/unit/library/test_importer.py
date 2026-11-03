@@ -51,6 +51,9 @@ def test_import_release(
             (results[1].rel, "rec2", "verified"),
         ]
         assert rows[0].artist_mbids == [ARTIST] and rows[0].acoustid_id == "ac-1"
+        for t in rows:  # the columns are what the file now says
+            assert (t.album_artist, t.album, t.year) == ("Radiohead", "Kid A", "2000")
+            assert tags.file_names(ops.library / t.path) == ("Radiohead", "Kid A", "2000")
         snap = s.scalars(select(TagSnapshot)).first()
         assert snap and snap.tags["format"] == "flac" and snap.file_path == results[0].rel
 

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Album - MixSync{% endblock %}
+{% block content %}
+{% from "macros/ui.html" import status %}
+{% import "macros/forms.html" as forms with context %}
+{% set can_edit = "library.edit" in user.capabilities %}
+<h1>{% if kind == "untagged" %}Untagged{% elif kind == "pending" %}Names pending{% else %}{{ albumartist or "(no album artist)" }} - {{ album or "(no album tag)" }}{% if year %} ({{ year }}){% endif %}{% endif %}</h1>
+{% if kind in ("verified", "unverified") %}<p>{{ status(kind) }}</p>{% endif %}
+{% if can_edit and kind in ("verified", "unverified") %}
+<form method="post" action="/library/album/delete">{{ forms.csrf() }}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="group" value="{{ group }}"><input type="hidden" name="albumartist" value="{{ albumartist }}"><input type="hidden" name="album" value="{{ album }}"><input type="hidden" name="year" value="{{ year }}"><button class="btn danger" type="submit">Delete album</button></form>
+{% endif %}
+<div class="table-wrap scroll">
+<table>
+  <thead><tr><th>Path</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for t in tracks %}
+  <tr>
+    <td><span class="path">{{ t.path }}</span></td>
+    <td>{{ status(t.status) }}</td>
+    <td>{% if can_edit %}<a href="/library/tracks/{{ t.id }}/tags">Restore earlier tags</a>
+      <form method="post" action="/library/tracks/{{ t.id }}/delete">{{ forms.csrf() }}<button class="btn danger" type="submit">Delete track</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p><a href="/library/albums">Back to the library</a></p>
+{% endblock %}

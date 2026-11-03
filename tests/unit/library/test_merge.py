@@ -99,6 +99,14 @@ class World:
     def lib(self) -> dict[str, str]:
         return {f: sha(self.ops.library / f) for f in files(self.ops.library)}
 
+    def names_match_files(self) -> bool:
+        """Every row's album columns equal the album tags of its file."""
+        with self.sessions() as s:
+            return all(
+                (t.album_artist, t.album, t.year) == tags.file_names(self.ops.library / t.path)
+                for t in s.scalars(select(Track))
+            )
+
     def trashed(self) -> list[str]:
         return files(self.ops.trash_dir)
 
@@ -212,6 +220,9 @@ def test_execute_moves_retags_and_trashes(world: World) -> None:
     got = tags.read_fields(world.ops.library / now["r1"][0])
     assert got["musicbrainz_albumid"] == CANON and got["date"] == "1999"
     assert got["acoustid_id"] == "ac-r1" and got["mixsync_status"] == "verified"
+    assert world.names_match_files()
+    with world.sessions() as s:  # the canonical release is 1999: the column changed with the file
+        assert s.scalar(select(Track.year).where(Track.path == now["r1"][0])) == "1999"
     # every original is in the trash, byte for byte
     trash = {f.rpartition("/")[2]: sha(world.ops.trash_dir / f) for f in world.trashed()}
     for rec in ("r1", "r2", "r3"):
@@ -328,6 +339,7 @@ def test_undo_restores_everything(world: World) -> None:
     world.merger.undo_plan(pid)
 
     assert world.plan(pid).status == "undone" and world.canonical() == OLD
+    assert world.names_match_files()
     assert world.lib() == lib_before  # byte-identical, nothing extra in the library
     assert {p: tags.read_all(world.ops.library / p) for p in lib_before} == tags_before
     assert world.tracks() == paths_before

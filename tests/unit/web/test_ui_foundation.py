@@ -87,15 +87,19 @@ def nav(html: str) -> str:
     [
         (
             "alice",
-            ["Find", "Resume", "/discover", "/requests", "/review"],
-            ["Library", "/library/fragments", "/library/unverified", "/migration"],
+            ["Find", "Resume", "Library", "/library/albums", "/discover", "/requests", "/review"],
+            ["/library/fragments", "/library/unverified", "/migration"],
         ),
         (
             "editor",
             ["Resume", "Library", "/library/fragments", "/library/unverified"],
             ["Find", "/requests", "/review", "/migration"],
         ),
-        ("none", ["/account", "/logout"], ["Find", "Resume", "Library", "/requests", "/review"]),
+        (
+            "none",
+            ["Library", "/library/albums", "/account", "/logout"],
+            ["Find", "Resume", "/requests", "/review", "/library/fragments"],
+        ),
         ("root", ["Find", "Resume", "Library", "/migration"], []),
     ],
 )
