@@ -240,6 +240,9 @@ def seed(sf: sessionmaker[Session], box: SecretBox, downloads: Path) -> list[tup
                     status="verified",
                     batch_id="b",
                     imported_at=now,
+                    album_artist="Band",
+                    album="Album",
+                    year="2000",
                 )
             )
         plans: dict[str, int] = {}
@@ -263,6 +266,7 @@ def seed(sf: sessionmaker[Session], box: SecretBox, downloads: Path) -> list[tup
             plans[status] = p.id
         links += [("fragments (admin)", "/library/fragments")]
         links += [("unverified (admin)", "/library/unverified")]
+        links += [("library browse", "/library/albums")]
         links += [(f"plan, {k} (admin)", f"/library/plans/{v}") for k, v in plans.items()]
 
         mig = Migration(user_id=uid["admin"], status="running", summary={"albums": 4})

@@ -181,6 +181,13 @@ def test_unverified_album_group_roundtrip(world: World) -> None:  # noqa: F811
         _roundtrip(world, c, tok, "/library/unverified/delete", old_files, **form)
 
 
+def _sync_names(w: World, *rels: str) -> None:
+    """The test retagged these files itself: the columns must mirror the new tags."""
+    with w.sessions.begin() as s:
+        for t in s.scalars(select(Track).where(Track.path.in_(rels))):
+            t.album_artist, t.album, t.year = tags.file_names(w.ops.library / t.path)
+
+
 def test_unverified_group_without_album_tag_deletes_only_that_group(world: World) -> None:  # noqa: F811
     c = _setup(world)
     with world.sessions.begin() as s:
@@ -188,6 +195,7 @@ def test_unverified_group_without_album_tag_deletes_only_that_group(world: World
     old_files = _paths(world, Track.release_mbid == OLD)
     bare, others = old_files[0], old_files[1:]
     tags.write(world.ops.library / bare, tags.TagSet("Bare", "", "", "", 1, 1))
+    _sync_names(world, bare)
     with c:
         tok = _login(c, "root")
         page = c.get("/library/unverified").text
@@ -208,6 +216,7 @@ def test_two_untagged_groups_delete_independently(world: World) -> None:  # noqa
     a, b, *others = _paths(world, Track.release_mbid == OLD)
     tags.write(world.ops.library / a, tags.TagSet("A", "", "", "Artist A", 1, 1, year=1999))
     tags.write(world.ops.library / b, tags.TagSet("B", "", "", "Artist B", 1, 1, year=2005))
+    _sync_names(world, a, b)
     with c:
         tok = _login(c, "root")
         page = c.get("/library/unverified").text

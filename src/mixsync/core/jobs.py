@@ -26,6 +26,7 @@ class JobKind(StrEnum):
     DISCOVERY_PUSH = "discovery_push"
     DISCOVERY_RETAIN = "discovery_retain"
     DB_BACKUP = "db_backup"
+    NAME_BACKFILL = "name_backfill"
 
 
 class JobState(StrEnum):

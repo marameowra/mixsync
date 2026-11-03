@@ -164,8 +164,12 @@ class Importer:
     ) -> None:
         with self._sessions.begin() as s:
             if s.scalar(select(Track.id).where(Track.path == rel)) is None:
+                album_artist, album, year = tags.names_of(t)
                 s.add(
                     Track(
+                        album_artist=album_artist,
+                        album=album,
+                        year=year,
                         path=rel,
                         recording_mbid=t.recording_id,
                         release_mbid=t.release_id,

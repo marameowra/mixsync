@@ -45,7 +45,18 @@ def client(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> Iterator[Test
         create_user(s, "alice", "pw")
         create_user(s, "root", "pw", admin=True)
         for p in (*TAGS, "c/none.flac"):
-            s.add(Track(path=p, status="unverified", batch_id="b", imported_at=datetime.now(UTC)))
+            tg = TAGS.get(p, {})
+            s.add(
+                Track(
+                    path=p,
+                    status="unverified",
+                    batch_id="b",
+                    imported_at=datetime.now(UTC),
+                    album_artist=tg.get("albumartist", ""),
+                    album=tg.get("album", ""),
+                    year=tags.year_of(tg.get("date", "")),
+                )
+            )
         s.add(Track(path="v.flac", status="verified", batch_id="b", imported_at=datetime.now(UTC)))
     monkeypatch.setattr(tags, "read_fields", lambda p: TAGS[p.relative_to(p.parents[1]).as_posix()])
     monkeypatch.setattr(tags, "length_ms", lambda p: 61000 if p.name == "1.flac" else None)

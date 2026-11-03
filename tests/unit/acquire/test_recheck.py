@@ -130,6 +130,14 @@ class Rig:
         with self.env.sessions() as s:
             return [fragmentation.row_dict(t) for t in s.scalars(select(Track).order_by(Track.id))]
 
+    def names_match_files(self) -> bool:
+        """Every row's album columns equal the album tags of its file."""
+        with self.env.sessions() as s:
+            return all(
+                (t.album_artist, t.album, t.year) == tags.file_names(self.env.ops.library / t.path)
+                for t in s.scalars(select(Track))
+            )
+
     def library(self) -> dict[str, str]:
         lib = self.env.ops.library
         return {
@@ -267,12 +275,14 @@ async def test_promote_runs_and_undoes_through_the_plan_pages(env: Env, web: Tes
         t = tags.read_fields(env.ops.library / str(r["path"]))
         assert t["mixsync_status"] == "verified" and t["musicbrainz_trackid"] == r["recording_mbid"]
     assert len(rig.trash()) == 2  # the originals
+    assert rig.names_match_files()  # the promote retagged the files and the columns
     assert "Nothing unverified" in web.get("/library/unverified").text
     assert "ready to promote" not in web.get("/").text
 
     assert web.post(f"/library/plans/{plan.id}/undo", data={"csrf_token": tok}).status_code == 303
     await env.drain(until=lambda: rig.plans("undone") != [])
     assert rig.library() == lib0 and rig.rows() == rows0
+    assert rig.names_match_files()  # and so did its undo
     t = tags.read_fields(env.ops.library / old[0])
     assert t["mixsync_status"] == "unverified" and "musicbrainz_trackid" not in t
 
@@ -312,7 +322,7 @@ async def test_a_failed_plan_blocks_a_new_draft_and_is_linked(env: Env) -> None:
     (plan,) = rig.plans()
     with env.sessions.begin() as s:
         s.get_one(Plan, plan.id).status = "failed"
-        st = statuses(s, group(read_unverified(s, env.ops.library)))
+        st = statuses(s, group(read_unverified(s)))
     assert [(x.plan_id, x.plan_failed) for x in st.values()] == [(plan.id, True)]
     rig.schedule(user_id=env.user_id)
     await env.step()

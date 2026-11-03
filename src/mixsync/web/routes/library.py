@@ -9,7 +9,7 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import recheck
@@ -30,7 +30,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.undo import undoable
-from mixsync.library import fragmentation, tag_undo, tags
+from mixsync.library import albums, fragmentation, tag_undo, tags
 from mixsync.library.fileops import FileOps
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -119,13 +119,9 @@ async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLR
     )
 
 
-def _read_unverified(request: Request, db: Session) -> list[recheck.Item]:
-    return recheck.read_unverified(db, request.app.state.services.fileops.library)
-
-
 @router.get("/unverified")
 def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
-    items = _read_unverified(request, db)
+    items = recheck.read_unverified(db)
     albums = recheck.group(items)
     ctx = {
         "user": user,
@@ -146,7 +142,7 @@ def check_now(
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
     key = (albumartist, album, year)
-    if key not in recheck.group(_read_unverified(request, db)):
+    if key not in recheck.group(recheck.read_unverified(db)):
         raise HTTPException(404, "no unverified tracks for that album")
     enqueue_recheck(db, datetime.now(UTC), key, user.id)
     return RedirectResponse("/library/unverified", status_code=303)
@@ -156,11 +152,14 @@ def _num(v: str | None, default: int) -> int:
     return int(v) if v and v.isascii() and v.isdigit() else default
 
 
+_Item = tuple[Track, dict[str, str]]
+
+
 def _seed_release(
-    request: Request, items: list[recheck.Item], album: str, artist: str, year: str
+    request: Request, items: list[_Item], album: str, artist: str, year: str
 ) -> SeedRelease:
     root = request.app.state.services.fileops.library
-    discs: dict[int, list[recheck.Item]] = {}
+    discs: dict[int, list[_Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
     mediums: list[SeedMedium] = []
@@ -201,9 +200,15 @@ def unverified_submit(
     year: str = "",
     store_url: str = "",
 ) -> HTMLResponse:
-    items = recheck.group(_read_unverified(request, db)).get((albumartist, album, year), [])
-    if not items:
+    rows = recheck.group(recheck.read_unverified(db)).get((albumartist, album, year), [])
+    if not rows:
         raise HTTPException(404, "no unverified tracks for that album")
+    items: list[_Item] = []
+    for t in rows:  # one album's files, for the seed's disc and track numbers
+        try:
+            items.append((t, tags.read_fields(request.app.state.services.fileops.library / t.path)))
+        except Exception:  # file moved or unreadable: the path alone still identifies it
+            items.append((t, {}))
     seen = Counter(
         (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0) or tg["tracknumber"])
         for _, tg in items
@@ -350,11 +355,89 @@ def delete_unverified_album(
     albumartist: Annotated[str, Form()] = "",
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
-    items = recheck.group(_read_unverified(request, db)).get((albumartist, album, year))
+    items = recheck.group(recheck.read_unverified(db)).get((albumartist, album, year))
     if not items:
         raise HTTPException(404, "no unverified tracks for that album")
     db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
-    return _delete_plan(merger, [t.id for t, _ in items])
+    return _delete_plan(merger, [t.id for t in items])
+
+
+_KINDS = ("verified", "unverified", "untagged", "pending")
+
+
+def _album_tracks(
+    db: Session, kind: str, group: str, albumartist: str, album: str, year: str
+) -> list[Track]:
+    rows = albums.tracks_of(db, kind, group, (albumartist, album, year)) if kind in _KINDS else []
+    if not rows:
+        raise HTTPException(404, "no such album")
+    return rows
+
+
+@router.get("/albums")
+def browse(
+    request: Request, user: CurrentUser, db: Db, q: str = "", page: str = "1"
+) -> HTMLResponse:
+    found = albums.search(db, q)
+    pages = max(1, -(-len(found) // albums.PAGE))
+    n = min(max(_num(page, 1), 1), pages)
+    ctx = {
+        "user": user,
+        "q": q,
+        "page": n,
+        "pages": pages,
+        "total": len(found),
+        "albums": found[(n - 1) * albums.PAGE : n * albums.PAGE],
+        "pending": db.scalar(select(func.count()).where(Track.album.is_(None))),
+    }
+    return templates.TemplateResponse(request, "pages/albums.html", ctx)
+
+
+@router.get("/album")
+def album_page(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    kind: str,
+    group: str = "",
+    albumartist: str = "",
+    album: str = "",
+    year: str = "",
+) -> HTMLResponse:
+    ctx = {
+        "user": user,
+        "kind": kind,
+        "group": group,
+        "albumartist": albumartist,
+        "album": album,
+        "year": year,
+        "tracks": _album_tracks(db, kind, group, albumartist, album, year),
+        # the unverified list's empty-album groups (#270): their delete is its own route
+        "bare": sorted(
+            k
+            for k in recheck.group(recheck.read_unverified(db))
+            if kind == "untagged" and not k[0] and not k[1]
+        ),
+    }
+    return templates.TemplateResponse(request, "pages/album.html", ctx)
+
+
+@router.post("/album/delete")
+def delete_album(
+    user: User,
+    db: Db,
+    merger: Merge,
+    kind: Annotated[str, Form()],
+    group: Annotated[str, Form()] = "",
+    albumartist: Annotated[str, Form()] = "",
+    album: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    if kind not in ("verified", "unverified"):  # untagged and pending: per-track actions only
+        raise HTTPException(404, "no such album")
+    rows = _album_tracks(db, kind, group, albumartist, album, year)
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    return _delete_plan(merger, [t.id for t in rows])
 
 
 @router.post("/tracks/{track_id}/delete")

@@ -29,6 +29,10 @@ class Track(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16))  # verified | unverified
     batch_id: Mapped[str] = mapped_column(String(64))
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # The file's album artist, album and year tags (ADR 0018); null until filled, "" if untagged.
+    album_artist: Mapped[str | None] = mapped_column(Text)
+    album: Mapped[str | None] = mapped_column(Text)
+    year: Mapped[str | None] = mapped_column(String(4))
 
 
 class Plan(TimestampMixin, Base):

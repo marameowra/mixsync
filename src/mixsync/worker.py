@@ -31,6 +31,7 @@ from mixsync.discovery.retention import Retention
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
+from mixsync.library.name_backfill import NameBackfill
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.ratelimit.client import PoliteClient
@@ -277,6 +278,7 @@ def _new_queue(
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
+    backfill = NameBackfill(sessions, clock, fileops)
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
     nightly = NightlyBackup(
         sessions,
@@ -314,6 +316,7 @@ def _new_queue(
         | submitter.handlers()
         | watcher.handlers()
         | purger.handlers()
+        | backfill.handlers()
         | nightly.handlers()
         | discovery.handlers()
         | retention.handlers()
@@ -327,6 +330,7 @@ def _new_queue(
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
+        backfill.start_chains,
         nightly.start_chains,
         dropper.start_chains,
         adopt.start_chains,
