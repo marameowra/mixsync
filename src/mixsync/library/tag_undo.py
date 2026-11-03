@@ -31,6 +31,8 @@ def restore_tags(
     old: tags.Snapshot,
 ) -> None:
     batch = f"{BATCH}{uuid.uuid4().hex}"
+    # names pending until the file settles: after a crash the startup backfill re-reads them
+    _set_names(sessions, track_id, (None, None, None))
     trashed = fo.trash(rel, batch)
     change = snapshotting(
         sessions, clock, rel, lambda staging: tags.restore(staging, old), track_id
@@ -43,10 +45,20 @@ def restore_tags(
                 fo.restore(trashed, rel, batch)
             except Exception:  # e.g. the database is locked: recover() retries at startup
                 log.exception("tag undo: could not put %s back; the worker will", rel)
+        if fo.has(rel):
+            _set_names(sessions, track_id, tags.file_names(fo.library / rel))
         raise
-    with sessions.begin() as s:  # the file now holds the old tags
+    _set_names(sessions, track_id, tags.file_names(fo.library / rel))
+
+
+def _set_names(
+    sessions: sessionmaker[Session],
+    track_id: int,
+    names: tuple[str | None, str | None, str | None],
+) -> None:
+    with sessions.begin() as s:
         if (row := s.get(Track, track_id)) is not None:
-            row.album_artist, row.album, row.year = tags.file_names(fo.library / rel)
+            row.album_artist, row.album, row.year = names
 
 
 def unfinished(sessions: sessionmaker[Session], fo: FileOps) -> list[FileOp]:
