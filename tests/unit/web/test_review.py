@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire import lifecycle, review, verify
+from mixsync.acquire import lifecycle, request_delete, review, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.app import create_app
@@ -45,7 +45,6 @@ from mixsync.metadata.deezer import DeezerAlbum, DeezerTrack
 from mixsync.metadata.discogs import DiscogsClient, DiscogsRelease, DiscogsTrack
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.deps import get_coverart, get_deezer, get_discogs, get_watch
-from mixsync.web.routes import requests as requests_route
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import duration, filesize
 
@@ -462,7 +461,7 @@ def test_delete_request_409_when_job_claimed_after_check(
     client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rid = _req(sf, "alice", "no_results", JobState.LEASED)  # a worker claimed it after the check
-    monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
+    monkeypatch.setattr(request_delete, "deletable", lambda *_a: True)
     tok = _login(client, "alice")
     assert client.post(f"/requests/{rid}/delete", data={"csrf_token": tok}).status_code == 409
     with sf() as s:
@@ -1035,7 +1034,7 @@ def test_clear_imported(
         req = s.get(AlbumRequest, migr)
         assert req
         req.migration_id = m.id
-        leased_job = s.scalars(select(Job).where(requests_route._of(leased))).one()
+        leased_job = s.scalars(select(Job).where(request_delete._of(leased))).one()
         s.add(
             Job(
                 kind=leased_job.kind,
@@ -1046,7 +1045,7 @@ def test_clear_imported(
         )
     # A worker leases the row after listing: _delete cancels the decision and deletes the FAILED
     # job, then 409s on the held one; only the savepoint undoes that.
-    monkeypatch.setattr(requests_route, "_deletable", lambda *_a: True)
+    monkeypatch.setattr(request_delete, "deletable", lambda *_a: True)
     dec = {}
     for rid in (mine, leased, mine2):
         dec[rid] = _make_decision(sf, "alice", "/x")
@@ -1062,7 +1061,7 @@ def test_clear_imported(
         left = set(s.scalars(select(AlbumRequest.id)))
         assert left == {leased, failed, theirs, migr}
         assert mine not in left and mine2 not in left
-        assert sorted(s.scalars(select(Job.status).where(requests_route._of(leased)))) == sorted(
+        assert sorted(s.scalars(select(Job.status).where(request_delete._of(leased)))) == sorted(
             [JobState.LEASED, JobState.FAILED]
         )
         for rid, want in dec.items():

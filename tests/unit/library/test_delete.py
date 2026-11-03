@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
+from mixsync.acquire.merge import Merger
 from mixsync.acquire.requests import create_request
 from mixsync.core.jobs import JobKind
 from mixsync.db.auth import create_user
@@ -19,7 +20,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.library import fragmentation
+from mixsync.library import fragmentation, tags
 
 from .test_merge import GROUP, OLD, World, build, world  # noqa: F401  # world is a fixture
 from .test_merge_web import _client, _drain
@@ -180,6 +181,55 @@ def test_unverified_album_group_roundtrip(world: World) -> None:  # noqa: F811
         _roundtrip(world, c, tok, "/library/unverified/delete", old_files, **form)
 
 
+def test_unverified_group_without_album_tag_deletes_only_that_group(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.release_mbid == OLD).values(status="unverified"))
+    old_files = _paths(world, Track.release_mbid == OLD)
+    bare, others = old_files[0], old_files[1:]
+    tags.write(world.ops.library / bare, tags.TagSet("Bare", "", "", "", 1, 1))
+    with c:
+        tok = _login(c, "root")
+        page = c.get("/library/unverified").text
+        assert page.count("Delete this album from the library") == 2  # tagged group and bare one
+        assert page.count("Submit to MusicBrainz") == 1  # the album-tag-only actions stay
+        assert page.count("Check MusicBrainz now") == 1
+        _roundtrip(
+            world, c, tok, "/library/unverified/delete", [bare], albumartist="", album="", year=""
+        )
+        assert _paths(world, Track.release_mbid == OLD) == sorted(old_files)
+    assert others  # the tagged group was never part of the plan
+
+
+def test_two_untagged_groups_delete_independently(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.release_mbid == OLD).values(status="unverified"))
+    a, b, *others = _paths(world, Track.release_mbid == OLD)
+    tags.write(world.ops.library / a, tags.TagSet("A", "", "", "Artist A", 1, 1, year=1999))
+    tags.write(world.ops.library / b, tags.TagSet("B", "", "", "Artist B", 1, 1, year=2005))
+    with c:
+        tok = _login(c, "root")
+        page = c.get("/library/unverified").text
+        assert page.count("Delete this album from the library") == 3  # tagged group and both bare
+        form = {"album": "", "year": "1999"}
+        pid = _preview(c, tok, "/library/unverified/delete", albumartist="Artist A", **form)
+        assert [o["old"]["path"] for o in world.plan(pid).ops if o["op"] == "trash"] == [a]
+        _roundtrip(
+            world,
+            c,
+            tok,
+            "/library/unverified/delete",
+            [b],
+            albumartist="Artist B",
+            album="",
+            year="2005",
+        )
+        # both other groups are still listed after the delete round trip
+        assert c.get("/library/unverified").text.count("Delete this album from the library") == 3
+    assert others and b in _paths(world, Track.release_mbid == OLD)
+
+
 def test_single_track_roundtrip(world: World) -> None:  # noqa: F811
     c = _setup(world)
     (tid,) = _ids(world, Track.release_mbid != OLD)
@@ -204,10 +254,10 @@ def test_permissions(world: World) -> None:  # noqa: F811
         assert c.get(f"/library/plans/{pid}").status_code == 403
         for act in ("confirm", "discard", "undo", "resume"):
             assert _post(c, bob, f"/library/plans/{pid}/{act}") == 403
-        # the owner may open, confirm, discard and undo it, but not resume
+        # the owner may open, confirm, discard, undo and resume it (a draft cannot resume: 409)
         alice = _login(c, "alice")
         assert c.get(f"/library/plans/{pid}").status_code == 200
-        assert _post(c, alice, f"/library/plans/{pid}/resume") == 403
+        assert _post(c, alice, f"/library/plans/{pid}/resume") == 409
         assert _post(c, alice, f"/library/plans/{pid}/discard") == 303
         assert world.plan(pid).status == "discarded"
         # and nothing else: a track-delete plan of root's is closed to her
@@ -428,3 +478,87 @@ def test_six_day_old_delete_draft_still_confirms(world: World) -> None:  # noqa:
         assert _post(c, tok, f"/library/plans/{pid}/confirm") == 303
         _drain(world)
         assert world.plan(pid).status == "done"
+
+
+def _fail_first_trash(monkeypatch: pytest.MonkeyPatch) -> None:
+    real, calls = Merger._trash, []  # pyright: ignore[reportPrivateUsage]
+
+    def flaky(self: Merger, *a: Any, **k: Any) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        real(self, *a, **k)
+
+    monkeypatch.setattr(Merger, "_trash", flaky)
+
+
+def test_a_failed_delete_keeps_the_request_and_the_owner_resumes_it(
+    world: World,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    c = _setup(world)
+    mine = _paths(world, Track.batch_id.like("request-1-%"))
+    _fail_first_trash(monkeypatch)
+    with c:
+        alice = _login(c, "alice")
+        pid = _preview(c, alice, "/requests/1/delete-with-music")
+        assert _post(c, alice, f"/library/plans/{pid}/confirm") == 303
+        assert _request_ids(world) == [1, 2]  # confirm deletes nothing
+        _drain(world)
+        assert world.plan(pid).status == "failed"
+        assert _request_ids(world) == [1, 2]  # the request outlives the failed run
+        assert set(mine) <= set(world.lib())
+        assert f"/library/plans/{pid}" in c.get("/requests").text  # she can find the plan
+        assert _post(c, _login(c, "bob"), f"/library/plans/{pid}/resume") == 403
+        assert (
+            _post(c, _login(c, "alice"), f"/library/plans/{pid}/resume") == 303
+        )  # no library.edit
+        _drain(world)
+        assert world.plan(pid).status == "done", world.plan(pid).error
+        assert _request_ids(world) == [2]
+        assert not set(mine) & set(world.lib())
+        assert f"/library/plans/{pid}" not in c.get("/requests").text
+
+
+def test_requests_page_links_a_confirmed_delete_plan_until_it_is_done(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with c:
+        alice = _login(c, "alice")
+        pid = _preview(c, alice, "/requests/1/delete-with-music")
+        assert f"/library/plans/{pid}" not in c.get("/requests").text  # a preview is not running
+        assert _post(c, alice, f"/library/plans/{pid}/confirm") == 303
+        assert f"/library/plans/{pid}" in c.get("/requests").text  # queued
+        _drain(world)
+        assert f"/library/plans/{pid}" not in c.get("/requests").text
+
+
+def test_confirm_refused_changes_nothing(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with c:
+        alice = _login(c, "alice")
+        pid = _preview(c, alice, "/requests/1/delete-with-music")
+        with world.sessions.begin() as s:
+            s.get_one(AlbumRequest, 1).status = "downloading"
+        before = world.lib()
+        assert _post(c, alice, f"/library/plans/{pid}/confirm") == 409
+        _drain(world)
+        assert world.plan(pid).status == "draft" and not world.trashed()
+        assert world.lib() == before and _request_ids(world) == [1, 2]
+
+
+def test_late_refusal_completes_the_plan_and_keeps_the_request(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    mine = _paths(world, Track.batch_id.like("request-1-%"))
+    with c:
+        alice = _login(c, "alice")
+        pid = _preview(c, alice, "/requests/1/delete-with-music")
+        assert _post(c, alice, f"/library/plans/{pid}/confirm") == 303
+        with world.sessions.begin() as s:  # the request changed after confirm
+            s.get_one(AlbumRequest, 1).status = "downloading"
+        _drain(world)
+        plan = world.plan(pid)
+        assert plan.status == "done" and "request is in progress" in (plan.error or "")
+        assert _request_ids(world) == [1, 2]
+        assert not set(mine) & set(world.lib())  # the files stay trashed
+        page = c.get(f"/library/plans/{pid}").text
+        assert "Request kept: request is in progress" in page

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire import lifecycle
 from mixsync.acquire.acoustid_submit import enqueue_submit
+from mixsync.acquire.request_delete import NotDeletable, delete_request
 from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
 from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock, aware
@@ -176,7 +177,7 @@ class Merger:
     def build_delete(self, track_ids: list[int], request: AlbumRequest | None = None) -> int:
         """Store a draft delete plan for these library tracks and return its id (the dry run: no
         side effects). Confirm trashes the files and drops the rows; undo restores both. With a
-        request, a last `request` op records it for the route to delete on confirm."""
+        request, a last `request` op records it for the worker to delete when the plan is done."""
         with self.sessions.begin() as s:
             now = self.clock.now()
             for p in s.scalars(select(Plan).where(Plan.kind == "delete", Plan.status == "draft")):
@@ -275,10 +276,24 @@ class Merger:
             )
             raise
         with self.sessions.begin() as s:
-            s.get_one(Plan, plan_id).status = "done"
+            plan = s.get_one(Plan, plan_id)
+            plan.status = "done"
+            plan.error = self._delete_requests(s, plan)
             enqueue_rescan(s, self.clock.now())
             if promote:  # AcoustID learns the new recording links
                 enqueue_submit(s, self.clock.now(), plan_id)
+
+    def _delete_requests(self, s: Session, plan: Plan) -> str | None:
+        """The request goes last, with the plan's `done`. A refusal (it changed since confirm)
+        keeps the request and is returned for the plan page; the files stay trashed."""
+        for op in plan.ops:
+            if op["op"] == "request" and (req := s.get(AlbumRequest, op["request_id"])):
+                try:
+                    with s.begin_nested():  # a refusal undoes its own partial changes
+                        delete_request(s, req, op["user_id"])
+                except NotDeletable as e:
+                    return f"request kept: {e}"
+        return None
 
     def _fail(self, plan_id: int, error: str) -> None:
         with self.sessions.begin() as s:
