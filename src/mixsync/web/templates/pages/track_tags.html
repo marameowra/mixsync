@@ -5,6 +5,9 @@
 {% import "macros/forms.html" as forms with context %}
 <h1>Restore earlier tags</h1>
 <p>{{ track.path }}</p>
+{% if not snapshot %}
+<p>{{ unavailable }}</p>
+{% else %}
 <p>Snapshot {{ snapshot.id }}, taken {{ snapshot.taken_at.strftime("%Y-%m-%d %H:%M") }} before a retag. Only the tags MixSync manages are shown and restored; cover art and other tags are left alone.</p>
 {% if changes %}
 <div class="table-wrap scroll">
@@ -21,6 +24,7 @@
 <form method="post" action="/library/tracks/{{ track.id }}/tags">{{ forms.csrf() }}<input type="hidden" name="snapshot_id" value="{{ snapshot.id }}"><button class="btn danger filled" type="submit">Restore these tags</button></form>
 {% else %}
 <p>The file already has these tags.</p>
+{% endif %}
 {% endif %}
 <form method="post" action="/library/tracks/{{ track.id }}/delete">{{ forms.csrf() }}<button class="btn danger" type="submit">Delete this track from the library</button></form>
 {% endblock %}

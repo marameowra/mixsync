@@ -20,7 +20,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
-from mixsync.library import fragmentation
+from mixsync.library import fragmentation, tags
 
 from .test_merge import GROUP, OLD, World, build, world  # noqa: F401  # world is a fixture
 from .test_merge_web import _client, _drain
@@ -179,6 +179,55 @@ def test_unverified_album_group_roundtrip(world: World) -> None:  # noqa: F811
         assert all(p in shown for p in old_files)
         form = {"albumartist": "Band", "album": "Album", "year": "2000"}
         _roundtrip(world, c, tok, "/library/unverified/delete", old_files, **form)
+
+
+def test_unverified_group_without_album_tag_deletes_only_that_group(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.release_mbid == OLD).values(status="unverified"))
+    old_files = _paths(world, Track.release_mbid == OLD)
+    bare, others = old_files[0], old_files[1:]
+    tags.write(world.ops.library / bare, tags.TagSet("Bare", "", "", "", 1, 1))
+    with c:
+        tok = _login(c, "root")
+        page = c.get("/library/unverified").text
+        assert page.count("Delete this album from the library") == 2  # tagged group and bare one
+        assert page.count("Submit to MusicBrainz") == 1  # the album-tag-only actions stay
+        assert page.count("Check MusicBrainz now") == 1
+        _roundtrip(
+            world, c, tok, "/library/unverified/delete", [bare], albumartist="", album="", year=""
+        )
+        assert _paths(world, Track.release_mbid == OLD) == sorted(old_files)
+    assert others  # the tagged group was never part of the plan
+
+
+def test_two_untagged_groups_delete_independently(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.release_mbid == OLD).values(status="unverified"))
+    a, b, *others = _paths(world, Track.release_mbid == OLD)
+    tags.write(world.ops.library / a, tags.TagSet("A", "", "", "Artist A", 1, 1, year=1999))
+    tags.write(world.ops.library / b, tags.TagSet("B", "", "", "Artist B", 1, 1, year=2005))
+    with c:
+        tok = _login(c, "root")
+        page = c.get("/library/unverified").text
+        assert page.count("Delete this album from the library") == 3  # tagged group and both bare
+        form = {"album": "", "year": "1999"}
+        pid = _preview(c, tok, "/library/unverified/delete", albumartist="Artist A", **form)
+        assert [o["old"]["path"] for o in world.plan(pid).ops if o["op"] == "trash"] == [a]
+        _roundtrip(
+            world,
+            c,
+            tok,
+            "/library/unverified/delete",
+            [b],
+            albumartist="Artist B",
+            album="",
+            year="2005",
+        )
+        # both other groups are still listed after the delete round trip
+        assert c.get("/library/unverified").text.count("Delete this album from the library") == 3
+    assert others and b in _paths(world, Track.release_mbid == OLD)
 
 
 def test_single_track_roundtrip(world: World) -> None:  # noqa: F811

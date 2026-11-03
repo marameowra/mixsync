@@ -346,7 +346,7 @@ def delete_unverified_album(
     user: User,
     db: Db,
     merger: Merge,
-    album: Annotated[str, Form()],
+    album: Annotated[str, Form()] = "",
     albumartist: Annotated[str, Form()] = "",
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
@@ -363,6 +363,10 @@ def delete_track(track_id: int, user: User, db: Db, merger: Merge) -> RedirectRe
         raise HTTPException(404, "no such track")
     db.commit()
     return _delete_plan(merger, [track_id])
+
+
+class _NoRestore(HTTPException):
+    """The file has no restorable tags; the page shows why, the restore POST answers 409."""
 
 
 _tag_lock = threading.Lock()  # one restore at a time: a double click must not run twice
@@ -407,19 +411,25 @@ def _tag_target(
     )
     snap = db.scalars(q if snapshot_id is None else q.where(TagSnapshot.id == snapshot_id)).first()
     if snap is None:
-        raise HTTPException(409, "no undo available for this file")
+        raise _NoRestore(409, "There are no earlier tags to restore for this file.")
     try:
         current = tags.read_all(path)
     except Exception:
-        raise HTTPException(409, "the file's tags cannot be read") from None
+        raise _NoRestore(409, "The file's tags cannot be read.") from None
     if current["format"] != snap.tags["format"]:
-        raise HTTPException(409, "the snapshot is of a different file format")
+        raise _NoRestore(409, "The snapshot is of a different file format.")
     return track, snap, current
 
 
 @router.get("/tracks/{track_id}/tags")
 def track_tags(track_id: int, request: Request, user: User, db: Db, fo: Files) -> HTMLResponse:
-    track, snap, current = _tag_target(db, fo, track_id)
+    try:
+        track, snap, current = _tag_target(db, fo, track_id)
+    except _NoRestore as e:
+        track = db.get(Track, track_id)
+        assert track is not None  # _tag_target found it before raising
+        ctx = {"user": user, "track": track, "snapshot": None, "unavailable": e.detail}
+        return templates.TemplateResponse(request, "pages/track_tags.html", ctx)
     ctx = {
         "user": user,
         "track": track,

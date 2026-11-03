@@ -1,3 +1,4 @@
+import hashlib
 import re
 import shutil
 from collections.abc import Iterator
@@ -6,7 +7,8 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from httpx import Response
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
@@ -18,7 +20,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.library import Plan, Track
-from mixsync.db.models.safety import TagSnapshot
+from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.models.work import Job
 from mixsync.library import tags
 from mixsync.library.fileops import FileOps
@@ -85,11 +87,18 @@ def _snap(client: TestClient, env: Env) -> str:
     return m.group(1)
 
 
+def _no_restore(r: Response, env: Env, message: str) -> None:
+    assert r.status_code == 200 and message in r.text
+    assert "Restore these tags" not in r.text and "snapshot_id" not in r.text
+    assert f"/library/tracks/{env.track}/delete" in r.text
+
+
 def test_preview_shows_diff(client: TestClient, env: Env) -> None:
     _login(client)
     html = client.get(env.url).text
     assert "Original" in html and "Imported" in html and "Restore these tags" in html
     assert "not changed" in html
+    assert f"/library/tracks/{env.track}/delete" in html  # restore and delete together
     assert env.title() == "Imported"  # a preview writes nothing
 
 
@@ -147,7 +156,7 @@ def test_snapshot_of_a_replaced_file_refused(client: TestClient, env: Env) -> No
     tok = _login(client)
     snap = _snap(client, env)
     tags.write(env.file, tags.TagSet("Other recording", "Z", "Z", "Z", 1, 1))
-    assert client.get(env.url).status_code == 409
+    _no_restore(client.get(env.url), env, "no earlier tags")
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
     assert r.status_code == 409 and env.title() == "Other recording"
 
@@ -188,3 +197,34 @@ def test_refused_while_a_plan_is_changing_the_track(
         )
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
     assert r.status_code == 409 and env.title() == "Imported"
+
+
+def test_no_snapshot_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    _login(client)
+    with env.sf() as s, s.begin():
+        s.execute(delete(TagSnapshot))
+    _no_restore(client.get(env.url), env, "no earlier tags")
+
+
+def test_unreadable_tags_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    env.file.write_bytes(b"not audio")
+    with env.sf() as s, s.begin():  # keep the journaled hash matching the damaged file
+        op = s.scalars(select(FileOp).where(FileOp.dst_hash.is_not(None))).one()
+        op.dst_hash = hashlib.sha256(b"not audio").hexdigest()
+    _no_restore(client.get(env.url), env, "cannot be read")
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409  # the POST is unchanged
+
+
+def test_format_mismatch_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    with env.sf() as s, s.begin():
+        row = s.scalars(select(TagSnapshot)).one()
+        row.tags = {**row.tags, "format": "mp3"}  # the file is a flac
+    before = env.title()
+    _no_restore(client.get(env.url), env, "different file format")
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409 and env.title() == before
