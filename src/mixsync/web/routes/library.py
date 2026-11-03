@@ -412,6 +412,12 @@ def album_page(
         "album": album,
         "year": year,
         "tracks": _album_tracks(db, kind, group, albumartist, album, year),
+        # the unverified list's empty-album groups (#270): their delete is its own route
+        "bare": sorted(
+            k
+            for k in recheck.group(recheck.read_unverified(db))
+            if kind == "untagged" and not k[0] and not k[1]
+        ),
     }
     return templates.TemplateResponse(request, "pages/album.html", ctx)
 

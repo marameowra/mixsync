@@ -9,6 +9,9 @@
 {% if can_edit and kind in ("verified", "unverified") %}
 <form method="post" action="/library/album/delete">{{ forms.csrf() }}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="group" value="{{ group }}"><input type="hidden" name="albumartist" value="{{ albumartist }}"><input type="hidden" name="album" value="{{ album }}"><input type="hidden" name="year" value="{{ year }}"><button class="btn danger" type="submit">Delete album</button></form>
 {% endif %}
+{% if can_edit %}{% for a, b, y in bare %}
+<form method="post" action="/library/unverified/delete">{{ forms.csrf() }}<input type="hidden" name="albumartist" value="{{ a }}"><input type="hidden" name="album" value="{{ b }}"><input type="hidden" name="year" value="{{ y }}"><button class="btn danger" type="submit">Delete this album from the library{% if y %} ({{ y }}){% endif %}</button></form>
+{% endfor %}{% endif %}
 <div class="table-wrap scroll">
 <table>
   <thead><tr><th>Path</th><th>Status</th><th></th></tr></thead>

@@ -132,10 +132,19 @@ def test_untagged_last_and_pending_apart(world: World) -> None:  # noqa: F811
         tok = _login(c, "root")
         page = c.get("/library/albums").text
         assert "Untagged" in page and "Names pending" in page and "Names pending for 1" in page
-        for kind in ("untagged", "pending"):  # per-track actions only: no group delete
+        for kind in ("untagged", "pending"):
             html = c.get("/library/album", params={"kind": kind}).text
             assert "Delete album" not in html and "Delete track" in html
             assert _post(c, tok, "/library/album/delete", kind=kind) == 404
+        # Untagged offers the unverified list's empty-album group delete (#270); pending does not
+        untagged = c.get("/library/album", params={"kind": "untagged"}).text
+        assert untagged.count("Delete this album from the library") == 1
+        assert 'action="/library/unverified/delete"' in untagged
+        pending = c.get("/library/album", params={"kind": "pending"}).text
+        assert "Delete this album from the library" not in pending
+        _login(c, "alice")  # no library.edit: no action at all
+        plain = c.get("/library/album", params={"kind": "untagged"}).text
+        assert "Delete this album" not in plain and "Delete track" not in plain
 
 
 def test_backfill_fills_from_tags_without_writing_files(world: World) -> None:  # noqa: F811
