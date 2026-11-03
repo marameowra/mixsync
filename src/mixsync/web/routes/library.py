@@ -290,10 +290,14 @@ def _act(
     if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)
-    if action == "confirm":  # a request-page plan also deletes its request; a refusal aborts all
+    if action == "confirm":  # the worker deletes the request last; a refusal now aborts the confirm
         for op in plan.ops:
             if op["op"] == "request" and (req := db.get(AlbumRequest, op["request_id"])):
-                delete_row(db, req, user.id)
+                check = db.begin_nested()
+                try:
+                    delete_row(db, req, user.id)
+                finally:
+                    check.rollback()  # checks only: nothing is deleted yet
     enqueue(db, datetime.now(UTC), plan.id)
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
@@ -316,7 +320,7 @@ def discard(plan_id: int, request: Request, user: CurrentUser, db: Db) -> Redire
 
 @router.post("/plans/{plan_id}/resume")
 def resume(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
     return _act(request, user, plan_id, "resume", db, count, enqueue_merge)
 
