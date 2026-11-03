@@ -12,6 +12,7 @@ from mixsync.core.clock import Clock, SystemClock
 from mixsync.core.config import Settings
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
+from mixsync.db.names import SqlNameStore
 from mixsync.db.secretbox import SecretBox, load_box
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
@@ -54,7 +55,9 @@ def build_services(
         settings.drop_dir,
     )
     musicbrainz = MusicBrainzProvider(
-        PoliteClient("musicbrainz", settings, session_factory), settings.mb_base_url
+        PoliteClient("musicbrainz", settings, session_factory),
+        settings.mb_base_url,
+        SqlNameStore(session_factory, clock),
     )
     merger = Merger(
         session_factory,

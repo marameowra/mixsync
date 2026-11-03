@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Discover - MixSync{% endblock %}
+{% import "macros/mb.html" as mb with context %}
 {% from "macros/media.html" import artwork %}
 {% from "macros/ui.html" import status %}
 {% block content %}
@@ -16,7 +17,7 @@
   <tbody>
   {% for h in soon %}
   <tr>
-    <td><div class="release-heading">{{ artwork(h.name, h.artwork_src, "xs") }}<span>{{ h.name }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(h.name or h.mbid, h.artwork_src, "xs") }}<span>{{ h.name or mb.link("recording", h.mbid) }}</span></div></td>
     <td>{% if h.overdue %}overdue (was {{ h.expires.date() }}){% else %}{{ h.expires.date() }}{% endif %}</td>
     <td><form method="post" action="/discover/keep/{{ h.mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form></td>
   </tr>
@@ -38,7 +39,7 @@
   <tbody>
   {% for t in tracks[p.id] %}
   <tr>
-    <td><div class="release-heading">{{ artwork(t.title, t.artwork_src, "xs") }}<span>{{ t.artist }} - {{ t.title }}</span></div></td>
+    <td><div class="release-heading">{{ artwork(t.title or t.recording_mbid, t.artwork_src, "xs") }}<span>{% if t.title %}{{ t.artist }} - {{ t.title }}{% else %}{{ mb.link("recording", t.recording_mbid) }}{% endif %}</span></div></td>
     <td>{{ status(t.status, t.status) }}{% if t.status == "in discover" and t.hold.expires_at %} (until {{ t.hold.expires_at.date() }}){% endif %}</td>
     <td>{% if t.status == "in discover" %}<form method="post" action="/discover/keep/{{ t.recording_mbid }}">{{ forms.csrf() }}<button type="submit">Keep in library</button></form>{% endif %}</td>
   </tr>
