@@ -92,6 +92,11 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
 )
 
 
+def _ident(title: str | None, mbid: str | None) -> str:
+    """A title when the data in hand has one (no lookup), else the id."""
+    return repr(title) if title else str(mbid)
+
+
 def artist_partial(str1: str | None, str2: str | None) -> bool:
     """One side is a credit naming several artists, one of which is the other side's artist."""
     if not str1 or not str2 or string_dist(str1, str2) <= ARTIST_PARTIAL_PENALTY:
@@ -226,7 +231,11 @@ def track_distance(
     if sure:
         dist.add("track_id", 0.0, "AcoustID confirms the recording")
     elif acoustid_contradicts(file, track):
-        dist.add("track_id", 1.0, f"AcoustID says a different recording than {track.recording_id}")
+        dist.add(
+            "track_id",
+            1.0,
+            f"AcoustID says a different recording than {_ident(track.title, track.recording_id)}",
+        )
     elif file.recording_id:
         dist.add_expr(
             "track_id",

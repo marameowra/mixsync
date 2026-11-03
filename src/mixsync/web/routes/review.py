@@ -121,6 +121,8 @@ async def review_detail(
     refs = {("release", d.release_mbid)} | {
         ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
+    if ru := d.evidence.get("runner_up"):
+        refs.add(("release", ru.get("release_id", "")))
     names = await resolve(db, namer, refs, MAX_LOOKUPS)
     ctx = {
         "user": user,

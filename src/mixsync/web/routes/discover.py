@@ -14,7 +14,8 @@ from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, Prov
 from mixsync.db.models.library import Track
 from mixsync.db.models.work import Request as WorkRequest
 from mixsync.discovery import playlists, retention
-from mixsync.web.deps import Db, require
+from mixsync.web.deps import Db, Namer, require
+from mixsync.web.names import resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/discover")
@@ -52,7 +53,7 @@ def _artwork_src(release: str | None, group: str | None) -> str | None:
 
 
 @router.get("")
-def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
+async def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     rows = db.scalars(
         select(DiscoveryPlaylist)
         .where(DiscoveryPlaylist.user_id == user.id)
@@ -121,22 +122,30 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
     soon: list[dict[str, Any]] = []
     for h in due:
         t, e = pts.get(h.provisional_track_id or 0), names.get(h.recording_mbid, {})
-        title = (t and t.title) or e.get("title") or h.recording_mbid
+        title = (t and t.title) or e.get("title")  # no title: the template names the recording
         artist = (t and t.artist) or e.get("artist")
         soon.append(
             {
                 "mbid": h.recording_mbid,
-                "name": f"{artist} - {title}" if artist else title,
+                "name": (f"{artist} - {title}" if artist else title) if title else None,
                 "artwork_src": _artwork_src(*artwork_ids.get(h.recording_mbid, (None, None))),
                 "expires": h.expires_at,
                 "overdue": bool(h.expires_at and aware(h.expires_at) <= now),
             }
         )
+    unnamed = {
+        ("recording", t["recording_mbid"])
+        for ts in tracks.values()
+        for t in ts
+        if not t.get("title")
+    }
+    unnamed |= {("recording", h["mbid"]) for h in soon if not h["name"]}
     ctx: dict[str, Any] = {
         "user": user,
         "rows": rows,
         "tracks": tracks,
         "soon": soon,
+        "names": await resolve(db, namer, unnamed),
         "linked": {"listenbrainz", "navidrome"} <= linked,
     }
     return templates.TemplateResponse(request, "pages/discover.html", ctx)

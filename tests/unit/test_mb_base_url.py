@@ -18,9 +18,11 @@ MIRROR = "http://mirror.test:5000"
 class Recorder(MusicBrainzProvider):
     urls: list[str] = []
 
-    def __init__(self, client: Any, base_url: str = "https://musicbrainz.org") -> None:
+    def __init__(
+        self, client: Any, base_url: str = "https://musicbrainz.org", names: Any = None
+    ) -> None:
         Recorder.urls.append(base_url)
-        super().__init__(client, base_url)
+        super().__init__(client, base_url, names)
 
 
 def _worker(services: Any) -> None:

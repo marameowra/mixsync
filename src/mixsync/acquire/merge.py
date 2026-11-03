@@ -30,6 +30,7 @@ from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
+from mixsync.db.names import stored_names
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import undoable
 from mixsync.library import canonical, fragmentation, tags
@@ -55,7 +56,8 @@ def _open_plan(s: Session, group: str) -> str | None:
     )
     for p in plans:
         if p.status != "draft" or live_job(s, p.id):
-            return f"plan {p.id} for release group {group} is {p.status}"
+            name = stored_names(s, {group}).get(group, group)  # no lookup: the UUID if unnamed
+            return f"plan {p.id} for release group {name} is {p.status}"
     return _delete_blocking(s, {group}, set(), "delete")  # a delete plan blocks merges too
 
 

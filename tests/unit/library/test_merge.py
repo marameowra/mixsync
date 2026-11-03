@@ -22,6 +22,7 @@ from mixsync.db.journal import SqlJournal
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
+from mixsync.db.names import SqlNameStore
 from mixsync.db.undo import undoable
 from mixsync.library import fileops, fragmentation, tags
 from mixsync.library.fileops import FileOps
@@ -644,6 +645,21 @@ def test_build_refuses_while_a_plan_is_active(world: World, status: str) -> None
     with pytest.raises(PlanInProgress):
         build(world)
     assert world.plan(pid).status == status
+
+
+@pytest.mark.parametrize(("stored", "shown"), [(True, "Group Name — Band"), (False, GROUP)])
+def test_refusal_names_the_group_when_a_name_is_stored(
+    world: World, stored: bool, shown: str
+) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:
+        s.get_one(Plan, pid).status = "running"
+    if stored:
+        SqlNameStore(world.sessions, SystemClock()).save(
+            [("release-group", GROUP, "Group Name — Band")]
+        )
+    with pytest.raises(PlanInProgress, match=f"release group {shown} is running"):
+        build(world)
 
 
 def test_undoing_a_plan_that_set_nothing_leaves_the_canonical_alone(world: World) -> None:

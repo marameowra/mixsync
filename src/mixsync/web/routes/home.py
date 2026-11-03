@@ -7,14 +7,15 @@ from mixsync.core.capabilities import Capability
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import fragmentation
-from mixsync.web.deps import CurrentUser, Db
+from mixsync.web.deps import CurrentUser, Db, Namer
+from mixsync.web.names import resolve
 from mixsync.web.templating import templates
 
 router = APIRouter()
 
 
 @router.get("/")
-def home(request: Request, user: CurrentUser, db: Db) -> HTMLResponse:
+async def home(request: Request, user: CurrentUser, db: Db, namer: Namer) -> HTMLResponse:
     counts = request.state.waiting_counts
     promotions = None
     fragments = None
@@ -98,10 +99,14 @@ def home(request: Request, user: CurrentUser, db: Db) -> HTMLResponse:
             )
             for hold, track, entries in raw_discovery
         ]
+    refs = {("release", r.release_mbid) for r in (*in_progress, *recent) if r.release_mbid}
+    refs |= {("recording", h.recording_mbid) for h, *_ in discovery}
+    names = await resolve(db, namer, refs)  # list page: stored and cached names, no lookups
     return templates.TemplateResponse(
         request,
         "pages/home.html",
         {
+            "names": names,
             "user": user,
             **counts,
             "promotions": promotions,
