@@ -58,7 +58,9 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Library**: The organized tree under `/data/library` that the media server reads.
 
-**Album (in the library)**: Every verified library track filed under one release group, whichever edition it came from. Unverified tracks often have no release group, so they form albums by their artist, album and year tags instead. _Avoid_: Release (that is one edition), folder
+**Album (in the library)**: Every verified library track filed under one release group, whichever edition it came from. An unverified track belongs to the album named by its album artist, album and year tags, even when it carries a release group, so one record can show as a verified album and an unverified one. _Avoid_: Release (that is one edition), folder
+
+**Album artist**: The artist credited for a whole album (the `albumartist` tag), which a compilation gives as "Various Artists". It names and groups albums; the artist of each track can differ. _Avoid_: Artist (when the album credit is meant)
 
 **Trash**: `/data/.trash/<day>/`, where "delete" moves files; purged by a journaled job after `MIXSYNC_TRASH_DAYS`. _Avoid_: Recycle bin
 
