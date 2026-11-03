@@ -9,7 +9,8 @@
 {% if delete %}<p>Moves {{ counts.trash }} {{ "files" if counts.trash != 1 else "file" }} out of the library into the trash and removes {{ "their" if counts.trash != 1 else "its" }} library {{ "records" if counts.trash != 1 else "record" }}.{% if request_op %} Confirming also deletes request {{ request_op.request_id }}; an undo does not bring the request back.{% endif %} Undo restores the files and records while recovery is available.</p>
 {% elif promote %}<p>Found on MusicBrainz as release {{ mb.link("release", plan.canonical_release_mbid) }}. Confirming retags the files with its data and marks them verified. AcoustID submissions are not retracted by an undo. The canonical release is not changed; the fragmentation report shows any split this leaves.</p>
 {% else %}<p>Release group {{ mb.link("release-group", plan.release_group_mbid) }}: merge onto {{ mb.link("release", plan.canonical_release_mbid) }}.</p>{% endif %}
-{% if plan.error %}<p class="notice danger" role="alert">✕ Error: {{ plan.error }}</p>{% endif %}
+{% if plan.error and plan.status == "done" %}<p class="notice" role="status">The music is deleted. {{ plan.error|capitalize }}; delete it from the requests page if you still want it gone.</p>
+{% elif plan.error %}<p class="notice danger" role="alert">✕ Error: {{ plan.error }}</p>{% endif %}
 {% if delete %}
 <section class="consequence" aria-label="Plan consequences">
   <h2>What this plan changes</h2>

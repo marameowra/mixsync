@@ -4,20 +4,21 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import ColumnElement, delete, select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import review, verify
-from mixsync.acquire.lifecycle import BUSY, DONE, IN_PROGRESS, is_busy, is_dead_end, is_waiting
-from mixsync.acquire.merge import DeleteRefused, PlanInProgress
+from mixsync.acquire import verify
+from mixsync.acquire.lifecycle import BUSY, DONE, IN_PROGRESS
+from mixsync.acquire.merge import DeleteRefused, PlanInProgress, live_job
+from mixsync.acquire.request_delete import NotDeletable, live_states
+from mixsync.acquire.request_delete import deletable as is_deletable
+from mixsync.acquire.request_delete import delete_request as drop_request
 from mixsync.acquire.requests import REQUEST_BUDGET, create_request
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import LIVE, JobState
+from mixsync.core.jobs import JobState
 from mixsync.db.auth import AuthUser
-from mixsync.db.models.discovery import ProvisionalHold
-from mixsync.db.models.library import Track
-from mixsync.db.models.watchlist import FollowHit
+from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.work import Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.deps import CurrentUser, Db, Merge, Namer, require
@@ -30,10 +31,6 @@ router = APIRouter(prefix="/requests")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 
-def _of(req_id: int) -> ColumnElement[bool]:
-    return Job.payload["request_id"].as_integer() == req_id
-
-
 def _waiting(db: Session, ids: list[int], now: datetime) -> set[int]:
     """Requests whose next step is due but the worker has not taken it yet."""
     rid = Job.payload["request_id"].as_integer()
@@ -41,23 +38,17 @@ def _waiting(db: Session, ids: list[int], now: datetime) -> set[int]:
     return set(db.scalars(due))
 
 
-def _live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
-    rid = Job.payload["request_id"].as_integer()
-    states: dict[int, set[JobState]] = {}
-    for req_id, status in db.execute(
-        select(rid, Job.status).where(rid.in_(ids), Job.status.in_(LIVE))
-    ):
-        states.setdefault(req_id, set()).add(status)
-    return states
-
-
-def _deletable(req: AlbumRequest, live: dict[int, set[JobState]]) -> bool:
-    """A no_results or partial request always has a queued repeat search, which delete
-    removes with it."""
-    if is_busy(req) or is_dead_end(req):
-        return False
-    blocking = {JobState.LEASED, JobState.RUNNING} if is_waiting(req) else set(LIVE)
-    return not (live.get(req.id, set()) & blocking)
+def _delete_plans(db: Session, ids: list[int]) -> dict[int, int]:
+    """Request id -> its delete plan that is confirmed but not done (queued, running or failed)."""
+    q = select(Plan).where(Plan.kind == "delete", Plan.status.in_(["draft", "running", "failed"]))
+    found: dict[int, int] = {}
+    for p in db.scalars(q.order_by(Plan.id)):
+        if p.status == "draft" and not live_job(db, p.id):
+            continue
+        for op in p.ops:
+            if op["op"] == "request" and op["request_id"] in ids:
+                found[op["request_id"]] = p.id
+    return found
 
 
 @router.get("")
@@ -74,8 +65,8 @@ async def request_list(
     if ids is not None:
         query = query.where(AlbumRequest.id.in_(ids))
     items = db.scalars(query.order_by(AlbumRequest.id.desc())).all()
-    live = _live_states(db, [r.id for r in items])
-    deletable = {r.id for r in items if _deletable(r, live)}
+    live = live_states(db, [r.id for r in items])
+    deletable = {r.id for r in items if is_deletable(r, live)}
     queued = _waiting(db, [r.id for r in items], datetime.now(UTC))
     candidates = [r.id for r in items if r.status not in BUSY]
     music = set(  # requests with library tracks from their imports: one query for the page
@@ -96,6 +87,7 @@ async def request_list(
             "in_progress": any(r.status in IN_PROGRESS for r in items),
             "live_url": "/requests?" + "&".join(f"ids={r.id}" for r in items),
             "deletable": deletable,
+            "delete_plans": _delete_plans(db, [r.id for r in items]),
             "music": music,
             "queued": queued,
             "budget": REQUEST_BUDGET,
@@ -120,28 +112,10 @@ def new_request(user: User, db: Db, release: Annotated[str, Form()]) -> Redirect
 
 
 def delete_row(db: Session, req: AlbumRequest, user_id: int) -> None:
-    """Drops the row and its finished jobs; files on disk and decisions (the audit record) stay.
-    Raises HTTPException(409) when the request cannot be deleted; the caller rolls back."""
-    if req.migration_id is not None:
-        raise HTTPException(409, "a migration album cannot be deleted")
-    if is_dead_end(req):
-        raise HTTPException(409, "discovery keeps this as a dead end")
-    if not _deletable(req, _live_states(db, [req.id])):
-        raise HTTPException(409, "request is in progress")
-    # A decision still pending for this request would sit in /review with nothing to act on.
     try:
-        review.cancel(db, req.id, user_id)
-    except review.Refused as e:
+        drop_request(db, req, user_id)
+    except NotDeletable as e:
         raise HTTPException(409, str(e)) from e
-    # A worker may have claimed the repeat search since _deletable checked; never delete its job.
-    held = (JobState.LEASED, JobState.RUNNING)
-    db.execute(delete(Job).where(_of(req.id), Job.status.not_in(held)))
-    if db.scalar(select(Job.id).where(_of(req.id)).limit(1)) is not None:
-        raise HTTPException(409, "request is in progress")  # get_db rolls the whole delete back
-    # Keep the hit (its status still stops the watchlist re-requesting) and the hold; drop the link.
-    for model in (FollowHit, ProvisionalHold):
-        db.execute(update(model).where(model.request_id == req.id).values(request_id=None))
-    db.delete(req)
 
 
 @router.post("/delete-imported")
