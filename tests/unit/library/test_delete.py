@@ -200,6 +200,35 @@ def test_unverified_group_without_album_tag_deletes_only_that_group(world: World
     assert others  # the tagged group was never part of the plan
 
 
+def test_two_untagged_groups_delete_independently(world: World) -> None:  # noqa: F811
+    c = _setup(world)
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.release_mbid == OLD).values(status="unverified"))
+    a, b, *others = _paths(world, Track.release_mbid == OLD)
+    tags.write(world.ops.library / a, tags.TagSet("A", "", "", "Artist A", 1, 1, year=1999))
+    tags.write(world.ops.library / b, tags.TagSet("B", "", "", "Artist B", 1, 1, year=2005))
+    with c:
+        tok = _login(c, "root")
+        page = c.get("/library/unverified").text
+        assert page.count("Delete this album from the library") == 3  # tagged group and both bare
+        form = {"album": "", "year": "1999"}
+        pid = _preview(c, tok, "/library/unverified/delete", albumartist="Artist A", **form)
+        assert [o["old"]["path"] for o in world.plan(pid).ops if o["op"] == "trash"] == [a]
+        _roundtrip(
+            world,
+            c,
+            tok,
+            "/library/unverified/delete",
+            [b],
+            albumartist="Artist B",
+            album="",
+            year="2005",
+        )
+        # both other groups are still listed after the delete round trip
+        assert c.get("/library/unverified").text.count("Delete this album from the library") == 3
+    assert others and b in _paths(world, Track.release_mbid == OLD)
+
+
 def test_single_track_roundtrip(world: World) -> None:  # noqa: F811
     c = _setup(world)
     (tid,) = _ids(world, Track.release_mbid != OLD)

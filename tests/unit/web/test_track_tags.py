@@ -216,3 +216,15 @@ def test_unreadable_tags_page_still_offers_delete(client: TestClient, env: Env) 
     _no_restore(client.get(env.url), env, "cannot be read")
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
     assert r.status_code == 409  # the POST is unchanged
+
+
+def test_format_mismatch_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    with env.sf() as s, s.begin():
+        row = s.scalars(select(TagSnapshot)).one()
+        row.tags = {**row.tags, "format": "mp3"}  # the file is a flac
+    before = env.title()
+    _no_restore(client.get(env.url), env, "different file format")
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409 and env.title() == before
