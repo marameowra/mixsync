@@ -8,6 +8,11 @@
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/guard_main_merge.py\"",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/guard_tests.py\"",
+            "timeout": 20
           }
         ]
       }
