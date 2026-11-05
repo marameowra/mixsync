@@ -44,11 +44,7 @@ jobs:
       - run: uv python install 3.13
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg libchromaprint-tools
       - run: uv sync --frozen
-      - run: uv run ruff check
-      - run: uv run ruff format --check
-      - run: uv run pyright
-      - run: uv run lint-imports
-      - run: uv run pytest -n auto
+      - run: scripts/check.sh --all
   # Same suite on Postgres. Required by the dev and main rulesets (with `check`); on docs-only changes it skips like `check`.
   postgres:
     needs: changes
