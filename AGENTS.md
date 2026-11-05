@@ -26,11 +26,14 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   these. A release is the user merging `dev` into `main` with a bumped `version`.
 
 ## Delegation
-- Hand all implementation (features, fixes, tests, refactors) to the `implementer`
-  subagent. The main session plans, writes the brief, reviews, runs the full check once
-  before pushing, and opens PRs. It does not write the code itself.
-- Run independent pieces of work as parallel implementers. Launch each with
-  `isolation: "worktree"` and tell them to `git switch -c <branch> origin/dev` first
+- Do small or tightly coupled edits (a handful of tool calls, one or two files, or work
+  that needs this session's context) directly in the main session.
+- Delegate self-contained, well-specified tasks to `implementer` (Sonnet); pass
+  `model: opus` for hard or long-horizon ones.
+- Run parallel worktree implementers only for independent, sizeable tracks. Launch each
+  with `isolation: "worktree"` and tell them to `git switch -c <branch> origin/dev` first
   (new worktrees start from `origin/main`).
 - Brief each implementer fully: files to read, deliverables, out of scope, and the report
-  format.
+  format. The `reviewer` pass before merge is the independent check; don't spawn extra
+  agents to re-verify.
+- The main session runs the full check once before pushing, and opens PRs.
