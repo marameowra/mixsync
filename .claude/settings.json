@@ -10,6 +10,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_tests.py\"",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }

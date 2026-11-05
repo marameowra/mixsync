@@ -8,42 +8,29 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   route, stop and report back instead. See [data safety](docs/design/data-safety.md).
 - Respect external services. Obey rate limits and terms, cache where sensible, and never
   hammer an API. Limits and User-Agent rules: [services etiquette](docs/design/services-etiquette.md).
-- Before reporting work as done, run every CI step (`.github/workflows/ci.yml`), not just
-  tests: `uv run ruff check`, `uv run ruff format --check`, `uv run pyright`,
-  `uv run lint-imports`, `uv run pytest`. Docs-only changes (every changed file under
-  `docs/` or ending in `.md`) skip these, matching the `changes` job in ci.yml.
-- Don't weaken tests. Everything under `tests/` counts, fixtures and cassettes included:
-  - Deleting or emptying a file: no `rm`, `git rm`, `unlink`, `truncate`, `>` redirects, or
-    an empty Write. Change test files with Edit/Write. If a file looks obsolete, ask.
-  - Fewer assertions: when behavior changes, rewrite a test's assertions to the new
-    behavior instead of deleting them or the test.
-  - Skip markers: no `skip`, `skipif`, `xfail`, or `.only`. Fix the code under test.
-  If one of these is truly needed, ask first and say why. Write tests against public
-  behavior, not internals, so refactors don't force rewriting them.
-- Branches and PRs. `main` is the default branch, but work goes to `dev`: branch from
-  `origin/dev` and open PRs with `gh pr create --base dev`. Never open a PR against `main`.
-- Auto-merge. After opening a PR into `dev`, queue `gh pr merge --auto --merge` once every
-  CI step passed locally (or the change is docs-only). A ruleset on `dev` requires the
-  `check` and `postgres` CI jobs, so GitHub holds the merge until they pass. If a local
-  step fails, leave the PR for the user. Merging to `dev` publishes the `:dev` image.
-  Never merge into `main` or queue auto-merge on a PR whose base is `main`. A hook in
-  `.claude/settings.json` blocks agent merges into `main`, and a workflow turns off
-  auto-merge on PRs into `main`.
-- Releases are human-only: merging `dev` into `main` with a bumped `version` in pyproject.toml.
-  `release.yml` then waits for the user's approval in the `release` environment, publishes
-  `:<version>` (e.g. `:1.0.0`) and `:latest`, and tags `v<version>`. Pushes to `main` without
-  a version bump publish nothing. Never create or push `v*` tags, create GitHub releases,
-  merge to `main`, or approve deployments to the `release` environment.
-- Close issues once their fix merges into `dev`. GitHub ignores closing keywords in PRs
-  merged into `dev`, so close them yourself after the merge:
-  `gh issue close <n> --comment "Fixed in #<pr>, merged to dev."`
+- Checks. The full suite is slow, so run the full `scripts/check.sh` (every CI step, skipped
+  for docs-only changes) once, locally, before pushing; `/ship` does this. Implementers and
+  reviewers run only the tests relevant to the change, plus `scripts/check.sh --fast` (no
+  pytest), which the implementer's Stop hook runs.
+- Don't weaken tests (anything under `tests/`): no deleting or emptying files and no new
+  `skip`/`skipif`/`xfail`/`.only` markers (`.claude/hooks/guard_tests.py` blocks these). When
+  behavior changes, rewrite assertions to the new behavior instead of deleting them. If
+  one of these is truly needed, ask first and say why. Test public behavior, not internals.
+- Shipping: branch from `origin/dev`, then `/ship`. It runs the checks, opens the PR with
+  `--base dev` and `Fixes #n` lines, and queues `gh pr merge --auto --merge` only if checks
+  passed; otherwise it leaves the PR for the user. The `dev` ruleset requires the `check`
+  and `postgres` jobs. Merging to `dev` publishes `:dev`, and a workflow closes the `Fixes`
+  issues.
+- `main` and releases are human-only: no PRs or merges into `main`, no `v*` tags, GitHub
+  releases, or `release` environment approvals. `.claude/hooks/guard_main_merge.py` blocks
+  these. A release is the user merging `dev` into `main` with a bumped `version`.
 
 ## Delegation
 - Hand all implementation (features, fixes, tests, refactors) to the `implementer`
-  subagent. The main session plans, writes the brief, reviews, re-runs checks,
-  and opens PRs. It does not write the code itself.
+  subagent. The main session plans, writes the brief, reviews, runs the full check once
+  before pushing, and opens PRs. It does not write the code itself.
 - Run independent pieces of work as parallel implementers. Launch each with
-  `isolation: "worktree"`, branched from the pushed base branch (normally `origin/dev`),
-  so they never share a checkout.
-- Brief each implementer fully: files to read, deliverables, out of scope, the full check
-  list, and the report format.
+  `isolation: "worktree"` and tell them to `git switch -c <branch> origin/dev` first
+  (new worktrees start from `origin/main`).
+- Brief each implementer fully: files to read, deliverables, out of scope, and the report
+  format.
