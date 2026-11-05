@@ -1,4 +1,7 @@
-"""Stop hook for the implementer subagent: block finishing while scripts/check.sh fails."""
+"""Stop hook for the implementer subagent: block finishing while `scripts/check.sh --fast` fails.
+
+--fast skips pytest: the full suite runs once before pushing (/ship), not per implementer.
+"""
 
 import json
 import subprocess
@@ -14,7 +17,9 @@ root = subprocess.run(
 )
 if root.returncode:
     sys.exit(0)  # not in a repo: nothing to check
-run = subprocess.run(["scripts/check.sh"], cwd=root.stdout.strip(), capture_output=True, text=True)
+run = subprocess.run(
+    ["scripts/check.sh", "--fast"], cwd=root.stdout.strip(), capture_output=True, text=True
+)
 if run.returncode:
     tail = "\n".join((run.stdout + run.stderr).splitlines()[-60:])
     print(f"CI checks failed; fix them before finishing:\n{tail}", file=sys.stderr)
