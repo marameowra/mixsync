@@ -13,7 +13,7 @@ Adapters that find and download music. v1 has one: slskd (Soulseek). Torrent, Us
 - At most 3 concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`), counting only `InProgress` file transfers; slow ones stop counting ([etiquette](../../../docs/design/services-etiquette.md#soulseek)). `active_downloads()` feeds `acquire.gate.DownloadGate`.
 - Never queue more than one album folder per peer at a time.
 - `TransferInfo.local_path` is always `None`: slskd's API does not report it.
-  > Planned (#292): the search concurrency cap, query debounce and no-results backoff, and `release()`.
+- `search()` holds one of `MIXSYNC_SLSKD_MAX_SEARCHES` DB-leased slots (`ratelimit.Slots`) while it runs, so the cap holds across workers; extra searches wait. The same query (trimmed, case-folded) in flight or within `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` shares one slskd search (per worker process). The no-results backoff lives in `acquire`.
 
 ## May import
 `core`, `ratelimit`.

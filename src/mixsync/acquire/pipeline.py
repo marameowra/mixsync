@@ -23,7 +23,6 @@ from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.requests import (
-    NO_RESULTS_BACKOFF,
     AlbumKey,
     candidate_dict,
     candidate_from_dict,
@@ -32,6 +31,7 @@ from mixsync.acquire.requests import (
     enqueue_recheck,
     enqueue_rescan,
     hold_imports,
+    no_results_delay,
     profile_for,
     search_priority,
 )
@@ -87,7 +87,6 @@ PARTIAL_ALBUM_MAX_DIST = 0.2
 Handler = Callable[[JobRecord], Awaitable[None]]
 
 SEARCH_DEBOUNCE = timedelta(minutes=10)  # one request never searches twice within this
-MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
 IDENTIFY_RECORDINGS = 5  # recordings on no scored release, looked up for the releases holding them
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
@@ -115,6 +114,7 @@ class Pipeline:
     reencode: bool = False  # lossless files go into the library as FLAC (see library/encode.py)
     flac_level: int = 8
     gate: DownloadGate = field(default_factory=DownloadGate)
+    max_searches: int = 2  # a fuller cap defers the job; the source holds the strict one
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {
@@ -145,7 +145,7 @@ class Pipeline:
                     Job.kind == JobKind.SEARCH, Job.status == JobState.RUNNING, Job.id != job.id
                 )
             )
-            if (wait and wait > now) or (busy or 0) >= MAX_SEARCHES:
+            if (wait and wait > now) or (busy or 0) >= self.max_searches:
                 later = wait if wait and wait > now else now + SEARCH_BUSY_DELAY
                 enqueue_in(
                     s,
@@ -219,10 +219,8 @@ class Pipeline:
             req.artist, req.album = album.artist[:255], album.album[:255]
             req.release_group_mbid = req.release_group_mbid or album.release_group_id
             if not ranked:
-                delay = NO_RESULTS_BACKOFF[
-                    min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)
-                ]
                 req.no_results_attempts += 1
+                delay = no_results_delay(req.no_results_attempts)
                 lifecycle.no_results(req)
                 req.next_search_at = now + delay
                 enqueue_in(

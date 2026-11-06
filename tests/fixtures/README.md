@@ -56,7 +56,7 @@ Fake Soulseek data (`slskd/`) must cover every case below. Each case has a stabl
 ### Peers and transfers (fake slskd behavior)
 | ID | Case | Expected |
 |---|---|---|
-| SK-P01 | No search results | backoff schedule starts (1 h → 6 h → 24 h → weekly) |
+| SK-P01 | No search results | backoff schedule starts (1 h → 4 h → 16 h → 64 h → weekly) |
 | SK-P02 | Best candidate's peer has no free slots or a long queue | peer-health penalty; a healthy peer is preferred |
 | SK-P03 | Transfer fails or is rejected by the peer | the next candidate is tried; the failure is recorded |
 | SK-P04 | Peer disconnects mid-transfer (partial file) | partial file never imported; retry or next candidate |

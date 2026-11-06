@@ -9,6 +9,31 @@ from mixsync.db.models.infra import RateBucket
 from mixsync.ratelimit.services import ServiceLimits
 
 
+def _lock(s: Session) -> None:
+    if s.get_bind().dialect.name == "sqlite":
+        # first statement of the transaction: pysqlite does not autobegin for non-DML
+        s.execute(text("BEGIN IMMEDIATE"))
+
+
+def _locked_row(s: Session, service: str, rate: float, now: datetime) -> RateBucket:
+    """The `service` row, created if missing, locked FOR UPDATE (SQLite: by `_lock`)."""
+    cap = max(1.0, rate)
+    if s.get_bind().dialect.name != "sqlite":
+        # FOR UPDATE locks nothing on a missing row: the loser of a first-use race no-ops
+        s.execute(
+            pg_insert(RateBucket)
+            .values(service=service, tokens=cap, capacity=cap, refill_per_sec=rate, updated_at=now)
+            .on_conflict_do_nothing()
+        )
+    row = s.get(RateBucket, service, with_for_update=True)
+    if row is None:
+        row = RateBucket(
+            service=service, tokens=cap, capacity=cap, refill_per_sec=rate, updated_at=now
+        )
+        s.add(row)
+    return row
+
+
 class Bucket:
     """Token bucket persisted in `rate_buckets`, so every worker shares one budget.
 
@@ -26,36 +51,10 @@ class Bucket:
         self.clock = clock
 
     def _row(self, s: Session, rate: float, now: datetime) -> RateBucket:
-        if s.get_bind().dialect.name == "sqlite":
-            # first statement of the transaction: pysqlite does not autobegin for non-DML
-            s.execute(text("BEGIN IMMEDIATE"))
-        cap = max(1.0, rate)
-        if s.get_bind().dialect.name != "sqlite":
-            # FOR UPDATE locks nothing on a missing row: the loser of a first-use race no-ops
-            s.execute(
-                pg_insert(RateBucket)
-                .values(
-                    service=self.service,
-                    tokens=cap,
-                    capacity=cap,
-                    refill_per_sec=rate,
-                    updated_at=now,
-                )
-                .on_conflict_do_nothing()
-            )
-        row = s.get(RateBucket, self.service, with_for_update=True)
-        if row is None:
-            row = RateBucket(
-                service=self.service,
-                tokens=cap,
-                capacity=cap,
-                refill_per_sec=rate,
-                updated_at=now,
-            )
-            s.add(row)
-        else:  # pick up rate changes from config; reserve() clamps tokens to the new capacity
-            row.refill_per_sec = rate
-            row.capacity = cap
+        _lock(s)
+        row = _locked_row(s, self.service, rate, now)
+        # pick up rate changes from config; reserve() clamps tokens to the new capacity
+        row.refill_per_sec, row.capacity = rate, max(1.0, rate)
         return row
 
     def reserve(self) -> timedelta:
@@ -83,3 +82,35 @@ class Bucket:
         with self.sessions.begin() as s:
             row = self._row(s, self.rate, now)
             row.blocked_until = max(now + delay, aware(row.blocked_until or now))
+
+
+class Slots:
+    """At most `n` holders at once across every worker. Each slot is a `rate_buckets` row
+    (`<name>:<i>`) whose `blocked_until` is its holder's lease, so a crashed holder's slot frees
+    itself when the lease runs out."""
+
+    def __init__(
+        self, name: str, n: int, sessions: sessionmaker[Session], clock: Clock, lease: timedelta
+    ) -> None:
+        self.name, self.n, self.sessions, self.clock, self.lease = name, n, sessions, clock, lease
+
+    def take(self) -> tuple[str, datetime] | None:
+        """Claim a free slot: its key and lease end, or None when all `n` are held."""
+        now = self.clock.now()
+        with self.sessions.begin() as s:
+            _lock(s)
+            for i in range(self.n):  # same order in every worker: no deadlock on Postgres
+                row = _locked_row(s, f"{self.name}:{i}", 0.0, now)
+                if row.blocked_until is None or aware(row.blocked_until) <= now:
+                    row.blocked_until, row.updated_at = now + self.lease, now
+                    return row.service, now + self.lease
+        return None
+
+    def give(self, slot: tuple[str, datetime]) -> None:
+        key, until = slot
+        with self.sessions.begin() as s:
+            _lock(s)
+            row = s.get(RateBucket, key, with_for_update=True)
+            # a lease that ran out may already belong to someone else: leave theirs alone
+            if row is not None and row.blocked_until and aware(row.blocked_until) == until:
+                row.blocked_until = None

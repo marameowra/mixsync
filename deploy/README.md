@@ -32,6 +32,8 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_DEEZER_SUGGESTIONS` | `true`: Mark unverified gets a "Suggest from Deezer" button that pre-fills the form on request (metadata only, 1 req/s, no audio). Deezer's terms allow private, non-commercial, single-household use only. Default off |
 | `MIXSYNC_DISCOGS_SUGGESTIONS` | `true`: Discogs joins Deezer behind one "Suggest" button on Mark unverified (release search and tracklist, on request only). Each user links their own Discogs personal token under Account (no shared token); a user without one gets no Discogs suggestions. The limits in [services](../docs/design/services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default) came from an OpenAPI copy: check them by hand before enabling. Default off |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
+| `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
+| `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
