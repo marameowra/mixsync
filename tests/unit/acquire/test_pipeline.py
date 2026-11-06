@@ -467,20 +467,29 @@ async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
     assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
 
 
-async def test_no_results_backs_off_then_caps(env: Env) -> None:
+async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None:
     rid = request(env)
     t0 = env.clock.now()
-    for wait in [1, 6, 24, 168, 168]:  # hours: 1h, 6h, 24h, 1 week, then the cap
+    waits = [1, 2, 4, 8, 16, 32, 64, 128, 168, 168]  # hours: doubling from 1h to the weekly cap
+    for wait in waits:
         job = None
         while job is None or job.kind is not JobKind.SEARCH:
             job = await env.step()
         assert status(env, rid) == "no_results"
         (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
-        assert nxt.run_after.replace(tzinfo=env.clock.t.tzinfo) - env.clock.now() == timedelta(
-            hours=wait
-        )
-    assert env.clock.now() - t0 == timedelta(hours=1 + 6 + 24 + 168)
+        due = nxt.run_after.replace(tzinfo=env.clock.t.tzinfo)
+        assert due - env.clock.now() == timedelta(hours=wait)
+    assert env.clock.now() - t0 == timedelta(hours=sum(waits[:-1]))
     assert env.source.enqueued == []
+    login(web, "alice")  # the user sees when the next search runs
+    assert f"Next search {due:%Y-%m-%d %H:%M}" in web.get("/requests").text
+    # a search that finds something resets the backoff
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    while (job := await env.step()) is None or job.kind is not JobKind.SEARCH:
+        pass
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.no_results_attempts == 0 and req.status == "downloading"
 
 
 async def test_search_is_debounced_for_ten_minutes(env: Env) -> None:

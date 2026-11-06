@@ -1,15 +1,20 @@
+import asyncio
 import json
 import os
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.matching import Candidate, CandidateFile, TransferStatus
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.slskd import SlskdSource, map_responses
 
@@ -131,6 +136,84 @@ async def test_search_gives_up_and_deletes_the_search(make_client: Make) -> None
     post, last = seen[0], seen[-1]
     search_id = json.loads(post.content)["id"]
     assert last.method == "DELETE" and last.url.path == f"/api/v0/searches/{search_id}"
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        return self.t
+
+
+async def _yield(_s: float) -> None:
+    await asyncio.sleep(0)
+
+
+async def test_searches_past_the_cap_wait_and_all_complete(
+    settings: Settings, sessions: sessionmaker[Session]
+) -> None:
+    in_flight: set[str] = set()
+    peak = 0
+    polled: set[str] = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal peak
+        if request.method == "POST":
+            in_flight.add(json.loads(request.content)["id"])
+            peak = max(peak, len(in_flight))
+            return httpx.Response(200, json=load("search_running.json"))
+        sid = request.url.path.split("/")[4]
+        if request.url.path.endswith("/responses"):
+            in_flight.discard(sid)
+            return httpx.Response(200, json=load("responses.json"))
+        if sid in polled:  # running on the first poll, so searches overlap
+            return httpx.Response(200, json=load("search_complete.json"))
+        polled.add(sid)
+        return httpx.Response(200, json=load("search_running.json"))
+
+    clock = Clock()
+
+    def worker() -> SlskdSource:  # two workers: the cap is shared through the DB
+        client = PoliteClient(
+            "slskd", settings, sessions, clock=clock, transport=httpx.MockTransport(handler)
+        )
+        slots = Slots("slskd-search", 2, sessions, clock, timedelta(minutes=10))
+        return SlskdSource(client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_yield, slots=slots)
+
+    a, b = worker(), worker()
+    found = await asyncio.gather(*(src.search(f"q{i}") for i, src in enumerate([a, b] * 4)))
+    assert peak == 2 and not in_flight
+    assert all(len(cands) == 4 for cands in found)
+
+
+async def test_the_same_query_within_the_window_is_searched_once(
+    settings: Settings, sessions: sessionmaker[Session]
+) -> None:
+    posts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posts.append(json.loads(request.content)["searchText"])
+            return httpx.Response(200, json=load("search_running.json"))
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=load("responses.json"))
+        return httpx.Response(200, json=load("search_complete.json"))
+
+    clock = Clock()
+    client = PoliteClient(
+        "slskd", settings, sessions, clock=clock, transport=httpx.MockTransport(handler)
+    )
+    src = SlskdSource(
+        client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_yield, debounce=timedelta(minutes=5)
+    )
+    together = await asyncio.gather(src.search("Test Album"), src.search(" test album "))
+    clock.t += timedelta(minutes=4)
+    again = await src.search("TEST ALBUM")
+    assert posts == ["Test Album"] and len(again) == 4 and together[0] == together[1] == again
+    clock.t += timedelta(minutes=2)  # the window has passed: slskd is asked again
+    await src.search("test album")
+    assert posts == ["Test Album", "test album"]
 
 
 @pytest.mark.parametrize("code", [401, 403])

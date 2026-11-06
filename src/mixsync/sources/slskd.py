@@ -4,6 +4,7 @@ import re
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from mixsync.core.matching import (
     TransferStatus,
     download_dir,
 )
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset(e[1:] for e in EXTENSIONS)  # only what import takes
@@ -32,6 +34,8 @@ SEARCH_SETTINGS = {
     "minimumPeerUploadSpeed": 0,  # keep slow peers: they may be the only ones with the album
     "maximumPeerQueueLength": 1000,  # a queue this deep will not start within our patience
 }
+# Far longer than a search's ~70 s of polling: a crashed worker's slot frees itself after this.
+SEARCH_LEASE = timedelta(minutes=10)
 _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+", re.IGNORECASE)
 
 
@@ -113,6 +117,8 @@ class SlskdSource:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         poll_interval: float = 1.0,
         max_polls: int = 60,
+        slots: Slots | None = None,  # caps searches in flight across every worker
+        debounce: timedelta = timedelta(0),  # a repeated query within this reuses the result
     ) -> None:
         self._client = client
         self._base = base_url.rstrip("/") + "/api/v0"
@@ -121,6 +127,11 @@ class SlskdSource:
         self._sleep = sleep
         self._poll_interval = poll_interval
         self._max_polls = max_polls
+        self._slots = slots
+        self._debounce = debounce
+        # shortcut: debounce is per worker process; a second worker may repeat a query once.
+        self._inflight: dict[str, asyncio.Future[list[Candidate]]] = {}
+        self._recent: dict[str, tuple[datetime, list[Candidate]]] = {}
 
     async def _call(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
@@ -139,6 +150,35 @@ class SlskdSource:
         return response.json() if response.content else None
 
     async def search(self, query: str) -> list[Candidate]:
+        """Candidates for `query`. The same query (trimmed, case-folded) in flight or finished
+        within the debounce window shares that result: slskd is asked once."""
+        key = query.strip().casefold()
+        hit = self._recent.get(key)
+        if hit and self._client.clock.now() - hit[0] < self._debounce:
+            return list(hit[1])
+        if (task := self._inflight.get(key)) is None:
+            task = self._inflight[key] = asyncio.ensure_future(self._capped(query))
+            task.add_done_callback(lambda t: self._done(key, t))
+        return list(await asyncio.shield(task))  # one caller cancelled never cancels the rest
+
+    def _done(self, key: str, task: asyncio.Future[list[Candidate]]) -> None:
+        del self._inflight[key]
+        if not task.cancelled() and task.exception() is None:
+            now = self._client.clock.now()
+            self._recent = {k: v for k, v in self._recent.items() if now - v[0] < self._debounce}
+            self._recent[key] = (now, task.result())
+
+    async def _capped(self, query: str) -> list[Candidate]:
+        if self._slots is None:
+            return await self._search(query)
+        while (slot := await asyncio.to_thread(self._slots.take)) is None:
+            await self._sleep(self._poll_interval)  # wait our turn; never dropped
+        try:
+            return await self._search(query)
+        finally:
+            await asyncio.to_thread(self._slots.give, slot)
+
+    async def _search(self, query: str) -> list[Candidate]:
         search_id = str(uuid.uuid4())
         await self._call(
             "POST", "/searches", json={"id": search_id, "searchText": query, **SEARCH_SETTINGS}
