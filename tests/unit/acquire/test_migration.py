@@ -35,6 +35,7 @@ from mixsync.match import scorer
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, AUDIO, CATALOG, OTHER, RECORDINGS, FakeMetadata
+from .fakes import BIG as TEN_TRACKS
 from .test_pipeline import decision_rows, library
 
 
@@ -375,6 +376,105 @@ async def test_untagged_album_picks_the_best_of_the_top_three(rig: Rig) -> None:
     assert rig.meta.calls[:3] == [OTHER.release_id, ALBUM.release_id, OTHER.release_id]
     (req,) = rig.requests()
     assert req.status == "imported" and req.release_mbid == ALBUM.release_id
+
+
+async def test_identify_adds_the_release_holding_every_recording_from_a_recording_lookup(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one_only = replace(
+        ALBUM, release_id="55555555-5555-5555-5555-555555555555", tracks=ALBUM.tracks[:1]
+    )
+    monkeypatch.setitem(CATALOG, str(one_only.release_id), one_only)
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.meta.refs = [ref(one_only)]  # the text search misses the release holding Song Two
+    rig.meta.holding = {RECORDINGS["Song Two"]: [str(one_only.release_id), str(ALBUM.release_id)]}
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    assert rig.meta.looked_up == [RECORDINGS["Song Two"]]  # Song One is on a scored release
+    assert rig.meta.calls[:2] == [one_only.release_id, ALBUM.release_id]  # deduplicated
+    (req,) = rig.requests()
+    assert req.status == "imported" and req.release_mbid == ALBUM.release_id
+
+
+async def test_a_recording_off_the_chosen_release_is_unpaired_with_where_it_is(
+    rig: Rig, web: TestClient
+) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.99, ("elsewhere-rec",))
+    ]
+    rig.meta.refs = [ref(ALBUM)]
+    rig.meta.holding = {"elsewhere-rec": [str(OTHER.release_id)]}
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    assert rig.meta.looked_up == ["elsewhere-rec"] and OTHER.release_id in rig.meta.calls
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.release_mbid) == ("review", ALBUM.release_id)
+    assert d.vetoes == ["'Song Two': release does not contain recording elsewhere-rec"]
+    assert [a["recording_id"] for a in d.evidence["assignment"]] == [RECORDINGS["Song One"]]
+    assert [Path(u).name for u in d.evidence["unassigned"]] == ["02 Song Two.mp3"]
+    (off,) = d.evidence["off_release"]
+    assert Path(off["local_path"]).name == "02 Song Two.mp3"
+    assert (off["recording_ids"], off["releases"]) == (["elsewhere-rec"], [OTHER.release_id])
+    login(web, "root")
+    assert "release does not contain recording elsewhere-rec" in web.get(f"/review/{d.id}").text
+
+
+async def test_a_recording_lookup_musicbrainz_refuses_still_identifies(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.99, ("merged-rec",))
+    ]
+    rig.meta.refs = [ref(ALBUM)]
+    rig.meta.gone = {"merged-rec"}  # a deleted or merged MBID: 404
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    assert rig.meta.looked_up == ["merged-rec"]
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.release_mbid) == ("review", ALBUM.release_id)
+    assert d.evidence["off_release"][0]["releases"] == []
+
+
+async def test_a_looked_up_release_musicbrainz_refuses_still_identifies(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.99, ("elsewhere-rec",))
+    ]
+    rig.meta.refs = [ref(ALBUM)]
+    rig.meta.holding = {"elsewhere-rec": [str(OTHER.release_id)]}
+    fetch = rig.meta.get_release
+
+    async def refuse_other(mbid: str, *, fresh: bool = False) -> Any:
+        if mbid == OTHER.release_id:
+            raise PermanentError("returned 404")  # deleted between the browse and the fetch
+        return await fetch(mbid, fresh=fresh)
+
+    rig.meta.get_release = refuse_other  # type: ignore[method-assign]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.release_mbid) == ("review", ALBUM.release_id)
+
+
+async def test_recording_lookups_take_one_recording_per_file_for_at_most_five_files(
+    rig: Rig,
+) -> None:
+    put_album(rig.root, "Gamma Band/Gamma Album", TEN_TRACKS)  # ten files, no search hit
+    rig.env.acoustid.override["Gamma Album/01 Gamma One.mp3"] = [
+        AcoustIdResult("aid-1", 0.99, tuple(f"alias-{n}" for n in range(6)))
+    ]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    others = [RECORDINGS[t.title] for t in TEN_TRACKS.tracks[1:5]]
+    assert rig.meta.looked_up == ["alias-0", *others]
 
 
 async def test_two_near_identical_releases_go_to_review_with_the_runner_up(

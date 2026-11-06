@@ -163,7 +163,7 @@ def score_candidate(
     pairs, extras, missing = assign_tracks(tracks, album.tracks)
 
     dist = Distance(weights)
-    vetoes = list(find_vetoes(pairs))
+    vetoes = list(find_vetoes(pairs, extras, album.tracks))
     total = len(album.tracks)
     dist.add(
         "folder_completeness",

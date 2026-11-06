@@ -16,7 +16,7 @@
 - One resumable job per album folder (or loose-file group), at lower priority than normal requests.
 - Every file gets an AcoustID lookup ([ADR 0009](../decisions/0009-acoustid-mandatory.md)).
 - Each folder runs [stage 2 matching](matching.md#stage-2-post-download-verification) with the admin's profile: auto-accept imports and canonicalizes; review and no-MB-match go to the review queue (the latter offering **Mark unverified**).
-- An album with a `musicbrainz_albumid` is scored against that release (unknown id falls back to search); otherwise against the top 3 search hits. A reject band or no candidate goes to review, where reject skips the album.
+- An album with a `musicbrainz_albumid` is scored against that release (unknown id falls back to search); otherwise against the top 3 search hits. Releases holding confident AcoustID recordings that none of those hold are added from a recording lookup (at most 5 recordings and 3 more releases). A reject band or no candidate goes to review, where reject skips the album.
 - For large libraries consider a local MB mirror (`MIXSYNC_MB_BASE_URL`).
 - WAV and AIFF are encoded to FLAC on import; Opus is tagged in place. Unsupported formats are listed as `skipped` (`unsupported format`). Extensions: `core/audio.py`.
 - The source is only read, never moved, written or released. **Check old tree** re-hashes it against the preflight manifest.

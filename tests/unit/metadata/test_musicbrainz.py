@@ -139,6 +139,19 @@ async def test_browse_group_releases_one_request_and_mapping(make_client: Make) 
     assert vinyl.date is None  # MB's "" means unknown
 
 
+async def test_recording_releases_is_one_cached_browse(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    body = (MB / "browse_group_releases.json").read_text()  # a release browse, same shape
+    provider = MusicBrainzProvider(make_client("musicbrainz", serve(body, seen)))
+    refs = await provider.recording_releases("rec-1")
+    (req,) = seen
+    assert req.url.path == "/ws/2/release"
+    assert dict(req.url.params) == {"recording": "rec-1", "fmt": "json", "limit": "25"}
+    assert refs[1].release_id and refs[1].status == "Official"
+    assert await provider.recording_releases("rec-1") == refs  # identify again: from the cache
+    assert len(seen) == 1
+
+
 async def test_fresh_requests_skip_the_response_cache(make_client: Make) -> None:
     seen: list[httpx.Request] = []
     body = (MB / "release_multi_disc.json").read_text()

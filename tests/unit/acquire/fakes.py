@@ -81,6 +81,9 @@ class FakeMetadata:
         self.calls: list[str] = []
         self.browsed: list[str] = []
         self.group: dict[str, ReleaseRef] = {}  # by release id; overrides the catalog's refs
+        self.holding: dict[str, list[str]] = {}  # recording id -> release ids; empty by default
+        self.looked_up: list[str] = []  # recording ids browsed for their releases
+        self.gone: set[str] = set()  # recording ids MusicBrainz answers 404 for
 
     async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         self.calls.append(mbid)
@@ -90,6 +93,12 @@ class FakeMetadata:
         self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
     ) -> list[ReleaseRef]:
         return []
+
+    async def recording_releases(self, recording_mbid: str, limit: int = 25) -> list[ReleaseRef]:
+        self.looked_up.append(recording_mbid)
+        if recording_mbid in self.gone:
+            raise PermanentError("returned 404")
+        return [ReleaseRef(r, CATALOG[r].album, "") for r in self.holding.get(recording_mbid, [])]
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
         self.browsed.append(release_group_mbid)
