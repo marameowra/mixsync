@@ -332,6 +332,26 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert env.target.rescans == 1
 
 
+async def test_accept_never_imports_an_off_release_file_and_keeps_it_in_quarantine(
+    env: Env, web: TestClient
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    (held,) = [p for p in quarantined(env, "review") if p.name == "02 Song Two.mp3"]
+    (off,) = d.evidence["off_release"]
+    assert Path(off["local_path"]) == held and off["recording_ids"] == ["somebody-elses-recording"]
+    body = held.read_bytes()
+
+    tok = login(web, "alice")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported" and library(env) == [FIRST]
+    assert quarantined(env, "review") == [held] and held.read_bytes() == body
+
+
 async def test_a_contradicted_pair_lands_in_review(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     contradict_second_file(env)

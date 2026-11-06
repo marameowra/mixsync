@@ -15,7 +15,14 @@ from mixsync.library import fileops
 
 from .conftest import Env, login
 from .fakes import ALBUM
-from .test_pipeline import contradict_second_file, decision_rows, quarantined, request, status
+from .test_pipeline import (
+    contradict_second_file,
+    decision_rows,
+    quarantined,
+    request,
+    status,
+    veto_second_file,
+)
 from .test_quarantine import file_ops
 
 QUARANTINE = "quarantine"
@@ -67,6 +74,21 @@ async def test_a_reject_refiles_the_files_into_rejected_today(env: Env, web: Tes
     moves = refile_moves(env)
     assert len(moves) == 4 and {o.status for o in moves} == {"done"}
     assert {o.root for o in moves} == {QUARANTINE}
+
+
+async def test_a_reject_points_the_off_release_evidence_at_the_rejected_copy(
+    env: Env, web: TestClient
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM)
+    veto_second_file(env)
+    request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    reject(web, d.id)
+    await run_refile(env)
+    (d,) = decision_rows(env, 2)
+    (off,) = d.evidence["off_release"]
+    assert Path(off["local_path"]) in quarantined(env, "rejected")
 
 
 async def test_refiled_files_are_purged_after_the_trash_window(env: Env, web: TestClient) -> None:

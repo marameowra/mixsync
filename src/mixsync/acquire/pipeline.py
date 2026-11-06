@@ -635,17 +635,22 @@ class Pipeline:
         self, files: list[FileTrack], albums: list[AlbumInfo]
     ) -> dict[str, list[str]]:
         """Add to `albums` the releases holding the most AcoustID recordings no album in it
-        holds (capped lookups and fetches); returns recording id -> release ids holding it."""
+        holds (capped lookups and fetches); returns recording id -> release ids holding it.
+        One recording per file, at most IDENTIFY_RECORDINGS files; a lookup MusicBrainz refuses
+        (a deleted or merged id) holds nothing."""
         have = {t.recording_id for a in albums for t in a.tracks}
-        wanted = [
-            b.recording_ids
+        firsts = [
+            b.recording_ids[0]
             for f in files
             if (b := confident(f)) and have.isdisjoint(b.recording_ids)
         ]
-        ids = list(dict.fromkeys(i for rs in wanted for i in rs))[:IDENTIFY_RECORDINGS]
-        holding = {
-            i: [r.release_id for r in await self.metadata.recording_releases(i)] for i in ids
-        }
+        holding: dict[str, list[str]] = {}
+        for i in list(dict.fromkeys(firsts))[:IDENTIFY_RECORDINGS]:
+            try:
+                holding[i] = [r.release_id for r in await self.metadata.recording_releases(i)]
+            except PermanentError as e:
+                log.info("recording %s: no releases looked up: %s", i, e)
+                holding[i] = []
         votes = Counter(r for rs in holding.values() for r in dict.fromkeys(rs))
         known = {a.release_id for a in albums}
         new = [r for r, _ in votes.most_common() if r not in known][:IDENTIFY_RELEASES]
