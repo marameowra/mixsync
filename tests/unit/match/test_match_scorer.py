@@ -568,3 +568,79 @@ def test_acoustid_separated_runner_up_does_not_cap() -> None:
 
 def tags_closer(files: list[FileTrack], like: Likelies, a: AlbumInfo, b: AlbumInfo) -> bool:
     return score_files(files, like, a, LOOSE).distance < score_files(files, like, b, LOOSE).distance
+
+
+def test_acoustid_confirmed_file_pays_no_track_or_disc_number_penalty() -> None:
+    f = sure_file("Mr. Kill Myself", "r7", track=8, disc=2)
+    t = replace(rec_track("Mr. Kill Myself", "r7"), index=7, medium_index=7, medium=1)
+    got = {p.key: p.penalty for p in track_distance(f, t).breakdown()}
+    assert "track_index" not in got and "medium" not in got  # both 0.0
+    unsure = {p.key for p in track_distance(replace(f, acoustid=()), t).breakdown()}
+    assert {"track_index", "medium"} <= unsure
+
+
+DRAINING = (  # the #278 report: a 9-track release without Newlove
+    "Intro",
+    "Yandere Complex",
+    "Burn",
+    "Sorry",
+    "Everlong",
+    "Scars",
+    "Mr. Kill Myself",
+    "Losing",
+    "Draining Love Story",
+)
+
+
+def draining() -> AlbumInfo:
+    tracks = tuple(
+        TrackInfo(title, "Kirsche", 180.0, i, i, 1, f"rec-{i}")
+        for i, title in enumerate(DRAINING, 1)
+    )
+    return AlbumInfo(artist="Kirsche", album="Draining Love Story", tracks=tracks, release_id="dls")
+
+
+def draining_files() -> list[FileTrack]:
+    """08 - Mr. Kill Myself (AcoustID: track 7) and 02 - Newlove (AcoustID: not on the release)."""
+    kill = FileTrack(
+        "Mr. Kill Myself", "Kirsche", 180.0, 8, 1, acoustid=(AcoustIdResult("a", 0.99, ("rec-7",)),)
+    )
+    newlove = FileTrack(
+        "Newlove", "Kirsche", 289.0, 2, 1, acoustid=(AcoustIdResult("b", 0.99, ("rec-new",)),)
+    )
+    return [kill, newlove]
+
+
+def test_a_file_whose_recording_the_release_lacks_is_never_paired() -> None:
+    album, (kill, newlove) = draining(), draining_files()
+    pairs, extra, missing = assign_tracks([kill, newlove], album.tracks)
+    assert [(f.title, t.title) for f, t in pairs] == [("Mr. Kill Myself", "Mr. Kill Myself")]
+    assert extra == [newlove] and album.tracks[1] in missing and len(missing) == 8
+    like = Likelies("Kirsche", "Draining Love Story")
+    result = score_files([kill, newlove], like, album, LOOSE)
+    assert result.band is Band.REVIEW
+    assert result.vetoes == ("'Newlove': release does not contain recording rec-new",)
+    reasons = " ".join(p.reason for p in result.breakdown)
+    assert "-> 'Yandere Complex'" not in reasons and "track number" not in reasons
+
+
+def test_a_confirmed_pair_beats_a_number_based_pairing() -> None:
+    album = draining()
+    kill = replace(draining_files()[0], title="Burn", track=3)  # tags say track 3, AcoustID 7
+    pairs, _, _ = assign_tracks([kill], album.tracks)
+    assert [t.title for _, t in pairs] == ["Mr. Kill Myself"]
+
+
+def test_the_release_holding_every_identified_recording_wins() -> None:
+    only_kill = draining()
+    newlove = TrackInfo("Newlove", "Kirsche", 289.0, 10, 10, 1, "rec-new")
+    both = replace(
+        only_kill,
+        album="Draining Love Story (Deluxe)",
+        release_id="dls-deluxe",
+        tracks=(*only_kill.tracks, newlove),
+    )
+    like = Likelies("Kirsche", "Draining Love Story")
+    for albums in ([only_kill, both], [both, only_kill]):
+        album, _ = best_release(draining_files(), like, albums, BALANCED)
+        assert album is both

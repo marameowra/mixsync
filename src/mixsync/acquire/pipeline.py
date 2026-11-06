@@ -76,7 +76,7 @@ from mixsync.match.scorer import (
     best_release,
     score_files,
 )
-from mixsync.match.vetoes import all_confident
+from mixsync.match.vetoes import all_confident, confident, off_release
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +89,7 @@ Handler = Callable[[JobRecord], Awaitable[None]]
 SEARCH_DEBOUNCE = timedelta(minutes=10)  # one request never searches twice within this
 MAX_SEARCHES = 2
 IDENTIFY_SEARCH, IDENTIFY_RELEASES = 5, 3  # a migrated album: search hits, releases scored
+IDENTIFY_RECORDINGS = 5  # recordings on no scored release, looked up for the releases holding them
 SEARCH_BUSY_DELAY = timedelta(minutes=1)
 DOWNLOAD_BUSY_DELAY = timedelta(seconds=30)  # each look at a full cap is also a rate sample
 MONITOR_EVERY = timedelta(seconds=30)
@@ -431,10 +432,11 @@ class Pipeline:
             req = self._request(s, job)
             profile, migrating = profile_for(s, req.user_id), req.from_files
             provisional = req.provisional
+        holding: dict[str, list[str]] = {}  # recording id -> release ids holding it (identify)
         if album is not None:
             result = score_files(files, like, album, profile)
         else:
-            album, result = await self._identify(files, like, profile, cand.folder)
+            album, result, holding = await self._identify(files, like, profile, cand.folder)
         if migrating and result.band is Band.REJECT:  # nothing to search again: a human decides
             result = replace(result, band=Band.REVIEW)
         pairs, extra, _ = assign_tracks(files, album.tracks)
@@ -450,6 +452,11 @@ class Pipeline:
             for f, t in pairs
         ]
         unassigned = [str(readable[index[id(f)]]) for f in extra]  # import copies only the paired
+        off = [
+            (str(readable[index[id(f)]]), b)
+            for f in extra
+            if (b := confident(f)) and off_release(f, album.tracks)
+        ]
         if migrating and unassigned and result.band is Band.AUTO_ACCEPT:  # never drop silently
             result = replace(result, band=Band.REVIEW)
         if not migrating and result.band is not Band.AUTO_ACCEPT:
@@ -461,6 +468,7 @@ class Pipeline:
             paths = moved
             assignment = [{**a, "local_path": where[str(a["local_path"])]} for a in assignment]
             unassigned = [where[u] for u in unassigned]
+            off = [(where[u], b) for u, b in off]
         partial = ""
         if pairs and len(pairs) < len(album.tracks) and result.band is not Band.AUTO_ACCEPT:
             # deliberately partial: missing tracks cost nothing, but only when AcoustID is sure
@@ -495,6 +503,15 @@ class Pipeline:
         ).to_json()
         if result.runner_up:
             evidence["runner_up"] = asdict(result.runner_up)
+        if off:  # files AcoustID places off the release, and the looked-up releases holding them
+            evidence["off_release"] = [
+                {
+                    "local_path": u,
+                    "recording_ids": list(b.recording_ids),
+                    "releases": sorted({r for i in b.recording_ids for r in holding.get(i, ())}),
+                }
+                for u, b in off
+            ]
 
         now = self.clock.now()
         with self.sessions.begin() as s:
@@ -587,9 +604,11 @@ class Pipeline:
 
     async def _identify(
         self, files: list[FileTrack], like: Likelies, profile: Profile, folder: str
-    ) -> tuple[AlbumInfo, MatchResult]:
+    ) -> tuple[AlbumInfo, MatchResult, dict[str, list[str]]]:
         """The best-scoring release for files of unknown release: the one their tags name, else
-        the top MusicBrainz search hits. No candidate gives an empty album and a review band."""
+        the top MusicBrainz search hits, plus the releases holding AcoustID recordings none of
+        those hold. No candidate gives an empty album and a review band. Also returns, per
+        looked-up recording, the release ids holding it."""
         albums: list[AlbumInfo] = []
         if tagged := _uuid(like.release_id):
             try:
@@ -604,12 +623,34 @@ class Pipeline:
             albums = [
                 await self.metadata.get_release(r.release_id) for r in refs[:IDENTIFY_RELEASES]
             ]
+        holding = await self._recording_releases(files, albums)
         if not albums:
             none = MatchResult(
                 1.0, Band.REVIEW, (), ("no release found on MusicBrainz",), SCORER_VERSION
             )
-            return AlbumInfo(like.artist or "", like.album or "", ()), none
-        return best_release(files, like, albums, profile)
+            return AlbumInfo(like.artist or "", like.album or "", ()), none, holding
+        return *best_release(files, like, albums, profile), holding
+
+    async def _recording_releases(
+        self, files: list[FileTrack], albums: list[AlbumInfo]
+    ) -> dict[str, list[str]]:
+        """Add to `albums` the releases holding the most AcoustID recordings no album in it
+        holds (capped lookups and fetches); returns recording id -> release ids holding it."""
+        have = {t.recording_id for a in albums for t in a.tracks}
+        wanted = [
+            b.recording_ids
+            for f in files
+            if (b := confident(f)) and have.isdisjoint(b.recording_ids)
+        ]
+        ids = list(dict.fromkeys(i for rs in wanted for i in rs))[:IDENTIFY_RECORDINGS]
+        holding = {
+            i: [r.release_id for r in await self.metadata.recording_releases(i)] for i in ids
+        }
+        votes = Counter(r for rs in holding.values() for r in dict.fromkeys(rs))
+        known = {a.release_id for a in albums}
+        new = [r for r, _ in votes.most_common() if r not in known][:IDENTIFY_RELEASES]
+        albums += [await self.metadata.get_release(r) for r in new]
+        return holding
 
     async def import_(self, job: JobRecord) -> None:
         rid, did = job.payload["request_id"], job.payload["decision_id"]

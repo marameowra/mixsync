@@ -16,7 +16,15 @@ from mixsync.db.models.safety import FileOp
 from .conftest import Env, login
 from .fakes import ALBUM
 from .test_adopter import Rig
-from .test_pipeline import decision_rows, library, quarantined, request, status, veto_second_file
+from .test_pipeline import (
+    contradict_second_file,
+    decision_rows,
+    library,
+    quarantined,
+    request,
+    status,
+    veto_second_file,
+)
 
 FOLDER = "Music\\Alpha Band\\Alpha Album"
 
@@ -57,7 +65,7 @@ async def test_a_rejected_candidate_is_quarantined_journaled_and_released(env: E
 
 async def test_a_review_candidate_in_quarantine_can_be_accepted(env: Env, web: TestClient) -> None:
     env.source.add("peer1", FOLDER)
-    veto_second_file(env)
+    contradict_second_file(env)
     rid = request(env)
     await env.drain()
     (d,) = decision_rows(env, 2)

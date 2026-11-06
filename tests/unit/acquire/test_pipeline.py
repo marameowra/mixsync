@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import pipeline, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
@@ -85,6 +86,14 @@ def veto_second_file(env: Env, folder: str = "Alpha Album") -> None:
     """AcoustID is sure (0.95) that the second file is a recording of another release."""
     env.acoustid.override[f"{folder}/02 Song Two.mp3"] = [
         AcoustIdResult("aid-x", 0.95, ("somebody-elses-recording",))
+    ]
+
+
+def contradict_second_file(env: Env, folder: str = "Alpha Album") -> None:
+    """AcoustID is sure (0.95) that the second file is the first track's recording: both files
+    stay paired with their own tracks, and the contradiction is a veto."""
+    env.acoustid.override[f"{folder}/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.95, (RECORDINGS["Song One"],))
     ]
 
 
@@ -294,7 +303,8 @@ async def test_a_padded_preview_lands_in_review_with_its_veto_text(
 
 
 async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient) -> None:
-    """Exit criterion 2: a file AcoustID disagrees with is held for review, not imported."""
+    """Exit criterion 2: a file AcoustID disagrees with is held for review, not imported. A file
+    whose recording the release lacks is never paired, so accepting imports only the rest."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     veto_second_file(env)
     rid = request(env)
@@ -303,10 +313,13 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert status(env, rid) == "review"
     assert library(env) == []
     (d,) = [d for d in decision_rows(env, 2)]
-    assert d.status == "pending_review" and d.vetoes
+    assert d.status == "pending_review"
+    assert d.vetoes == ["'Song Two': release does not contain recording somebody-elses-recording"]
+    ev = Evidence.parse(d.evidence)
+    assert [a["recording_id"] for a in ev.assignment] == [RECORDINGS["Song One"]]
     tok = login(web, "alice")
     page = web.get(f"/review/{d.id}")
-    assert page.status_code == 200 and "AcoustID (0.95) says a different recording" in page.text
+    assert page.status_code == 200 and "release does not contain recording" in page.text
     assert "somebody-elses-recording" in page.text
     assert f'href="/review/{d.id}"' in web.get("/review").text
 
@@ -314,14 +327,25 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert r.status_code == 303
     assert status(env, rid) == "importing"
     await env.drain()
-    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
+    assert status(env, rid) == "imported" and library(env) == [FIRST]
+    assert [p.name for p in quarantined(env, "review")] == ["02 Song Two.mp3"]  # kept, unpaired
     assert env.target.rescans == 1
+
+
+async def test_a_contradicted_pair_lands_in_review(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    contradict_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    assert status(env, rid) == "review" and len(Evidence.parse(d.evidence).assignment) == 2
+    assert any("AcoustID (0.95) says a different recording" in v for v in d.vetoes)
 
 
 async def _held_for_review(env: Env, web: TestClient) -> tuple[int, int, str]:
     """Verify the album with one vetoed file; return the request, decision and csrf token."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
-    veto_second_file(env)
+    contradict_second_file(env)
     rid = request(env)
     await env.drain()
     (d,) = decision_rows(env, 2)

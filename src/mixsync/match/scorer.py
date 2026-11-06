@@ -44,9 +44,15 @@ from mixsync.core.matching import (
 )
 from mixsync.match.features import normalize, string_dist
 from mixsync.match.profiles import RUNNER_UP_GAP, band, close_gap
-from mixsync.match.vetoes import acoustid_confirms, acoustid_contradicts, all_confident, find_vetoes
+from mixsync.match.vetoes import (
+    acoustid_confirms,
+    acoustid_contradicts,
+    all_confident,
+    find_vetoes,
+    off_release,
+)
 
-SCORER_VERSION = 6  # 6: transcode and padded-preview vetoes
+SCORER_VERSION = 7  # 7: AcoustID beats track numbers; a recording off the release is unpaired
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -64,7 +70,8 @@ ARTIST_PART_MIN_CHARS = 3  # shorter parts ("X", "DJ") match too much to count
 # Penalty when one side's credit contains the other's artist among several; below any mismatch.
 ARTIST_PARTIAL_PENALTY = 0.2
 ARTIST_PART_MATCH_MAX = 0.1
-# Share of the title, artist, number and disc penalties kept when AcoustID confirms the recording.
+# Share of the title and artist penalties kept when AcoustID confirms the recording (number and
+# disc penalties drop to 0).
 ACOUSTID_DISCOUNT = 0.1
 
 DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType(
@@ -198,6 +205,7 @@ def track_distance(
     dist = Distance(weights)
     sure = acoustid_confirms(file, track)
     keep = ACOUSTID_DISCOUNT if sure else 1.0  # metadata differences matter less for a sure file
+    numbered = 0.0 if sure else 1.0  # AcoustID outranks the tags' track and disc numbers
 
     if file.length and track.length:
         dist.add_ratio(
@@ -224,7 +232,7 @@ def track_distance(
     if track.index and file.track:
         dist.add(
             "track_index",
-            keep * (file.track not in (track.medium_index, track.index)),
+            numbered * (file.track not in (track.medium_index, track.index)),
             f"track number {file.track} vs {track.medium_index or track.index}",
         )
 
@@ -246,7 +254,7 @@ def track_distance(
     if track.medium and file.disc:
         dist.add(
             "medium",
-            keep * (file.disc != track.medium),
+            numbered * (file.disc != track.medium),
             f"disc {file.disc} vs {track.medium}",
         )
 
@@ -302,15 +310,25 @@ def assign_tracks(
     weights: Mapping[str, float] = DEFAULT_WEIGHTS,
 ) -> tuple[list[tuple[FileTrack, TrackInfo]], list[FileTrack], list[TrackInfo]]:
     """Best one-to-one mapping of files to tracks by track distance. Returns the pairs
-    (in file order), the extra files and the missing tracks."""
-    if not files or not tracks:
+    (in file order), the extra files and the missing tracks. A file AcoustID places off the
+    release is never paired, and a file pairs with a track AcoustID confirms when it can."""
+    # a file AcoustID places off the release stays an extra file
+    idx = [i for i, f in enumerate(files) if not off_release(f, tracks)]
+    if not idx or not tracks:
         return [], list(files), list(tracks)
-    costs = [[track_distance(f, t, weights).distance for t in tracks] for f in files]
-    if len(files) <= len(tracks):
-        pairs = list(enumerate(_hungarian(costs)))
+    big = len(idx) + 1  # one AcoustID contradiction outweighs all other costs together
+    costs = [
+        [
+            track_distance(files[i], t, weights).distance + big * acoustid_contradicts(files[i], t)
+            for t in tracks
+        ]
+        for i in idx
+    ]
+    if len(idx) <= len(tracks):
+        pairs = [(idx[fi], ti) for fi, ti in enumerate(_hungarian(costs))]
     else:
         by_track = _hungarian([list(col) for col in zip(*costs, strict=True)])
-        pairs = sorted((fi, ti) for ti, fi in enumerate(by_track))
+        pairs = sorted((idx[fi], ti) for ti, fi in enumerate(by_track))
     used_f = {fi for fi, _ in pairs}
     used_t = {ti for _, ti in pairs}
     return (
@@ -438,7 +456,7 @@ def score_files(
         return reject("release has no tracklist")
     pairs, extra_files, _ = assign_tracks(files, album.tracks, weights)
     dist = album_distance(likelies, album, pairs, len(extra_files), weights)
-    vetoes = find_vetoes(pairs)
+    vetoes = find_vetoes(pairs, extra_files, album.tracks)
     result_band = band(dist.distance, vetoes, profile)
     partial_credit = (not album.va and artist_partial(likelies.artist, album.artist)) or any(
         album.va and artist_partial(f.artist, t.artist) for f, t in pairs

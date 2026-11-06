@@ -11,29 +11,42 @@ MIN_HIGH_BAND_SHARE = 1e-5
 MAX_TRAILING_SILENCE_SHARE = 0.5  # of the file's length: a padded preview is mostly silence
 
 
-def _best(file: FileTrack) -> AcoustIdResult | None:
+def confident(file: FileTrack) -> AcoustIdResult | None:
+    """AcoustID's best result for the file when it is confident and names recordings."""
     best = max(file.acoustid, key=lambda r: r.score, default=None)
     return best if best and best.score >= ACOUSTID_VETO_SCORE and best.recording_ids else None
 
 
 def acoustid_confirms(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID's confident best result names the track's recording."""
-    best = _best(file)
+    best = confident(file)
     return bool(best and track.recording_id in best.recording_ids)
 
 
 def acoustid_contradicts(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID is confident the file is a different recording than the track's."""
-    best = _best(file)
+    best = confident(file)
     return bool(best and track.recording_id and track.recording_id not in best.recording_ids)
+
+
+def off_release(file: FileTrack, tracks: Sequence[TrackInfo]) -> bool:
+    """AcoustID is confident the file is a recording the release (with recording ids) lacks."""
+    best = confident(file)
+    ids = {t.recording_id for t in tracks if t.recording_id}
+    return bool(best and ids and ids.isdisjoint(best.recording_ids))
 
 
 def _clock(seconds: float) -> str:
     return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
 
 
-def find_vetoes(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> tuple[str, ...]:
-    """Reasons to force review regardless of the score, for matched (file, track) pairs."""
+def find_vetoes(
+    pairs: Sequence[tuple[FileTrack, TrackInfo]],
+    extras: Sequence[FileTrack] = (),
+    tracks: Sequence[TrackInfo] = (),
+) -> tuple[str, ...]:
+    """Reasons to force review regardless of the score, for matched (file, track) pairs and the
+    extra files AcoustID places off the release `tracks`."""
     out: list[str] = []
     for file, track in pairs:
         if file.length is not None and track.length is not None:
@@ -61,12 +74,16 @@ def find_vetoes(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> tuple[str, ...]
                 f"{file.title!r}: tagged as recording {file.recording_id}, "
                 f"matched to {track.title!r} ({track.recording_id})"
             )
-        best = _best(file)
+        best = confident(file)
         if best and acoustid_contradicts(file, track):
             out.append(
                 f"{file.title!r}: AcoustID ({best.score:.2f}) says a different recording than "
                 f"{track.title!r} ({track.recording_id})"
             )
+    for file in extras:
+        if (best := confident(file)) and off_release(file, tracks):
+            ids = ", ".join(best.recording_ids)
+            out.append(f"{file.title!r}: release does not contain recording {ids}")
     return tuple(out)
 
 

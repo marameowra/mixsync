@@ -195,6 +195,18 @@ class MusicBrainzProvider:
             for r in MbSearch.model_validate(data).releases
         ]
 
+    async def recording_releases(self, recording_mbid: str, limit: int = 25) -> list[ReleaseRef]:
+        """The releases holding a recording: one cached browse page of at most `limit`."""
+        data = await get_json(
+            self._client,
+            f"{self._base}/release",
+            {"recording": recording_mbid, "fmt": "json", "limit": limit},
+        )
+        return [
+            ReleaseRef(r.id, r.title, "", r.date or None, r.country, status=r.status)
+            for r in MbSearch.model_validate(data).releases
+        ]
+
     async def new_release_groups(
         self, kind: str, mbid: str, since: str | None, *, fresh: bool = False
     ) -> list[ReleaseGroupHit]:

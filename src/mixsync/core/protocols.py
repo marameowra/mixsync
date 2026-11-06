@@ -49,6 +49,9 @@ class MetadataProvider(Protocol):
         self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
     ) -> list[ReleaseRef]: ...
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]: ...
+    async def recording_releases(
+        self, recording_mbid: str, limit: int = 25
+    ) -> list[ReleaseRef]: ...
 
 
 class ReleaseWatch(Protocol):

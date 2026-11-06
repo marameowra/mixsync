@@ -15,7 +15,7 @@ from mixsync.library import fileops
 
 from .conftest import Env, login
 from .fakes import ALBUM
-from .test_pipeline import decision_rows, quarantined, request, status, veto_second_file
+from .test_pipeline import contradict_second_file, decision_rows, quarantined, request, status
 from .test_quarantine import file_ops
 
 QUARANTINE = "quarantine"
@@ -23,7 +23,7 @@ QUARANTINE = "quarantine"
 
 async def in_review(env: Env) -> int:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM)
-    veto_second_file(env)
+    contradict_second_file(env)
     rid = request(env)
     await env.drain()
     assert status(env, rid) == "review" and len(quarantined(env, "review")) == 2
