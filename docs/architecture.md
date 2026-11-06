@@ -51,7 +51,7 @@ Each external system sits behind a small interface (`core/protocols.py`).
 | `DownloadSource` | slskd | Prowlarr + qBittorrent/SABnzbd, yt-dlp |
 | `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs (`metadata/discogs.py`), Deezer (`metadata/deezer.py`) |
 | `LibraryTarget` | Navidrome | Jellyfin, Plex, Music Assistant |
-| `HistorySource` | ListenBrainz, Navidrome plays | |
+| `HistorySource` | ListenBrainz (plays and stars come through `UserLibrary`) | |
 
 ## Tech stack
 Rationale: ADRs [0002](decisions/0002-python-backend.md), [0003](decisions/0003-htmx-server-rendered-ui.md), [0004](decisions/0004-sqlite-and-db-job-queue.md). Versions: `pyproject.toml`.
