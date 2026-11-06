@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Plan {{ plan.id }} moves - MixSync{% endblock %}
+{% block content %}
+<h1>Plan {{ plan.id }}: every move ({{ total }})</h1>
+<p><a href="/library/plans/{{ plan.id }}">Back to the plan</a></p>
+<div class="table-wrap scroll">
+<table>
+  <thead><tr><th>Op</th><th>From</th><th>To</th></tr></thead>
+  <tbody>
+  {% for op in rows %}
+  <tr>
+    <td class="plan-op">{% if op.op == "refused" %}refused: {{ op.reason }}{% else %}move{% if op.done %} (done){% endif %}{% endif %}</td>
+    <td class="plan-file">{{ op.old.path }}</td>
+    <td class="plan-file">{{ op.new_path or "" }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="3">No moves.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p>Page {{ page }} of {{ pages }}
+  {% if page > 1 %}<a href="/library/plans/{{ plan.id }}/moves?page={{ page - 1 }}">Previous</a>{% endif %}
+  {% if page < pages %}<a href="/library/plans/{{ plan.id }}/moves?page={{ page + 1 }}">Next</a>{% endif %}
+</p>
+{% endblock %}

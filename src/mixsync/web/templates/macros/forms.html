@@ -1,11 +1,12 @@
 {# Import with context: {% import "macros/forms.html" as forms with context %} #}
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
 {# A plan action; changes = move+trash ops, typed back when above the data-safety threshold. #}
-{% macro plan_action(plan, action, label) %}
-{% set changes = plan.ops | selectattr("op", "in", ["move", "trash"]) | list | length %}
-{% set remaining = plan.ops | selectattr("op", "in", ["move", "trash"]) | selectattr("done", "equalto", false) | list | length %}
-{% set has_trash = plan.ops | selectattr("op", "equalto", "trash") | list | length > 0 %}
-{% set has_move = plan.ops | selectattr("op", "equalto", "move") | list | length > 0 %}
+{% macro plan_action(plan, action, label, ops=none) %}
+{% set ops = plan.ops if ops is none else ops %}
+{% set changes = ops | selectattr("op", "in", ["move", "trash"]) | list | length %}
+{% set remaining = ops | selectattr("op", "in", ["move", "trash"]) | selectattr("done", "equalto", false) | list | length %}
+{% set has_trash = ops | selectattr("op", "equalto", "trash") | list | length > 0 %}
+{% set has_move = ops | selectattr("op", "equalto", "move") | list | length > 0 %}
 <form class="confirm" method="post" action="/library/plans/{{ plan.id }}/{{ action }}">{{ csrf() }}
   {% if changes > typed_above %}<label class="field">Type {{ changes }} to confirm <input class="input num" name="count" type="text" inputmode="numeric" required autocomplete="off"></label>{% endif %}
   {% if action == "confirm" and has_trash %}<button class="btn danger filled" type="submit">{{ label }}</button>

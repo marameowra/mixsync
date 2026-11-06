@@ -327,6 +327,7 @@ def _new_queue(
         retention.start_chains()
 
     startup = (
+        merger.backfill_templates,  # labels rows only; a reorganize plan waits for the user
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,

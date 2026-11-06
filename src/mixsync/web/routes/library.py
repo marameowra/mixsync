@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -18,19 +18,23 @@ from mixsync.acquire.merge import (
     Merger,
     PlanInProgress,
     enqueue_merge,
+    enqueue_reorganize,
     enqueue_undo,
     live_job,
+    reorganize_build,
     stale_delete_draft,
 )
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
+from mixsync.core.jobs import LIVE
+from mixsync.db import progress
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.undo import undoable
-from mixsync.library import albums, fragmentation, tag_undo, tags
+from mixsync.library import albums, fragmentation, layout, tag_undo, tags
 from mixsync.library.fileops import FileOps
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -44,7 +48,7 @@ from mixsync.submit.mb_seed import (
 from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.routes.requests import delete_row
-from mixsync.web.templating import templates
+from mixsync.web.templating import render, templates
 
 router = APIRouter(prefix="/library")
 User = Annotated[AuthUser, Depends(require(Capability.library_edit))]
@@ -254,28 +258,89 @@ async def build_plan(
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
+@router.post("/reorganize/plan")
+def build_reorganize(user: User, db: Db) -> RedirectResponse:
+    """Queue the build: it reads the tags of every drifted file, too slow for a request."""
+    enqueue_reorganize(db, datetime.now(UTC))
+    return RedirectResponse("/library/reorganize", status_code=303)
+
+
+@router.get("/reorganize")
+def reorganize_status(request: Request, user: User, db: Db) -> HTMLResponse:
+    """A live region (ADR 0017): building, then a link to the draft or why it failed."""
+    job, plan_id = reorganize_build(db)
+    ctx = {
+        "user": user,
+        "job": job,
+        "plan_id": plan_id,
+        "building": job is not None and job.status in LIVE,
+    }
+    return render(request, "pages/reorganize.html", "pages/reorganize_live.html", ctx)
+
+
+SAMPLE, FOLDERS = 3, 100  # a reorganize page shows this many moves per folder, of this many
+
+
+def _by_folder(ops: list[dict[str, Any]]) -> dict[str, Any]:
+    """Moves and refusals grouped by the album folder they leave: (folder, count, sample) for
+    the first FOLDERS folders, and how many folders are left out."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for op in ops:
+        if op["op"] in ("move", "refused"):
+            groups.setdefault(op["old"]["path"].rpartition("/")[0], []).append(op)
+    shown = [(f, len(o), o[:SAMPLE]) for f, o in list(groups.items())[:FOLDERS]]
+    return {"folders": shown, "folders_hidden": len(groups) - len(shown)}
+
+
 @router.get("/plans/{plan_id}")
 async def plan_detail(
     plan_id: int, request: Request, user: CurrentUser, db: Db, namer: Namer
 ) -> HTMLResponse:
     plan = _plan(db, plan_id, user)
-    counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
+    kinds = ("move", "trash", "keep", "refused")
+    counts = {k: sum(op["op"] == k for op in plan.ops) for k in kinds}
     refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
     for op in plan.ops:
-        if op["op"] == "move":
+        if op["op"] == "move" and "tags" in op:
             refs |= {
                 ("release", op["old"].get("release_mbid") or ""),
                 ("release", op["tags"].get("release_id") or ""),
             }
     allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
+    ops = progress.with_done(db, plan)
     ctx = {
         "user": user,
         "plan": plan,
+        "ops": ops,
         "counts": counts,
         "allowed": allowed,
         "names": await resolve(db, namer, refs, MAX_LOOKUPS),
+        **(_by_folder(ops) if plan.kind == "reorganize" else {}),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
+
+
+MOVES_PAGE = 200
+
+
+@router.get("/plans/{plan_id}/moves")
+def plan_moves(
+    plan_id: int, request: Request, user: CurrentUser, db: Db, page: str = "1"
+) -> HTMLResponse:
+    """Every move and refusal of a reorganize plan, paged (data-safety rule 5)."""
+    plan = _plan(db, plan_id, user)
+    rows = [op for op in progress.with_done(db, plan) if op["op"] in ("move", "refused")]
+    pages = max(1, -(-len(rows) // MOVES_PAGE))
+    n = min(max(_num(page, 1), 1), pages)
+    ctx = {
+        "user": user,
+        "plan": plan,
+        "total": len(rows),
+        "page": n,
+        "pages": pages,
+        "rows": rows[(n - 1) * MOVES_PAGE : n * MOVES_PAGE],
+    }
+    return templates.TemplateResponse(request, "pages/plan_moves.html", ctx)
 
 
 def _act(
@@ -389,6 +454,7 @@ def browse(
         "total": len(found),
         "albums": found[(n - 1) * albums.PAGE : n * albums.PAGE],
         "pending": db.scalar(select(func.count()).where(Track.album.is_(None))),
+        "drift": layout.drift(db, request.app.state.settings.path_template),
     }
     return templates.TemplateResponse(request, "pages/albums.html", ctx)
 

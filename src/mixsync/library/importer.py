@@ -179,5 +179,6 @@ class Importer:
                         status=status,
                         batch_id=batch_id,
                         imported_at=self._clock.now(),
+                        path_template=self._template,
                     )
                 )
