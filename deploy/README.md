@@ -57,6 +57,7 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 ## Upgrading
 `compose.yml` runs `ghcr.io/marameowra/mixsync:${MIXSYNC_TAG:-latest}`. Pin `MIXSYNC_TAG` in `.env` to a version (e.g. `1.0.1`) or leave it at `latest`.
 1. Back up: `docker compose -f deploy/compose.yml run --rm mixsync-migrate backup` (SQLite; on Postgres use `pg_dump`).
+   Coming from the old local-build compose? There is no ghcr image yet, so take this first backup with `-f deploy/compose.build.yml` added.
 2. Set `MIXSYNC_TAG` to the new version, then `docker compose -f deploy/compose.yml pull`.
 3. `docker compose -f deploy/compose.yml up -d`. The one-shot `mixsync-migrate` service runs migrations first; web and worker start after it succeeds.
 4. Check: `docker compose -f deploy/compose.yml ps`, `docker compose -f deploy/compose.yml logs mixsync-migrate`, and `GET /healthz`.
