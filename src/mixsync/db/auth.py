@@ -137,6 +137,7 @@ def other_active_admins(s: Session, user_id: int) -> int:
             .join(UserRole, UserRole.user_id == User.id)
             .join(Role, Role.id == UserRole.role_id)
             .where(Role.name == "admin", User.status == "active", User.id != user_id)
+            .with_for_update()  # serialises concurrent demotions on Postgres; no-op on SQLite
         ).all()
     )
 

@@ -240,8 +240,13 @@ def change_password(
 ) -> Response:
     """The current session stays signed in; the user's other sessions end."""
     row = db.get_one(User, user.id)
+    key = (request.client.host if request.client else "", user.username.lower())
+    if not admit(key):  # the same budget as /login
+        msg = "Too many attempts, try again later."
+        return _page(request, user, db, box, ("password", msg), 429)
     if not verify_password(row.password_hash, current):
         return _page(request, user, db, box, ("password", "The current password is wrong."))
+    forget(key)
     if not new or len(new) > MAX_LEN:
         return _page(request, user, db, box, ("password", "Enter a new password."))
     if new != confirm:

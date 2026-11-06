@@ -233,3 +233,42 @@ def test_forms_need_csrf(admin: tuple[TestClient, str]) -> None:
         c.post("/account/password", data={"current": "pw", "new": "n", "confirm": "n"}).status_code
         == 403
     )
+
+
+def test_unknown_user_is_404(admin: tuple[TestClient, str]) -> None:
+    c, tok = admin
+    for leaf, data in (("status", {"status": "active"}), ("role", {"role": "user"})):
+        assert c.post(f"/users/999/{leaf}", data={"csrf_token": tok, **data}).status_code == 404
+    assert (
+        c.post("/users/999/password", data={"csrf_token": tok, "password": "x"}).status_code == 404
+    )
+
+
+def test_reenable_does_not_revive_sessions(
+    admin: tuple[TestClient, str],
+    app_client: Callable[[], TestClient],
+    sf: sessionmaker[Session],
+) -> None:
+    c, tok = admin
+    a = app_client()
+    login(a, "alice")
+    i = uid(sf, "alice")
+    c.post(f"/users/{i}/status", data={"csrf_token": tok, "status": "disabled"})
+    c.post(f"/users/{i}/status", data={"csrf_token": tok, "status": "active"})
+    assert a.get("/account").status_code == 303
+
+
+def test_change_password_is_rate_limited(
+    app_client: Callable[[], TestClient], sf: sessionmaker[Session]
+) -> None:
+    c = app_client()
+    tok = login(c, "alice")
+
+    def post(current: str) -> int:
+        data = {"csrf_token": tok, "current": current, "new": "n", "confirm": "n"}
+        return c.post("/account/password", data=data).status_code
+
+    assert [post("wrong") for _ in range(10)] == [400] * 10
+    assert post("pw") == 429  # even the right password is refused once locked
+    with sf() as s:
+        assert authenticate(s, "alice", "pw") is not None
