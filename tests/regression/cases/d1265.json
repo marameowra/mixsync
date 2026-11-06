@@ -1,0 +1,730 @@
+{
+ "albums": [
+  {
+   "album": "Chillhop Essentials: Winter 2025",
+   "albumdisambig": null,
+   "artist": "Various Artists",
+   "artist_ids": [
+    "89ad4ac3-39f7-470e-963a-56509c546377"
+   ],
+   "catalognum": "CR530",
+   "country": "XW",
+   "genres": [
+    "hip hop",
+    "house",
+    "jazz fusion",
+    "lo-fi hip hop",
+    "trip hop"
+   ],
+   "label": "Chillhop Music",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2025,
+   "release_group_id": "a0ca1841-90cf-4684-9fb2-8845bd69c1cb",
+   "release_id": "e6b2dd55-534d-4cce-823e-cc9915ef9f26",
+   "tracks": [
+    {
+     "artist": "dennisivnvc ft. Dani Catal\u00e1",
+     "artist_ids": [
+      "72837c3f-7caa-42a7-8a35-690ec14ec22a",
+      "b509a13c-f4e2-49de-b0c2-aa9e4f3b4670"
+     ],
+     "index": 1,
+     "length": 116.97,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "d684752a-88ea-42b9-b2bc-bed075ef2114",
+     "title": "Always White"
+    },
+    {
+     "artist": "anbuu, Blue Wednesday",
+     "artist_ids": [
+      "66a0a274-5511-445e-b4b0-231e0dac9af0",
+      "1077e53e-c8e8-4492-9813-31f71677e6f9"
+     ],
+     "index": 2,
+     "length": 185.952,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "e1eb93b1-f1ca-4f6c-89e4-d83e139a64c2",
+     "title": "Cold Start"
+    },
+    {
+     "artist": "goosetaf, Idan Morim",
+     "artist_ids": [
+      "a0f336e8-7589-43d7-bbec-5a01cfa62869",
+      "2049e529-b1a3-4b6d-a925-900169623178"
+     ],
+     "index": 3,
+     "length": 146.054,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "e4db5a41-1955-4c72-868b-db9871845d4f",
+     "title": "At First There Was Rain"
+    },
+    {
+     "artist": "Saib",
+     "artist_ids": [
+      "b9d36436-6ac0-4277-86fd-462fd4d0c9f6"
+     ],
+     "index": 4,
+     "length": 179.916,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "1e483888-3711-4525-b84d-0adcbd17c943",
+     "title": "Color Flow"
+    },
+    {
+     "artist": "Sweeps, luv pug",
+     "artist_ids": [
+      "4c41eabc-c28f-497f-aad1-d120bc1bfc26",
+      "d6a398a7-bea0-4365-a691-53566f98d2bb"
+     ],
+     "index": 5,
+     "length": 180.072,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "e8ecb06e-bf67-4250-8062-fa469aed506c",
+     "title": "Night Waltz"
+    },
+    {
+     "artist": "Philanthrope, invention_",
+     "artist_ids": [
+      "8033e863-c3e3-4dfc-9255-bd3a67eae181",
+      "3f1f7d94-e5c5-4ef9-a14f-4542ba609963"
+     ],
+     "index": 6,
+     "length": 104.087,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "d8474820-78ae-4974-a562-d346275560d1",
+     "title": "Akxnyte"
+    },
+    {
+     "artist": "L\u2019Ind\u00e9cis, \u00d8DYSSEE",
+     "artist_ids": [
+      "5316780d-2810-41e3-a224-653a6a0bdf50",
+      "e099e006-e993-4c2f-8cee-30b1f51d235e"
+     ],
+     "index": 7,
+     "length": 155.996,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "1e39808f-f858-4e2d-b695-8ab495105ef9",
+     "title": "Machine Learning"
+    },
+    {
+     "artist": "No Spirit",
+     "artist_ids": [
+      "6bba32d4-5c07-4187-9281-ba901f17e496"
+     ],
+     "index": 8,
+     "length": 138.856,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "e1ae236e-f0c7-428a-a068-f81b04af7feb",
+     "title": "Last Month"
+    },
+    {
+     "artist": "Mr Slipz",
+     "artist_ids": [
+      "e0a9ae5a-894b-4dd7-9d7d-7466e9933bba"
+     ],
+     "index": 9,
+     "length": 169.761,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "590b7569-6d23-4a77-90d2-9e95b1ac65eb",
+     "title": "Winter in Patagonia"
+    },
+    {
+     "artist": "Tesk",
+     "artist_ids": [
+      "596a1dcf-704d-45fc-a167-93aed95a033d"
+     ],
+     "index": 10,
+     "length": 93.683,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "8b4f2694-9490-44d7-800f-a3fe500347a6",
+     "title": "Strobelight"
+    },
+    {
+     "artist": "King I Divine",
+     "artist_ids": [
+      "d505aaab-1a60-4b26-9e1c-f1659d356c3a"
+     ],
+     "index": 11,
+     "length": 164.965,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "6a4d900d-7d28-40b5-92e1-af98a9187961",
+     "title": "Fireplace"
+    },
+    {
+     "artist": "The BREED",
+     "artist_ids": [
+      "9fe8b420-52f0-4b3d-83d5-799a5562322a"
+     ],
+     "index": 12,
+     "length": 110.579,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "e0798c2d-0a7d-43cb-9209-b88a0e1d307e",
+     "title": "Soulistica"
+    },
+    {
+     "artist": "Aviino ft. Lozz",
+     "artist_ids": [
+      "f139ed2a-74a1-4670-8700-c3368a05175c",
+      "2a351f6a-10a5-4de9-b489-e51374355d98"
+     ],
+     "index": 13,
+     "length": 224.765,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "7b9af38b-1749-41bc-bcf8-fd86dd6a4c74",
+     "title": "Citrus Snow"
+    },
+    {
+     "artist": "Aphrow",
+     "artist_ids": [
+      "ed47ca3a-e1c5-4f16-aadb-6597017aee76"
+     ],
+     "index": 14,
+     "length": 98.343,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "8370e1b5-f441-4959-b3c2-4e6108af231b",
+     "title": "Crossroads"
+    },
+    {
+     "artist": "Psalm Trees",
+     "artist_ids": [
+      "8e5038b0-f71f-4951-aa26-542cdfe9280a"
+     ],
+     "index": 15,
+     "length": 199.897,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "ae354b6b-e8aa-4f9e-8202-c97d86e4e7e1",
+     "title": "Mudanca"
+    },
+    {
+     "artist": "Leavv",
+     "artist_ids": [
+      "63cdbeb7-73b2-4752-acf9-f566d7960105"
+     ],
+     "index": 16,
+     "length": 123.941,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "4cebed5e-70a5-41c3-8864-d1d0ca66d291",
+     "title": "How It Is"
+    },
+    {
+     "artist": "chromo, the dreamer",
+     "artist_ids": [
+      "5fe71109-488a-49c0-a67f-993e0329629d"
+     ],
+     "index": 17,
+     "length": 159.288,
+     "medium": 1,
+     "medium_index": 17,
+     "recording_id": "929d73e7-c75c-45d7-b829-34534b871e56",
+     "title": "Apricity"
+    },
+    {
+     "artist": "Ben Bada Boom",
+     "artist_ids": [
+      "9f938492-62ed-416f-9868-9025e9943b02"
+     ],
+     "index": 18,
+     "length": 161.539,
+     "medium": 1,
+     "medium_index": 18,
+     "recording_id": "4feb083f-24e0-4bc1-b0d7-960a3aab24e7",
+     "title": "Frostbite Funk"
+    },
+    {
+     "artist": "Dotlights, zak\u00e8",
+     "artist_ids": [
+      "c41eb7a0-b1b3-4f16-af49-6a0bb4b99578",
+      "87ae4300-b2f0-4f2f-a2c3-d75128ea5980"
+     ],
+     "index": 19,
+     "length": 147.382,
+     "medium": 1,
+     "medium_index": 19,
+     "recording_id": "9496adc6-8b50-46bb-ac91-a1d104e221b6",
+     "title": "Sediment Bloom"
+    },
+    {
+     "artist": "Ward Wills",
+     "artist_ids": [
+      "c967ad11-49c4-4913-a4e9-bbcf492ae519"
+     ],
+     "index": 20,
+     "length": 153.755,
+     "medium": 1,
+     "medium_index": 20,
+     "recording_id": "cc8ee6a4-78e5-4a90-a990-01535744f054",
+     "title": "Ghost of You"
+    },
+    {
+     "artist": "Flitz&Suppe",
+     "artist_ids": [
+      "adef1475-266f-4b30-a844-d66fb49e335c"
+     ],
+     "index": 21,
+     "length": 173.393,
+     "medium": 1,
+     "medium_index": 21,
+     "recording_id": "ea6cc05e-f035-40a4-a531-a25b93d65637",
+     "title": "Stand Alone Complex"
+    },
+    {
+     "artist": "Ian Ewing",
+     "artist_ids": [
+      "0e620ca7-a47e-45ec-9c20-0ab274db14c1"
+     ],
+     "index": 22,
+     "length": 137.871,
+     "medium": 1,
+     "medium_index": 22,
+     "recording_id": "e140f252-d593-48d3-aa94-1e95dcb251d3",
+     "title": "Cosmic Gumbo"
+    },
+    {
+     "artist": "J.Folk",
+     "artist_ids": [
+      "fab5e8f3-7b3b-4a07-959f-0f32b46338d0"
+     ],
+     "index": 23,
+     "length": 88.617,
+     "medium": 1,
+     "medium_index": 23,
+     "recording_id": "aa1b2070-5f47-477c-8be6-0484cfed7bde",
+     "title": "Some Days"
+    },
+    {
+     "artist": "Enough Cereals",
+     "artist_ids": [
+      "26958360-cd84-4a24-95bb-6f34f85e1410"
+     ],
+     "index": 24,
+     "length": 150.218,
+     "medium": 1,
+     "medium_index": 24,
+     "recording_id": "8e842107-273a-43d5-804a-ec52d9c50a87",
+     "title": "Mirage"
+    },
+    {
+     "artist": "lloom",
+     "artist_ids": [
+      "0eb18738-8213-4297-9424-8ceff3e6ed60"
+     ],
+     "index": 25,
+     "length": 157.338,
+     "medium": 1,
+     "medium_index": 25,
+     "recording_id": "4ebc4a96-c637-4eef-9413-97b5f4972c34",
+     "title": "M\u00e1s o menos"
+    },
+    {
+     "artist": "cocabona, less.people",
+     "artist_ids": [
+      "0c60cfb6-69d8-4159-b413-b89da0c52fed",
+      "a70870a6-a7ce-4789-88fe-3d899cc0b3cb"
+     ],
+     "index": 26,
+     "length": 156.124,
+     "medium": 1,
+     "medium_index": 26,
+     "recording_id": "51798c2f-94b8-419d-918f-ec4219de9fe2",
+     "title": "Subtle"
+    },
+    {
+     "artist": "Vhsceral",
+     "artist_ids": [
+      "aa7aa839-d573-4e5c-937d-b39aa585cbb1"
+     ],
+     "index": 27,
+     "length": 149.546,
+     "medium": 1,
+     "medium_index": 27,
+     "recording_id": "1e59df5b-a4fc-4433-be97-807fe6737a20",
+     "title": "So Worth It"
+    },
+    {
+     "artist": "Mac Kay",
+     "artist_ids": [
+      "d3763320-3507-4cd6-9d1e-9bf2ef6bdc0f"
+     ],
+     "index": 28,
+     "length": 150.313,
+     "medium": 1,
+     "medium_index": 28,
+     "recording_id": "7656d15a-17bf-43bb-85f3-753f05c764fa",
+     "title": "Rubin"
+    }
+   ],
+   "va": true,
+   "year": 2025
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "01 Always White.mp3",
+    "sample_rate": null,
+    "size": 3653643
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "02 Cold Start.mp3",
+    "sample_rate": null,
+    "size": 5714403
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "03 At First There Was Rain.mp3",
+    "sample_rate": null,
+    "size": 4614509
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "04 Color Flow.mp3",
+    "sample_rate": null,
+    "size": 5760268
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "05 Night Waltz.mp3",
+    "sample_rate": null,
+    "size": 5479572
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "06 Akxnyte.mp3",
+    "sample_rate": null,
+    "size": 3260572
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "07 Machine Learning.mp3",
+    "sample_rate": null,
+    "size": 4814814
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "08 Last Month.mp3",
+    "sample_rate": null,
+    "size": 4256022
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "10 Strobelight.mp3",
+    "sample_rate": null,
+    "size": 3105064
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "11 Fireplace.mp3",
+    "sample_rate": null,
+    "size": 5249591
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "13 Citrus Snow.mp3",
+    "sample_rate": null,
+    "size": 6865886
+   }
+  ],
+  "folder": "downloads\\Chillhop Essentials_ Winter 2025",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1265,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d684752a-88ea-42b9-b2bc-bed075ef2114"
+     ],
+     "score": 0.99959373
+    }
+   ],
+   "artist": "dennisivnvc feat. Dani Catal\u00e1",
+   "disc": 1,
+   "high_band": null,
+   "length": 116.96956916099774,
+   "recording_id": "d684752a-88ea-42b9-b2bc-bed075ef2114",
+   "title": "Always White",
+   "track": 1,
+   "trailing_silence": 2.5796821609977343
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e1eb93b1-f1ca-4f6c-89e4-d83e139a64c2"
+     ],
+     "score": 0.99914294
+    }
+   ],
+   "artist": "Anbuu, Blue Wednesday",
+   "disc": 1,
+   "high_band": null,
+   "length": 185.95192743764173,
+   "recording_id": "e1eb93b1-f1ca-4f6c-89e4-d83e139a64c2",
+   "title": "Cold Start",
+   "track": 2,
+   "trailing_silence": 1.6472784376417167
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e4db5a41-1955-4c72-868b-db9871845d4f"
+     ],
+     "score": 0.9996044
+    }
+   ],
+   "artist": "goosetaf, Idan Morim",
+   "disc": 1,
+   "high_band": null,
+   "length": 146.05369614512472,
+   "recording_id": "e4db5a41-1955-4c72-868b-db9871845d4f",
+   "title": "At First There Was Rain",
+   "track": 3,
+   "trailing_silence": 1.7797961451247204
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e483888-3711-4525-b84d-0adcbd17c943"
+     ],
+     "score": 0.9995055
+    }
+   ],
+   "artist": "saib.",
+   "disc": 1,
+   "high_band": null,
+   "length": 179.91614512471656,
+   "recording_id": "1e483888-3711-4525-b84d-0adcbd17c943",
+   "title": "Color Flow",
+   "track": 4,
+   "trailing_silence": 4.356644124716553
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "69a9a31c-0a72-405d-84ce-941dae16e288",
+      "e8ecb06e-bf67-4250-8062-fa469aed506c"
+     ],
+     "score": 0.9987803
+    }
+   ],
+   "artist": "Sweeps, luv pug",
+   "disc": 1,
+   "high_band": null,
+   "length": 180.0715192743764,
+   "recording_id": "e8ecb06e-bf67-4250-8062-fa469aed506c",
+   "title": "Night Waltz",
+   "track": 5,
+   "trailing_silence": 2.095737274376404
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d8474820-78ae-4974-a562-d346275560d1"
+     ],
+     "score": 0.9989698
+    }
+   ],
+   "artist": "Philanthrope, invention_",
+   "disc": 1,
+   "high_band": null,
+   "length": 104.08680272108843,
+   "recording_id": "d8474820-78ae-4974-a562-d346275560d1",
+   "title": "Akxnyte",
+   "track": 6,
+   "trailing_silence": 2.2360087210884387
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e39808f-f858-4e2d-b695-8ab495105ef9"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "L\u2019ind\u00e9cis, \u00d8DYSSEE",
+   "disc": 1,
+   "high_band": null,
+   "length": 155.99600907029478,
+   "recording_id": "1e39808f-f858-4e2d-b695-8ab495105ef9",
+   "title": "Machine Learning",
+   "track": 7,
+   "trailing_silence": 2.6993420702947617
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e1ae236e-f0c7-428a-a068-f81b04af7feb"
+     ],
+     "score": 0.99897814
+    }
+   ],
+   "artist": "No Spirit",
+   "disc": 1,
+   "high_band": null,
+   "length": 138.85557823129253,
+   "recording_id": "e1ae236e-f0c7-428a-a068-f81b04af7feb",
+   "title": "Last Month",
+   "track": 8,
+   "trailing_silence": 1.8037642312925186
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8b4f2694-9490-44d7-800f-a3fe500347a6"
+     ],
+     "score": 0.9991922
+    }
+   ],
+   "artist": "TESK",
+   "disc": 1,
+   "high_band": null,
+   "length": 93.68299319727892,
+   "recording_id": "8b4f2694-9490-44d7-800f-a3fe500347a6",
+   "title": "Strobelight",
+   "track": 10,
+   "trailing_silence": 1.6374371972789135
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6a4d900d-7d28-40b5-92e1-af98a9187961"
+     ],
+     "score": 0.9982199
+    }
+   ],
+   "artist": "King I Divine",
+   "disc": 1,
+   "high_band": null,
+   "length": 164.9654648526077,
+   "recording_id": "6a4d900d-7d28-40b5-92e1-af98a9187961",
+   "title": "Fireplace",
+   "track": 11,
+   "trailing_silence": 1.7648068526077054
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7b9af38b-1749-41bc-bcf8-fd86dd6a4c74"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Aviino feat. Lozz",
+   "disc": 1,
+   "high_band": null,
+   "length": 224.76532879818595,
+   "recording_id": "7b9af38b-1749-41bc-bcf8-fd86dd6a4c74",
+   "title": "Citrus Snow",
+   "track": 13,
+   "trailing_silence": 2.010679798185947
+  }
+ ],
+ "labels": [
+  "partial",
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Chillhop Essentials: Winter 2025",
+  "albumdisambig": null,
+  "artist": "Various Artists",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "e6b2dd55-534d-4cce-823e-cc9915ef9f26",
+  "year": 2025
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 2.053982883475971e-05,
+  "final_action": null,
+  "scorer_version": 5,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "e6b2dd55-534d-4cce-823e-cc9915ef9f26"
+}

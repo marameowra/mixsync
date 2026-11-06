@@ -1,0 +1,117 @@
+{
+ "albums": [
+  {
+   "album": "Set Me Free",
+   "albumdisambig": "Bandcamp release",
+   "artist": "Friction",
+   "artist_ids": [
+    "6bab48a1-c3e0-4160-b574-f99fc7dfad9f"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "drum and bass",
+    "electronic"
+   ],
+   "label": "Elevate Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "37893df1-7751-4c75-b2be-a336932960cd",
+   "release_id": "5250c70e-9ef5-4af6-bb12-9391ec8ebb4f",
+   "tracks": [
+    {
+     "artist": "Friction",
+     "artist_ids": [
+      "6bab48a1-c3e0-4160-b574-f99fc7dfad9f"
+     ],
+     "index": 1,
+     "length": 249.633,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "52de1d59-3b4d-47c9-a79e-8767ad8099ad",
+     "title": "Set Me Free"
+    }
+   ],
+   "va": false,
+   "year": 2022
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Set Me Free.flac",
+    "sample_rate": null,
+    "size": 32116822
+   }
+  ],
+  "folder": "Friction\\Friction - Set Me Free (Bandcamp release)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2302,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "52de1d59-3b4d-47c9-a79e-8767ad8099ad",
+      "833b61b9-712e-4a18-9f1d-c2293ba8331a",
+      "f4fd2ae2-45f3-4e67-bd94-9dce5e6d2330"
+     ],
+     "score": 0.99884623
+    }
+   ],
+   "artist": "Friction",
+   "disc": 1,
+   "high_band": 0.007756750100706245,
+   "length": 223.52691609977325,
+   "recording_id": "52de1d59-3b4d-47c9-a79e-8767ad8099ad",
+   "title": "Set Me Free",
+   "track": 1,
+   "trailing_silence": 5.395102099773254
+  }
+ ],
+ "labels": [
+  "padded",
+  "accept"
+ ],
+ "likelies": {
+  "album": "Set Me Free",
+  "albumdisambig": null,
+  "artist": "Friction",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "5250c70e-9ef5-4af6-bb12-9391ec8ebb4f",
+  "year": 2022
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.012780158730158737,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": [
+   "'Set Me Free': duration off by 26s from 'Set Me Free'"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "5250c70e-9ef5-4af6-bb12-9391ec8ebb4f"
+}

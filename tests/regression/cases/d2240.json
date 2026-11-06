@@ -1,0 +1,433 @@
+{
+ "albums": [
+  {
+   "album": "OIL OF EVERY PEARL\u2019S UN\u2010INSIDES NON\u2010STOP REMIX ALBUM",
+   "albumdisambig": null,
+   "artist": "SOPHIE",
+   "artist_ids": [
+    "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+   ],
+   "catalognum": "TRANS432",
+   "country": "XW",
+   "genres": [
+    "electronic",
+    "experimental",
+    "pop"
+   ],
+   "label": "Transgressive Records",
+   "media": "Digital Media",
+   "mediums": 2,
+   "original_year": 2019,
+   "release_group_id": "87bbbb45-9ad7-45c7-8f36-63e73391d1aa",
+   "release_id": "03ff0fe4-0761-46f6-985e-95b0de1f0050",
+   "tracks": [
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 1,
+     "length": 265.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "68d3f90f-dc8d-47e0-9f1a-3d83fb393f1e",
+     "title": "COLD WORLD"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 2,
+     "length": 84.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "4c88e274-b2da-4a00-8da0-f9b5cff96d3b",
+     "title": "NOT OKAY (ALONE MIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 3,
+     "length": 191.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "1e9e250e-2872-4f23-83d8-37194d8ef5d9",
+     "title": "XTC ACID"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 4,
+     "length": 296.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "1454608b-eb2e-43da-8a65-b05a96d18dd9",
+     "title": "PONYBOY (MEGADOG)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 5,
+     "length": 327.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "91559475-0ffb-4bde-a1ee-e8e18b71e63b",
+     "title": "PUSH EMISSION (wHor3 moans)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 6,
+     "length": 344.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "ffd0b169-552f-41eb-ab31-28de6c9ec2a8",
+     "title": "PONYBOY (FAAST BOY REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 7,
+     "length": 164.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "7905bd23-487d-4b77-853a-7ee57465d8eb",
+     "title": "FACESHOPPING (LIPSTICK GEL REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 8,
+     "length": 104.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "eb098dcd-3a3d-4d3a-b5a2-aaab1f8943b1",
+     "title": "NOT OKAY (MACHINE WORLD REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 9,
+     "length": 210.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "756e658e-2fe8-472f-8f08-c13dea416356",
+     "title": "WHOLE NEW WORLD (SOPHIE AND DOSS REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 10,
+     "length": 308.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "1ade30b3-6be9-4901-94bb-6b9a5b94846a",
+     "title": "INFATUATION (LICHTBOGEN DREAMIN\u2019 REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 11,
+     "length": 313.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "5770b9b0-9370-4a51-9d5b-e90ddb8945d7",
+     "title": "FACESHOPPING (EUPHORIC REDUCE ME TO NOTHINGNESS REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 12,
+     "length": 242.0,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "8e1a0cc5-276d-45cd-a93c-ac3c80f77779",
+     "title": "PRETENDING I GIVE IN (LET GO)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 13,
+     "length": 367.0,
+     "medium": 2,
+     "medium_index": 1,
+     "recording_id": "bfb8b720-b38e-46c0-93c4-e90f7c0d4bdb",
+     "title": "PRETENDING (GLASSHOUSE)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 14,
+     "length": 188.0,
+     "medium": 2,
+     "medium_index": 2,
+     "recording_id": "9c2bbbb3-3233-4eb9-88c2-d8fe0814146f",
+     "title": "WHOLE NEW WORLD (BIG KISS REMIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 15,
+     "length": 251.0,
+     "medium": 2,
+     "medium_index": 3,
+     "recording_id": "7aab358c-e37f-48f4-9d37-9e6d7041773c",
+     "title": "PONY WHIP"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 16,
+     "length": 233.0,
+     "medium": 2,
+     "medium_index": 4,
+     "recording_id": "bfc3ed81-e412-49ab-a82a-67c9b259136e",
+     "title": "FACESHOPPING (MONEY MIX)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 17,
+     "length": 187.0,
+     "medium": 2,
+     "medium_index": 5,
+     "recording_id": "b1f17881-1497-4caa-8163-d2b1a2831ca9",
+     "title": "PRETEND WORLD (SHOP FRONT)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 18,
+     "length": 221.0,
+     "medium": 2,
+     "medium_index": 6,
+     "recording_id": "630c360e-f947-4445-a4a0-388aeb7958fb",
+     "title": "LASER"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 19,
+     "length": 221.0,
+     "medium": 2,
+     "medium_index": 7,
+     "recording_id": "9591c880-ec0f-492b-bfe8-a433038f1cab",
+     "title": "COLD WATER"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 20,
+     "length": 110.0,
+     "medium": 2,
+     "medium_index": 8,
+     "recording_id": "1c5411c2-c30d-44ae-a8e2-dfb9ad96e6b8",
+     "title": "DIVE (SDF)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 21,
+     "length": 66.0,
+     "medium": 2,
+     "medium_index": 9,
+     "recording_id": "b8162aaf-628a-4185-b3a1-fbf6e486298f",
+     "title": "INFATUATION (SUNLIGHT ZONE)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 22,
+     "length": 88.0,
+     "medium": 2,
+     "medium_index": 10,
+     "recording_id": "56fc6a9d-41a6-4c4a-98da-8207ec83e655",
+     "title": "INFATUATION (TWILIGHT ZONE)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 23,
+     "length": 355.0,
+     "medium": 2,
+     "medium_index": 11,
+     "recording_id": "df5ebae8-9b3d-42f2-819e-97223441f51d",
+     "title": "INFATUATION (MIDNIGHT ZONE)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 24,
+     "length": 59.0,
+     "medium": 2,
+     "medium_index": 12,
+     "recording_id": "cce67077-99db-4192-a6b2-e5174b6ffe1c",
+     "title": "INFATUATION (THE ABYSS)"
+    },
+    {
+     "artist": "SOPHIE",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde"
+     ],
+     "index": 25,
+     "length": 479.0,
+     "medium": 2,
+     "medium_index": 13,
+     "recording_id": "2c3c6f84-4c39-4315-a5a9-139d1f7c6fea",
+     "title": "INFATUATION (THE TRENCHES)"
+    }
+   ],
+   "va": false,
+   "year": 2019
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Ponyboy.flac",
+    "sample_rate": null,
+    "size": 25234023
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Faceshopping.flac",
+    "sample_rate": null,
+    "size": 30026743
+   }
+  ],
+  "folder": "SOPHIE\\SOPHIE - OIL OF EVERY PEARL'S UN-INSIDES",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2240,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c2335ed8-678c-4c19-a5b5-783326f8aafe"
+     ],
+     "score": 0.9662601
+    }
+   ],
+   "artist": "SOPHIE",
+   "disc": 1,
+   "high_band": 0.0012679099207842893,
+   "length": 194.43750566893425,
+   "recording_id": null,
+   "title": "Ponyboy",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0c7b9770-2183-43e7-8623-033fdad14b6b"
+     ],
+     "score": 0.9674314
+    }
+   ],
+   "artist": "SOPHIE",
+   "disc": 1,
+   "high_band": 0.003831749417034061,
+   "length": 236.93750566893425,
+   "recording_id": null,
+   "title": "Faceshopping",
+   "track": 3,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "reject"
+ ],
+ "likelies": {
+  "album": "OIL OF EVERY PEARL'S UN-INSIDES",
+  "albumdisambig": null,
+  "artist": "SOPHIE",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "03ff0fe4-0761-46f6-985e-95b0de1f0050",
+  "year": 2019
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.6687243365172519,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Ponyboy': AcoustID (0.97) says a different recording than 'WHOLE NEW WORLD (BIG KISS REMIX)' (9c2bbbb3-3233-4eb9-88c2-d8fe0814146f)",
+   "'Faceshopping': AcoustID (0.97) says a different recording than 'FACESHOPPING (MONEY MIX)' (bfc3ed81-e412-49ab-a82a-67c9b259136e)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "03ff0fe4-0761-46f6-985e-95b0de1f0050"
+}

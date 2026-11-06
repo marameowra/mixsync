@@ -18,7 +18,6 @@ Persistent state: SQLAlchemy models, Alembic migrations, the job queue, the oper
 - `match_decisions` is the calibration dataset ([matching](../../../docs/design/matching.md#calibration)). Never prune it.
 - MusicBrainz data: ids plus filterable fields only ([ADR 0011](../../../docs/decisions/0011-musicbrainz-ids-and-key-fields-only.md)).
 - Secrets are Fernet-encrypted with an operator-supplied key ([ADR 0010](../../../docs/decisions/0010-secret-key-source.md)).
-  > Planned — not built (#222): database backups.
 
 ## May import
 `core` only (plus SQLAlchemy, Alembic, cryptography).

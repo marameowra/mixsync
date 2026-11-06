@@ -20,8 +20,6 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Request budget**: The number of candidates a request may start downloading and then drop before it needs a person. _Avoid_: Retry limit, attempts
 
-> Planned, not built (#203): the 5-candidate cap in [ADR 0007](docs/decisions/0007-quarantine-owned-by-mixsync.md) is not in code yet.
-
 **Quarantine**: The place mixsync owns (`/data/quarantine`) where rejected and review candidates wait, apart from slskd's `/downloads`. _Avoid_: Failed imports, downloads
 
 **Release (a download)**: The journaled hard delete of a source file from `/downloads` after its library copy is hash-verified; the one allowed hard delete. _Avoid_: Delete, clean up
@@ -70,7 +68,7 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Unverified**: An item imported without a confident MusicBrainz match, tagged `MIXSYNC_STATUS=unverified`.
 
-**Suggestion**: Album and track details from a service other than MusicBrainz (Deezer, later Discogs), fetched only when a reviewer asks, to pre-fill Mark unverified. The reviewer still edits and submits; a suggestion never affects matching or makes an item verified. _Avoid_: Fallback match, secondary provider
+**Suggestion**: Album and track details from a service other than MusicBrainz (Deezer, Discogs), fetched only when a reviewer asks, to pre-fill Mark unverified. The reviewer still edits and submits; a suggestion never affects matching or makes an item verified. _Avoid_: Fallback match, secondary provider
 
 ### Watchlist and discovery
 

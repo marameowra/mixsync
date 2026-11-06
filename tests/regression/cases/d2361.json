@@ -1,0 +1,491 @@
+{
+ "albums": [
+  {
+   "album": "The Vibe Guide, Vol. 4",
+   "albumdisambig": null,
+   "artist": "Tep No",
+   "artist_ids": [
+    "7e3e0e05-e34c-450f-becf-b00572125048"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "deep house",
+    "dance",
+    "edm",
+    "house"
+   ],
+   "label": "Tep No Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "25682018-7135-4b69-b98b-0e70d75d5025",
+   "release_id": "9f1e1418-8212-486b-bb4b-a7197643cb47",
+   "tracks": [
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 1,
+     "length": 232.174,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "d6b41e35-640a-4a86-b1bd-29cec9b2a5f0",
+     "title": "Superpowers"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 2,
+     "length": 132.704,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "fe741d31-83da-4a18-ab81-b026da200735",
+     "title": "Bondi Beach"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 3,
+     "length": 211.377,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "8c5beac0-9158-4f48-b023-5b54c0306bd8",
+     "title": "The Best Part of Me"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 4,
+     "length": 192.681,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "4a2d1ccd-9644-4bf9-8ca6-372b43ba2682",
+     "title": "Thoughts"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 5,
+     "length": 193.11,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "09fc5d31-e382-4ff2-9d79-184572c1ee95",
+     "title": "The River"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 6,
+     "length": 196.25,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "049ba2cf-373b-4179-8680-cd9b0a008242",
+     "title": "Too Much Conversation (Took My Time)"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 7,
+     "length": 203.67,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "9fdd459f-7fe0-4bb5-be21-e31fea92e8c3",
+     "title": "She Don't Know How I Feel"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 8,
+     "length": 189.406,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "cf377304-c04f-47cd-b25b-077715f3bb2a",
+     "title": "For Eternity"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 9,
+     "length": 236.279,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "8430ee52-398b-4c91-9165-cb99a08c5e25",
+     "title": "Pacing"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 10,
+     "length": 173.673,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "f1a8fa08-1052-493e-8116-452b453e3a47",
+     "title": "Drown in Your Love"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 11,
+     "length": 145.179,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "c3058a07-466a-4fd3-bdd5-5a7facfc0be9",
+     "title": "Chronically Online"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 219,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 01 - Warm Sand and Hot Summer Nights.flac",
+    "sample_rate": 44100,
+    "size": 21034351
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 131,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 02 - So Late, Babe.flac",
+    "sample_rate": 44100,
+    "size": 15482838
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 311,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 03 - Pomegranate Seeds (Tep No remix).flac",
+    "sample_rate": 44100,
+    "size": 31810132
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 222,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 04 - Wish I Made This Song for You.flac",
+    "sample_rate": 44100,
+    "size": 26561529
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 216,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 05 - Gravity Bends.flac",
+    "sample_rate": 44100,
+    "size": 25285349
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 205,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 06 - Right Here Now.flac",
+    "sample_rate": 44100,
+    "size": 24809584
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 271,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 07 - Bliss (Au-del\u00e0 des mots).flac",
+    "sample_rate": 44100,
+    "size": 28894034
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 208,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 08 - The Last Ones Standing.flac",
+    "sample_rate": 44100,
+    "size": 24569435
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 119,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 09 - Damn Babe.flac",
+    "sample_rate": 44100,
+    "size": 19786278
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 236,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 3 (2025)\\Tep No - The Vibe Guide, Vol. 3 - 10 - Pacing.flac",
+    "sample_rate": 44100,
+    "size": 28354230
+   }
+  ],
+  "folder": "Temp Artists Location\\The Vibe Guide, Vol. 3 (2025)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 959337,
+  "username": "peer-8fca2cb3"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2361,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 3.029951661383232e-06,
+   "length": 219.50614512471654,
+   "recording_id": "810d0632-1b0f-4565-b2ff-533307c3cd0e",
+   "title": "Warm Sand and Hot Summer Nights",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00013460273982571856,
+   "length": 131.63061224489795,
+   "recording_id": "da12845d-b4ed-492e-b773-2e3d1d441fa6",
+   "title": "So Late, Babe",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "KATZROAR",
+   "disc": 1,
+   "high_band": 1.0052065272601805e-05,
+   "length": 311.33,
+   "recording_id": "3522b0a2-a6ed-41eb-91f0-a68032c34fee",
+   "title": "Pomegranate Seeds (Tep No remix)",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9999011
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00021546210576551958,
+   "length": 222.15281179138321,
+   "recording_id": "27bfc2bd-f327-4285-a9cf-bdf323d3c1dd",
+   "title": "Wish I Made This Song for You",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00034333802136329107,
+   "length": 216.40319727891156,
+   "recording_id": "d32c10ba-2ad6-480a-b681-3c7e17260d1a",
+   "title": "Gravity Bends",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9997363
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0002913128217850752,
+   "length": 205.07609977324262,
+   "recording_id": "edd7b994-6224-4e46-b6f6-653930db2b43",
+   "title": "Right Here Now",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 6.696460323717696e-05,
+   "length": 271.3309523809524,
+   "recording_id": "b8f5b39b-f5ea-45c1-9b39-a3eaf51c7393",
+   "title": "Bliss (Au-del\u00e0 des mots)",
+   "track": 7,
+   "trailing_silence": 1.0245123809523875
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "feb52262-835f-477c-b07d-48c92c8d1567"
+     ],
+     "score": 0.97359574
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00031241321777630425,
+   "length": 208.3859410430839,
+   "recording_id": "feb52262-835f-477c-b07d-48c92c8d1567",
+   "title": "The Last Ones Standing",
+   "track": 8,
+   "trailing_silence": 1.1814060430839106
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0008260065667993019,
+   "length": 119.01755102040816,
+   "recording_id": "8e820cd1-ab02-4c39-8aef-fffe7ba84955",
+   "title": "Damn Babe",
+   "track": 9,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8430ee52-398b-4c91-9165-cb99a08c5e25"
+     ],
+     "score": 0.96080565
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0003212236406866483,
+   "length": 236.27913832199548,
+   "recording_id": "8430ee52-398b-4c91-9165-cb99a08c5e25",
+   "title": "Pacing",
+   "track": 10,
+   "trailing_silence": 1.285328321995479
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch",
+  "transcode",
+  "padded"
+ ],
+ "likelies": {
+  "album": "The Vibe Guide, Vol. 3",
+  "albumdisambig": null,
+  "artist": "Tep No",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "524595b5-6f18-4cf2-9058-1ab0cd6be62a",
+  "year": 2025
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.6003699635619332,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'Warm Sand and Hot Summer Nights': looks transcoded: almost nothing above 16 kHz",
+   "'Warm Sand and Hot Summer Nights': tagged as recording 810d0632-1b0f-4565-b2ff-533307c3cd0e, matched to 'Superpowers' (d6b41e35-640a-4a86-b1bd-29cec9b2a5f0)",
+   "'So Late, Babe': tagged as recording da12845d-b4ed-492e-b773-2e3d1d441fa6, matched to 'Bondi Beach' (fe741d31-83da-4a18-ab81-b026da200735)",
+   "'Pomegranate Seeds (Tep No remix)': duration off by 100s from 'The Best Part of Me'",
+   "'Pomegranate Seeds (Tep No remix)': tagged as recording 3522b0a2-a6ed-41eb-91f0-a68032c34fee, matched to 'The Best Part of Me' (8c5beac0-9158-4f48-b023-5b54c0306bd8)",
+   "'Wish I Made This Song for You': duration off by 29s from 'Thoughts'",
+   "'Wish I Made This Song for You': tagged as recording 27bfc2bd-f327-4285-a9cf-bdf323d3c1dd, matched to 'Thoughts' (4a2d1ccd-9644-4bf9-8ca6-372b43ba2682)",
+   "'Gravity Bends': duration off by 23s from 'The River'",
+   "'Gravity Bends': tagged as recording d32c10ba-2ad6-480a-b681-3c7e17260d1a, matched to 'The River' (09fc5d31-e382-4ff2-9d79-184572c1ee95)",
+   "'Right Here Now': tagged as recording edd7b994-6224-4e46-b6f6-653930db2b43, matched to 'Too Much Conversation (Took My Time)' (049ba2cf-373b-4179-8680-cd9b0a008242)",
+   "'Bliss (Au-del\u00e0 des mots)': duration off by 68s from \"She Don't Know How I Feel\"",
+   "'Bliss (Au-del\u00e0 des mots)': tagged as recording b8f5b39b-f5ea-45c1-9b39-a3eaf51c7393, matched to \"She Don't Know How I Feel\" (9fdd459f-7fe0-4bb5-be21-e31fea92e8c3)",
+   "'The Last Ones Standing': duration off by 19s from 'For Eternity'",
+   "'The Last Ones Standing': tagged as recording feb52262-835f-477c-b07d-48c92c8d1567, matched to 'For Eternity' (cf377304-c04f-47cd-b25b-077715f3bb2a)",
+   "'The Last Ones Standing': AcoustID (0.97) says a different recording than 'For Eternity' (cf377304-c04f-47cd-b25b-077715f3bb2a)",
+   "'Damn Babe': duration off by 26s from 'Chronically Online'",
+   "'Damn Babe': tagged as recording 8e820cd1-ab02-4c39-8aef-fffe7ba84955, matched to 'Chronically Online' (c3058a07-466a-4fd3-bdd5-5a7facfc0be9)"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "9f1e1418-8212-486b-bb4b-a7197643cb47"
+}

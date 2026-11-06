@@ -1,0 +1,203 @@
+{
+ "albums": [
+  {
+   "album": "BLUE",
+   "albumdisambig": null,
+   "artist": "Lemaitre",
+   "artist_ids": [
+    "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "dance"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2024,
+   "release_group_id": "40a3e9ee-9e70-4a4d-98c0-d1c98b6c12f3",
+   "release_id": "62b3dbc2-1d98-498a-9897-8189769de7e8",
+   "tracks": [
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 1,
+     "length": 148.205,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "aabf36c5-eda1-42f1-bc0a-f73c1f0f828d",
+     "title": "Died At The Party"
+    },
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 2,
+     "length": 244.723,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "59057156-02d6-428f-add7-ee16ae556041",
+     "title": "Care"
+    },
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 3,
+     "length": 148.234,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "ec45fed1-bb24-4902-834f-7fdf63a90dbe",
+     "title": "All My Friends"
+    },
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 4,
+     "length": 159.346,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "30d41cb3-8b85-45e2-9607-ceecd7654e2c",
+     "title": "Forever"
+    }
+   ],
+   "va": false,
+   "year": 2024
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0101 - Died At The Party.flac",
+    "sample_rate": null,
+    "size": 17227586
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0102 - Care.flac",
+    "sample_rate": null,
+    "size": 28202564
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0103 - All My Friends.flac",
+    "sample_rate": null,
+    "size": 17475804
+   }
+  ],
+  "folder": "downloads\\Lemaitre - EP - 2024 - BLUE",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2220,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "aabf36c5-eda1-42f1-bc0a-f73c1f0f828d"
+     ],
+     "score": 0.9865836
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 0.000136179959285863,
+   "length": 148.20514739229026,
+   "recording_id": "aabf36c5-eda1-42f1-bc0a-f73c1f0f828d",
+   "title": "Died At The Party",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "59057156-02d6-428f-add7-ee16ae556041"
+     ],
+     "score": 0.96766216
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 5.38850512189534e-05,
+   "length": 244.72383219954648,
+   "recording_id": "59057156-02d6-428f-add7-ee16ae556041",
+   "title": "Care",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ec45fed1-bb24-4902-834f-7fdf63a90dbe"
+     ],
+     "score": 0.9917919
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 0.00020192593382840738,
+   "length": 148.234126984127,
+   "recording_id": "ec45fed1-bb24-4902-834f-7fdf63a90dbe",
+   "title": "All My Friends",
+   "track": 3,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "BLUE",
+  "albumdisambig": null,
+  "artist": "Lemaitre",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "62b3dbc2-1d98-498a-9897-8189769de7e8",
+  "year": 2024
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.04761904761904762,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "62b3dbc2-1d98-498a-9897-8189769de7e8"
+}

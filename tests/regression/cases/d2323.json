@@ -1,0 +1,113 @@
+{
+ "albums": [
+  {
+   "album": "poster",
+   "albumdisambig": null,
+   "artist": "Oaf1",
+   "artist_ids": [
+    "64a45367-c96d-402b-8994-b481253122e0"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "trance"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2020,
+   "release_group_id": "238051f6-8a5a-4416-ba24-88a6e61867cb",
+   "release_id": "1ccbeb9b-e823-4e17-9992-5734da267896",
+   "tracks": [
+    {
+     "artist": "Oaf1",
+     "artist_ids": [
+      "64a45367-c96d-402b-8994-b481253122e0"
+     ],
+     "index": 1,
+     "length": 121.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "01e0cc1f-1087-4ee8-8ab4-cab1c83066ea",
+     "title": "poster"
+    }
+   ],
+   "va": false,
+   "year": 2020
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - poster.flac",
+    "sample_rate": null,
+    "size": 12919164
+   }
+  ],
+  "folder": "Cardingfraud\\Cardingfraud - poster",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2323,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "01e0cc1f-1087-4ee8-8ab4-cab1c83066ea"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Cardingfraud",
+   "disc": 1,
+   "high_band": 7.124339385924463e-06,
+   "length": 121.87934240362812,
+   "recording_id": null,
+   "title": "poster",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "transcode"
+ ],
+ "likelies": {
+  "album": "poster",
+  "albumdisambig": null,
+  "artist": "Cardingfraud",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2019
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.2962962962962963,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'poster': looks transcoded: almost nothing above 16 kHz"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "1ccbeb9b-e823-4e17-9992-5734da267896"
+}

@@ -1,0 +1,113 @@
+{
+ "albums": [
+  {
+   "album": "About You Now",
+   "albumdisambig": null,
+   "artist": "Otto Benson",
+   "artist_ids": [
+    "bb131df0-022a-43db-89fa-c91df22fcb13"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [],
+   "label": "PLZ Make It Ruins",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2020,
+   "release_group_id": "96df16fb-36f3-41d5-a10d-6345fa52c593",
+   "release_id": "e0df9c14-dfb7-4c64-ba90-6cf27e8bee77",
+   "tracks": [
+    {
+     "artist": "Otto Benson & Max Beirne-Shafer",
+     "artist_ids": [
+      "bb131df0-022a-43db-89fa-c91df22fcb13",
+      "e8cb645b-760b-41a8-bf66-a8f448f816ee"
+     ],
+     "index": 1,
+     "length": 218.786,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "6cadccb0-0922-4f6f-b342-418df107b5a7",
+     "title": "About You Now"
+    }
+   ],
+   "va": false,
+   "year": 2020
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - About You Now.flac",
+    "sample_rate": null,
+    "size": 40152060
+   }
+  ],
+  "folder": "Otto Benson\\Otto Benson - About You Now",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2230,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "bf46f046-6af3-44c0-9ee0-92f97b7eb96b"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "OTTO",
+   "disc": 1,
+   "high_band": 5.957984924715329e-05,
+   "length": 218.78666666666666,
+   "recording_id": "6cadccb0-0922-4f6f-b342-418df107b5a7",
+   "title": "About You Now",
+   "track": 1,
+   "trailing_silence": 1.7692286666666632
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "accept"
+ ],
+ "likelies": {
+  "album": "About You Now",
+  "albumdisambig": null,
+  "artist": "OTTO",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "e0df9c14-dfb7-4c64-ba90-6cf27e8bee77",
+  "year": 2020
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.1880952380952381,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": [
+   "'About You Now': AcoustID (1.00) says a different recording than 'About You Now' (6cadccb0-0922-4f6f-b342-418df107b5a7)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "e0df9c14-dfb7-4c64-ba90-6cf27e8bee77"
+}

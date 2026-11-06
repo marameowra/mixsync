@@ -1,0 +1,1079 @@
+{
+ "albums": [
+  {
+   "album": "Chillhop Essentials: Spring 2021",
+   "albumdisambig": "green opaque vinyl",
+   "artist": "Various Artists",
+   "artist_ids": [
+    "89ad4ac3-39f7-470e-963a-56509c546377"
+   ],
+   "catalognum": "[none]",
+   "country": "NL",
+   "genres": [
+    "hip hop",
+    "boom bap",
+    "chillout",
+    "chillwave",
+    "downtempo",
+    "instrumental",
+    "instrumental hip hop",
+    "jazz fusion",
+    "lo-fi",
+    "lo-fi hip hop",
+    "trip hop"
+   ],
+   "label": "Chillhop Music",
+   "media": "12\" Vinyl",
+   "mediums": 2,
+   "original_year": 2021,
+   "release_group_id": "919bdac5-7199-4ea0-a393-9d8d20c19c94",
+   "release_id": "e39a3f2e-dda7-47df-9970-56989307b597",
+   "tracks": [
+    {
+     "artist": "Ruck P",
+     "artist_ids": [
+      "41acb869-cc1c-4184-8457-b1bf80e78ea3"
+     ],
+     "index": 1,
+     "length": 140.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "01284e0b-9d6e-438e-b4cf-72464121e926",
+     "title": "Sunrise Hike"
+    },
+    {
+     "artist": "Blue Wednesday, Magnus Klausen",
+     "artist_ids": [
+      "1077e53e-c8e8-4492-9813-31f71677e6f9",
+      "de920962-e790-4a46-b0e9-a901030cf408"
+     ],
+     "index": 2,
+     "length": 134.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "adf68fc4-beb1-4784-8e95-584097169acd",
+     "title": "Runaway"
+    },
+    {
+     "artist": "Anbuu",
+     "artist_ids": [
+      "66a0a274-5511-445e-b4b0-231e0dac9af0"
+     ],
+     "index": 3,
+     "length": 148.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "a96be064-d1d0-4402-a523-f124db7ebf81",
+     "title": "Traveling"
+    },
+    {
+     "artist": "iamalex, azula, Dayle",
+     "artist_ids": [
+      "4e05f2f2-ecc5-4ce4-b053-34aefec75e60",
+      "ec1335f2-6c43-4a4e-9cbd-4b2842c76632",
+      "9d24fa43-a37f-4db4-8869-9cdc1f2df56a"
+     ],
+     "index": 4,
+     "length": 121.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "dac2d8e7-2746-4d17-90cf-a927727d39e6",
+     "title": "Meadow"
+    },
+    {
+     "artist": "Mama Aiuto",
+     "artist_ids": [
+      "94af4360-87d3-4b12-bccd-5dc1c0937cf2"
+     ],
+     "index": 5,
+     "length": 127.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "6a9cd650-838e-4878-a311-912305973b12",
+     "title": "Mt. Elsewhere"
+    },
+    {
+     "artist": "Stan Forebee",
+     "artist_ids": [
+      "13d95485-6e88-45d9-a9cc-feb99f5a1d18"
+     ],
+     "index": 6,
+     "length": 168.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "46228782-9a65-43a4-ac64-0e8afa68a17b",
+     "title": "Along the Yarra"
+    },
+    {
+     "artist": "Sleepy Fish",
+     "artist_ids": [
+      "55913d64-5188-4afb-a294-64df35e5c749"
+     ],
+     "index": 7,
+     "length": 163.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "091c430e-754a-4c4a-94c8-4e0145e86f2b",
+     "title": "Parksong"
+    },
+    {
+     "artist": "Birocratic, Brock Berrigan, iamalex, Philanthrope",
+     "artist_ids": [
+      "aced72fe-4a86-4658-842f-cd25ee53b59b",
+      "c10c7e25-78db-494d-91b8-3e66fb0fa021",
+      "4e05f2f2-ecc5-4ce4-b053-34aefec75e60",
+      "8033e863-c3e3-4dfc-9255-bd3a67eae181"
+     ],
+     "index": 8,
+     "length": 160.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "62838f63-86e8-4058-8b58-9f6ae4637aa8",
+     "title": "Brockoli"
+    },
+    {
+     "artist": "Misha, Screen Jazzmaster",
+     "artist_ids": [
+      "da31f94b-86c4-4611-8f59-ce4910079ead",
+      "e6e47393-a27e-4979-8174-c77d81885fc5"
+     ],
+     "index": 9,
+     "length": 181.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "2ddcc2e2-9fc3-4e35-b5ef-38f3c91e77d1",
+     "title": "Memories"
+    },
+    {
+     "artist": "Hanz, Makzo",
+     "artist_ids": [
+      "78ff50dc-edd5-49da-9698-0c1e26d74420",
+      "603756ad-5eb9-4c48-81b3-e61669cdd14b"
+     ],
+     "index": 10,
+     "length": 120.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "0a68a71c-1597-47f5-b65a-2366956af891",
+     "title": "Tall"
+    },
+    {
+     "artist": "Enzalla",
+     "artist_ids": [
+      "279abdad-98c0-486d-ae60-2ca01c497214"
+     ],
+     "index": 11,
+     "length": 170.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "12c1ee62-d602-40db-a5cf-e0f0882bbaaa",
+     "title": "Sailing on a Flying Boat"
+    },
+    {
+     "artist": "Flawed Mangoes",
+     "artist_ids": [
+      "736c4c01-029f-42d2-8a1e-ff87f65073fa"
+     ],
+     "index": 12,
+     "length": 220.0,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "70a81447-3a4c-4cb0-b16d-0879c7babec4",
+     "title": "Point in Space and Time"
+    },
+    {
+     "artist": "\u00d8DYSSEE",
+     "artist_ids": [
+      "e099e006-e993-4c2f-8cee-30b1f51d235e"
+     ],
+     "index": 13,
+     "length": 207.0,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "b7c8b863-dcb3-43cc-b1bb-3162ad72b4e7",
+     "title": "R\u00eaverie"
+    },
+    {
+     "artist": "Philanthrope, G Mills",
+     "artist_ids": [
+      "8033e863-c3e3-4dfc-9255-bd3a67eae181",
+      "cbad43e0-f510-4deb-a979-26a5ea8c24b7"
+     ],
+     "index": 14,
+     "length": 125.0,
+     "medium": 2,
+     "medium_index": 1,
+     "recording_id": "8a3d8b82-2a30-4736-92cc-007fc802d6c4",
+     "title": "Sand Castles"
+    },
+    {
+     "artist": "Gustav Gustav",
+     "artist_ids": [
+      "4d841c49-b9a8-4c60-8171-8e9f445c69b9"
+     ],
+     "index": 15,
+     "length": 112.0,
+     "medium": 2,
+     "medium_index": 2,
+     "recording_id": "b28918d6-cb3b-489b-bb8b-6a6a91dc7517",
+     "title": "Feels"
+    },
+    {
+     "artist": "C Y G N",
+     "artist_ids": [
+      "78666e83-2fe4-4473-9470-1a919d89ae94"
+     ],
+     "index": 16,
+     "length": 206.0,
+     "medium": 2,
+     "medium_index": 3,
+     "recording_id": "f093d743-7110-4c8a-8e17-2edcb19b1f5d",
+     "title": "Leitmotiv"
+    },
+    {
+     "artist": "chromonicci",
+     "artist_ids": [
+      "56ee44d2-7168-4e4e-b3f1-59eb7938e692"
+     ],
+     "index": 17,
+     "length": 157.0,
+     "medium": 2,
+     "medium_index": 4,
+     "recording_id": "63e69fc3-aa4d-43e5-9af0-54810379c547",
+     "title": "Peace."
+    },
+    {
+     "artist": "Aviino",
+     "artist_ids": [
+      "f139ed2a-74a1-4670-8700-c3368a05175c"
+     ],
+     "index": 18,
+     "length": 211.0,
+     "medium": 2,
+     "medium_index": 5,
+     "recording_id": "1888d399-e209-4582-831b-ba2f1773e056",
+     "title": "Bloom"
+    },
+    {
+     "artist": "arbour",
+     "artist_ids": [
+      "af0f34ae-01f3-4c65-b9b8-934964312c96"
+     ],
+     "index": 19,
+     "length": 169.0,
+     "medium": 2,
+     "medium_index": 6,
+     "recording_id": "3aa31ad1-f4d2-4642-a53f-6f23f5e6b657",
+     "title": "Daffodil"
+    },
+    {
+     "artist": "Oatmello, Guavas",
+     "artist_ids": [
+      "f5c1fa9f-3b58-43a7-a900-3a53f31985d3",
+      "2ecc681b-742a-4212-81c5-fdae68512a0a"
+     ],
+     "index": 20,
+     "length": 104.0,
+     "medium": 2,
+     "medium_index": 7,
+     "recording_id": "0fba38d0-57b7-4d74-a5a7-4df9f27c0c2f",
+     "title": "Libra"
+    },
+    {
+     "artist": "SwuM, Delayde",
+     "artist_ids": [
+      "07236348-572d-4a28-9405-a547b5c968d4",
+      "af54ca49-3226-4ac1-8b46-73dc52ea907a"
+     ],
+     "index": 21,
+     "length": 133.0,
+     "medium": 2,
+     "medium_index": 8,
+     "recording_id": "9daefb41-b196-41a9-bcd5-32597744695c",
+     "title": "Motions"
+    },
+    {
+     "artist": "Loop Schrauber",
+     "artist_ids": [
+      "baebb0eb-4132-48b1-85c9-ad059136e02e"
+     ],
+     "index": 22,
+     "length": 141.0,
+     "medium": 2,
+     "medium_index": 9,
+     "recording_id": "7c2f2287-a2ef-4fa5-992a-ec839b3746ea",
+     "title": "Bud"
+    },
+    {
+     "artist": "COMODO",
+     "artist_ids": [
+      "b2a3ecf2-c08a-40a4-afb9-129964f9d20b"
+     ],
+     "index": 23,
+     "length": 127.0,
+     "medium": 2,
+     "medium_index": 10,
+     "recording_id": "46ee3934-e9f7-49e3-9347-5fb0f3f73409",
+     "title": "Lone Wolf"
+    },
+    {
+     "artist": "illiterate, Josh Wells",
+     "artist_ids": [
+      "ddd4fee9-a691-4a77-9c6d-6a888372a022",
+      "91c08459-de1f-469f-bad0-5ed45ca71920"
+     ],
+     "index": 24,
+     "length": 185.0,
+     "medium": 2,
+     "medium_index": 11,
+     "recording_id": "56742cad-19f4-4fe8-b935-62d1e9c853c1",
+     "title": "Leafy"
+    },
+    {
+     "artist": "Psalm Trees, Guillaume Muschalle ft. Julien Brunard",
+     "artist_ids": [
+      "8e5038b0-f71f-4951-aa26-542cdfe9280a",
+      "e299faf0-5330-47fa-ad31-148a92a551eb",
+      "939ce044-d83c-4a36-8da4-877a4899c36b"
+     ],
+     "index": 25,
+     "length": 212.0,
+     "medium": 2,
+     "medium_index": 12,
+     "recording_id": "1ef7a73e-d094-425e-9ffd-6eda4661eaa6",
+     "title": "Days Go By"
+    },
+    {
+     "artist": "HM Surf",
+     "artist_ids": [
+      "99905c35-b758-4677-a56a-4ec907d2b448"
+     ],
+     "index": 26,
+     "length": 123.0,
+     "medium": 2,
+     "medium_index": 13,
+     "recording_id": "d7fb2e6a-0aea-4600-8bb3-aca81160d495",
+     "title": "Sunshine"
+    }
+   ],
+   "va": true,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.01 - Sunrise Hike.flac",
+    "sample_rate": null,
+    "size": 18256777
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.02 - Runaway.flac",
+    "sample_rate": null,
+    "size": 15344647
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.03 - Traveling.flac",
+    "sample_rate": null,
+    "size": 14617999
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.04 - Meadow.flac",
+    "sample_rate": null,
+    "size": 27904788
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.05 - Mt. Elsewhere.flac",
+    "sample_rate": null,
+    "size": 17086597
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.06 - Along the Yarra.flac",
+    "sample_rate": null,
+    "size": 19771819
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.07 - Parksong.flac",
+    "sample_rate": null,
+    "size": 19433308
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.08 - Brockoli.flac",
+    "sample_rate": null,
+    "size": 19494883
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.09 - Memories.flac",
+    "sample_rate": null,
+    "size": 19443681
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.10 - Tall.flac",
+    "sample_rate": null,
+    "size": 14716390
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.11 - Sailing on a Flying Boat.flac",
+    "sample_rate": null,
+    "size": 19197752
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.12 - Point in Space and Time.flac",
+    "sample_rate": null,
+    "size": 22573029
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01.13 - R\u00eaverie.flac",
+    "sample_rate": null,
+    "size": 21653372
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.01 - Sand Castles.flac",
+    "sample_rate": null,
+    "size": 17032382
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.02 - Feels.flac",
+    "sample_rate": null,
+    "size": 14656469
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.03 - Leitmotiv.flac",
+    "sample_rate": null,
+    "size": 24182175
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.04 - Peace.flac",
+    "sample_rate": null,
+    "size": 19553851
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.05 - Bloom.flac",
+    "sample_rate": null,
+    "size": 22370519
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.06 - Daffodil.flac",
+    "sample_rate": null,
+    "size": 19773567
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.07 - Libra.flac",
+    "sample_rate": null,
+    "size": 12443976
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.09 - Bud.flac",
+    "sample_rate": null,
+    "size": 17137747
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.11 - Leafy.flac",
+    "sample_rate": null,
+    "size": 19706310
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.12 - Days Go By.flac",
+    "sample_rate": null,
+    "size": 22859214
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02.13 - Sunshine.flac",
+    "sample_rate": null,
+    "size": 15080008
+   }
+  ],
+  "folder": "downloads\\2021 - Chillhop Essentials - Spring 2021",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1257,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "01284e0b-9d6e-438e-b4cf-72464121e926"
+     ],
+     "score": 0.9988133
+    }
+   ],
+   "artist": "Ruck P",
+   "disc": 1,
+   "high_band": 5.800921653741451e-06,
+   "length": 140.5554195011338,
+   "recording_id": "01284e0b-9d6e-438e-b4cf-72464121e926",
+   "title": "Sunrise Hike",
+   "track": 1,
+   "trailing_silence": 1.9680495011338053
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "adf68fc4-beb1-4784-8e95-584097169acd"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "Blue Wednesday",
+   "disc": 1,
+   "high_band": 2.340018010107633e-07,
+   "length": 134.3885260770975,
+   "recording_id": "adf68fc4-beb1-4784-8e95-584097169acd",
+   "title": "Runaway",
+   "track": 2,
+   "trailing_silence": 3.774875077097505
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a96be064-d1d0-4402-a523-f124db7ebf81"
+     ],
+     "score": 0.99963737
+    }
+   ],
+   "artist": "Anbuu",
+   "disc": 1,
+   "high_band": 2.5434089781511634e-06,
+   "length": 148.58324263038548,
+   "recording_id": "a96be064-d1d0-4402-a523-f124db7ebf81",
+   "title": "Traveling",
+   "track": 3,
+   "trailing_silence": 4.15725663038549
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "dac2d8e7-2746-4d17-90cf-a927727d39e6"
+     ],
+     "score": 0.99884623
+    }
+   ],
+   "artist": "iamalex",
+   "disc": 1,
+   "high_band": 0.00012757330300303468,
+   "length": 121.87859410430839,
+   "recording_id": "dac2d8e7-2746-4d17-90cf-a927727d39e6",
+   "title": "Meadow",
+   "track": 4,
+   "trailing_silence": 3.091134104308395
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6a9cd650-838e-4878-a311-912305973b12"
+     ],
+     "score": 0.9980551
+    }
+   ],
+   "artist": "Mama Aiuto",
+   "disc": 1,
+   "high_band": 8.451254885478068e-06,
+   "length": 127.20190476190476,
+   "recording_id": "6a9cd650-838e-4878-a311-912305973b12",
+   "title": "Mt. Elsewhere",
+   "track": 5,
+   "trailing_silence": 3.1910657619047527
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "46228782-9a65-43a4-ac64-0e8afa68a17b"
+     ],
+     "score": 0.9989452
+    }
+   ],
+   "artist": "Stan Forebee",
+   "disc": 1,
+   "high_band": 6.181430632626812e-05,
+   "length": 168.97240362811792,
+   "recording_id": "46228782-9a65-43a4-ac64-0e8afa68a17b",
+   "title": "Along the Yarra",
+   "track": 6,
+   "trailing_silence": 2.753673628117923
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "091c430e-754a-4c4a-94c8-4e0145e86f2b"
+     ],
+     "score": 0.9989452
+    }
+   ],
+   "artist": "sleepy fish",
+   "disc": 1,
+   "high_band": 2.0894135172354382e-05,
+   "length": 163.0036961451247,
+   "recording_id": "091c430e-754a-4c4a-94c8-4e0145e86f2b",
+   "title": "Parksong",
+   "track": 7,
+   "trailing_silence": 3.850181145124708
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "62838f63-86e8-4058-8b58-9f6ae4637aa8"
+     ],
+     "score": 0.9987803
+    }
+   ],
+   "artist": "Birocratic",
+   "disc": 1,
+   "high_band": 2.1514056260709455e-06,
+   "length": 160.67185941043084,
+   "recording_id": "62838f63-86e8-4058-8b58-9f6ae4637aa8",
+   "title": "Brockoli",
+   "track": 8,
+   "trailing_silence": 3.681610410430835
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2ddcc2e2-9fc3-4e35-b5ef-38f3c91e77d1"
+     ],
+     "score": 0.999077
+    }
+   ],
+   "artist": "Misha",
+   "disc": 1,
+   "high_band": 2.2665066623691296e-05,
+   "length": 181.9892290249433,
+   "recording_id": "2ddcc2e2-9fc3-4e35-b5ef-38f3c91e77d1",
+   "title": "Memories",
+   "track": 9,
+   "trailing_silence": 3.745488024943313
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0a68a71c-1597-47f5-b65a-2366956af891"
+     ],
+     "score": 0.99920887
+    }
+   ],
+   "artist": "Hanz",
+   "disc": 1,
+   "high_band": 1.5898018572401439e-06,
+   "length": 120.94272108843538,
+   "recording_id": "0a68a71c-1597-47f5-b65a-2366956af891",
+   "title": "Tall",
+   "track": 10,
+   "trailing_silence": 3.332562088435381
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12c1ee62-d602-40db-a5cf-e0f0882bbaaa"
+     ],
+     "score": 0.99831885
+    }
+   ],
+   "artist": "Enzalla",
+   "disc": 1,
+   "high_band": 2.797428531381594e-06,
+   "length": 170.37648526077098,
+   "recording_id": "12c1ee62-d602-40db-a5cf-e0f0882bbaaa",
+   "title": "Sailing on a Flying Boat",
+   "track": 11,
+   "trailing_silence": 1.8308162607709733
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "70a81447-3a4c-4cb0-b16d-0879c7babec4"
+     ],
+     "score": 0.9995055
+    }
+   ],
+   "artist": "Flawed Mangoes",
+   "disc": 1,
+   "high_band": 3.142260600413197e-05,
+   "length": 220.79814058956916,
+   "recording_id": "70a81447-3a4c-4cb0-b16d-0879c7babec4",
+   "title": "Point in Space and Time",
+   "track": 12,
+   "trailing_silence": 2.90251658956916
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b7c8b863-dcb3-43cc-b1bb-3162ad72b4e7"
+     ],
+     "score": 0.9987144
+    }
+   ],
+   "artist": "\u00d8DYSSEE",
+   "disc": 1,
+   "high_band": 6.676857385363886e-05,
+   "length": 207.11528344671203,
+   "recording_id": "b7c8b863-dcb3-43cc-b1bb-3162ad72b4e7",
+   "title": "R\u00eaverie",
+   "track": 13,
+   "trailing_silence": 1.999274446712036
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8a3d8b82-2a30-4736-92cc-007fc802d6c4"
+     ],
+     "score": 0.99874735
+    }
+   ],
+   "artist": "Philanthrope",
+   "disc": 2,
+   "high_band": 0.00011726607792373413,
+   "length": 125.75698412698412,
+   "recording_id": "8a3d8b82-2a30-4736-92cc-007fc802d6c4",
+   "title": "Sand Castles",
+   "track": 1,
+   "trailing_silence": 3.7740131269841157
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b28918d6-cb3b-489b-bb8b-6a6a91dc7517"
+     ],
+     "score": 0.99862444
+    }
+   ],
+   "artist": "Gustav Gustav",
+   "disc": 2,
+   "high_band": 4.8005290264252086e-05,
+   "length": 112.36514739229025,
+   "recording_id": "b28918d6-cb3b-489b-bb8b-6a6a91dc7517",
+   "title": "Feels",
+   "track": 2,
+   "trailing_silence": 4.558775392290258
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f093d743-7110-4c8a-8e17-2edcb19b1f5d"
+     ],
+     "score": 0.99753904
+    }
+   ],
+   "artist": "C Y G N",
+   "disc": 2,
+   "high_band": 0.00010633702356654159,
+   "length": 206.46408163265306,
+   "recording_id": "f093d743-7110-4c8a-8e17-2edcb19b1f5d",
+   "title": "Leitmotiv",
+   "track": 3,
+   "trailing_silence": 6.806598632653049
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "63e69fc3-aa4d-43e5-9af0-54810379c547"
+     ],
+     "score": 0.99891216
+    }
+   ],
+   "artist": "chromonicci",
+   "disc": 2,
+   "high_band": 3.2710343139182493e-06,
+   "length": 157.95650793650793,
+   "recording_id": "63e69fc3-aa4d-43e5-9af0-54810379c547",
+   "title": "Peace.",
+   "track": 4,
+   "trailing_silence": 3.024580936507931
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1888d399-e209-4582-831b-ba2f1773e056"
+     ],
+     "score": 0.9993737
+    }
+   ],
+   "artist": "Aviino",
+   "disc": 2,
+   "high_band": 5.781555513236492e-07,
+   "length": 211.93231292517007,
+   "recording_id": "1888d399-e209-4582-831b-ba2f1773e056",
+   "title": "Bloom",
+   "track": 5,
+   "trailing_silence": 2.3902039251700558
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3aa31ad1-f4d2-4642-a53f-6f23f5e6b657"
+     ],
+     "score": 0.99963737
+    }
+   ],
+   "artist": "arbour",
+   "disc": 2,
+   "high_band": 3.0938353686935856e-06,
+   "length": 169.99124716553288,
+   "recording_id": "3aa31ad1-f4d2-4642-a53f-6f23f5e6b657",
+   "title": "Daffodil",
+   "track": 6,
+   "trailing_silence": 3.783923165532883
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0fba38d0-57b7-4d74-a5a7-4df9f27c0c2f"
+     ],
+     "score": 0.9995813
+    }
+   ],
+   "artist": "Oatmello",
+   "disc": 2,
+   "high_band": 3.309953556268931e-06,
+   "length": 104.36138321995465,
+   "recording_id": "0fba38d0-57b7-4d74-a5a7-4df9f27c0c2f",
+   "title": "Libra",
+   "track": 7,
+   "trailing_silence": 3.3603632199546496
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7c2f2287-a2ef-4fa5-992a-ec839b3746ea"
+     ],
+     "score": 0.9989452
+    }
+   ],
+   "artist": "Loop Schrauber",
+   "disc": 2,
+   "high_band": 0.00018298024299682016,
+   "length": 141.60469387755103,
+   "recording_id": "7c2f2287-a2ef-4fa5-992a-ec839b3746ea",
+   "title": "Bud",
+   "track": 9,
+   "trailing_silence": 2.411768877551026
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "56742cad-19f4-4fe8-b935-62d1e9c853c1"
+     ],
+     "score": 0.9994396
+    }
+   ],
+   "artist": "Illiterate",
+   "disc": 2,
+   "high_band": 6.666824150851252e-06,
+   "length": 185.53759637188207,
+   "recording_id": "56742cad-19f4-4fe8-b935-62d1e9c853c1",
+   "title": "Leafy",
+   "track": 11,
+   "trailing_silence": 4.7896373718820655
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1ef7a73e-d094-425e-9ffd-6eda4661eaa6"
+     ],
+     "score": 0.99891216
+    }
+   ],
+   "artist": "Psalm Trees",
+   "disc": 2,
+   "high_band": 1.4755967838995249e-05,
+   "length": 212.3859410430839,
+   "recording_id": "1ef7a73e-d094-425e-9ffd-6eda4661eaa6",
+   "title": "Days Go By",
+   "track": 12,
+   "trailing_silence": 5.277188043083896
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d7fb2e6a-0aea-4600-8bb3-aca81160d495"
+     ],
+     "score": 0.9992748
+    }
+   ],
+   "artist": "HM Surf",
+   "disc": 2,
+   "high_band": 2.3629199008296515e-06,
+   "length": 123.50163265306122,
+   "recording_id": "d7fb2e6a-0aea-4600-8bb3-aca81160d495",
+   "title": "Sunshine",
+   "track": 13,
+   "trailing_silence": 2.749863653061226
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Chillhop Essentials: Spring 2021",
+  "albumdisambig": null,
+  "artist": "Various Artists",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "e39a3f2e-dda7-47df-9970-56989307b597",
+  "year": 2021
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.03148688046647231,
+  "final_action": null,
+  "scorer_version": 5,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "e39a3f2e-dda7-47df-9970-56989307b597"
+}

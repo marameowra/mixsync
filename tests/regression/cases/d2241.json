@@ -1,0 +1,243 @@
+{
+ "albums": [
+  {
+   "album": "Draining Love Story",
+   "albumdisambig": "DistroKid",
+   "artist": "Sewerslvt",
+   "artist_ids": [
+    "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "atmospheric drum and bass",
+    "electronic",
+    "jungle",
+    "vaporwave"
+   ],
+   "label": "[no label]",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2020,
+   "release_group_id": "a807b4de-9773-4f69-921f-d220eddcf11b",
+   "release_id": "19bbd1c6-b76e-4558-8beb-dc31048bc764",
+   "tracks": [
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 1,
+     "length": 138.057,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "107124f6-0e91-41ec-922e-52272f8f295e",
+     "title": "Love Is a Mighty Big Word"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 2,
+     "length": 250.383,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "f29afaa7-7719-4c8c-8232-f8d93adf6cc2",
+     "title": "Yandere Complex"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 3,
+     "length": 347.193,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "cda93bed-baba-47bc-b6fa-ccc085efa91f",
+     "title": "Ecifircas"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 4,
+     "length": 435.748,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "80cdaa66-afe4-4841-91cc-4d2b9442d0dd",
+     "title": "Lexapro Delirium"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 5,
+     "length": 211.565,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "b4a39ee5-648f-4d12-bda3-f402bcddd017",
+     "title": "This Fleeting Feeling"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 6,
+     "length": 322.821,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "2b4914b7-db27-4dec-bbf3-56f4436d1de0",
+     "title": "Swinging in His Cell"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 7,
+     "length": 471.588,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "ba710f70-604e-4046-812b-29403ed27e66",
+     "title": "Mr. Kill Myself"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 8,
+     "length": 488.306,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "fc60183a-c6f3-44dc-bb6f-8520e5a9904b",
+     "title": "Down the Drain"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 9,
+     "length": 492.852,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "800a864d-01fe-4f53-8714-501a9e70d217",
+     "title": "Slowdeath"
+    }
+   ],
+   "va": false,
+   "year": 2020
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Newlove.flac",
+    "sample_rate": null,
+    "size": 80837940
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - Mr. Kill Myself.flac",
+    "sample_rate": null,
+    "size": 106573772
+   }
+  ],
+  "folder": "Sewerslvt\\Sewerslvt - Draining Love Story",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2241,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "19e991a7-6982-4cd4-97a3-b81640cbd5d5"
+     ],
+     "score": 0.99238527
+    }
+   ],
+   "artist": "Sewerslvt",
+   "disc": 1,
+   "high_band": 0.0005699353569008124,
+   "length": 359.36562358276643,
+   "recording_id": null,
+   "title": "Newlove",
+   "track": 2,
+   "trailing_silence": 4.505782582766415
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ba710f70-604e-4046-812b-29403ed27e66"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Sewerslvt",
+   "disc": 1,
+   "high_band": 0.0024271638771572587,
+   "length": 471.529410430839,
+   "recording_id": null,
+   "title": "Mr. Kill Myself",
+   "track": 8,
+   "trailing_silence": 9.759569430839008
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "padded",
+  "reject"
+ ],
+ "likelies": {
+  "album": "Draining Love Story",
+  "albumdisambig": null,
+  "artist": "Sewerslvt",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "19bbd1c6-b76e-4558-8beb-dc31048bc764",
+  "year": 2020
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.3515908605594704,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Newlove': duration off by 109s from 'Yandere Complex'",
+   "'Newlove': AcoustID (0.99) says a different recording than 'Yandere Complex' (f29afaa7-7719-4c8c-8232-f8d93adf6cc2)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "19bbd1c6-b76e-4558-8beb-dc31048bc764"
+}

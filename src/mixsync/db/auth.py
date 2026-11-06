@@ -104,3 +104,47 @@ def delete_session(s: Session, token: str) -> None:
     row = s.get(SessionRow, _hash_token(token))
     if row is not None:
         s.delete(row)
+
+
+def delete_user_sessions(s: Session, user_id: int, keep: str | None = None) -> None:
+    """End every session of the user, except the one with token `keep`."""
+    keep_id = _hash_token(keep) if keep else None
+    for row in s.scalars(select(SessionRow).where(SessionRow.user_id == user_id)):
+        if row.id != keep_id:
+            s.delete(row)
+
+
+def set_password(s: Session, user: User, password: str, keep: str | None = None) -> None:
+    user.password_hash = hash_password(password)
+    delete_user_sessions(s, user.id, keep)
+
+
+def is_admin(s: Session, user_id: int) -> bool:
+    return (
+        s.scalar(
+            select(UserRole.user_id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(UserRole.user_id == user_id, Role.name == "admin")
+        )
+        is not None
+    )
+
+
+def other_active_admins(s: Session, user_id: int) -> int:
+    return len(
+        s.scalars(
+            select(User.id)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(Role.name == "admin", User.status == "active", User.id != user_id)
+            .with_for_update()  # serialises concurrent demotions on Postgres; no-op on SQLite
+        ).all()
+    )
+
+
+def set_role(s: Session, user_id: int, admin: bool) -> None:
+    role_id = s.scalars(select(Role.id).where(Role.name == ("admin" if admin else "user"))).one()
+    for ur in s.scalars(select(UserRole).where(UserRole.user_id == user_id)):
+        s.delete(ur)
+    s.flush()
+    s.add(UserRole(user_id=user_id, role_id=role_id))
