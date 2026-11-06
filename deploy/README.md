@@ -1,6 +1,6 @@
 # `deploy`
 
-Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile`, `compose.yml` (web, worker, a one-shot `mixsync-migrate` they wait for, slskd, navidrome), `.env.example` (every var, commented). Rationale: [architecture](../docs/architecture.md#deployment).
+Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile`, `compose.build.yml` (local-build override), `compose.yml` (web, worker, a one-shot `mixsync-migrate` they wait for, slskd, navidrome), `.env.example` (every var, commented). Rationale: [architecture](../docs/architecture.md#deployment).
 
 - Roles: `mixsync web` (port 8080), `mixsync worker` (scalable once on Postgres), or one `mixsync all` container.
 - `.github/workflows/image.yml` publishes `ghcr.io/marameowra/mixsync:dev` on every push to `dev`; approved releases from `main` publish `:<version>` and `:latest`.
@@ -32,6 +32,8 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_DEEZER_SUGGESTIONS` | `true`: Mark unverified gets a "Suggest from Deezer" button that pre-fills the form on request (metadata only, 1 req/s, no audio). Deezer's terms allow private, non-commercial, single-household use only. Default off |
 | `MIXSYNC_DISCOGS_SUGGESTIONS` | `true`: Discogs joins Deezer behind one "Suggest" button on Mark unverified (release search and tracklist, on request only). Each user links their own Discogs personal token under Account (no shared token); a user without one gets no Discogs suggestions. The limits in [services](../docs/design/services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default) came from an OpenAPI copy: check them by hand before enabling. Default off |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
+| `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
+| `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
@@ -50,7 +52,23 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 ## Health and ops
 - `GET /healthz` backs the web healthcheck. The worker records a heartbeat every 10 s while idle (and during long jobs); `mixsync worker-health` exits non-zero when none is newer than 90 s and backs the worker healthcheck. Admins see "worker last seen" under Account → Worker status. It catches a dead or wedged worker loop, not a single job hung on a network call that never returns.
 - Logs go to stderr (timestamp, level, logger, message); `MIXSYNC_LOG_LEVEL` sets the level (default `INFO`).
-- Back up `/config` and `/data` with your host backup. Upgrade: pull → `mixsync migrate` (Alembic) → restart.
+- Back up `/config` and `/data` with your host backup. Upgrade: see below.
 
 - SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.
 - On Postgres none of this runs; back up with `pg_dump`. `mixsync backup` exits non-zero saying so.
+
+## Upgrading
+`compose.yml` runs `ghcr.io/marameowra/mixsync:${MIXSYNC_TAG:-latest}`. Pin `MIXSYNC_TAG` in `.env` to a version (e.g. `1.0.1`) or leave it at `latest`.
+1. Back up: `docker compose -f deploy/compose.yml run --rm mixsync-migrate backup` (SQLite; on Postgres use `pg_dump`).
+   Coming from the old local-build compose? There is no ghcr image yet, so take this first backup with `-f deploy/compose.build.yml` added.
+2. Set `MIXSYNC_TAG` to the new version, then `docker compose -f deploy/compose.yml pull`.
+3. `docker compose -f deploy/compose.yml up -d`. The one-shot `mixsync-migrate` service runs migrations first; web and worker start after it succeeds.
+4. Check: `docker compose -f deploy/compose.yml ps`, `docker compose -f deploy/compose.yml logs mixsync-migrate`, and `GET /healthz`.
+
+To roll back, restore the backup and set the previous tag.
+
+### Building locally (contributors)
+`docker compose -f deploy/compose.yml -f deploy/compose.build.yml up -d --build` builds from the repo `Dockerfile` and tags it `mixsync:local`.
+
+### Bumping slskd and Navidrome
+Both are pinned in `compose.yml` (slskd `0.26.2`, Navidrome `0.64.2`; Navidrome must stay 0.58+). To bump: read the release notes ([slskd](https://github.com/slskd/slskd/releases), [Navidrome](https://github.com/navidrome/navidrome/releases)), back up `/config`, change the tag in `compose.yml` (Docker tags have no `v` prefix), then `pull` and `up -d`.

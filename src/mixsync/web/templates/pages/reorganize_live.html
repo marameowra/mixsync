@@ -1,0 +1,7 @@
+{% import "macros/live.html" as live %}
+{% call live.region("/library/reorganize", building) %}
+{% if building %}<p role="status">Building the reorganize plan&hellip; reading the tags of each file filed under another path template. Nothing moves.</p>
+{% elif plan_id %}<p role="status">The plan is ready: <a href="/library/plans/{{ plan_id }}">review reorganize plan {{ plan_id }}</a>. Nothing moves until you confirm it.</p>
+{% elif job %}<p class="notice danger" role="alert">✕ No plan was built: {{ job.last_error or job.status }}</p>
+{% else %}<p>No reorganize plan has been requested.</p>{% endif %}
+{% endcall %}

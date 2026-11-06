@@ -34,9 +34,10 @@ from mixsync.library.importer import Importer
 from mixsync.library.name_backfill import NameBackfill
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.query import queries
-from mixsync.sources.slskd import SlskdSource
+from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
 from mixsync.wiring import Services, build_services
@@ -187,7 +188,10 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
             settings.slskd_url,
             settings.slskd_api_key,
             downloads_dir=Path(settings.downloads_dir),
+            slots=Slots("slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE),
+            debounce=timedelta(seconds=settings.slskd_search_debounce),
         ),
+        max_searches=settings.slskd_max_searches,
         gate=DownloadGate(
             settings.max_concurrent_downloads,
             timedelta(seconds=settings.slow_download_window),
@@ -342,6 +346,7 @@ def _new_queue(
         retention.start_chains()
 
     startup = (
+        merger.backfill_templates,  # labels rows only; a reorganize plan waits for the user
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,

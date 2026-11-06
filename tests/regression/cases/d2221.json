@@ -1,0 +1,204 @@
+{
+ "albums": [
+  {
+   "album": "Red",
+   "albumdisambig": null,
+   "artist": "Lemaitre",
+   "artist_ids": [
+    "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "dance"
+   ],
+   "label": "Substellar",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2024,
+   "release_group_id": "19464aed-2262-4a57-a909-a1028148d8e1",
+   "release_id": "b519d08c-426b-4114-9000-81c828c55a44",
+   "tracks": [
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 1,
+     "length": 245.764,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "f5799765-690b-4557-b16a-01ba5363973a",
+     "title": "Time"
+    },
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 2,
+     "length": 150.005,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "81433fd7-1357-4627-89e2-46a0b63d16e6",
+     "title": "In Your Mind"
+    },
+    {
+     "artist": "Lemaitre",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4"
+     ],
+     "index": 3,
+     "length": 180.861,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "93a68bcb-32c4-4dea-99d0-ba577e2f42be",
+     "title": "Pixel Heart"
+    },
+    {
+     "artist": "Lemaitre & Ora the Molecule",
+     "artist_ids": [
+      "7bc012a7-c5cc-4e7a-9ca6-15db02bbcde4",
+      "01150b18-f9d3-424d-b7cf-a6922d162b91"
+     ],
+     "index": 4,
+     "length": 201.894,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "937c652c-8ff0-498e-8279-f7b7253fe8cc",
+     "title": "Techno Sapien"
+    }
+   ],
+   "va": false,
+   "year": 2024
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0101 - Time.flac",
+    "sample_rate": null,
+    "size": 28604610
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0102 - In Your Mind.flac",
+    "sample_rate": null,
+    "size": 18043761
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "0103 - Pixel Heart.flac",
+    "sample_rate": null,
+    "size": 20253448
+   }
+  ],
+  "folder": "downloads\\Lemaitre - EP - 2024 - Red",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2221,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f5799765-690b-4557-b16a-01ba5363973a"
+     ],
+     "score": 0.9723431
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 0.0006272249130907756,
+   "length": 245.76410430839002,
+   "recording_id": "f5799765-690b-4557-b16a-01ba5363973a",
+   "title": "Time",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "81433fd7-1357-4627-89e2-46a0b63d16e6"
+     ],
+     "score": 0.9901437
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 0.00016613712854391793,
+   "length": 150.00548752834467,
+   "recording_id": "81433fd7-1357-4627-89e2-46a0b63d16e6",
+   "title": "In Your Mind",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "93a68bcb-32c4-4dea-99d0-ba577e2f42be"
+     ],
+     "score": 0.9725738
+    }
+   ],
+   "artist": "Lemaitre",
+   "disc": 1,
+   "high_band": 0.00025498621361990195,
+   "length": 180.86170068027212,
+   "recording_id": "93a68bcb-32c4-4dea-99d0-ba577e2f42be",
+   "title": "Pixel Heart",
+   "track": 3,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Red",
+  "albumdisambig": null,
+  "artist": "Lemaitre",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "b519d08c-426b-4114-9000-81c828c55a44",
+  "year": 2024
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.04761904761904762,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "b519d08c-426b-4114-9000-81c828c55a44"
+}

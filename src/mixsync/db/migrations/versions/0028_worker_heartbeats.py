@@ -1,14 +1,14 @@
 """worker_heartbeats: when each worker's polling loop last went round
 
-Revision ID: 0026_worker_heartbeats
-Revises: 0025_app_settings
+Revision ID: 0028_worker_heartbeats
+Revises: 0027_plan_progress
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0026_worker_heartbeats"
-down_revision: str | None = "0025_app_settings"
+revision = "0028_worker_heartbeats"
+down_revision: str | None = "0027_plan_progress"
 branch_labels = None
 depends_on = None
 

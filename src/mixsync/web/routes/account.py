@@ -12,7 +12,7 @@ from mixsync.acquire.requests import auto_accept_cap, profile_for
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import WORKER_STALE_AFTER
-from mixsync.db.auth import AuthUser
+from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.queue import worker_age
@@ -24,6 +24,7 @@ from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
+    SESSION_COOKIE,
     Box,
     CurrentUser,
     Db,
@@ -238,6 +239,33 @@ def show_worker(request: Request, admin: Admin, db: Db) -> HTMLResponse:
         "stale": age is None or age > WORKER_STALE_AFTER,
     }
     return templates.TemplateResponse(request, "pages/worker.html", ctx)
+
+
+@router.post("/password")
+def change_password(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    box: Box,
+    current: Annotated[str, Form()],
+    new: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
+) -> Response:
+    """The current session stays signed in; the user's other sessions end."""
+    row = db.get_one(User, user.id)
+    key = (request.client.host if request.client else "", user.username.lower())
+    if not admit(key):  # the same budget as /login
+        msg = "Too many attempts, try again later."
+        return _page(request, user, db, box, ("password", msg), 429)
+    if not verify_password(row.password_hash, current):
+        return _page(request, user, db, box, ("password", "The current password is wrong."))
+    forget(key)
+    if not new or len(new) > MAX_LEN:
+        return _page(request, user, db, box, ("password", "Enter a new password."))
+    if new != confirm:
+        return _page(request, user, db, box, ("password", "The new passwords do not match."))
+    set_password(db, row, new, keep=request.cookies.get(SESSION_COOKIE))
+    return RedirectResponse("/account", 303)
 
 
 @router.post("/{service}")

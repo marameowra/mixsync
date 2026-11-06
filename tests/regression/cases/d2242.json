@@ -1,0 +1,336 @@
+{
+ "albums": [
+  {
+   "album": "Drowning in the Sewer",
+   "albumdisambig": null,
+   "artist": "Sewerslvt",
+   "artist_ids": [
+    "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "atmospheric drum and bass",
+    "drum and bass",
+    "jungle",
+    "electronic",
+    "experimental",
+    "rave"
+   ],
+   "label": "[no label]",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2019,
+   "release_group_id": "4d90f6a1-33e7-4d47-beba-4470960fb3c8",
+   "release_id": "4c98ef40-4c72-46bb-88fd-158935937f62",
+   "tracks": [
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 1,
+     "length": 240.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "a96fe743-5ea5-4c3c-a434-f5a166838422",
+     "title": "Drowning in the Sewer"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 2,
+     "length": 294.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "1e26fc86-1f62-448a-8de9-8d5769469b80",
+     "title": "Cyberia lyr1"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 3,
+     "length": 288.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "89cb0283-e882-4dbf-81cd-05c9703a95da",
+     "title": "Luciferians"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 4,
+     "length": 344.471,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "5840d4e3-d1c0-427e-bd4c-b49dd5f54896",
+     "title": "Squids"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 5,
+     "length": 291.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "005277ca-bb84-47c7-87a1-25ac35fb89fe",
+     "title": "Hopelessness"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 6,
+     "length": 261.176,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "6096427e-a551-4303-876d-95aeb9a097e1",
+     "title": "Suicide in Fragments"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 7,
+     "length": 349.714,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "926e4e51-200f-42b8-b2aa-9c3bea4e1f64",
+     "title": "Nice Ways to Die"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 8,
+     "length": 245.538,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "66b993b0-cccb-46ce-86a9-5aa74c5b6ac5",
+     "title": "Cyberia lyr2"
+    },
+    {
+     "artist": "Sewerslvt feat. Skvllz",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba",
+      "74822f6c-e1e7-4ebb-b7ed-c04a6a9ad06b"
+     ],
+     "index": 9,
+     "length": 277.333,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "6154e90e-111f-4ee4-ba88-db6b73ceef50",
+     "title": "Blacklight"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 10,
+     "length": 408.276,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "5c919f79-8efa-4ad3-9936-99152cde2173",
+     "title": "Junko Loves You"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 11,
+     "length": 510.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "989afa66-c56c-4831-adfd-b2769c1afbf7",
+     "title": "Lolibox"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 12,
+     "length": 176.471,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "fd74af48-e9f8-4ddb-a542-16eb29bf4522",
+     "title": "Emergence"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 13,
+     "length": 480.0,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "3b920462-64bc-41a0-8095-60368d80453b",
+     "title": "Death & Humanity"
+    },
+    {
+     "artist": "Sewerslvt",
+     "artist_ids": [
+      "33b1695b-0b35-4e22-b1d4-be4971fb71ba"
+     ],
+     "index": 14,
+     "length": 951.234,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "d2d50caa-ae9b-4aaf-8c4d-d30391020bc7",
+     "title": "Nothingness"
+    }
+   ],
+   "va": false,
+   "year": 2019
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Cyberia Lyr 1.flac",
+    "sample_rate": null,
+    "size": 66029609
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Cyberia lyr1.flac",
+    "sample_rate": null,
+    "size": 66058195
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - Cyberia Lyr2.flac",
+    "sample_rate": null,
+    "size": 55305330
+   }
+  ],
+  "folder": "Sewerslvt\\Sewerslvt - Drowning in the Sewer",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2242,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e26fc86-1f62-448a-8de9-8d5769469b80",
+      "e873fc51-1322-4731-98d5-1464909f8ff1"
+     ],
+     "score": 0.99002594
+    }
+   ],
+   "artist": "Sewerslvt",
+   "disc": 1,
+   "high_band": 0.000744735746494776,
+   "length": 294.0,
+   "recording_id": "1e26fc86-1f62-448a-8de9-8d5769469b80",
+   "title": "Cyberia Lyr 1",
+   "track": 2,
+   "trailing_silence": 3.475010999999995
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e26fc86-1f62-448a-8de9-8d5769469b80",
+      "e873fc51-1322-4731-98d5-1464909f8ff1"
+     ],
+     "score": 0.99002594
+    }
+   ],
+   "artist": "Sewerslvt",
+   "disc": 1,
+   "high_band": 0.000744735746494776,
+   "length": 294.0,
+   "recording_id": "1e26fc86-1f62-448a-8de9-8d5769469b80",
+   "title": "Cyberia lyr1",
+   "track": 2,
+   "trailing_silence": 3.475010999999995
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "66b993b0-cccb-46ce-86a9-5aa74c5b6ac5"
+     ],
+     "score": 0.99205565
+    }
+   ],
+   "artist": "Sewerslvt",
+   "disc": 1,
+   "high_band": 0.0002445728249947185,
+   "length": 245.53845804988663,
+   "recording_id": "66b993b0-cccb-46ce-86a9-5aa74c5b6ac5",
+   "title": "Cyberia Lyr2",
+   "track": 8,
+   "trailing_silence": 1.6247850498866399
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch",
+  "reject"
+ ],
+ "likelies": {
+  "album": "Drowning in the Sewer",
+  "albumdisambig": null,
+  "artist": "Sewerslvt",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "4c98ef40-4c72-46bb-88fd-158935937f62",
+  "year": 2019
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.4037145650048876,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Cyberia lyr1': tagged as recording 1e26fc86-1f62-448a-8de9-8d5769469b80, matched to 'Luciferians' (89cb0283-e882-4dbf-81cd-05c9703a95da)",
+   "'Cyberia lyr1': AcoustID (0.99) says a different recording than 'Luciferians' (89cb0283-e882-4dbf-81cd-05c9703a95da)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "4c98ef40-4c72-46bb-88fd-158935937f62"
+}

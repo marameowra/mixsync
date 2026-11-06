@@ -24,7 +24,6 @@ The Python package. Every subfolder has a README; read it before adding code to 
 - `wiring.py`: composition root for what the worker and web share (engine, `FileOps`, the one `MusicBrainzProvider`, `Merger`, HTTP clients, `SecretBox`). `build_services(settings)` only constructs: no recovery, no startup chains. A bad key file fails here.
 - `worker.py`: the job loop. Claims jobs, dispatches by `JobKind`, heartbeats leases and its own liveness (`worker_heartbeats`, read by `mixsync worker-health` and the admin worker page), runs startup journal recovery ([data safety](../../docs/design/data-safety.md#4-operation-journal)). Recurring chain initializers run in worker threads before polling and retry at the polling interval; discovery and retention initialize together. `mixsync worker`.
 - `__main__.py`: `mixsync web | worker | all | migrate | user-add | backup | worker-health`. `all` builds one `Services` for both. `web`, `worker` and `all` configure logging to stderr at `MIXSYNC_LOG_LEVEL`.
-  > Planned — not built (#222): `mixsync backup` only prints "not implemented yet".
 
 ## Dependency rules
 Arrows mean "may import from". Anything not listed is forbidden.

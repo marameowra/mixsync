@@ -4,7 +4,7 @@
 The only way MixSync talks HTTP to the outside world: per-service rate limits, a response cache, the User-Agent, and retry/backoff, so no adapter can hammer a service.
 
 ## Owns / does not own
-- **Owns:** `PoliteClient`, the token buckets (`bucket.py`, state in the DB), the cache (`cache.py`), and the per-service limits and TTL table (`services.py`).
+- **Owns:** `PoliteClient`, the token buckets and the leased concurrency `Slots` (`bucket.py`, state in the DB), the cache (`cache.py`), and the per-service limits and TTL table (`services.py`).
 - **Does not own:** API semantics. Adapters build requests; this package sends them politely.
 
 ## Rules / invariants

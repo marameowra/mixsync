@@ -1,0 +1,1008 @@
+{
+ "albums": [
+  {
+   "album": "TRUE LOVE IN A MADE UP WORLD",
+   "albumdisambig": null,
+   "artist": "San Holo",
+   "artist_ids": [
+    "23101701-cecf-4c9b-9b4c-d6a249eac118"
+   ],
+   "catalognum": "SLRD003",
+   "country": "XW",
+   "genres": [
+    "future riddim"
+   ],
+   "label": "SHINE LIGHT RECORDS",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "d5836382-5009-4862-b44e-07396611b628",
+   "release_id": "8fa87196-6722-4284-9cb4-804170f75acb",
+   "tracks": [
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 1,
+     "length": 108.8,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "2c0963c8-4058-4bf1-9226-519fe0e35859",
+     "title": "CRYING \u2191%"
+    },
+    {
+     "artist": "San Holo, RJ Pasin & Alice Aera",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "742b9700-1843-4de2-86e8-6a6d0b98a7e1",
+      "0d61d849-b6c6-43b4-9955-3dd2719ebe9b"
+     ],
+     "index": 2,
+     "length": 182.4,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "cf63f690-ed27-49b8-8cbd-c0f093e1c34d",
+     "title": "I WANNA SHOW YOU"
+    },
+    {
+     "artist": "San Holo & Juelz",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "578ed90a-5993-42c3-953a-aba335910e6d"
+     ],
+     "index": 3,
+     "length": 195.31,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "ef18d49d-cb26-4765-a304-8d426083cf85",
+     "title": "FOREVER, forever"
+    },
+    {
+     "artist": "San Holo, YDG, AVELLO & Emi Grace",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "e8562450-d4c0-4739-a0da-a5f135f66885",
+      "90bcd6a7-1267-4275-af31-19e0e601ce73",
+      "46bdee3e-509e-4650-98e8-158705678345"
+     ],
+     "index": 4,
+     "length": 166.479,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "4c8a6265-77c8-4367-8775-b1ffb8cb7ca7",
+     "title": "NOBODY"
+    },
+    {
+     "artist": "San Holo, Big Gigantic & Evalyn",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "f6c003f9-4aae-40ce-8e4c-112d9a1b140c",
+      "0ccfd7b7-73d0-4b7b-be4a-96fe685706be"
+     ],
+     "index": 5,
+     "length": 204.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "4ed9472b-78a4-4a05-936b-4222a678d3ee",
+     "title": "BEAUTIFUL COLORS"
+    },
+    {
+     "artist": "San Holo, LSDREAM & Artemis Orion",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "3e8f5ad6-fcd4-416c-997e-5d7f6aa99043",
+      "b39d4306-6182-4409-8f99-8fbc775b9d92"
+     ],
+     "index": 6,
+     "length": 199.184,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "90a69de3-1a71-40e9-98fb-7e9eafa556a8",
+     "title": "PULL ME CLOSER"
+    },
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 7,
+     "length": 224.276,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "5b9971aa-4ab5-4f8f-991f-b2dc97b61ff1",
+     "title": "TRUE LOVE IN A MADE UP WORLD"
+    },
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 8,
+     "length": 180.8,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "4b011ee8-6f2e-425d-b94b-560c0a613d6c",
+     "title": "LETTING GO!!!!!!"
+    },
+    {
+     "artist": "San Holo & Amanda Joy",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "f3b804d0-3d0c-4559-a01f-5f71037721e7"
+     ],
+     "index": 9,
+     "length": 236.8,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "d11c3825-8ed0-4dfc-a894-05a6c5b07a5a",
+     "title": "IYKYK"
+    },
+    {
+     "artist": "San Holo & Former Hero",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "638c2ce6-1e57-4e3f-ba83-4bd6c5256eda"
+     ],
+     "index": 10,
+     "length": 239.172,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "ba9f2869-871f-4a26-baaf-000085edb24b",
+     "title": "BLINDING LIGHTS"
+    },
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 11,
+     "length": 208.966,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "5ddf971d-8547-4305-a270-2aa698d9c703",
+     "title": "CLOSE YOUR EYES"
+    },
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 12,
+     "length": 166.8,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "bd039927-c74a-4c2f-81be-3550d2f661af",
+     "title": "I TRY..."
+    },
+    {
+     "artist": "San Holo",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118"
+     ],
+     "index": 13,
+     "length": 105.985,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "1e912196-a958-4637-922b-640d7cd4ecf5",
+     "title": "[keep going]"
+    },
+    {
+     "artist": "San Holo & Underbelly",
+     "artist_ids": [
+      "23101701-cecf-4c9b-9b4c-d6a249eac118",
+      "41f544cc-be34-4a7c-a678-499a8f0ad545"
+     ],
+     "index": 14,
+     "length": 230.793,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "5cf55d0c-190b-45f5-a103-0e274d8f1064",
+     "title": "AN INTRODUCTION TO WHOLESOME RIDDIM"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - CRYING \u2191%.flac",
+    "sample_rate": null,
+    "size": 27489237
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - I WANNA SHOW YOU.flac",
+    "sample_rate": null,
+    "size": 26036849
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - FOREVER, forever.flac",
+    "sample_rate": null,
+    "size": 49300541
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - NOBODY.flac",
+    "sample_rate": null,
+    "size": 42241371
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - BEAUTIFUL COLORS.flac",
+    "sample_rate": null,
+    "size": 46584099
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - PULL ME CLOSER.flac",
+    "sample_rate": null,
+    "size": 45995804
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - TRUE LOVE IN A MADE UP WORLD.flac",
+    "sample_rate": null,
+    "size": 54792360
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - LETTING GO!!!!!!.flac",
+    "sample_rate": null,
+    "size": 42115666
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "09 - IYKYK.flac",
+    "sample_rate": null,
+    "size": 53244521
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - BLINDING LIGHTS.flac",
+    "sample_rate": null,
+    "size": 58692309
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "11 - CLOSE YOUR EYES.flac",
+    "sample_rate": null,
+    "size": 47701246
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "12 - I TRY.flac",
+    "sample_rate": null,
+    "size": 36696696
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "13 - [keep going].flac",
+    "sample_rate": null,
+    "size": 21556150
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "14 - AN INTRODUCTION TO WHOLESOME RIDDIM.flac",
+    "sample_rate": null,
+    "size": 48960102
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 01 - CRYING \u2191%.flac",
+    "sample_rate": null,
+    "size": 16056057
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 02 - I WANNA SHOW YOU.flac",
+    "sample_rate": null,
+    "size": 26036851
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 03 - FOREVER, forever.flac",
+    "sample_rate": null,
+    "size": 28402204
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 04 - NOBODY.flac",
+    "sample_rate": null,
+    "size": 24445593
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 05 - BEAUTIFUL COLORS.flac",
+    "sample_rate": null,
+    "size": 25961436
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 06 - PULL ME CLOSER.flac",
+    "sample_rate": null,
+    "size": 25766476
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 08 - LETTING GO!!!!!!.flac",
+    "sample_rate": null,
+    "size": 26205125
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 09 - IYKYK.flac",
+    "sample_rate": null,
+    "size": 32355250
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 10 - BLINDING LIGHTS.flac",
+    "sample_rate": null,
+    "size": 33391000
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 12 - I TRY.flac",
+    "sample_rate": null,
+    "size": 20391617
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 13 - [keep going].flac",
+    "sample_rate": null,
+    "size": 10562421
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "San Holo - TRUE LOVE IN A MADE UP WORLD - 14 - AN INTRODUCTION TO WHOLESOME RIDDIM.flac",
+    "sample_rate": null,
+    "size": 28611004
+   }
+  ],
+  "folder": "downloads\\TRUE LOVE IN A MADE UP WORLD (2026)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2355,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2c0963c8-4058-4bf1-9226-519fe0e35859",
+      "6ea50df2-e876-4e79-a3c1-9e203872d4a0"
+     ],
+     "score": 0.99314207
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0024614374275210103,
+   "length": 108.8,
+   "recording_id": null,
+   "title": "TRACK 1",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2dc72e8e-66c4-45b5-897e-998534e48cc1",
+      "cf63f690-ed27-49b8-8cbd-c0f093e1c34d"
+     ],
+     "score": 0.9900778
+    }
+   ],
+   "artist": "San Holo, RJ Pasin, Alice Aera",
+   "disc": 1,
+   "high_band": 0.0008047509536355925,
+   "length": 182.4,
+   "recording_id": null,
+   "title": "I WANNA SHOW YOU",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ef18d49d-cb26-4765-a304-8d426083cf85",
+      "fffbc052-4ab3-4bc6-9877-fdb90ea7ab8b"
+     ],
+     "score": 0.9916271
+    }
+   ],
+   "artist": "San Holo, Juelz",
+   "disc": 1,
+   "high_band": 0.0026903104588685547,
+   "length": 195.31035416666666,
+   "recording_id": null,
+   "title": "FOREVER, forever",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2e224e90-4f78-4bd1-9321-9ca3a7f89c82",
+      "4c8a6265-77c8-4367-8775-b1ffb8cb7ca7"
+     ],
+     "score": 0.95886075
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0023714403221322144,
+   "length": 166.478875,
+   "recording_id": null,
+   "title": "TRACK 4",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4ed9472b-78a4-4a05-936b-4222a678d3ee",
+      "738807c3-1924-4789-a8f2-4b38e49b505d"
+     ],
+     "score": 0.99182487
+    }
+   ],
+   "artist": "San Holo, Big Gigantic, Evalyn",
+   "disc": 1,
+   "high_band": 0.00021590480115062538,
+   "length": 204.0,
+   "recording_id": null,
+   "title": "BEAUTIFUL COLORS",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "18092541-517d-4065-a1b8-a9c7c329e618",
+      "90a69de3-1a71-40e9-98fb-7e9eafa556a8"
+     ],
+     "score": 0.9932423
+    }
+   ],
+   "artist": "San Holo, LSDREAM, Artemis Orion",
+   "disc": 1,
+   "high_band": 0.0007089096692517589,
+   "length": 199.1836875,
+   "recording_id": null,
+   "title": "PULL ME CLOSER",
+   "track": 6,
+   "trailing_silence": 1.6488755000000026
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5b9971aa-4ab5-4f8f-991f-b2dc97b61ff1",
+      "9d7ed35b-3493-453f-a465-b5c490d80cdc"
+     ],
+     "score": 0.9923523
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.003596318110010672,
+   "length": 224.275875,
+   "recording_id": null,
+   "title": "TRACK 7",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3c862223-72ad-44d6-aa7e-6c24825df587",
+      "4b011ee8-6f2e-425d-b94b-560c0a613d6c"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0018010961587783781,
+   "length": 180.8,
+   "recording_id": null,
+   "title": "LETTING GO!!!!!!",
+   "track": 8,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "31bbeaf1-fe0a-4851-9b7f-7bd3bbc7e00d",
+      "d11c3825-8ed0-4dfc-a894-05a6c5b07a5a"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "San Holo, Amanda Joy",
+   "disc": 1,
+   "high_band": 0.0006634614598801856,
+   "length": 236.8,
+   "recording_id": null,
+   "title": "IYKYK",
+   "track": 9,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "337a357f-10bf-4df9-a553-4847eefac86f",
+      "ba9f2869-871f-4a26-baaf-000085edb24b"
+     ],
+     "score": 0.9929127
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.002369335164156381,
+   "length": 239.17241666666666,
+   "recording_id": null,
+   "title": "TRACK 10",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5ddf971d-8547-4305-a270-2aa698d9c703",
+      "8b952975-9988-4708-b852-1a73a347b6ff"
+     ],
+     "score": 0.99963737
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0025116325341063284,
+   "length": 208.96551020408162,
+   "recording_id": null,
+   "title": "CLOSE YOUR EYES",
+   "track": 11,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6731254e-ca2a-4a79-b43f-a2a802fa74c6",
+      "bd039927-c74a-4c2f-81be-3550d2f661af"
+     ],
+     "score": 0.9919568
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.00016226535341305376,
+   "length": 166.8,
+   "recording_id": null,
+   "title": "TRACK 12",
+   "track": 12,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e912196-a958-4637-922b-640d7cd4ecf5",
+      "2c7f83ff-e7ca-49e9-a552-93bbc597660f"
+     ],
+     "score": 0.9922066
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 5.431952955553655e-06,
+   "length": 105.98541666666667,
+   "recording_id": null,
+   "title": "TRACK 13",
+   "track": 13,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5cf55d0c-190b-45f5-a103-0e274d8f1064",
+      "6c5119d2-f690-4ca3-a916-9859e0145929"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "San Holo, Underbelly",
+   "disc": 1,
+   "high_band": 0.003433829283924108,
+   "length": 230.79310657596372,
+   "recording_id": null,
+   "title": "AN INTRODUCTION TO WHOLESOME RIDDIM",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2c0963c8-4058-4bf1-9226-519fe0e35859",
+      "6ea50df2-e876-4e79-a3c1-9e203872d4a0"
+     ],
+     "score": 0.99317914
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.002410583058342181,
+   "length": 108.8,
+   "recording_id": null,
+   "title": "TRACK 1",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2dc72e8e-66c4-45b5-897e-998534e48cc1",
+      "cf63f690-ed27-49b8-8cbd-c0f093e1c34d"
+     ],
+     "score": 0.9900778
+    }
+   ],
+   "artist": "San Holo, RJ Pasin, Alice Aera",
+   "disc": 1,
+   "high_band": 0.0008047509536355925,
+   "length": 182.4,
+   "recording_id": null,
+   "title": "I WANNA SHOW YOU",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ef18d49d-cb26-4765-a304-8d426083cf85",
+      "fffbc052-4ab3-4bc6-9877-fdb90ea7ab8b"
+     ],
+     "score": 0.991693
+    }
+   ],
+   "artist": "San Holo, Juelz",
+   "disc": 1,
+   "high_band": 0.0024817269677596247,
+   "length": 195.31036281179138,
+   "recording_id": null,
+   "title": "FOREVER, forever",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2e224e90-4f78-4bd1-9321-9ca3a7f89c82",
+      "4c8a6265-77c8-4367-8775-b1ffb8cb7ca7"
+     ],
+     "score": 0.9588937
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0020699535502514475,
+   "length": 166.47886621315192,
+   "recording_id": null,
+   "title": "TRACK 4",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4ed9472b-78a4-4a05-936b-4222a678d3ee",
+      "738807c3-1924-4789-a8f2-4b38e49b505d"
+     ],
+     "score": 0.9917919
+    }
+   ],
+   "artist": "San Holo, Big Gigantic, Evalyn",
+   "disc": 1,
+   "high_band": 0.00015555701470175133,
+   "length": 204.0,
+   "recording_id": null,
+   "title": "BEAUTIFUL COLORS",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "18092541-517d-4065-a1b8-a9c7c329e618",
+      "90a69de3-1a71-40e9-98fb-7e9eafa556a8"
+     ],
+     "score": 0.99327534
+    }
+   ],
+   "artist": "San Holo, LSDREAM, Artemis Orion",
+   "disc": 1,
+   "high_band": 0.0006533384231344967,
+   "length": 199.1836961451247,
+   "recording_id": null,
+   "title": "PULL ME CLOSER",
+   "track": 6,
+   "trailing_silence": 1.648866145124714
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3c862223-72ad-44d6-aa7e-6c24825df587",
+      "4b011ee8-6f2e-425d-b94b-560c0a613d6c"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0017977280715879573,
+   "length": 180.8,
+   "recording_id": null,
+   "title": "LETTING GO!!!!!!",
+   "track": 8,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "31bbeaf1-fe0a-4851-9b7f-7bd3bbc7e00d",
+      "d11c3825-8ed0-4dfc-a894-05a6c5b07a5a"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "San Holo, Amanda Joy",
+   "disc": 1,
+   "high_band": 0.0006616626195685615,
+   "length": 236.8,
+   "recording_id": null,
+   "title": "IYKYK",
+   "track": 9,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "337a357f-10bf-4df9-a553-4847eefac86f",
+      "ba9f2869-871f-4a26-baaf-000085edb24b"
+     ],
+     "score": 0.9928468
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.0017838609558244328,
+   "length": 239.17242630385488,
+   "recording_id": null,
+   "title": "TRACK 10",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6731254e-ca2a-4a79-b43f-a2a802fa74c6",
+      "bd039927-c74a-4c2f-81be-3550d2f661af"
+     ],
+     "score": 0.99198973
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 0.00012484593320839806,
+   "length": 166.8,
+   "recording_id": null,
+   "title": "TRACK 12",
+   "track": 12,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1e912196-a958-4637-922b-640d7cd4ecf5",
+      "2c7f83ff-e7ca-49e9-a552-93bbc597660f"
+     ],
+     "score": 0.9922066
+    }
+   ],
+   "artist": "San Holo",
+   "disc": 1,
+   "high_band": 3.6207346651983097e-06,
+   "length": 105.98541950113379,
+   "recording_id": null,
+   "title": "TRACK 13",
+   "track": 13,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5cf55d0c-190b-45f5-a103-0e274d8f1064",
+      "6c5119d2-f690-4ca3-a916-9859e0145929"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "San Holo, Underbelly",
+   "disc": 1,
+   "high_band": 0.003431053578923801,
+   "length": 230.79310657596372,
+   "recording_id": null,
+   "title": "AN INTRODUCTION TO WHOLESOME RIDDIM",
+   "track": 14,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "transcode"
+ ],
+ "likelies": {
+  "album": "TRUE LOVE IN A MADE UP WORLD",
+  "albumdisambig": null,
+  "artist": "San Holo",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2026
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.1771968158224082,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'TRACK 13': looks transcoded: almost nothing above 16 kHz"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "8fa87196-6722-4284-9cb4-804170f75acb"
+}

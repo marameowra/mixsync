@@ -4,7 +4,7 @@
 Everything that touches the music library on disk: where files go, how they get there safely, how they are tagged, and which release they belong to.
 
 ## Owns / does not own
-- **Owns:** path templates (`paths.py`), **all filesystem writes under `/data`** (`fileops.py`), tags (`tags.py`, `tag_undo.py`), canonical release policy (`canonical.py`), the importer, trash purge (`purge.py`), the fragmentation report (`fragmentation.py`).
+- **Owns:** path templates (`paths.py`), **all filesystem writes under `/data`** (`fileops.py`), tags (`tags.py`, `tag_undo.py`), canonical release policy (`canonical.py`), the importer, trash purge (`purge.py`), the fragmentation report (`fragmentation.py`), template drift (`layout.py`).
 - **Does not own:** scoring (`match`), downloading (`sources`), or notifying Navidrome (`targets`, called by the composition root after import). Merge execution and undo live in `acquire/merge.py`.
 
 ## Rules / invariants
@@ -15,7 +15,7 @@ Everything that touches the music library on disk: where files go, how they get 
 - The purge skips trash entries of any plan that can still be undone, and the trashed original of any not-done move/trash op. It refuses to run through a symlinked `.trash`.
 - Every bulk change returns a `Plan` first; executing one above 50 ops needs the typed count from the UI.
 - Paths in the DB are relative to the library root.
-- Changing the path template never moves files by itself; it produces a reorganize `Plan`. Default template and genre source: [ADR 0014](../../../docs/decisions/0014-default-path-template-and-genres.md).
+- Changing the path template never moves files by itself. Each track records the template its path came from (`tracks.path_template`, [ADR 0019](../../../docs/decisions/0019-path-template-per-track.md)); `layout.py` counts drifted tracks and renders their new paths from their own tags. The user builds a reorganize `Plan` from the library page; `acquire/merge.py` runs and undoes it like a merge, without changing tags. Default template and genre source: [ADR 0014](../../../docs/decisions/0014-default-path-template-and-genres.md).
 
 ## May import
 `core`, `db`, `match`.

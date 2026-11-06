@@ -51,7 +51,7 @@ Before any tag write, the full original tag set is stored in the DB, keyed by fi
 - Postgres: no backups here. `mixsync backup` exits non-zero and says to use `pg_dump`; the nightly job does nothing; `migrate` logs a notice and upgrades.
 - Restore is manual: stop MixSync, copy a backup over the database file.
 
-> Planned — not built: settings export/import.
+> Planned — not built (#303): settings export/import.
 
 ## 7. Independence
 The library is plain, standard-tagged audio. Navidrome or any player works without MixSync. Its own markers are plain text tags (e.g. `MIXSYNC_STATUS`).

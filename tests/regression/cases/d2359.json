@@ -1,0 +1,104 @@
+{
+ "albums": [
+  {
+   "album": "Puppy-Eyed",
+   "albumdisambig": null,
+   "artist": "puppygirl",
+   "artist_ids": [
+    "2dafc7af-f709-4bef-b714-a28dd559758b"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "6a8d1ac1-149c-4252-aff0-0d831ed88e03",
+   "release_id": "05dc41d0-4809-427e-9468-fb7b5d1bd705",
+   "tracks": [
+    {
+     "artist": "puppygirl",
+     "artist_ids": [
+      "2dafc7af-f709-4bef-b714-a28dd559758b"
+     ],
+     "index": 1,
+     "length": 175.301,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "e8446ba8-8ac3-4183-a25c-888b07820829",
+     "title": "Puppy-Eyed"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": 192,
+    "duration": 195,
+    "extension": "mp3",
+    "path": "# Unsorted\\Lush Puppy - One Eyed Snake (Official Video).mp3",
+    "sample_rate": null,
+    "size": 4682115
+   }
+  ],
+  "folder": "4ThessRadio\\# Unsorted",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 3,
+  "upload_speed": 1299621,
+  "username": "peer-016e07d3"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2359,
+ "files": [
+  {
+   "acoustid": [],
+   "artist": "",
+   "disc": null,
+   "high_band": null,
+   "length": 195.05632653061224,
+   "recording_id": null,
+   "title": "Lush Puppy - One Eyed Snake (Official Video)",
+   "track": null,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "padded",
+  "reject"
+ ],
+ "likelies": {
+  "album": null,
+  "albumdisambig": null,
+  "artist": null,
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": null
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.8756182352941178,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Lush Puppy - One Eyed Snake (Official Video)': duration off by 20s from 'Puppy-Eyed'"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "05dc41d0-4809-427e-9468-fb7b5d1bd705"
+}

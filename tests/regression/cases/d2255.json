@@ -1,0 +1,103 @@
+{
+ "albums": [
+  {
+   "album": "doom signal",
+   "albumdisambig": null,
+   "artist": "To Oscar & wishlane",
+   "artist_ids": [
+    "b3067938-52cb-45d4-83a3-3ef9f3d243db",
+    "2a250063-bece-40d6-9c99-030888b0f961"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2023,
+   "release_group_id": "99fdaa0a-f8d8-4da9-8843-6d0deb490bfa",
+   "release_id": "81dcb9e8-44dc-42ea-9ca0-bc6e9759d28a",
+   "tracks": [
+    {
+     "artist": "To Oscar & wishlane",
+     "artist_ids": [
+      "b3067938-52cb-45d4-83a3-3ef9f3d243db",
+      "2a250063-bece-40d6-9c99-030888b0f961"
+     ],
+     "index": 1,
+     "length": 172.174,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "673dd460-6082-469a-bf97-364f92e2a517",
+     "title": "doom signal"
+    }
+   ],
+   "va": false,
+   "year": 2023
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "01 - doom signal.mp3",
+    "sample_rate": null,
+    "size": 7029140
+   }
+  ],
+  "folder": "To Oscar\\To Oscar - doom signal",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2255,
+ "files": [
+  {
+   "acoustid": [],
+   "artist": "To Oscar, wishlane",
+   "disc": 1,
+   "high_band": null,
+   "length": 172.2,
+   "recording_id": "673dd460-6082-469a-bf97-364f92e2a517",
+   "title": "doom signal",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "accept"
+ ],
+ "likelies": {
+  "album": "doom signal",
+  "albumdisambig": null,
+  "artist": "To Oscar",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "81dcb9e8-44dc-42ea-9ca0-bc6e9759d28a",
+  "year": 2023
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.042857142857142864,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "81dcb9e8-44dc-42ea-9ca0-bc6e9759d28a"
+}

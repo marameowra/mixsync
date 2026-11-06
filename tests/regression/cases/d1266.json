@@ -1,0 +1,514 @@
+{
+ "albums": [
+  {
+   "album": "Human After All",
+   "albumdisambig": "\u201cIndustria Argentina\u201d is printed on the back cover.",
+   "artist": "Daft Punk",
+   "artist_ids": [
+    "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+   ],
+   "catalognum": null,
+   "country": "AR",
+   "genres": [
+    "electronic",
+    "house",
+    "electro",
+    "french house",
+    "experimental",
+    "club",
+    "electronica",
+    "progressive house"
+   ],
+   "label": "Virgin",
+   "media": "Enhanced CD",
+   "mediums": 1,
+   "original_year": 2005,
+   "release_group_id": "f9e8042a-674e-3f01-80ec-7f0ab1c537df",
+   "release_id": "2b2d70aa-8327-43d0-9683-a1216c295611",
+   "tracks": [
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 1,
+     "length": 319.226,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+     "title": "Human After All"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 2,
+     "length": 263.373,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+     "title": "The Prime Time of Your Life"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 3,
+     "length": 287.76,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+     "title": "Robot Rock"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 4,
+     "length": 320.8,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+     "title": "Steam Machine"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 5,
+     "length": 290.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+     "title": "Make Love"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 6,
+     "length": 248.24,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+     "title": "The Brainwasher"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 7,
+     "length": 19.333,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+     "title": "On/Off"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 8,
+     "length": 287.733,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+     "title": "Television Rules the Nation"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 9,
+     "length": 284.36,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+     "title": "Technologic"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 10,
+     "length": 418.066,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+     "title": "Emotion"
+    }
+   ],
+   "va": false,
+   "year": 2005
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Human After All.flac",
+    "sample_rate": null,
+    "size": 39723268
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - The Prime Time of Your Life.flac",
+    "sample_rate": null,
+    "size": 31577867
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Robot Rock.flac",
+    "sample_rate": null,
+    "size": 38469838
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - Steam Machine.flac",
+    "sample_rate": null,
+    "size": 40838628
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Make Love.flac",
+    "sample_rate": null,
+    "size": 30821648
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - The Brainwasher.flac",
+    "sample_rate": null,
+    "size": 31760474
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - On,Off.flac",
+    "sample_rate": null,
+    "size": 1758943
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - Television Rules The Nation.flac",
+    "sample_rate": null,
+    "size": 33868176
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "09 - Technologic.flac",
+    "sample_rate": null,
+    "size": 34776886
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Emotion.flac",
+    "sample_rate": null,
+    "size": 49958356
+   }
+  ],
+  "folder": "downloads\\Daft Punk - 2005.Human After All",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1266,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 0.987144
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.00010632617726273044,
+   "length": 319.2266666666667,
+   "recording_id": null,
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.98384756
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0002556409954527787,
+   "length": 263.37333333333333,
+   "recording_id": null,
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 0.97848797
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0013390398442510634,
+   "length": 287.76,
+   "recording_id": null,
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.3350570000000062
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 0.9953074
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0012790272578594422,
+   "length": 320.8,
+   "recording_id": null,
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "7df0252c-2fe8-4175-9d41-0e261420581b",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+      "8e0fab77-9fda-4545-89be-bf3b5834c82d",
+      "95e4588b-8edb-41f0-9636-37f80f1d5793"
+     ],
+     "score": 0.9816819
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0006622300746484788,
+   "length": 290.0,
+   "recording_id": null,
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.5452149999999847
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.99886477
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 7.890110763588593e-05,
+   "length": 248.24,
+   "recording_id": null,
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.99675924
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 8.416348301685129e-06,
+   "length": 19.333333333333332,
+   "recording_id": null,
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 0.9995385
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0005430237192933959,
+   "length": 287.73333333333335,
+   "recording_id": null,
+   "title": "Television Rules The Nation",
+   "track": 8,
+   "trailing_silence": 2.733560333333344
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.98490244
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 0.0003111381749985421,
+   "length": 284.36,
+   "recording_id": null,
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.3258050000000026
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 0.97143763
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": null,
+   "high_band": 5.8533918697190753e-05,
+   "length": 416.06666666666666,
+   "recording_id": null,
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 2.616507666666678
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Human After All",
+  "albumdisambig": null,
+  "artist": "Daft Punk",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2005
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.0,
+  "final_action": null,
+  "scorer_version": 5,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "2b2d70aa-8327-43d0-9683-a1216c295611"
+}

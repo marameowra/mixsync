@@ -17,6 +17,7 @@ Skill roles map one-to-one to the repo's label names:
 | `ready-for-agent` | Fully specified, ready for an AFK agent |
 | `ready-for-human` | Requires human implementation |
 | `wontfix` | Will not be actioned |
+| `epic` | Parent issue split into sub-issues; needs a `/grill-with-docs` session before work starts |
 
 ### Domain docs
 

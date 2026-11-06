@@ -1,0 +1,1767 @@
+{
+ "albums": [
+  {
+   "album": "Human After All",
+   "albumdisambig": null,
+   "artist": "Daft Punk",
+   "artist_ids": [
+    "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+   ],
+   "catalognum": "7243 5 63562 2 1",
+   "country": "US",
+   "genres": [
+    "electronic",
+    "house",
+    "electro",
+    "french house",
+    "experimental",
+    "club",
+    "electronica",
+    "progressive house"
+   ],
+   "label": "Virgin",
+   "media": "CD",
+   "mediums": 1,
+   "original_year": 2005,
+   "release_group_id": "f9e8042a-674e-3f01-80ec-7f0ab1c537df",
+   "release_id": "abbc40a0-2bcc-449e-bdd0-2dbae3213517",
+   "tracks": [
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 1,
+     "length": 319.226,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+     "title": "Human After All"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 2,
+     "length": 263.373,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+     "title": "The Prime Time of Your Life"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 3,
+     "length": 287.76,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+     "title": "Robot Rock"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 4,
+     "length": 320.8,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+     "title": "Steam Machine"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 5,
+     "length": 290.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+     "title": "Make Love"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 6,
+     "length": 248.24,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+     "title": "The Brainwasher"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 7,
+     "length": 19.333,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+     "title": "On/Off"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 8,
+     "length": 287.733,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+     "title": "Television Rules the Nation"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 9,
+     "length": 284.36,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+     "title": "Technologic"
+    },
+    {
+     "artist": "Daft Punk",
+     "artist_ids": [
+      "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     ],
+     "index": 10,
+     "length": 418.066,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+     "title": "Emotion"
+    }
+   ],
+   "va": false,
+   "year": 2005
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Human After All.flac",
+    "sample_rate": null,
+    "size": 40034825
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - The Prime Time of Your Life.flac",
+    "sample_rate": null,
+    "size": 31420153
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Robot Rock.flac",
+    "sample_rate": null,
+    "size": 38701925
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - Steam Machine.flac",
+    "sample_rate": null,
+    "size": 41077367
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Make Love.flac",
+    "sample_rate": null,
+    "size": 31120007
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - The Brainwasher.flac",
+    "sample_rate": null,
+    "size": 32159432
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - On+Off.flac",
+    "sample_rate": null,
+    "size": 1944849
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - Television Rules the Nation.flac",
+    "sample_rate": null,
+    "size": 34100937
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "09 - Technologic.flac",
+    "sample_rate": null,
+    "size": 35032445
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Emotion.flac",
+    "sample_rate": null,
+    "size": 50349006
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 01 - Human After All.flac",
+    "sample_rate": null,
+    "size": 39440475
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 01 - Human After All_639276871854368364.flac",
+    "sample_rate": null,
+    "size": 39973563
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 01 - Human After All_639276875683138547.flac",
+    "sample_rate": null,
+    "size": 39973563
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 01 - Human After All_639276883983054934.flac",
+    "sample_rate": null,
+    "size": 40545428
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 02 - The Prime Time of Your Life.flac",
+    "sample_rate": null,
+    "size": 31190709
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 02 - The Prime Time of Your Life_639276871935934222.flac",
+    "sample_rate": null,
+    "size": 31367974
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 02 - The Prime Time of Your Life_639276875794807044.flac",
+    "sample_rate": null,
+    "size": 31367974
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 02 - The Prime Time of Your Life_639276883966167541.flac",
+    "sample_rate": null,
+    "size": 31918169
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 03 - Robot Rock.flac",
+    "sample_rate": null,
+    "size": 38442016
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 03 - Robot Rock_639276871955861223.flac",
+    "sample_rate": null,
+    "size": 38637951
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 03 - Robot Rock_639276875851649769.flac",
+    "sample_rate": null,
+    "size": 38637951
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 03 - Robot Rock_639276884006908633.flac",
+    "sample_rate": null,
+    "size": 39223542
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 04 - Steam Machine.flac",
+    "sample_rate": null,
+    "size": 40988527
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 04 - Steam Machine_639276871876252402.flac",
+    "sample_rate": null,
+    "size": 41030057
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 04 - Steam Machine_639276875734348455.flac",
+    "sample_rate": null,
+    "size": 41030057
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 04 - Steam Machine_639276884025777388.flac",
+    "sample_rate": null,
+    "size": 41581096
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 05 - Make Love.flac",
+    "sample_rate": null,
+    "size": 30905667
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 05 - Make Love_639276871974414996.flac",
+    "sample_rate": null,
+    "size": 31058481
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 05 - Make Love_639276875756464435.flac",
+    "sample_rate": null,
+    "size": 31058481
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 05 - Make Love_639276884049784613.flac",
+    "sample_rate": null,
+    "size": 31631655
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 06 - The Brainwasher.flac",
+    "sample_rate": null,
+    "size": 31898808
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 06 - The Brainwasher_639276871897069762.flac",
+    "sample_rate": null,
+    "size": 32134980
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 06 - The Brainwasher_639276875812036794.flac",
+    "sample_rate": null,
+    "size": 32134980
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 06 - The Brainwasher_639276884037484212.flac",
+    "sample_rate": null,
+    "size": 32628631
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 07 - On+Off.flac",
+    "sample_rate": null,
+    "size": 1797162
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 07 - On+Off_639276871832717862.flac",
+    "sample_rate": null,
+    "size": 2168250
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 07 - On+Off_639276875860881534.flac",
+    "sample_rate": null,
+    "size": 2168250
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 07 - On+Off_639276884058217464.flac",
+    "sample_rate": null,
+    "size": 2593322
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 08 - Television Rules the Nation.flac",
+    "sample_rate": null,
+    "size": 34016834
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 08 - Television Rules the Nation_639276871917070961.flac",
+    "sample_rate": null,
+    "size": 34018591
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 08 - Television Rules the Nation_639276875777765722.flac",
+    "sample_rate": null,
+    "size": 34018591
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 08 - Television Rules the Nation_639276884073787824.flac",
+    "sample_rate": null,
+    "size": 34644337
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 09 - Technologic.flac",
+    "sample_rate": null,
+    "size": 34837801
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 09 - Technologic_639276871996215645.flac",
+    "sample_rate": null,
+    "size": 34967894
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 09 - Technologic_639276875832260898.flac",
+    "sample_rate": null,
+    "size": 34967894
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 09 - Technologic_639276884087084588.flac",
+    "sample_rate": null,
+    "size": 35581667
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 10 - Emotion.flac",
+    "sample_rate": null,
+    "size": 50198416
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 10 - Emotion_639276872021091476.flac",
+    "sample_rate": null,
+    "size": 50334554
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 10 - Emotion_639276875706379156.flac",
+    "sample_rate": null,
+    "size": 50334554
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Daft Punk - Human After All - 10 - Emotion_639276884101793954.flac",
+    "sample_rate": null,
+    "size": 50832910
+   }
+  ],
+  "folder": "downloads\\Human After All (2005)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2353,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 0.9874077
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00010632617726273044,
+   "length": 319.2266666666667,
+   "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.9832542
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0002556409954527787,
+   "length": 263.37333333333333,
+   "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 0.97848797
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0013390398442510634,
+   "length": 287.76,
+   "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.3354649999999992
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 0.99426293
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0012790272578594422,
+   "length": 320.8,
+   "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "7df0252c-2fe8-4175-9d41-0e261420581b",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+      "8e0fab77-9fda-4545-89be-bf3b5834c82d",
+      "95e4588b-8edb-41f0-9636-37f80f1d5793"
+     ],
+     "score": 0.98096603
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0006622300746484788,
+   "length": 290.0,
+   "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.5456239999999752
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.9999332
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 7.890110763588593e-05,
+   "length": 248.24,
+   "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.9974537
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 8.416394812273198e-06,
+   "length": 19.333333333333332,
+   "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0005430237192933959,
+   "length": 287.73333333333335,
+   "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+   "title": "Television Rules the Nation",
+   "track": 8,
+   "trailing_silence": 2.733968333333337
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9853639
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0003111381749985421,
+   "length": 284.36,
+   "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.3262129999999956
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 0.9724293
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 5.8533918697190753e-05,
+   "length": 416.06666666666666,
+   "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 2.616915666666671
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 0.99409944
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00010610618501148209,
+   "length": 319.87975056689345,
+   "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 1.0914735668934554
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00010632617726273044,
+   "length": 319.2266666666667,
+   "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00010632617726273044,
+   "length": 319.2266666666667,
+   "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "2b019867-ed79-4d66-9f7c-4aae63a1b302",
+      "691c8c35-f6e5-49e5-83fa-a42dcaafc97d",
+      "9312f0d4-24d1-426c-b9c5-dbdd8691a458",
+      "f78b23ae-4f27-4274-a499-bd2b48cc9817"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00010632617726273044,
+   "length": 319.2266666666667,
+   "recording_id": "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+   "title": "Human After All",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.98407835
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0002556215123719359,
+   "length": 263.24,
+   "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0002556409954527787,
+   "length": 263.37333333333333,
+   "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0002556409954527787,
+   "length": 263.37333333333333,
+   "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "3f92e890-abfe-4da9-aa27-6e76603c38ad",
+      "955a556d-7cda-4060-b402-bbfaf9d96c44",
+      "b1c25e8c-bd49-439a-91b0-e9d77b2718f9"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0002556409954527787,
+   "length": 263.37333333333333,
+   "recording_id": "955a556d-7cda-4060-b402-bbfaf9d96c44",
+   "title": "The Prime Time of Your Life",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 0.9764807
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.001338490213041822,
+   "length": 287.72,
+   "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.357438000000002
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0013390398442510634,
+   "length": 287.76,
+   "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.3223580000000084
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0013390398442510634,
+   "length": 287.76,
+   "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.3223580000000084
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08ec8d1f-d222-4bf3-9143-a3a614add7c4",
+      "11e07072-4fae-416e-9295-bc991d9f8e5c",
+      "15f16efc-8762-4151-95ab-c12d06268640",
+      "5e6332df-8cc8-4f4d-b8b1-cd6dfd512cfc",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "a40ded37-1af6-4465-8751-0be9bcd9eee0",
+      "d77e3fb9-501d-4196-b13f-5207991c6309",
+      "e9d33889-ee08-45af-8376-262a10766627",
+      "f92e924f-e795-433b-95ce-b256098abfd6"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0013390398442510634,
+   "length": 287.76,
+   "recording_id": "f92e924f-e795-433b-95ce-b256098abfd6",
+   "title": "Robot Rock",
+   "track": 3,
+   "trailing_silence": 1.3223580000000084
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 0.9968068
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0012771185117124426,
+   "length": 321.18666666666667,
+   "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0012790272578594422,
+   "length": 320.8,
+   "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0012790272578594422,
+   "length": 320.8,
+   "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+      "339deb02-8cb5-47db-9bb0-b4afdde07aea",
+      "4eda9362-4803-40c0-9025-5640e9193fa1",
+      "9b84aff7-0b2b-4b71-9e3b-949c4af28566",
+      "b1dbf8f2-b5e0-4dd1-95c5-e50fcf943a47"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0012790272578594422,
+   "length": 320.8,
+   "recording_id": "0ca77e5a-1c86-440b-a8e4-fa8c4b296c9c",
+   "title": "Steam Machine",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7df0252c-2fe8-4175-9d41-0e261420581b",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+      "8e0fab77-9fda-4545-89be-bf3b5834c82d",
+      "95e4588b-8edb-41f0-9636-37f80f1d5793"
+     ],
+     "score": 0.97052115
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0006618437926181657,
+   "length": 289.68,
+   "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.6356010000000083
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9993314
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0006622300746484788,
+   "length": 290.0,
+   "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.5325169999999844
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9993314
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0006622300746484788,
+   "length": 290.0,
+   "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.5325169999999844
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9993314
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0006622300746484788,
+   "length": 290.0,
+   "recording_id": "82f8a6c1-21b1-4aec-96ed-d76a473b38c6",
+   "title": "Make Love",
+   "track": 5,
+   "trailing_silence": 2.5325169999999844
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.98230624
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 7.903686397804589e-05,
+   "length": 248.4,
+   "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.9811976
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 7.890110763588593e-05,
+   "length": 248.24,
+   "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.9811976
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 7.890110763588593e-05,
+   "length": 248.24,
+   "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10f05631-cb9b-467c-8349-eea641022b97",
+      "19a9ef58-45a4-4f6c-90e7-54aec40e732c",
+      "a018fc24-db9d-4f78-9403-3c792ab08864",
+      "a6a58800-dd8f-4649-a61a-369a82d9ef38"
+     ],
+     "score": 0.9811976
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 7.890110763588593e-05,
+   "length": 248.24,
+   "recording_id": "a6a58800-dd8f-4649-a61a-369a82d9ef38",
+   "title": "The Brainwasher",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.99043846
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 9.147600719987087e-06,
+   "length": 19.2,
+   "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.9997685
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 8.41448808890989e-06,
+   "length": 19.333333333333332,
+   "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.9997685
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 8.41448808890989e-06,
+   "length": 19.333333333333332,
+   "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "21a0211f-b7e5-4800-aa89-461591ac2a01",
+      "81ba648c-4572-4246-b187-0caab9586c2d"
+     ],
+     "score": 0.9997685
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 8.41448808890989e-06,
+   "length": 19.333333333333332,
+   "recording_id": "21a0211f-b7e5-4800-aa89-461591ac2a01",
+   "title": "On/Off",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 0.99166006
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0005426539892287201,
+   "length": 287.84,
+   "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+   "title": "Television Rules the Nation",
+   "track": 8,
+   "trailing_silence": 2.861518999999987
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 0.98539686
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0005430237192933959,
+   "length": 287.73333333333335,
+   "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+   "title": "Television Rules the Nation",
+   "track": 8,
+   "trailing_silence": 2.720861333333346
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 0.98539686
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0005430237192933959,
+   "length": 287.73333333333335,
+   "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+   "title": "Television Rules the Nation",
+   "track": 8,
+   "trailing_silence": 2.720861333333346
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "09a83c53-1148-41a5-b559-141bb650d74d",
+      "12f055b1-1654-48a5-ae42-765dbba00255",
+      "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+      "81b46372-84f3-4d7c-b5fa-cb14c2bd357e"
+     ],
+     "score": 0.98539686
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0005430237192933959,
+   "length": 287.73333333333335,
+   "recording_id": "76fa60bf-10c5-46d1-a47a-bf156dec2035",
+   "title": "Television Rules the Nation",
+   "track": 8,
+   "trailing_silence": 2.720861333333346
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9836168
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.00030944366774608137,
+   "length": 284.28,
+   "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.4158959999999752
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0003111381749985421,
+   "length": 284.36,
+   "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.3131070000000022
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0003111381749985421,
+   "length": 284.36,
+   "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.3131070000000022
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1d2a50be-823f-4143-95e2-b84182487d49",
+      "1f7b6b76-ea87-428b-b731-52ea62a708d2",
+      "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+      "71a8e994-5042-4dc6-8ea0-3ae7349da46d",
+      "82f8a6c1-21b1-4aec-96ed-d76a473b38c6"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 0.0003111381749985421,
+   "length": 284.36,
+   "recording_id": "48d9340a-0c6a-469a-b043-eeaec9f577c6",
+   "title": "Technologic",
+   "track": 9,
+   "trailing_silence": 1.3131070000000022
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 0.9791468
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 5.854791046350993e-05,
+   "length": 417.32,
+   "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 4.003039000000001
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 5.8533918697190753e-05,
+   "length": 416.06666666666666,
+   "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 2.6038096666666775
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 5.8533918697190753e-05,
+   "length": 416.06666666666666,
+   "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 2.6038096666666775
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "efee830c-9e1c-47d7-adb6-9bc7bbe98955",
+      "fd0da185-a03d-405f-b7f2-8a271c6f632b"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Daft Punk",
+   "disc": 1,
+   "high_band": 5.8533918697190753e-05,
+   "length": 416.06666666666666,
+   "recording_id": "fd0da185-a03d-405f-b7f2-8a271c6f632b",
+   "title": "Emotion",
+   "track": 10,
+   "trailing_silence": 2.6038096666666775
+  }
+ ],
+ "labels": [
+  "transcode"
+ ],
+ "likelies": {
+  "album": "Human After All",
+  "albumdisambig": null,
+  "artist": "Daft Punk",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "abbc40a0-2bcc-449e-bdd0-2dbae3213517",
+  "year": 2005
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.42857142857142855,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'On/Off': looks transcoded: almost nothing above 16 kHz"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "abbc40a0-2bcc-449e-bdd0-2dbae3213517"
+}

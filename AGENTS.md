@@ -1,7 +1,7 @@
 # mixsync
 
-mixsync is a self-hosted music stack: download (Soulseek, torrent, Usenet), verify against
-MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
+mixsync is a self-hosted music stack: download (Soulseek via slskd; torrent/Usenet planned, #301), verify against
+MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome (Plex/Jellyfin planned, #302).
 
 - Data safety. Never delete, overwrite, or move user music files without a safeguard (dry
   run, backup, trash/quarantine, or confirmation). If a destructive action is the only
@@ -16,6 +16,9 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome/Plex/Jellyfin.
   `skip`/`skipif`/`xfail`/`.only` markers (`.claude/hooks/guard_tests.py` blocks these). When
   behavior changes, rewrite assertions to the new behavior instead of deleting them. If
   one of these is truly needed, ask first and say why. Test public behavior, not internals.
+- Epics (`epic` label) need a `/grill-with-docs` session before any work on them or their
+  sub-issues, recorded as a "Grilled" comment on the epic. Agents can't run that skill: if
+  the comment is missing, stop and ask the user to run `/grill-with-docs` on the epic.
 - Shipping: branch from `origin/dev`, then `/ship`. It runs the checks, opens the PR with
   `--base dev` and `Fixes #n` lines, and queues `gh pr merge --auto --merge` only if checks
   passed; otherwise it leaves the PR for the user. The `dev` ruleset requires the `check`

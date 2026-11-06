@@ -1,0 +1,11 @@
+# Local-build override for contributors: docker compose -f compose.yml -f compose.build.yml up -d --build
+x-build: &build
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: mixsync:local
+
+services:
+  mixsync-migrate: *build
+  mixsync-web: *build
+  mixsync-worker: *build

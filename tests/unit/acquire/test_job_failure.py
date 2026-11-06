@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 
 from mixsync.acquire import verify
-from mixsync.acquire.requests import NO_RESULTS_BACKOFF
+from mixsync.acquire.requests import no_results_delay
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.library import Track
@@ -85,7 +85,7 @@ async def test_a_failing_job_keeps_a_partial_request_partial(env: Env) -> None:
     with env.sessions() as s:  # a repeat search is queued, on the backoff
         searches = list(s.scalars(select(Job).where(Job.kind == JobKind.SEARCH)))
     assert [j.payload for j in searches] == [{"request_id": rid}]
-    assert searches[0].run_after.replace(tzinfo=UTC) == env.clock.now() + NO_RESULTS_BACKOFF[0]
+    assert searches[0].run_after.replace(tzinfo=UTC) == env.clock.now() + no_results_delay(1)
     assert req.no_results_attempts == 1
 
 

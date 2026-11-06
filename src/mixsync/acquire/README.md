@@ -14,7 +14,6 @@ The request pipeline and everything that turns files into library tracks: search
 - Merge, promote and migration act through plans: a draft (dry run) first, then a user confirmation. Every op is validated against the DB and the file journal before it acts, and a failure marks the plan failed instead of guessing ([data safety](../../../docs/design/data-safety.md)).
 - The migration source is only ever opened for reading.
 - The request budget of 5 dropped candidates is in [ADR 0007](../../../docs/decisions/0007-quarantine-owned-by-mixsync.md).
-  > Planned — not built (#203): the 5-candidate request budget.
 
 ## May import
 `core`, `db`, `match`, `library`.

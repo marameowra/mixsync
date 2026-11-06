@@ -1,0 +1,256 @@
+{
+ "albums": [
+  {
+   "album": "Purple EP",
+   "albumdisambig": null,
+   "artist": "Vulpey",
+   "artist_ids": [
+    "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [],
+   "label": "Simplify Recordings",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": null,
+   "release_group_id": "c7c35f74-3d48-46c8-a197-f3149ba66842",
+   "release_id": "bdde0906-0c53-4c80-b918-008b422b5a44",
+   "tracks": [
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 1,
+     "length": 312.032,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "90962cf8-6f83-427c-b72c-9093eec65542",
+     "title": "Bam (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 2,
+     "length": 324.466,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "a3fd0bbb-6939-46b6-a89e-7328dfc391c9",
+     "title": "A Long Way (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 3,
+     "length": 269.505,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "e6587a4c-eae0-44a1-a51f-7c503ba25dfb",
+     "title": "Atrium (feat. Mynerva) (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 4,
+     "length": 318.04,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "e48d7e05-e7ec-4d54-b666-0d647ef99a28",
+     "title": "Purple (Original Mix)"
+    }
+   ],
+   "va": false,
+   "year": null
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 326,
+    "extension": "mp3",
+    "path": "Rat Bat Blue (1973)\\1-Deep Purple - Rat Bat Blue.mp3",
+    "sample_rate": null,
+    "size": 13081946
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 315,
+    "extension": "mp3",
+    "path": "Rat Bat Blue (1973)\\Brothers in Arms - Rat Bat Blue.mp3",
+    "sample_rate": null,
+    "size": 12633645
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 261,
+    "extension": "mp3",
+    "path": "Rat Bat Blue (1973)\\Diamond Head - Rat Bat Blue.mp3",
+    "sample_rate": null,
+    "size": 10468845
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 331,
+    "extension": "mp3",
+    "path": "Rat Bat Blue (1973)\\Helloween - Rat Bat Blue.mp3",
+    "sample_rate": null,
+    "size": 13248398
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 298,
+    "extension": "mp3",
+    "path": "Rat Bat Blue (1973)\\Richie Kotzen, Deen Castronovo & Todd Jensen - Rat Bat Blue.mp3",
+    "sample_rate": null,
+    "size": 11955234
+   }
+  ],
+  "folder": "Deep Purple\\Rat Bat Blue (1973)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 346283,
+  "username": "peer-b0d3518b"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2370,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2defee0b-0486-4d77-bb38-228db3c022b3",
+      "7e4a1c4a-fa09-4fcc-8891-4c497e16b08c"
+     ],
+     "score": 0.9972969
+    }
+   ],
+   "artist": "Deep Purple",
+   "disc": null,
+   "high_band": null,
+   "length": 326.533825,
+   "recording_id": null,
+   "title": "Rat Bat Blue",
+   "track": 5,
+   "trailing_silence": 4.418132999999955
+  },
+  {
+   "acoustid": [],
+   "artist": "",
+   "disc": null,
+   "high_band": null,
+   "length": 315.816,
+   "recording_id": null,
+   "title": "Brothers in Arms - Rat Bat Blue",
+   "track": null,
+   "trailing_silence": 1.4614579999999933
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5dbdb7b7-eb4d-43ab-9ed2-5072acba15f8"
+     ],
+     "score": 0.98539686
+    }
+   ],
+   "artist": "",
+   "disc": null,
+   "high_band": null,
+   "length": 261.696,
+   "recording_id": null,
+   "title": "Diamond Head - Rat Bat Blue",
+   "track": null,
+   "trailing_silence": 1.1040830000000028
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0c056280-ff01-4b2b-a052-bbe4131690b7"
+     ],
+     "score": 0.95048785
+    }
+   ],
+   "artist": "",
+   "disc": null,
+   "high_band": null,
+   "length": 331.1804081632653,
+   "recording_id": null,
+   "title": "Helloween - Rat Bat Blue",
+   "track": null,
+   "trailing_silence": 2.4186391632653113
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6bb01fa5-301d-4aef-8c51-34915a76a460"
+     ],
+     "score": 0.9689807
+    }
+   ],
+   "artist": "Richie Kotzen",
+   "disc": null,
+   "high_band": null,
+   "length": 298.76565,
+   "recording_id": null,
+   "title": "Rat Bat Blue",
+   "track": 4,
+   "trailing_silence": 3.263971999999967
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "padded"
+ ],
+ "likelies": {
+  "album": "Who Do We Think We Are!",
+  "albumdisambig": null,
+  "artist": "Deep Purple",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 1973
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.7453790618954537,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'Diamond Head - Rat Bat Blue': AcoustID (0.99) says a different recording than 'Atrium (feat. Mynerva) (Original Mix)' (e6587a4c-eae0-44a1-a51f-7c503ba25dfb)",
+   "'Helloween - Rat Bat Blue': AcoustID (0.95) says a different recording than 'A Long Way (Original Mix)' (a3fd0bbb-6939-46b6-a89e-7328dfc391c9)",
+   "'Rat Bat Blue': duration off by 19s from 'Purple (Original Mix)'",
+   "'Rat Bat Blue': AcoustID (0.97) says a different recording than 'Purple (Original Mix)' (e48d7e05-e7ec-4d54-b666-0d647ef99a28)"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "bdde0906-0c53-4c80-b918-008b422b5a44"
+}
