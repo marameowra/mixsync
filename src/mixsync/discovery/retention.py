@@ -193,9 +193,7 @@ class Retention:
             folders = await lib.music_folders()
             folder = folders.get(self.d.discover_library)
             if folder is None:  # songs from other libraries must not decide a hold
-                note = self.d.missing_note(
-                    [self.d.discover_library], folders, MISSING_TAIL
-                )
+                note = self.d.missing_note([self.d.discover_library], folders, MISSING_TAIL)
                 log.warning("discovery retention: user %s: %s", uid, note)
                 return self._note(rows, note or "")
             starred = await lib.starred_song_ids()  # once per user per run, like the counts
