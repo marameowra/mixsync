@@ -654,7 +654,11 @@ class Pipeline:
         votes = Counter(r for rs in holding.values() for r in dict.fromkeys(rs))
         known = {a.release_id for a in albums}
         new = [r for r, _ in votes.most_common() if r not in known][:IDENTIFY_RELEASES]
-        albums += [await self.metadata.get_release(r) for r in new]
+        for r in new:
+            try:
+                albums.append(await self.metadata.get_release(r))
+            except PermanentError as e:  # an extra candidate only: identify goes on without it
+                log.info("release %s from a recording lookup: not fetched: %s", r, e)
         return holding
 
     async def import_(self, job: JobRecord) -> None:

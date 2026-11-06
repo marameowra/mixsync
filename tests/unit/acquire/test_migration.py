@@ -440,6 +440,29 @@ async def test_a_recording_lookup_musicbrainz_refuses_still_identifies(rig: Rig)
     assert d.evidence["off_release"][0]["releases"] == []
 
 
+async def test_a_looked_up_release_musicbrainz_refuses_still_identifies(rig: Rig) -> None:
+    put_album(rig.root, "Alpha Band/Alpha Album")
+    rig.env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.99, ("elsewhere-rec",))
+    ]
+    rig.meta.refs = [ref(ALBUM)]
+    rig.meta.holding = {"elsewhere-rec": [str(OTHER.release_id)]}
+    fetch = rig.meta.get_release
+
+    async def refuse_other(mbid: str, *, fresh: bool = False) -> Any:
+        if mbid == OTHER.release_id:
+            raise PermanentError("returned 404")  # deleted between the browse and the fetch
+        return await fetch(mbid, fresh=fresh)
+
+    rig.meta.get_release = refuse_other  # type: ignore[method-assign]
+    rig.confirm(await rig.preflight())
+    await rig.env.drain()
+
+    (req,) = rig.requests()
+    (d,) = decision_rows(rig.env, 2)
+    assert (req.status, d.release_mbid) == ("review", ALBUM.release_id)
+
+
 async def test_recording_lookups_take_one_recording_per_file_for_at_most_five_files(
     rig: Rig,
 ) -> None:
