@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 EVERY = timedelta(days=1)
 UNKNOWN_NOTE = " discovery tracks not found in Navidrome; not expiring them"
+MISSING_TAIL = "retention left every hold as it is"  # ends the missing-library note
 SOON = timedelta(days=7)
 
 
@@ -193,7 +194,7 @@ class Retention:
             folder = folders.get(self.d.discover_library)
             if folder is None:  # songs from other libraries must not decide a hold
                 note = self.d.missing_note(
-                    [self.d.discover_library], folders, "retention left every hold as it is"
+                    [self.d.discover_library], folders, MISSING_TAIL
                 )
                 log.warning("discovery retention: user %s: %s", uid, note)
                 return self._note(rows, note or "")
@@ -241,7 +242,7 @@ class Retention:
                 pt.navidrome_song_id = r.song_id
             for pid in {r.playlist_id for r in rows}:  # our note only; other errors stay
                 pl = s.get_one(DiscoveryPlaylist, pid)
-                ours = (pl.last_error or "").endswith(UNKNOWN_NOTE)
+                ours = (pl.last_error or "").endswith((UNKNOWN_NOTE, MISSING_TAIL))
                 if pid in unknown and (pl.last_error is None or ours):
                     pl.last_error = f"{unknown[pid]}{UNKNOWN_NOTE}"
                 elif pid not in unknown and ours:

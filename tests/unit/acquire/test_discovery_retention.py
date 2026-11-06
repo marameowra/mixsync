@@ -400,6 +400,17 @@ async def test_a_missing_discover_library_changes_no_hold(
     assert err in caplog.text
 
 
+async def test_a_good_run_clears_the_missing_library_note(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.folders = {"Music Library": "1"}
+    await r.retain(env.user_id)
+    r.lib.folders = {"Music Library": "1", "discover": DISCOVER_FOLDER}  # renamed by the user
+    await r.retain(env.user_id)
+    with env.sessions() as s:
+        assert s.scalars(select(DiscoveryPlaylist)).one().last_error is None
+
+
 async def test_an_unknown_song_is_never_expired(env: Env) -> None:
     r = RRig(env)
     r.hold(env.user_id)

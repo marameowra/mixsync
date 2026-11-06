@@ -47,7 +47,8 @@ class NavidromeUser:
 
     async def music_folders(self) -> dict[str, str]:
         """Library name -> id for the libraries this user can see (one getMusicFolders call)."""
-        return {str(f.get("name")): str(f["id"]) for f in await self._subsonic.get_music_folders()}
+        folders = await self._subsonic.get_music_folders()
+        return {str(f.get("name")): str(f["id"]) for f in reversed(folders)}  # first of a name wins
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
