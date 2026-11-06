@@ -1,8 +1,5 @@
 x-mixsync: &mixsync
-  build:
-    context: ..
-    dockerfile: deploy/Dockerfile
-  image: mixsync:local
+  image: ghcr.io/marameowra/mixsync:${MIXSYNC_TAG:-latest}
   user: "${PUID}:${PGID}"
   env_file: .env
   volumes:
@@ -49,7 +46,7 @@ services:
         condition: service_completed_successfully
 
   slskd:
-    image: slskd/slskd
+    image: slskd/slskd:0.26.2
     user: "${PUID}:${PGID}"
     environment:
       SLSKD_API_KEY: ${MIXSYNC_SLSKD_API_KEY}
@@ -60,7 +57,7 @@ services:
     restart: unless-stopped
 
   navidrome:
-    image: deluan/navidrome
+    image: deluan/navidrome:0.64.2
     user: "${PUID}:${PGID}"
     environment:
       ND_DATAFOLDER: /nd-data
