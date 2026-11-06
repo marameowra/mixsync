@@ -27,4 +27,14 @@
   <button type="submit">Save auto-accept limit</button>
 </form>
 {% if "admin" in user.capabilities %}<p><a href="/account/cap">App-wide minimum confidence</a></p>{% endif %}
+<h2>Change password</h2>
+{% if error and error[0] == "password" %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
+<p>Your other sessions are signed out; this one stays signed in.</p>
+<form method="post" action="/account/password">
+  {{ forms.csrf() }}
+  <p class="field"><label>Current password <input name="current" type="password" required autocomplete="current-password"></label></p>
+  <p class="field"><label>New password <input name="new" type="password" required autocomplete="new-password"></label></p>
+  <p class="field"><label>Confirm new password <input name="confirm" type="password" required autocomplete="new-password"></label></p>
+  <button type="submit">Change password</button>
+</form>
 {% endblock %}
