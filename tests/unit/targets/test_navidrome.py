@@ -157,9 +157,10 @@ async def test_resolve_passes_music_folder_and_folder_lookup(make_client: Make) 
         return ok(searchResult3={"song": [{"id": "a", "musicBrainzId": "m"}]})
 
     u = user(make_client, handler)
-    folder = await u.music_folder_id("discover")
-    assert folder == "2"
-    assert await u.music_folder_id("nope") is None
+    folders = await u.music_folders()
+    folder = folders["discover"]
+    assert folder == "2" and folders == {"music": "1", "discover": "2"}
+    assert "nope" not in folders
     assert await u.resolve("m", "x", "A", folder) == "a"
 
 

@@ -381,6 +381,36 @@ def set_song_id(r: RRig, song_id: str | None) -> None:
         s.scalars(select(ProvisionalTrack)).one().navidrome_song_id = song_id
 
 
+async def test_a_missing_discover_library_changes_no_hold(
+    env: Env, caplog: pytest.LogCaptureFixture
+) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.folders = {"Music Library": "1"}
+    r.lib.stars = {SONG}  # would promote, were songs resolved outside the discover library
+    env.clock.advance(timedelta(days=40))  # and would expire otherwise
+    await r.retain(env.user_id)
+    assert r.lib.resolved == []
+    hold = r.holds()[0]
+    assert hold.expired_at is None and hold.kept_at is None
+    assert r.track().status == "active"
+    with env.sessions() as s:
+        err = s.scalars(select(DiscoveryPlaylist)).one().last_error or ""
+    assert "'discover' library is not visible" in err and "it sees: Music Library" in err
+    assert err in caplog.text
+
+
+async def test_a_good_run_clears_the_missing_library_note(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.folders = {"Music Library": "1"}
+    await r.retain(env.user_id)
+    r.lib.folders = {"Music Library": "1", "discover": DISCOVER_FOLDER}  # renamed by the user
+    await r.retain(env.user_id)
+    with env.sessions() as s:
+        assert s.scalars(select(DiscoveryPlaylist)).one().last_error is None
+
+
 async def test_an_unknown_song_is_never_expired(env: Env) -> None:
     r = RRig(env)
     r.hold(env.user_id)

@@ -12,7 +12,7 @@ slskd:      /downloads (rw)  /data/library (ro)
 navidrome:  /data/library (ro)  /data/discover (ro)
 ```
 - `/data` is one mount holding `library/`, `discover/`, `.trash/`, `.incoming/`, `quarantine/`. Never split it ([why](../docs/architecture.md#deployment)); MixSync refuses a cross-device move.
-- Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2 and grant the relevant users access.
+- Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2, name it `discover` (or set `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY`), and grant the relevant users access.
 - `/drop` (set `MIXSYNC_DROP_DIR=/drop`): album folders are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash`. Files under a minute old are left alone; a rejected folder is not requeued unless its contents change.
 - Run all containers with the same `PUID`/`PGID`.
 
@@ -36,6 +36,8 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
+| `MIXSYNC_NAVIDROME_LIBRARY` | name of the main Navidrome library (default `Music Library`) |
+| `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY` | name of the discover Navidrome library (default `discover`) |
 | `MIXSYNC_NAVIDROME_URL`, `_USER`, `_PASSWORD` | Navidrome base URL and an **admin** account (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |
 | `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`; default `127.0.0.1,::1` |
