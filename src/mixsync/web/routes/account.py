@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap, profile_for
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
-from mixsync.db.auth import AuthUser
+from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
@@ -22,6 +22,7 @@ from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
+    SESSION_COOKIE,
     Box,
     CurrentUser,
     Db,
@@ -225,6 +226,28 @@ def save_cap(
             .values(auto_accept_max=cap)
         )
     return RedirectResponse("/account/cap", 303)
+
+
+@router.post("/password")
+def change_password(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    box: Box,
+    current: Annotated[str, Form()],
+    new: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
+) -> Response:
+    """The current session stays signed in; the user's other sessions end."""
+    row = db.get_one(User, user.id)
+    if not verify_password(row.password_hash, current):
+        return _page(request, user, db, box, ("password", "The current password is wrong."))
+    if not new or len(new) > MAX_LEN:
+        return _page(request, user, db, box, ("password", "Enter a new password."))
+    if new != confirm:
+        return _page(request, user, db, box, ("password", "The new passwords do not match."))
+    set_password(db, row, new, keep=request.cookies.get(SESSION_COOKIE))
+    return RedirectResponse("/account", 303)
 
 
 @router.post("/{service}")

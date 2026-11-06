@@ -22,6 +22,7 @@ from mixsync.web.routes import (
     migration,
     requests,
     review,
+    users,
     watchlist,
 )
 from mixsync.web.templating import templates
@@ -65,6 +66,7 @@ def create_app(
     app.include_router(library.router)
     app.include_router(media.router)
     app.include_router(migration.router)
+    app.include_router(users.router)
     app.include_router(watchlist.router)
     app.include_router(discover.router)
 
