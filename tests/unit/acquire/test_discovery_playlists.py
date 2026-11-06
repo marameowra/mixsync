@@ -95,8 +95,8 @@ class FakeLib:
     async def play_counts(self, song_ids: list[str]) -> dict[str, int]:
         return {}
 
-    async def music_folder_id(self, name: str) -> str | None:
-        return self.folders.get(name)
+    async def music_folders(self) -> dict[str, str]:
+        return self.folders
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
@@ -418,6 +418,25 @@ async def test_an_unscanned_song_is_skipped_then_pushed_after_the_import_hook(ri
     assert rig.lib.playlists["pl1"] == ["s1", "s2"]
 
 
+async def test_both_libraries_missing_give_one_note_naming_what_is_visible(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    provisional(rig.env, 2)
+    rig.lib.main, rig.lib.disc = {rec(1): "s1"}, {rec(2): "s2"}
+    rig.lib.folders = {"Other": "9", "Discover": "8"}
+    rig.history.weekly = [ref(1), ref(2)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    err = rig.pl(pid).last_error or ""
+    assert "'Music Library' and 'discover' libraries are not visible" in err
+    assert "(it sees: Other, Discover)" in err
+    assert err in caplog.text
+
+
 async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     pid = rig.playlist()
@@ -429,6 +448,7 @@ async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
     await rig.run(JobKind.DISCOVERY_PUSH)
     assert rig.lib.playlists == {"pl1": ["s2"]}
     assert "'discover' library is not visible" in (rig.pl(pid).last_error or "")
+    assert "it sees: no libraries" in (rig.pl(pid).last_error or "")
 
 
 async def test_next_build_is_one_jittered_job_and_a_rerun_adds_none(rig: Rig) -> None:

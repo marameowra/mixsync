@@ -189,7 +189,14 @@ class Retention:
         lib = self.d.library_for(*links["navidrome"])
         reasons: dict[int, str] = {}  # hold id -> why it is kept
         try:
-            folder = await lib.music_folder_id(self.d.discover_library)
+            folders = await lib.music_folders()
+            folder = folders.get(self.d.discover_library)
+            if folder is None:  # songs from other libraries must not decide a hold
+                note = self.d.missing_note(
+                    [self.d.discover_library], folders, "retention left every hold as it is"
+                )
+                log.warning("discovery retention: user %s: %s", uid, note)
+                return self._note(rows, note or "")
             starred = await lib.starred_song_ids()  # once per user per run, like the counts
             for r in rows:
                 if r.song_id is None and not r.kept:

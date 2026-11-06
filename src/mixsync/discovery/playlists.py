@@ -359,6 +359,18 @@ class Discovery:
             hold.playlist_id = pl.id
         return hold
 
+    @staticmethod
+    def missing_note(wanted: list[str], folders: dict[str, str], then: str) -> str | None:
+        """One message for every wanted library the user's Navidrome account cannot see."""
+        missing = [f"'{n}'" for n in wanted if n not in folders]
+        if not missing:
+            return None
+        sees = ", ".join(folders) or "no libraries"
+        return (
+            f"the {' and '.join(missing)} {'library is' if len(missing) == 1 else 'libraries are'}"
+            f" not visible to your Navidrome account (it sees: {sees}); {then}"
+        )
+
     async def push(self, job: JobRecord) -> None:
         pid = job.payload["playlist_id"]
         with self.sessions() as s:
@@ -390,20 +402,14 @@ class Discovery:
         ids: list[str] = []
         try:
             # a main-library entry must not resolve to its discover copy: restrict both
-            main_folder = await lib.music_folder_id(self.main_library) if main else None
-            if main and main_folder is None:
-                note = (
-                    f"the '{self.main_library}' library is not visible to your "
-                    "Navidrome account; searching all libraries"
-                )
-            folder = None
-            if discover - main:
-                folder = await lib.music_folder_id(self.discover_library)
-                if folder is None:
-                    note = (
-                        f"the '{self.discover_library}' library is not visible to your "
-                        "Navidrome account; searching all libraries"
-                    )
+            folders = await lib.music_folders() if main or discover - main else {}
+            main_folder = folders.get(self.main_library) if main else None
+            folder = folders.get(self.discover_library) if discover - main else None
+            wanted = ([self.main_library] if main else []) + (
+                [self.discover_library] if discover - main else []
+            )
+            if note := self.missing_note(wanted, folders, "searching all libraries"):
+                log.warning("discovery: playlist %s: %s", pid, note)
             for e in entries:
                 m = e["recording_mbid"]
                 if m not in main and m not in discover:
