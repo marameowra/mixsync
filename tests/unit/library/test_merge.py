@@ -18,6 +18,7 @@ from mixsync.core.jobs import JobKind
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import ReleaseRef
 from mixsync.db import canonical as canonical_db
+from mixsync.db import progress
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
@@ -93,6 +94,11 @@ class World:
         with self.sessions() as s:
             return s.get_one(Plan, plan_id)
 
+    def plan_ops(self, plan_id: int) -> list[dict[str, Any]]:
+        """The plan's ops with their current `done` flags."""
+        with self.sessions() as s:
+            return progress.with_done(s, s.get_one(Plan, plan_id))
+
     def canonical(self) -> str | None:
         with self.sessions() as s:
             return canonical_db.get(s, GROUP)
@@ -138,7 +144,7 @@ def build(w: World) -> int:
 
 def ops_by_kind(w: World, plan_id: int) -> dict[str, list[dict[str, Any]]]:
     out: dict[str, list[dict[str, Any]]] = {}
-    for op in w.plan(plan_id).ops:
+    for op in w.plan_ops(plan_id):
         out.setdefault(op["op"], []).append(op)
     return out
 
@@ -372,7 +378,7 @@ def test_undo_of_a_failed_partial_plan_undoes_only_what_ran(world: World) -> Non
         s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "changed"
     with pytest.raises(SafetyError):
         world.merger.execute(pid)
-    assert [o["done"] for o in world.plan(pid).ops].count(True) == 2
+    assert [o["done"] for o in world.plan_ops(pid)].count(True) == 2
     with world.sessions.begin() as s:
         s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "ac-r2"
     world.merger.undo_plan(pid)
@@ -555,7 +561,7 @@ def test_canonical_is_rechecked_before_each_op(
     monkeypatch.setattr(Merger, "_commit_op", commit_then_switch)
     with pytest.raises(SafetyError, match="canonical"):
         world.merger.execute(pid)
-    assert [o["done"] for o in world.plan(pid).ops].count(True) == 1
+    assert [o["done"] for o in world.plan_ops(pid)].count(True) == 1
     assert world.canonical() == "elsewhere"
 
 

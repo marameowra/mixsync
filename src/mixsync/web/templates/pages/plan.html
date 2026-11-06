@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Plan {{ plan.id }} - MixSync{% endblock %}
 {% block content %}
+{% set ops = ops if ops is defined else plan.ops %}{# with each op's current done flag #}
 {% from "macros/ui.html" import status %}
 {% set promote = plan.kind == "promote" %}
 {% set delete = plan.kind == "delete" %}
 {% set reorg = plan.kind == "reorganize" %}
-{% set request_op = plan.ops | selectattr("op", "equalto", "request") | first %}
+{% set request_op = ops | selectattr("op", "equalto", "request") | first %}
 <h1>{{ "Delete" if delete else "Promote" if promote else "Reorganize" if reorg else "Merge" }} plan {{ plan.id }}</h1>
 {% if reorg %}<p>Moves {{ counts.move }} {{ "files" if counts.move != 1 else "file" }} to the paths the current path template gives them. Tags are not changed. Each original goes to the trash first, so Undo puts every file back while recovery is available.</p>
 {% elif delete %}<p>Moves {{ counts.trash }} {{ "files" if counts.trash != 1 else "file" }} out of the library into the trash and removes {{ "their" if counts.trash != 1 else "its" }} library {{ "records" if counts.trash != 1 else "record" }}.{% if request_op %} Confirming also deletes request {{ request_op.request_id }}; an undo does not bring the request back.{% endif %} Undo restores the files and records while recovery is available.</p>
@@ -35,10 +36,10 @@
   <div class="summary">{{ status(plan.status) }} <strong>{% if reorg %}Reorganize {{ counts.move }} {{ "files" if counts.move != 1 else "file" }}{% elif delete %}Delete {{ counts.trash }} {{ "files" if counts.trash != 1 else "file" }}{% elif promote %}Promote to {{ mb.link("release", plan.canonical_release_mbid) }}{% else %}Merge {{ mb.link("release-group", plan.release_group_mbid) }} onto {{ mb.link("release", plan.canonical_release_mbid) }}{% endif %}</strong> <span class="muted">{% if reorg %}· {{ counts.move }} to move · {{ counts.refused }} refused{% elif delete %}· {{ counts.trash }} to trash{% else %}· {{ counts.move }} to move · {{ counts.trash }} to trash · {{ counts.keep }} to keep{% endif %}</span></div>
   <div class="actions">
     {% set noun = "delete" if delete else "promotion" if promote else "reorganize" if reorg else "merge" %}
-    {% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm delete: trash " ~ counts.trash if delete else ("Confirm reorganize: move " ~ counts.move if reorg else ("Confirm promotion" if promote else "Confirm merge") ~ ": move " ~ counts.move ~ ", trash " ~ counts.trash)) }}{% endif %}
+    {% if "confirm" in allowed %}{{ forms.plan_action(plan, "confirm", "Confirm delete: trash " ~ counts.trash if delete else ("Confirm reorganize: move " ~ counts.move if reorg else ("Confirm promotion" if promote else "Confirm merge") ~ ": move " ~ counts.move ~ ", trash " ~ counts.trash), ops) }}{% endif %}
     {% if "discard" in allowed %}<form method="post" action="/library/plans/{{ plan.id }}/discard">{{ forms.csrf() }}<button class="btn danger" type="submit">Discard plan</button></form>{% endif %}
-    {% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume " ~ noun) }}{% endif %}
-    {% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo " ~ noun) }}{% endif %}
+    {% if "resume" in allowed %}{{ forms.plan_action(plan, "resume", "Resume " ~ noun, ops) }}{% endif %}
+    {% if "undo" in allowed %}{{ forms.plan_action(plan, "undo", "Undo " ~ noun, ops) }}{% endif %}
   </div>
 </div>
 {% if reorg %}
@@ -62,7 +63,7 @@
 <table>
   <thead><tr><th>Op</th><th>File</th><th>Detail</th></tr></thead>
   <tbody>
-  {% for op in plan.ops %}
+  {% for op in ops %}
   <tr>
     <td class="plan-op">{{ op.op }}{% if op.done %} (done){% endif %}</td>
     {% if op.op == "move" %}

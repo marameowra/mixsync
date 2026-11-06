@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -54,3 +54,14 @@ class Plan(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), default="draft")
     ops: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class PlanProgress(Base):
+    """Whether op `op_index` of a plan is done. Overrides the op's own `done` flag, which only
+    plans from before this table carry (`db.progress.done_flags`)."""
+
+    __tablename__ = "plan_progress"
+
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"), primary_key=True)
+    op_index: Mapped[int] = mapped_column(primary_key=True)
+    done: Mapped[bool]

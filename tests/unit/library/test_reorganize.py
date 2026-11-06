@@ -8,15 +8,18 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 
 from mixsync.acquire.merge import Merger
 from mixsync.app import create_app
+from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
 from mixsync.core.errors import SafetyError
+from mixsync.core.jobs import JobKind
 from mixsync.db.auth import create_user
-from mixsync.db.models.library import Track
+from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp
+from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, layout, tags
 from mixsync.web.routes import library as library_routes
 
@@ -172,7 +175,107 @@ def test_startup_backfill_labels_old_rows_without_moving_anything(world: World) 
         m.build_reorganize()
 
 
+def test_a_collision_with_a_track_already_in_place_gets_a_suffix(world: World) -> None:
+    taken = "Band/2000 - Album/01 Song r1.flac"
+    (world.ops.library / taken).parent.mkdir(parents=True)
+    (world.ops.library / taken).write_bytes(b"in place")
+    with world.sessions.begin() as s:
+        s.add(
+            Track(path=taken, status="verified", batch_id="x", imported_at=SystemClock().now(),
+                  path_template=T2)
+        )  # fmt: skip
+    pid = merger(world).build_reorganize()
+    moves = {o["old"]["path"]: o["new_path"] for o in world.plan(pid).ops}
+    assert moves["Band/Album (2000)/01-01 Song r1.flac"] == "Band/2000 - Album/01 Song r1 (2).flac"
+    assert taken not in moves.values()
+
+
+def _plan_updates(w: World) -> list[str]:
+    """Record every UPDATE of the plans table, by the columns it sets."""
+    seen: list[str] = []
+
+    def spy(_c: Any, _cur: Any, statement: str, *_: Any) -> None:
+        if m := re.match(r"\s*UPDATE plans SET (.*?) WHERE", statement, re.S):
+            seen.append(m[1])
+
+    event.listen(w.sessions.kw["bind"], "before_cursor_execute", spy)
+    return seen
+
+
+def test_running_and_undoing_never_rewrite_the_ops(world: World) -> None:
+    m = merger(world)
+    pid = m.build_reorganize()
+    ops0, writes = world.plan(pid).ops, _plan_updates(world)
+    m.execute(pid)
+    assert [o["done"] for o in world.plan_ops(pid)] == [True] * 5
+    m.undo_plan(pid)
+    assert [o["done"] for o in world.plan_ops(pid)] == [False] * 5
+    assert any("status" in w for w in writes)  # the spy sees plan updates
+    assert not [w for w in writes if re.search(r"\bops\b", w)] and world.plan(pid).ops == ops0
+
+
+def test_a_crash_mid_plan_resumes_without_redoing_done_moves(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lib0, m = world.lib(), merger(world)
+    pid = m.build_reorganize()
+    test_merge.crash_once(monkeypatch, "_commit_op", nth=3)  # dies before the third op commits
+    with pytest.raises(test_merge.Boom):
+        m.execute(pid)
+    assert [o["done"] for o in world.plan_ops(pid)] == [True, True, False, False, False]
+    m.execute(pid)
+    assert world.plan(pid).status == "done"
+    assert world.lib() == {new: lib0[old] for old, new in MOVES.items()}
+    with world.sessions() as s:
+        trashes = s.scalars(
+            select(FileOp.src).where(FileOp.batch_id == f"reorganize-{pid}", FileOp.kind == "trash")
+        ).all()
+    assert sorted(trashes) == sorted(MOVES)  # each original moved exactly once
+
+
+def test_a_merge_refused_for_a_template_change_leaves_the_canonical_alone(world: World) -> None:
+    pid = test_merge.build(world)
+    lib0 = world.lib()
+    with pytest.raises(SafetyError, match="template changed"):
+        merger(world).execute(pid)
+    assert world.plan(pid).status == "failed" and world.canonical() is None
+    assert world.lib() == lib0
+
+
+def test_undo_of_a_plan_stored_before_path_template(world: World) -> None:
+    pid = test_merge.build(world)
+    with world.sessions.begin() as s:  # as a merge plan built before the column existed
+        plan = s.get_one(Plan, pid)
+        plan.ops = [
+            {**o, "old": {k: v for k, v in o["old"].items() if k != "path_template"}}
+            for o in plan.ops
+        ]
+    lib0, paths0 = world.lib(), sorted(r["path"] for r in rows(world))
+    world.merger.execute(pid)
+    world.merger.undo_plan(pid)
+    assert world.plan(pid).status == "undone", world.plan(pid).error
+    assert world.lib() == lib0 and sorted(r["path"] for r in rows(world)) == paths0
+
+
+def test_undo_leaves_the_template_of_an_in_place_track_changed_since(world: World) -> None:
+    with world.sessions.begin() as s:
+        s.execute(update(Track).values(path_template="{title}.{ext}"))
+    m = merger(world, world.merger.template)
+    pid = m.build_reorganize()
+    m.execute(pid)
+    victim = "Band/Album (2000)/01-01 Song r1.flac"
+    with world.sessions.begin() as s:
+        s.execute(update(Track).where(Track.path == victim).values(acoustid_id="retagged"))
+    m.undo_plan(pid)
+    plan = world.plan(pid)
+    assert plan.status == "undone" and victim in str(plan.error)
+    templates = {r["path"]: r["path_template"] for r in rows(world)}
+    assert templates.pop(victim) == m.template
+    assert set(templates.values()) == {"{title}.{ext}"}
+
+
 def _client(w: World, m: Merger) -> TestClient:
+    w.merger = m  # _drain runs w.merger's handlers, as the worker would
     with w.sessions.begin() as s:
         create_user(s, "root", "pw", admin=True)
     app = create_app(w.sessions, Settings(path_template=T2))
@@ -180,21 +283,53 @@ def _client(w: World, m: Merger) -> TestClient:
     return TestClient(app, follow_redirects=False)
 
 
-def _plan(c: TestClient, tok: str) -> int:
+def _plan(c: TestClient, tok: str, w: World) -> int:
+    """Ask for a plan, let the worker build it, and follow the status page to it."""
     r = c.post("/library/reorganize/plan", data={"csrf_token": tok})
-    assert r.status_code == 303, r.text
-    return int(r.headers["location"].rsplit("/", 1)[1])
+    assert (r.status_code, r.headers["location"]) == (303, "/library/reorganize"), r.text
+    _drain(w)
+    found = re.search(r'href="/library/plans/(\d+)"', c.get("/library/reorganize").text)
+    assert found
+    return int(found[1])
+
+
+def test_the_request_only_queues_the_build(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    reads: list[Path] = []
+    real = tags.read_fields
+    monkeypatch.setattr(tags, "read_fields", lambda p: reads.append(p) or real(p))
+    with _client(world, merger(world)) as c:
+        tok = _login(c)
+        r = c.post("/library/reorganize/plan", data={"csrf_token": tok})
+        assert r.status_code == 303 and reads == []
+        assert c.post("/library/reorganize/plan", data={"csrf_token": tok}).status_code == 303
+        with world.sessions() as s:
+            jobs = s.scalars(select(Job).where(Job.kind == JobKind.REORGANIZE_PLAN)).all()
+            assert len(jobs) == 1 and s.scalar(select(Plan.id)) is None
+        page = c.get("/library/reorganize").text
+        assert "Building the reorganize plan" in page and 'hx-trigger="every 5s' in page
+        _drain(world)
+        assert len(reads) == 5
+        live = c.get("/library/reorganize", headers={"HX-Request": "true"}).text
+        assert "review reorganize plan" in live and "hx-trigger" not in live
+        assert "<html" not in live  # the fragment alone
+
+
+def test_a_build_with_nothing_to_move_says_why(world: World) -> None:
+    with _client(world, world.merger) as c:  # every track already follows the template
+        assert c.post("/library/reorganize/plan", data={"csrf_token": _login(c)}).status_code == 303
+        _drain(world)
+        assert "No plan was built" in c.get("/library/reorganize").text
 
 
 def test_banner_shows_until_the_confirmed_plan_runs(world: World) -> None:
-    world.merger = m = merger(world)  # _drain runs world.merger's handlers
+    m = merger(world)
     with _client(world, m) as c:
         tok = _login(c)
         page = c.get("/library/albums").text
         assert "Layout differs from the path template (5 files)" in page
         assert 'action="/library/reorganize/plan"' in page
         lib0 = world.lib()
-        pid = _plan(c, tok)
+        pid = _plan(c, tok, world)
         page = c.get(f"/library/plans/{pid}").text
         assert "Reorganize plan" in page and "Reorganize 5 files" in page
         assert "Band/Album (2000): 4 files" in page and "and 1 more" in page  # a sample per album
@@ -208,7 +343,7 @@ def test_banner_shows_until_the_confirmed_plan_runs(world: World) -> None:
 def test_every_move_is_listed_before_confirm(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(library_routes, "MOVES_PAGE", 2)  # five rows over three pages
     with _client(world, merger(world, device=other_mount)) as c:
-        pid = _plan(c, _login(c))
+        pid = _plan(c, _login(c), world)
         summary = c.get(f"/library/plans/{pid}").text
         assert "and 1 more" in summary and f'href="/library/plans/{pid}/moves"' in summary
         seen, url = "", f"/library/plans/{pid}/moves"
@@ -225,7 +360,7 @@ def test_every_move_is_listed_before_confirm(world: World, monkeypatch: pytest.M
 
 def test_plan_page_reports_a_refused_move(world: World) -> None:
     with _client(world, merger(world, device=other_mount)) as c:
-        pid = _plan(c, _login(c))
+        pid = _plan(c, _login(c), world)
         page = c.get(f"/library/plans/{pid}").text
         assert "Reorganize 4 files" in page
         assert re.search(r"refused: Band/Album \(1999\)/01-03 Song r3.flac \(on another", page)

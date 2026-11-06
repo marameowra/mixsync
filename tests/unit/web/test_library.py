@@ -208,6 +208,42 @@ def test_non_admin_forbidden(client: TestClient, sf: sessionmaker[Session]) -> N
     assert _jobs(sf) == []
 
 
+def _reorganize_plan(sf: sessionmaker[Session], moves: int) -> int:
+    ops = [
+        {"op": "move", "old": {"path": f"a/{i}.flac"}, "new_path": f"b/{i}.flac", "done": False}
+        for i in range(moves)
+    ]
+    with sf() as s, s.begin():
+        p = Plan(kind="reorganize", release_group_mbid="", canonical_release_mbid="", ops=ops)
+        s.add(p)
+        s.flush()
+        return p.id
+
+
+def test_reorganize_routes_need_library_edit(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _reorganize_plan(sf, 1)
+    tok = _login(client, "alice")
+    assert client.post("/library/reorganize/plan", data={"csrf_token": tok}).status_code == 403
+    assert client.get("/library/reorganize").status_code == 403
+    assert client.get(f"/library/plans/{pid}/moves").status_code == 403
+    with sf() as s:
+        assert s.scalar(select(Job.id).where(Job.kind == JobKind.REORGANIZE_PLAN)) is None
+
+
+def test_a_reorganize_of_over_50_moves_needs_the_count_typed(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _reorganize_plan(sf, 51)
+    tok = _login(client, "root")
+    assert "Type 51 to confirm" in client.get(f"/library/plans/{pid}").text
+    url = f"/library/plans/{pid}/confirm"
+    assert client.post(url, data={"csrf_token": tok}).status_code == 400
+    assert client.post(url, data={"csrf_token": tok, "count": "50"}).status_code == 400
+    assert _jobs(sf) == []
+    assert client.post(url, data={"csrf_token": tok, "count": "51"}).status_code == 303
+    assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
+
+
 def test_build_errors(client: TestClient) -> None:
     tok = _login(client, "root")
     for group, code in [("busy", 409), ("mb", 503)]:

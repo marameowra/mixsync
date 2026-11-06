@@ -18,13 +18,17 @@ from mixsync.acquire.merge import (
     Merger,
     PlanInProgress,
     enqueue_merge,
+    enqueue_reorganize,
     enqueue_undo,
     live_job,
+    reorganize_build,
     stale_delete_draft,
 )
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import TransientError
+from mixsync.core.jobs import LIVE
+from mixsync.db import progress
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
@@ -44,7 +48,7 @@ from mixsync.submit.mb_seed import (
 from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.routes.requests import delete_row
-from mixsync.web.templating import templates
+from mixsync.web.templating import render, templates
 
 router = APIRouter(prefix="/library")
 User = Annotated[AuthUser, Depends(require(Capability.library_edit))]
@@ -255,25 +259,33 @@ async def build_plan(
 
 
 @router.post("/reorganize/plan")
-def build_reorganize(user: User, db: Db, merger: Merge) -> RedirectResponse:
-    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
-    try:
-        plan_id = merger.build_reorganize()
-    except PlanInProgress as e:
-        raise HTTPException(409, str(e)) from None
-    except LookupError as e:
-        raise HTTPException(404, str(e)) from None
-    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+def build_reorganize(user: User, db: Db) -> RedirectResponse:
+    """Queue the build: it reads the tags of every drifted file, too slow for a request."""
+    enqueue_reorganize(db, datetime.now(UTC))
+    return RedirectResponse("/library/reorganize", status_code=303)
+
+
+@router.get("/reorganize")
+def reorganize_status(request: Request, user: User, db: Db) -> HTMLResponse:
+    """A live region (ADR 0017): building, then a link to the draft or why it failed."""
+    job, plan_id = reorganize_build(db)
+    ctx = {
+        "user": user,
+        "job": job,
+        "plan_id": plan_id,
+        "building": job is not None and job.status in LIVE,
+    }
+    return render(request, "pages/reorganize.html", "pages/reorganize_live.html", ctx)
 
 
 SAMPLE, FOLDERS = 3, 100  # a reorganize page shows this many moves per folder, of this many
 
 
-def _by_folder(plan: Plan) -> dict[str, Any]:
+def _by_folder(ops: list[dict[str, Any]]) -> dict[str, Any]:
     """Moves and refusals grouped by the album folder they leave: (folder, count, sample) for
     the first FOLDERS folders, and how many folders are left out."""
     groups: dict[str, list[dict[str, Any]]] = {}
-    for op in plan.ops:
+    for op in ops:
         if op["op"] in ("move", "refused"):
             groups.setdefault(op["old"]["path"].rpartition("/")[0], []).append(op)
     shown = [(f, len(o), o[:SAMPLE]) for f, o in list(groups.items())[:FOLDERS]]
@@ -295,13 +307,15 @@ async def plan_detail(
                 ("release", op["tags"].get("release_id") or ""),
             }
     allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
+    ops = progress.with_done(db, plan)
     ctx = {
         "user": user,
         "plan": plan,
+        "ops": ops,
         "counts": counts,
         "allowed": allowed,
         "names": await resolve(db, namer, refs, MAX_LOOKUPS),
-        **(_by_folder(plan) if plan.kind == "reorganize" else {}),
+        **(_by_folder(ops) if plan.kind == "reorganize" else {}),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
@@ -315,7 +329,7 @@ def plan_moves(
 ) -> HTMLResponse:
     """Every move and refusal of a reorganize plan, paged (data-safety rule 5)."""
     plan = _plan(db, plan_id, user)
-    rows = [op for op in plan.ops if op["op"] in ("move", "refused")]
+    rows = [op for op in progress.with_done(db, plan) if op["op"] in ("move", "refused")]
     pages = max(1, -(-len(rows) // MOVES_PAGE))
     n = min(max(_num(page, 1), 1), pages)
     ctx = {

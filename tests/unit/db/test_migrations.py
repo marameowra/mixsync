@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0026_track_path_template"
+    assert _version(settings) == "0027_plan_progress"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0026_track_path_template"
+    assert _version(settings) == "0027_plan_progress"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
