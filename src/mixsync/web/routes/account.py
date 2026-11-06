@@ -11,13 +11,14 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap, profile_for
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
+from mixsync.core.matching import Profile
 from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
-from mixsync.match.profiles import confidence, from_confidence
+from mixsync.match.profiles import BALANCED, LOOSE, STRICT, confidence, from_confidence
 from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
@@ -36,6 +37,7 @@ from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
 SERVICES = ("listenbrainz", "navidrome", "discogs")
+PRESETS = (STRICT, BALANCED, LOOSE)
 Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
 
 
@@ -129,8 +131,16 @@ def _page(
         for link in user_links(s, box, user.id)
         if discogs or link.service != "discogs"
     }
-    profile = profile_for(s, user.id)
+    profile, cap = profile_for(s, user.id), auto_accept_cap(s)
+    me = s.get_one(User, user.id)
+    mine = s.get(MatchingProfile, me.matching_profile_id) if me.matching_profile_id else None
     ctx = {
+        "presets": [
+            (p.name, confidence(p.auto_accept_max), confidence(p.review_max)) for p in PRESETS
+        ],
+        "preset": mine.preset if mine else BALANCED.name,
+        "capped": [p.name for p in PRESETS if cap is not None and p.auto_accept_max > cap],
+        "cap": None if cap is None else confidence(cap),
         "user": user,
         "links": by_service,
         "error": error,
@@ -156,6 +166,43 @@ def _percent(text: str) -> int | None:
     return pct if 0 <= pct <= 100 else None
 
 
+def _own_row(db: Session, user_id: int, current: Profile) -> MatchingProfile:
+    """The user's own matching row; a missing or shared one is replaced by a copy first."""
+    row = db.get_one(User, user_id)
+    mine = db.get(MatchingProfile, row.matching_profile_id) if row.matching_profile_id else None
+    users = select(func.count(User.id)).where(User.matching_profile_id == row.matching_profile_id)
+    if mine is None or db.scalar(users) != 1:  # never change a row another user points at
+        mine = MatchingProfile(
+            name="custom",
+            preset="custom",
+            auto_accept_max=current.auto_accept_max,
+            review_max=current.review_max,
+            quality_pref=mine.quality_pref if mine else None,
+        )
+        db.add(mine)
+        db.flush()
+        row.matching_profile_id = mine.id
+    return mine
+
+
+@router.post("/matching/preset")
+def save_preset(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    box: Box,
+    preset: Annotated[str, Form()],
+) -> Response:
+    """Replaces the user's limits with a preset's. Stored decisions are not re-banded."""
+    chosen = next((p for p in PRESETS if p.name == preset), None)
+    if chosen is None:
+        return _page(request, user, db, box, ("matching", "Choose Strict, Balanced or Loose."))
+    mine = _own_row(db, user.id, profile_for(db, user.id))
+    mine.name = mine.preset = chosen.name
+    mine.auto_accept_max, mine.review_max = chosen.auto_accept_max, chosen.review_max
+    return RedirectResponse("/account", 303)
+
+
 @router.post("/matching")
 def save_matching(
     request: Request,
@@ -174,21 +221,8 @@ def save_matching(
     if cap is not None and limit > cap:
         msg = f"The administrator's minimum is {confidence(cap)}%."
         return _page(request, user, db, box, ("matching", msg))
-    row = db.get_one(User, user.id)
-    mine = db.get(MatchingProfile, row.matching_profile_id) if row.matching_profile_id else None
-    users = select(func.count(User.id)).where(User.matching_profile_id == row.matching_profile_id)
-    if mine is None or db.scalar(users) != 1:  # never change a row another user points at
-        mine = MatchingProfile(
-            name="custom",
-            preset="custom",
-            auto_accept_max=limit,
-            review_max=current.review_max,
-            quality_pref=mine.quality_pref if mine else None,
-        )
-        db.add(mine)
-        db.flush()
-        row.matching_profile_id = mine.id
-    mine.preset, mine.auto_accept_max = "custom", limit
+    mine = _own_row(db, user.id, current)
+    mine.name, mine.preset, mine.auto_accept_max = "custom", "custom", limit
     return RedirectResponse("/account", 303)
 
 

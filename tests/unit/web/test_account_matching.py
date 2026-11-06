@@ -143,3 +143,54 @@ def test_a_cap_clamps_stored_rows_and_the_preset_fallback(
     set_cap(client, login(client, "root"), "")
     assert row(sf, "alice")[2] == 0.05  # clearing the cap leaves clamped rows as they are
     assert effective(sf, "bob") == BALANCED
+
+
+def pick(c: TestClient, tok: str, preset: str) -> int:
+    return c.post(
+        "/account/matching/preset", data={"csrf_token": tok, "preset": preset}
+    ).status_code
+
+
+def test_a_preset_is_stored_on_the_users_own_row_and_survives_a_reload(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "alice")
+    page = client.get("/account").text
+    assert "current: Balanced" in page and "Strict: auto-accept at 96%, review from 70%" in page
+    assert row(sf, "alice")[0] is None  # no row until a choice is made
+    assert pick(client, tok, "loose") == 303
+    assert row(sf, "alice")[1:] == ("loose", 0.15, 0.55)
+    assert "current: Loose" in client.get("/account").text
+    assert effective(sf, "alice") == Profile("loose", 0.15, 0.55)  # new decisions band with it
+    assert row(sf, "bob")[0] is None and effective(sf, "bob") == BALANCED
+    assert pick(client, tok, "nope") == 400
+
+
+def test_a_custom_edit_shows_custom_and_a_preset_replaces_it(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "alice")
+    pick(client, tok, "strict")
+    assert set_limit(client, tok, "90") == 303
+    assert row(sf, "alice")[1:] == ("custom", 0.10, 0.30)
+    assert "current: Custom" in client.get("/account").text
+    pick(client, tok, "balanced")
+    assert row(sf, "alice")[1:] == ("balanced", 0.08, 0.40)
+
+
+def test_picking_copies_a_shared_row_and_a_cap_is_noted(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    with sf.begin() as s:
+        shared = MatchingProfile(name="x", preset="strict", auto_accept_max=0.04, review_max=0.30)
+        s.add(shared)
+        s.flush()
+        for u in s.query(User):
+            u.matching_profile_id = shared.id
+    pick(client, login(client, "alice"), "loose")
+    assert row(sf, "bob")[1:] == ("strict", 0.04, 0.30)
+    assert row(sf, "alice")[0] != row(sf, "bob")[0]
+    set_cap(client, login(client, "root"), "92")
+    login(client, "alice")
+    assert "minimum of 92% limits auto-accept for Loose" in client.get("/account").text
+    assert effective(sf, "alice").auto_accept_max == pytest.approx(0.08)
