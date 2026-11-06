@@ -38,7 +38,6 @@ from mixsync.library import measure, paths
 from mixsync.library.fileops import FileOps
 from mixsync.library.fragmentation import row_dict
 from mixsync.library.importer import render_path, tagset_for
-from mixsync.match.profiles import BALANCED
 from mixsync.match.scorer import assign_tracks, score_files
 
 log = logging.getLogger(__name__)
@@ -120,7 +119,7 @@ class Rechecker:
         try:
             with self.sessions() as s:
                 items = group(read_unverified(s)).get(key, [])
-                profile = profile_for(s, uid) if uid else BALANCED
+                profile = profile_for(s, uid)
             items = [t for t in items if self.fileops.has(t.path)]
             if not items or not key[1]:  # nothing unverified left: the chain ends
                 return

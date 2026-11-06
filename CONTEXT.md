@@ -32,7 +32,7 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Band**: Where a distance falls against the profile's thresholds: auto-accept, review, or reject.
 
-**Profile**: A user's preset thresholds (strict, balanced, loose), editable. _Avoid_: Mode, level
+**Profile**: A user's thresholds: a preset (strict, balanced, loose) or custom, with the auto-accept limit editable as a confidence percentage and held to the admin's app-wide minimum. _Avoid_: Mode, level
 
 **Hard veto**: A signal (e.g. AcoustID names a different recording) that forces review regardless of distance.
 

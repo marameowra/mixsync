@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0024_mb_name"
+    assert _version(settings) == "0025_app_settings"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0024_mb_name"
+    assert _version(settings) == "0025_app_settings"
 
 
 def test_models_match_migrations(settings: Settings) -> None:

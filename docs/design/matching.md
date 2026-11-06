@@ -13,7 +13,7 @@ Features: AcoustID recording match (mandatory for every file, [ADR 0009](../deci
 ## Scoring and bands
 - Each feature gives a penalty in `[0, 1]` times a weight; the total is a distance, 0 being perfect.
 - Year: matching the release year or original year is free. Otherwise, with a known original year, the difference is divided by the span from that year to now (minimum one year) and clamped to `[0, 1]`; with no original year a mismatch costs 1.
-- The requesting user's profile sets two inclusive thresholds (values in `match/profiles.py`; users can edit them):
+- The requesting user's profile sets two inclusive thresholds (preset values in `match/profiles.py`):
 
 | Profile | Auto-accept if ≤ | Review if ≤ | Else |
 |---|---|---|---|
@@ -21,11 +21,15 @@ Features: AcoustID recording match (mandatory for every file, [ADR 0009](../deci
 | Balanced | 0.08 | 0.40 | reject |
 | Loose | 0.15 | 0.55 | reject |
 
+- The UI shows a limit as confidence, `round((1 - distance) × 100)`: 0.08 is 92%. On the account page (`/account`) a user sees both limits and can set their auto-accept confidence, from the review limit up to 100%. Saving stores a `custom` `matching_profiles` row only that user references (a shared row is copied first); `review_max` is carried over and not editable. A user without a row runs Balanced.
+- An admin sets an app-wide minimum auto-accept confidence at `/account/cap` (the `app_settings` table; empty means no minimum, the default). Saving it lowers every stored auto-accept limit looser than it, and the profile loader holds a user without a row to it too. Clearing it leaves lowered rows as they are.
+- A new limit or minimum applies to new scoring and Recheck only; decisions already in review are not re-banded.
+
 - **Hard vetoes** force review whatever the distance: a high-scoring AcoustID match to a *different* recording, duration off by more than 15 s, a lossless file with almost nothing above 16 kHz (transcode), a file silent for over half its length at the end (padded preview).
 - **Reject** never deletes: files go to quarantine ([data safety](data-safety.md#1-no-hard-deletes-in-the-normal-flow)) and the next candidate is tried. Discovery requests treat a review-band match as a rejection.
 
 ## Close runner-up
-When several releases are scored, a match cannot auto-accept if another release with at least as many AcoustID-confirmed recordings is within the profile's auto-accept limit of the winner's distance. It goes to review and the decision's evidence names the close runner-up and the gap.
+When several releases are scored, a match cannot auto-accept if another release with at least as many AcoustID-confirmed recordings is within a fixed gap of 0.08 (`RUNNER_UP_GAP`) of the winner's distance. It goes to review and the decision's evidence names the close runner-up and the gap. The same 0.08 bounds which releases compete on AcoustID-confirmed counts. The gap is the same for every profile, so a user's auto-accept limit never widens or narrows it.
 
 ## Review screen
 Side by side: source (peer, folder, file, format, bitrate, size), candidate (MB release and recording, cover, track list), evidence (per-feature penalties, AcoustID result, duration delta), and an inline audio preview. Actions: Accept, Pick another release, Mark unverified ([details](unverified-and-mb-submit.md)), Reject.

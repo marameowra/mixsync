@@ -43,7 +43,7 @@ from mixsync.core.matching import (
     TrackInfo,
 )
 from mixsync.match.features import normalize, string_dist
-from mixsync.match.profiles import band, close_gap
+from mixsync.match.profiles import RUNNER_UP_GAP, band, close_gap
 from mixsync.match.vetoes import acoustid_confirms, acoustid_contradicts, all_confident, find_vetoes
 
 SCORER_VERSION = 6  # 6: transcode and padded-preview vetoes
@@ -457,11 +457,11 @@ def score_files(
 def best_release(
     files: Sequence[FileTrack], likelies: Likelies, albums: Sequence[AlbumInfo], profile: Profile
 ) -> tuple[AlbumInfo, MatchResult]:
-    """Among releases whose distance is within the profile's auto-accept threshold, the one
-    holding more AcoustID-confirmed recordings of the files wins, then the closest metadata. A
-    release the tags rule out (a compilation with every track) cannot win on confirmations
-    alone. A runner-up that AcoustID does not separate from the winner and within the
-    auto-accept limit of its distance caps the band at review.
+    """Among releases whose distance is within RUNNER_UP_GAP, the one holding more
+    AcoustID-confirmed recordings of the files wins, then the closest metadata. A release the
+    tags rule out (a compilation with every track) cannot win on confirmations alone. A
+    runner-up that AcoustID does not separate from the winner and within RUNNER_UP_GAP of its
+    distance caps the band at review.
     `albums` must not be empty."""
     scored = [
         (
@@ -473,7 +473,7 @@ def best_release(
     ]
 
     def key(x: tuple[MatchResult, AlbumInfo, int]) -> tuple[int, int, float]:
-        if x[0].distance > profile.auto_accept_max:
+        if x[0].distance > RUNNER_UP_GAP:
             return 1, 0, x[0].distance
         return 0, -x[2], x[0].distance
 
@@ -483,7 +483,7 @@ def best_release(
     if others:
         near, other = min(others, key=lambda x: x[0].distance)
         gap = near.distance - result.distance
-        if close_gap(gap, profile):
+        if close_gap(gap):
             runner = RunnerUp(str(other.release_id), other.album, gap)
             capped = Band.REVIEW if result.band is Band.AUTO_ACCEPT else result.band
             result = replace(result, band=capped, runner_up=runner)
