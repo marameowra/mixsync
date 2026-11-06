@@ -12,7 +12,7 @@ Required checks: [AGENTS.md](../AGENTS.md); source of truth `.github/workflows/c
 ## Crash-safety tests
 `-m crash` (off by default, see `addopts`): SIGKILL the worker at each import step (after copy, fsync, tag write, before rename). Assert no partial file in `/data/library`, source intact, journal consistent, job resumes and completes. Same for trash moves and canonical-release merges.
 
-Not built: compose integration tests, UI smoke tests (see issues).
+Planned (#300): compose integration tests, UI smoke tests.
 
 ## Matcher regression suite
 `tests/regression/` replays real logged decisions through the matcher offline and fails when any
@@ -47,7 +47,7 @@ runs with the normal suite; on its own: `uv run pytest tests/regression`.
   were purged cannot be exported.
 
 ## Integration tests (compose)
-Not built.
+Planned (#300).
 
 ## UI tests
-Not built (the `TestClient` tests above are what exist).
+Planned (#300); the `TestClient` tests above are what exist.

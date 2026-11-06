@@ -38,4 +38,4 @@ Side by side: source (peer, folder, file, format, bitrate, size), candidate (MB 
 The distance and candidate logic is ported, not embedded ([ADR 0006](../decisions/0006-port-beets-autotag.md)).
 
 ## Calibration
-Every decision stores its feature vector, scorer version, band and final user action; overrides are labeled data. Weights are hand-tuned today; a fitting job is not built.
+Every decision stores its feature vector, scorer version, band and final user action; overrides are labeled data. Weights are hand-tuned today; a fitting job is planned (#299).

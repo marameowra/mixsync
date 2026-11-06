@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-20
 - **Supersedes:** the SSE consequence of [ADR 0003](0003-htmx-server-rendered-ui.md). The rest of 0003 stands.
-- **Note:** the foundation is built (#221): vendored htmx, `macros/live.html`, and `render()` in `web/templating.py`. No page uses it yet; the requests status (#233) and migration progress (#234) regions come next.
+- **Note:** the foundation is built (#221): vendored htmx, `macros/live.html`, and `render()` in `web/templating.py`. The requests status (#233) and migration progress (#234) pages use it.
 
 ## Context
 [ADR 0003](0003-htmx-server-rendered-ui.md) chose server-rendered pages with HTMX, and live progress (downloads, imports) through server-sent events (SSE). Neither was built: pages with changing state say "Reload to see the result".
