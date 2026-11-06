@@ -1,0 +1,377 @@
+{
+ "albums": [
+  {
+   "album": "I\u2019m Creekflow",
+   "albumdisambig": "limited edition",
+   "artist": "Vylet Pony",
+   "artist_ids": [
+    "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+   ],
+   "catalognum": "[none]",
+   "country": "US",
+   "genres": [
+    "electronic",
+    "pop",
+    "rock"
+   ],
+   "label": "32.7 the Creek",
+   "media": "CD",
+   "mediums": 1,
+   "original_year": 2024,
+   "release_group_id": "d2191df4-bade-482e-9318-5e4fb15fcf69",
+   "release_id": "b50b5b86-4616-4fe4-bde8-4e35b912d081",
+   "tracks": [
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 1,
+     "length": 117.72,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "fcd55d10-19d1-4d0b-bd49-0e0dd3f9acce",
+     "title": "I\u2019m Creekflow"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 2,
+     "length": 113.133,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "f03a4c5c-d241-424e-9af8-0b4cec92f41e",
+     "title": "Creekflow Crashing Its Mercedes Into a McDonalds"
+    },
+    {
+     "artist": "Vylet Pony ft. Namii",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af",
+      "a9536923-ad34-4fdf-a915-348321996067"
+     ],
+     "index": 3,
+     "length": 154.96,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "22e94ee9-99ab-49e1-a15d-bc8050b5be5c",
+     "title": "Creekflow and the Things That Find Us"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 4,
+     "length": 15.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "7b88d6c9-1f6e-4f78-a633-119d4f17b04c",
+     "title": "The Famous Sound"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 5,
+     "length": 33.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "e08e7471-83f0-4b4d-9dba-16492c68760a",
+     "title": "And Now, A Surprise!"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 6,
+     "length": 141.24,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "a726392a-8199-47d6-8517-629bbacb829e",
+     "title": "Geekflow (The Haunted Moombahton)"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 7,
+     "length": 137.293,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "69ade32f-5875-4168-9be1-a885111becb2",
+     "title": "Carousel2"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 8,
+     "length": 137.293,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "09e02a41-53c0-4439-acb0-4b513806b8e5",
+     "title": "2lesuoraC"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 9,
+     "length": 141.24,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "27719fb0-da67-4d9a-9401-a123a37b6f0f",
+     "title": "(nothabmooM detnuaH ehT) wolfkeeG"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 10,
+     "length": 33.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "ffe3752d-1c2a-49ca-bd07-8c3c0c7bbd23",
+     "title": "!esirpruS A ,woN dnA"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 11,
+     "length": 15.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "0d61ad44-bf14-4672-907a-f6ddddd9ed51",
+     "title": "dnuoS suomaF ehT"
+    },
+    {
+     "artist": "Vylet Pony iimaN .tf",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af",
+      "a9536923-ad34-4fdf-a915-348321996067"
+     ],
+     "index": 12,
+     "length": 154.96,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "c0e80993-d7d9-4b59-b171-9941d364c18b",
+     "title": "sU dniF tahT sgnihT eht dna wolfkeerC"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 13,
+     "length": 113.133,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "08c41281-7eeb-4e15-8b14-86c9a5e7844f",
+     "title": "sdlanoDcM a otnI sedecreM stI gnihsarC wolfkeerC"
+    },
+    {
+     "artist": "Vylet Pony",
+     "artist_ids": [
+      "6a84105c-af0a-4367-8d54-e7dd6ceb19af"
+     ],
+     "index": 14,
+     "length": 117.72,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "25bce3a3-a8c7-48f8-8d2b-f769db65764f",
+     "title": "wolfkeerC m\u2019I"
+    }
+   ],
+   "va": false,
+   "year": 2024
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "01 - I'm Creekflow.mp3",
+    "sample_rate": null,
+    "size": 4777114
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Creekflow and the Things That Find Us (feat. Namii).flac",
+    "sample_rate": null,
+    "size": 36000836
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "04 - The Famous Sound.mp3",
+    "sample_rate": null,
+    "size": 654620
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - And Now, A Surprise!.flac",
+    "sample_rate": null,
+    "size": 6546116
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - Carousel2.flac",
+    "sample_rate": null,
+    "size": 27496601
+   }
+  ],
+  "folder": "Vylet Pony\\Vylet Pony - I'm Creekflow (limited edition)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2267,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "fcd55d10-19d1-4d0b-bd49-0e0dd3f9acce"
+     ],
+     "score": 0.98444223
+    }
+   ],
+   "artist": "Vylet Pony",
+   "disc": 1,
+   "high_band": null,
+   "length": 117.888,
+   "recording_id": "fcd55d10-19d1-4d0b-bd49-0e0dd3f9acce",
+   "title": "I\u2019m Creekflow",
+   "track": 1,
+   "trailing_silence": 1.3653330000000068
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "22e94ee9-99ab-49e1-a15d-bc8050b5be5c"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Vylet Pony, Namii",
+   "disc": 1,
+   "high_band": 0.0002638818985279061,
+   "length": 154.96064583333333,
+   "recording_id": "22e94ee9-99ab-49e1-a15d-bc8050b5be5c",
+   "title": "Creekflow and the Things That Find Us",
+   "track": 3,
+   "trailing_silence": 2.253791833333338
+  },
+  {
+   "acoustid": [],
+   "artist": "Vylet Pony",
+   "disc": 1,
+   "high_band": null,
+   "length": 15.048,
+   "recording_id": "7b88d6c9-1f6e-4f78-a633-119d4f17b04c",
+   "title": "The Famous Sound",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e08e7471-83f0-4b4d-9dba-16492c68760a"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Vylet Pony",
+   "disc": 1,
+   "high_band": 6.986434632504525e-06,
+   "length": 33.0,
+   "recording_id": "e08e7471-83f0-4b4d-9dba-16492c68760a",
+   "title": "And Now, A Surprise!",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "69ade32f-5875-4168-9be1-a885111becb2"
+     ],
+     "score": 0.99995196
+    }
+   ],
+   "artist": "Vylet Pony",
+   "disc": 1,
+   "high_band": 0.00021970371473336618,
+   "length": 137.2959375,
+   "recording_id": "69ade32f-5875-4168-9be1-a885111becb2",
+   "title": "Carousel2",
+   "track": 7,
+   "trailing_silence": 2.724812500000013
+  }
+ ],
+ "labels": [
+  "transcode"
+ ],
+ "likelies": {
+  "album": "I\u2019m Creekflow",
+  "albumdisambig": null,
+  "artist": "Vylet Pony",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "b50b5b86-4616-4fe4-bde8-4e35b912d081",
+  "year": 2024
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.2691029900332226,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'And Now, A Surprise!': looks transcoded: almost nothing above 16 kHz"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "b50b5b86-4616-4fe4-bde8-4e35b912d081"
+}

@@ -1,0 +1,301 @@
+{
+ "albums": [
+  {
+   "album": "fishmonger (demos)",
+   "albumdisambig": null,
+   "artist": "underscores",
+   "artist_ids": [
+    "ab1a3f85-e0ea-470a-af5c-175447ae774c"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "indie pop",
+    "indie rock",
+    "indietronica"
+   ],
+   "label": "[no label]",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "b30a0a12-77b7-4a55-877b-0746664b4b39",
+   "release_id": "33ec2d21-2b11-42d2-b6e6-bdc1898668a9",
+   "tracks": [
+    {
+     "artist": "underscores",
+     "artist_ids": [
+      "ab1a3f85-e0ea-470a-af5c-175447ae774c"
+     ],
+     "index": 1,
+     "length": 222.249,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "c5de0fc3-9708-4593-98d0-9550ffca0184",
+     "title": "The world almanac for kids 2003 (demo)"
+    },
+    {
+     "artist": "underscores",
+     "artist_ids": [
+      "ab1a3f85-e0ea-470a-af5c-175447ae774c"
+     ],
+     "index": 2,
+     "length": 182.413,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "a3907295-ba74-41a4-9854-bb17d6445fca",
+     "title": "Copy by default (demo)"
+    },
+    {
+     "artist": "underscores",
+     "artist_ids": [
+      "ab1a3f85-e0ea-470a-af5c-175447ae774c"
+     ],
+     "index": 3,
+     "length": 97.149,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "f5cc9063-90d4-44c0-9be6-66456942ecf9",
+     "title": "Inlaws (demo)"
+    },
+    {
+     "artist": "underscores",
+     "artist_ids": [
+      "ab1a3f85-e0ea-470a-af5c-175447ae774c"
+     ],
+     "index": 4,
+     "length": 143.177,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "896763a7-bfde-458c-a5fe-0f17736079f0",
+     "title": "Full throttle cold turkey (demo)"
+    }
+   ],
+   "va": false,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Second hand embarrassment.flac",
+    "sample_rate": null,
+    "size": 16065097
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Bozo bozo bozo.flac",
+    "sample_rate": null,
+    "size": 17464426
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - Kinko's field trip 2006.flac",
+    "sample_rate": null,
+    "size": 17133140
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - Spoiled little brat.flac",
+    "sample_rate": null,
+    "size": 26224540
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - Your favorite sidekick.flac",
+    "sample_rate": null,
+    "size": 15991996
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Del mar county fair 2008.flac",
+    "sample_rate": null,
+    "size": 26812382
+   }
+  ],
+  "folder": "underscores\\underscores - fishmonger",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2296,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "254e732a-77cf-4c22-ace0-d061fa33c2d9",
+      "50c90db2-1d96-4309-95af-f79a3a5c10c7"
+     ],
+     "score": 0.9961432
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.0005531464124164648,
+   "length": 137.14285714285714,
+   "recording_id": null,
+   "title": "Second hand embarrassment",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a18b984d-49ff-4b43-bbef-d0733fe170d0"
+     ],
+     "score": 0.99426425
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.000555679531745644,
+   "length": 158.42467120181405,
+   "recording_id": null,
+   "title": "Bozo bozo bozo",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3b8bbdf3-3f88-45a6-b292-82099ecbba5c"
+     ],
+     "score": 0.9961762
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.0007277885186186224,
+   "length": 151.80725623582765,
+   "recording_id": null,
+   "title": "Kinko's field trip 2006",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0e4e7b4e-536a-4059-a464-fd6681b19a73"
+     ],
+     "score": 0.96964
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.002218281207348381,
+   "length": 199.7965306122449,
+   "recording_id": "c9bcfbdf-1a33-4096-80d0-d199ce06a215",
+   "title": "Spoiled little brat",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d585a8ce-f906-4db7-8cbb-266ced665514"
+     ],
+     "score": 0.9912645
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.00021981245664379502,
+   "length": 150.64585034013606,
+   "recording_id": "f88c0149-f3ec-4a52-82d7-affa635051d6",
+   "title": "Your favorite sidekick",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "30d2ef3c-a634-41f9-a43d-10116a08b4b2"
+     ],
+     "score": 0.9968355
+    }
+   ],
+   "artist": "underscores",
+   "disc": 1,
+   "high_band": 0.00018418841047854352,
+   "length": 271.1111337868481,
+   "recording_id": "30d2ef3c-a634-41f9-a43d-10116a08b4b2",
+   "title": "Del mar county fair 2008",
+   "track": 10,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch",
+  "padded"
+ ],
+ "likelies": {
+  "album": "fishmonger",
+  "albumdisambig": null,
+  "artist": "underscores",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "33ec2d21-2b11-42d2-b6e6-bdc1898668a9",
+  "year": 2021
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.35111588067843197,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'Second hand embarrassment': duration off by 45s from 'Copy by default (demo)'",
+   "'Second hand embarrassment': AcoustID (1.00) says a different recording than 'Copy by default (demo)' (a3907295-ba74-41a4-9854-bb17d6445fca)",
+   "'Bozo bozo bozo': duration off by 61s from 'Inlaws (demo)'",
+   "'Bozo bozo bozo': AcoustID (0.99) says a different recording than 'Inlaws (demo)' (f5cc9063-90d4-44c0-9be6-66456942ecf9)",
+   "\"Kinko's field trip 2006\": AcoustID (1.00) says a different recording than 'Full throttle cold turkey (demo)' (896763a7-bfde-458c-a5fe-0f17736079f0)",
+   "'Spoiled little brat': duration off by 22s from 'The world almanac for kids 2003 (demo)'",
+   "'Spoiled little brat': tagged as recording c9bcfbdf-1a33-4096-80d0-d199ce06a215, matched to 'The world almanac for kids 2003 (demo)' (c5de0fc3-9708-4593-98d0-9550ffca0184)",
+   "'Spoiled little brat': AcoustID (0.97) says a different recording than 'The world almanac for kids 2003 (demo)' (c5de0fc3-9708-4593-98d0-9550ffca0184)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "33ec2d21-2b11-42d2-b6e6-bdc1898668a9"
+}

@@ -1,0 +1,225 @@
+{
+ "albums": [
+  {
+   "album": "Purple EP",
+   "albumdisambig": null,
+   "artist": "Vulpey",
+   "artist_ids": [
+    "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [],
+   "label": "Simplify Recordings",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": null,
+   "release_group_id": "c7c35f74-3d48-46c8-a197-f3149ba66842",
+   "release_id": "bdde0906-0c53-4c80-b918-008b422b5a44",
+   "tracks": [
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 1,
+     "length": 312.032,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "90962cf8-6f83-427c-b72c-9093eec65542",
+     "title": "Bam (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 2,
+     "length": 324.466,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "a3fd0bbb-6939-46b6-a89e-7328dfc391c9",
+     "title": "A Long Way (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 3,
+     "length": 269.505,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "e6587a4c-eae0-44a1-a51f-7c503ba25dfb",
+     "title": "Atrium (feat. Mynerva) (Original Mix)"
+    },
+    {
+     "artist": "Vulpey",
+     "artist_ids": [
+      "58e53f3c-3ce0-405d-9209-e48462eeb5dc"
+     ],
+     "index": 4,
+     "length": 318.04,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "e48d7e05-e7ec-4d54-b666-0d647ef99a28",
+     "title": "Purple (Original Mix)"
+    }
+   ],
+   "va": false,
+   "year": null
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 290,
+    "extension": "mp3",
+    "path": "Purple_Unit-Dance_Now_EP-(PSD015)-WEB-2010-MPX\\01-purple_unit-dance_now_(original_mix).mp3",
+    "sample_rate": null,
+    "size": 11621398
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 314,
+    "extension": "mp3",
+    "path": "Purple_Unit-Dance_Now_EP-(PSD015)-WEB-2010-MPX\\02-purple_unit-electriq_(original_mix).mp3",
+    "sample_rate": null,
+    "size": 12586884
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 342,
+    "extension": "mp3",
+    "path": "Purple_Unit-Dance_Now_EP-(PSD015)-WEB-2010-MPX\\03-purple_unit-fractal_glitch_(original_mix).mp3",
+    "sample_rate": null,
+    "size": 13690296
+   },
+   {
+    "bit_depth": null,
+    "bitrate": 320,
+    "duration": 314,
+    "extension": "mp3",
+    "path": "Purple_Unit-Dance_Now_EP-(PSD015)-WEB-2010-MPX\\04-purple_unit-new_dimensions_(original_mix).mp3",
+    "sample_rate": null,
+    "size": 12586884
+   }
+  ],
+  "folder": "03  March 2011\\Purple_Unit-Dance_Now_EP-(PSD015)-WEB-2010-MPX",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 24,
+  "upload_speed": 4380697,
+  "username": "peer-f392a6a0"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2357,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.96667325
+    }
+   ],
+   "artist": "Purple Unit",
+   "disc": null,
+   "high_band": null,
+   "length": 290.3451700680272,
+   "recording_id": null,
+   "title": "Dance Now (Original Mix)",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.96357465
+    }
+   ],
+   "artist": "Purple Unit",
+   "disc": null,
+   "high_band": null,
+   "length": 314.4831292517007,
+   "recording_id": null,
+   "title": "Electriq (Original Mix)",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9625857
+    }
+   ],
+   "artist": "Purple Unit",
+   "disc": null,
+   "high_band": null,
+   "length": 342.06936507936507,
+   "recording_id": null,
+   "title": "Fractal Glitch (Original Mix)",
+   "track": 3,
+   "trailing_silence": 7.741882079365098
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Purple Unit",
+   "disc": null,
+   "high_band": null,
+   "length": 314.4831292517007,
+   "recording_id": null,
+   "title": "New Dimensions (Original Mix)",
+   "track": 4,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "padded",
+  "reject"
+ ],
+ "likelies": {
+  "album": "Dance Now EP",
+  "albumdisambig": null,
+  "artist": "Purple Unit",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2010
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.5141222818952143,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Dance Now (Original Mix)': duration off by 22s from 'Bam (Original Mix)'",
+   "'Fractal Glitch (Original Mix)': duration off by 73s from 'Atrium (feat. Mynerva) (Original Mix)'"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "bdde0906-0c53-4c80-b918-008b422b5a44"
+}

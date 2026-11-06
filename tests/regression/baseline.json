@@ -1,0 +1,672 @@
+{
+ "d1068": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "reject",
+   "release": "c9056cbf-a956-4e0e-8071-85982a967b10"
+  }
+ },
+ "d1072": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "0a84c5fb-2764-4f00-97ff-7369bf2bfa53"
+  }
+ },
+ "d1089": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "dc94a294-d83e-4764-89e6-4673c6745668"
+  }
+ },
+ "d1256": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "b42abe34-9119-4833-8b7b-f2863e43205a"
+  }
+ },
+ "d1257": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e39a3f2e-dda7-47df-9970-56989307b597"
+  }
+ },
+ "d1262": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e6b2dd55-534d-4cce-823e-cc9915ef9f26"
+  }
+ },
+ "d1264": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "8bbe6c7b-0cf0-4d03-9ac4-df50e1507903"
+  }
+ },
+ "d1265": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e6b2dd55-534d-4cce-823e-cc9915ef9f26"
+  }
+ },
+ "d1266": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "2b2d70aa-8327-43d0-9683-a1216c295611"
+  }
+ },
+ "d1271": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "8fa87196-6722-4284-9cb4-804170f75acb"
+  }
+ },
+ "d1297": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "574166b1-78c0-4061-8781-b699f1e5b575"
+  }
+ },
+ "d1999": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "auto_accept",
+   "release": "ae83e23e-ae29-4e33-90d2-58e6c228508f"
+  }
+ },
+ "d2166": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "9f1e1418-8212-486b-bb4b-a7197643cb47"
+  }
+ },
+ "d2176": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "19b2d334-211a-4cc6-a25d-e329312791df"
+  }
+ },
+ "d2179": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "f4428e87-f6f4-4f65-a3fc-ed9c73cb9840"
+  }
+ },
+ "d2218": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "2eae85e3-7dc5-4038-9c36-100aaf5dbb6f"
+  }
+ },
+ "d2220": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "auto_accept",
+   "release": "62b3dbc2-1d98-498a-9897-8189769de7e8"
+  }
+ },
+ "d2221": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "auto_accept",
+   "release": "b519d08c-426b-4114-9000-81c828c55a44"
+  }
+ },
+ "d2223": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "cdacdced-4234-4607-8645-e3554a7ee80d"
+  }
+ },
+ "d2227": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "19fd583c-e63b-4336-b550-8e1dc2673ed9"
+  }
+ },
+ "d2230": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e0df9c14-dfb7-4c64-ba90-6cf27e8bee77"
+  }
+ },
+ "d2231": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "reject",
+   "release": "c0ca0879-e57f-4766-8ded-2f7f8001103f"
+  }
+ },
+ "d2232": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "692aaefc-f6fd-4905-84d7-0bad48c70ef1"
+  }
+ },
+ "d2233": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "f5e8ee54-57e4-4197-b35a-bef0a2863fb9"
+  }
+ },
+ "d2234": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "c3a51884-29cf-4d8a-905d-00f44ab120e4"
+  }
+ },
+ "d2239": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "d2b1f056-8a5b-4790-b1a2-eaec2af6293f"
+  }
+ },
+ "d2240": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "03ff0fe4-0761-46f6-985e-95b0de1f0050"
+  }
+ },
+ "d2241": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "19bbd1c6-b76e-4558-8beb-dc31048bc764"
+  }
+ },
+ "d2242": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "4c98ef40-4c72-46bb-88fd-158935937f62"
+  }
+ },
+ "d2255": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "81dcb9e8-44dc-42ea-9ca0-bc6e9759d28a"
+  }
+ },
+ "d2267": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "b50b5b86-4616-4fe4-bde8-4e35b912d081"
+  }
+ },
+ "d2269": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "45575f2b-a8cd-4611-90e9-974d846f4b07"
+  }
+ },
+ "d2296": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "33ec2d21-2b11-42d2-b6e6-bdc1898668a9"
+  }
+ },
+ "d2298": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "6be296ad-ccef-4fa8-b6ca-ef1a37a5461c"
+  }
+ },
+ "d2299": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "5485d70c-28a7-4393-b081-e4dde3a65e47"
+  }
+ },
+ "d2302": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "5250c70e-9ef5-4af6-bb12-9391ec8ebb4f"
+  }
+ },
+ "d2303": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "cf5bea06-c90a-4d49-97af-2bf1f9ab00e9"
+  }
+ },
+ "d2304": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "19fd583c-e63b-4336-b550-8e1dc2673ed9"
+  }
+ },
+ "d2306": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "0fc1ef58-efb7-487c-b826-8dc7c0b5094b"
+  }
+ },
+ "d2309": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "ee4cfe7b-599d-4731-955e-5904f39b0057"
+  }
+ },
+ "d2316": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "3520116e-d2aa-4c06-ae9f-16606696cfe5"
+  }
+ },
+ "d2323": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "1ccbeb9b-e823-4e17-9992-5734da267896"
+  }
+ },
+ "d2340": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "047319c3-c8ae-4790-ac24-21d3e657c3f4"
+  }
+ },
+ "d2348": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e6b2dd55-534d-4cce-823e-cc9915ef9f26"
+  }
+ },
+ "d2350": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "ac55689c-b3f6-4aaf-a994-d59abad60a11"
+  }
+ },
+ "d2353": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "abbc40a0-2bcc-449e-bdd0-2dbae3213517"
+  }
+ },
+ "d2355": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "8fa87196-6722-4284-9cb4-804170f75acb"
+  }
+ },
+ "d2357": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "bdde0906-0c53-4c80-b918-008b422b5a44"
+  }
+ },
+ "d2359": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "05dc41d0-4809-427e-9468-fb7b5d1bd705"
+  }
+ },
+ "d2360": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "f4428e87-f6f4-4f65-a3fc-ed9c73cb9840"
+  }
+ },
+ "d2361": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "9f1e1418-8212-486b-bb4b-a7197643cb47"
+  }
+ },
+ "d2366": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "ee4cfe7b-599d-4731-955e-5904f39b0057"
+  }
+ },
+ "d2370": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "bdde0906-0c53-4c80-b918-008b422b5a44"
+  }
+ },
+ "d2420": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "2a8937f0-aee6-4c60-b7f9-96f3e72dc2a3"
+  }
+ },
+ "d2429": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "1c2b4db2-7b32-4fc1-a2f7-a3f600ac0586"
+  }
+ },
+ "d2443": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "2a8937f0-aee6-4c60-b7f9-96f3e72dc2a3"
+  }
+ },
+ "d2444": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "f4428e87-f6f4-4f65-a3fc-ed9c73cb9840"
+  }
+ },
+ "d2445": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "05dc41d0-4809-427e-9468-fb7b5d1bd705"
+  }
+ },
+ "d2455": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "reject",
+   "release": "4a41c979-6472-4623-9a98-2feb769cd29a"
+  }
+ },
+ "d833": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "5294e8da-df0b-403a-a7a4-21f68ab803b7"
+  }
+ },
+ "d853": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "16e805d3-01ae-4044-b387-6586911ff972"
+  }
+ },
+ "d861": {
+  "stage1": {
+   "band": "reject",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e69f8de0-7f44-4e77-977d-f553839fa0c2"
+  }
+ },
+ "d865": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "e9bcea61-618c-4cea-8081-cb506481bc23"
+  }
+ },
+ "d868": {
+  "stage1": {
+   "band": "review",
+   "release": null
+  },
+  "stage2": {
+   "band": "auto_accept",
+   "release": "1ca31e9e-67a3-4028-98de-deaed8f13779"
+  }
+ },
+ "d872": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "a879f848-1799-4ed5-8659-b230b3ae880c"
+  }
+ },
+ "d874": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "6eb11b02-8fcc-407c-8d93-ad233a0d3c47"
+  }
+ },
+ "d876": {
+  "stage1": {
+   "band": "auto_accept",
+   "release": null
+  },
+  "stage2": {
+   "band": "review",
+   "release": "bfbcbd75-2a69-4395-a268-c3191f3bf502"
+  }
+ }
+}

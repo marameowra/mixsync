@@ -1,0 +1,162 @@
+{
+ "albums": [
+  {
+   "album": "LEAVE EARTH",
+   "albumdisambig": null,
+   "artist": "Clarence Clarity",
+   "artist_ids": [
+    "bd72c37d-5c45-42d1-8ccf-97ebb5612b8f"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [],
+   "label": "Deluxe Pain",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2018,
+   "release_group_id": "4f89254d-ad32-4f12-b7b6-7ab14e80218d",
+   "release_id": "16e805d3-01ae-4044-b387-6586911ff972",
+   "tracks": [
+    {
+     "artist": "Clarence Clarity",
+     "artist_ids": [
+      "bd72c37d-5c45-42d1-8ccf-97ebb5612b8f"
+     ],
+     "index": 1,
+     "length": 256.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "8da97705-ee21-4afe-8fff-67cbba6296ef",
+     "title": "Leave Earth"
+    }
+   ],
+   "va": false,
+   "year": 2018
+  },
+  {
+   "album": "Vapid Feels Are Vapid / SAME",
+   "albumdisambig": null,
+   "artist": "Clarence Clarity",
+   "artist_ids": [
+    "bd72c37d-5c45-42d1-8ccf-97ebb5612b8f"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [],
+   "label": "Deluxe Pain",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2016,
+   "release_group_id": "f966ca4c-b169-47d9-909b-197bd4bfcd48",
+   "release_id": "223e25ef-13b5-4470-86e0-a0a80508d897",
+   "tracks": [
+    {
+     "artist": "Clarence Clarity",
+     "artist_ids": [
+      "bd72c37d-5c45-42d1-8ccf-97ebb5612b8f"
+     ],
+     "index": 1,
+     "length": 185.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "17842056-259e-44ae-bb64-27285ed63f62",
+     "title": "Vapid Feels Are Vapid"
+    },
+    {
+     "artist": "Clarence Clarity",
+     "artist_ids": [
+      "bd72c37d-5c45-42d1-8ccf-97ebb5612b8f"
+     ],
+     "index": 2,
+     "length": 237.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "33387960-52e7-493d-a40a-9b1c6bad0cda",
+     "title": "SAME"
+    }
+   ],
+   "va": false,
+   "year": 2016
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Vapid Feels Are Vapid.flac",
+    "sample_rate": null,
+    "size": 24623863
+   }
+  ],
+  "folder": "Clarence Clarity\\Clarence Clarity - LEAVE EARTH",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": "223e25ef-13b5-4470-86e0-a0a80508d897",
+ "decision": 853,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "17842056-259e-44ae-bb64-27285ed63f62",
+      "6a02215c-7f50-42ab-a3a0-7eb28c9b1597"
+     ],
+     "score": 0.99858254
+    }
+   ],
+   "artist": "Clarence Clarity",
+   "disc": 1,
+   "high_band": 0.0008225424113798953,
+   "length": 185.0847619047619,
+   "recording_id": "6a02215c-7f50-42ab-a3a0-7eb28c9b1597",
+   "title": "Vapid Feels Are Vapid",
+   "track": 5,
+   "trailing_silence": 5.668230904761913
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch",
+  "padded",
+  "repick"
+ ],
+ "likelies": {
+  "album": "LEAVE EARTH",
+  "albumdisambig": null,
+  "artist": "Clarence Clarity",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "16e805d3-01ae-4044-b387-6586911ff972",
+  "year": 2018
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.12301587301587302,
+  "final_action": "repick",
+  "scorer_version": 4,
+  "status": "repick",
+  "vetoes": [
+   "'Vapid Feels Are Vapid': duration off by 71s from 'Leave Earth'",
+   "'Vapid Feels Are Vapid': tagged as recording 6a02215c-7f50-42ab-a3a0-7eb28c9b1597, matched to 'Leave Earth' (8da97705-ee21-4afe-8fff-67cbba6296ef)",
+   "'Vapid Feels Are Vapid': AcoustID (1.00) says a different recording than 'Leave Earth' (8da97705-ee21-4afe-8fff-67cbba6296ef)"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "16e805d3-01ae-4044-b387-6586911ff972"
+}

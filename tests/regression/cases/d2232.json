@@ -1,0 +1,260 @@
+{
+ "albums": [
+  {
+   "album": "Elemental (The Remixes)",
+   "albumdisambig": null,
+   "artist": "Pendulum",
+   "artist_ids": [
+    "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+   ],
+   "catalognum": "PENDRMXEP",
+   "country": "XW",
+   "genres": [
+    "electronic",
+    "house"
+   ],
+   "label": "Earstorm",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "a7c66704-2eaa-4707-9827-ec0ba73d6c30",
+   "release_id": "692aaefc-f6fd-4905-84d7-0bad48c70ef1",
+   "tracks": [
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 1,
+     "length": 386.417,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "87e379c3-9cc1-43c9-895c-e8f7adf5d5d0",
+     "title": "Driver (ABSOLUTE. Neon Energy remix)"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 2,
+     "length": 251.034,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "c6fcd039-e91b-4d37-817a-ca873b48c08c",
+     "title": "Nothing for Free (Kove remix)"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 3,
+     "length": 311.022,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "bce7c60f-b1f2-4e03-bfc7-dfc196c38b01",
+     "title": "Louder Than Words (Luttrell remix)"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 4,
+     "length": 316.75,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "a04c72c2-3b53-4da0-adbd-1d1d3f4b632a",
+     "title": "Come Alive (KDA remix)"
+    }
+   ],
+   "va": false,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Driver (ABSOLUTE. Neon Energy remix).flac",
+    "sample_rate": null,
+    "size": 86264114
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Nothing For Free (Kove Remix).flac",
+    "sample_rate": null,
+    "size": 60230517
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Louder Than Words (Luttrell remix).flac",
+    "sample_rate": null,
+    "size": 64280859
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - Come Alive (KDA remix).flac",
+    "sample_rate": null,
+    "size": 72539680
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Louder Than Words (Rob Swire chill mix).flac",
+    "sample_rate": null,
+    "size": 87775322
+   }
+  ],
+  "folder": "Pendulum\\Pendulum - Elemental (The Remixes)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2232,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "87e379c3-9cc1-43c9-895c-e8f7adf5d5d0"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 5.063071960763526e-05,
+   "length": 386.41791383219953,
+   "recording_id": "87e379c3-9cc1-43c9-895c-e8f7adf5d5d0",
+   "title": "Driver (ABSOLUTE. Neon Energy remix)",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c6fcd039-e91b-4d37-817a-ca873b48c08c"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.0019089915235042357,
+   "length": 251.03448979591838,
+   "recording_id": "c6fcd039-e91b-4d37-817a-ca873b48c08c",
+   "title": "Nothing For Free (Kove Remix)",
+   "track": 2,
+   "trailing_silence": 3.7399317959183804
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "bce7c60f-b1f2-4e03-bfc7-dfc196c38b01"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Pendulum, Hybrid Minds",
+   "disc": 1,
+   "high_band": 0.00010978479619794719,
+   "length": 311.0227210884354,
+   "recording_id": "bce7c60f-b1f2-4e03-bfc7-dfc196c38b01",
+   "title": "Louder Than Words (Luttrell remix)",
+   "track": 3,
+   "trailing_silence": 4.314376088435381
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a04c72c2-3b53-4da0-adbd-1d1d3f4b632a"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.00030820423356972917,
+   "length": 316.75,
+   "recording_id": "a04c72c2-3b53-4da0-adbd-1d1d3f4b632a",
+   "title": "Come Alive (KDA remix)",
+   "track": 4,
+   "trailing_silence": 1.864670999999987
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f9596890-d94e-44da-89e2-a4c59fbd348e"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Pendulum, Hybrid Minds",
+   "disc": 1,
+   "high_band": 2.413873461188775e-05,
+   "length": 457.9269160997732,
+   "recording_id": "f9596890-d94e-44da-89e2-a4c59fbd348e",
+   "title": "Louder Than Words (Rob Swire chill mix)",
+   "track": 5,
+   "trailing_silence": 9.000204099773214
+  }
+ ],
+ "labels": [
+  "accept"
+ ],
+ "likelies": {
+  "album": "Elemental (The Remixes)",
+  "albumdisambig": null,
+  "artist": "Pendulum",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "692aaefc-f6fd-4905-84d7-0bad48c70ef1",
+  "year": 2021
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.029126213592233007,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "692aaefc-f6fd-4905-84d7-0bad48c70ef1"
+}
