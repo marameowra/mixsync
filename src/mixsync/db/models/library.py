@@ -33,6 +33,8 @@ class Track(TimestampMixin, Base):
     album_artist: Mapped[str | None] = mapped_column(Text)
     album: Mapped[str | None] = mapped_column(Text)
     year: Mapped[str | None] = mapped_column(String(4))
+    # The path template `path` was rendered with (ADR 0019); null until the startup backfill.
+    path_template: Mapped[str | None] = mapped_column(Text)
 
 
 class Plan(TimestampMixin, Base):
@@ -41,7 +43,7 @@ class Plan(TimestampMixin, Base):
     __tablename__ = "plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))  # merge | promote
+    kind: Mapped[str] = mapped_column(String(16))  # merge | promote | delete | reorganize
     release_group_mbid: Mapped[str] = mapped_column(String(36))
     # for a promote plan: the matched release; the canonical choice is never touched
     canonical_release_mbid: Mapped[str] = mapped_column(String(36))

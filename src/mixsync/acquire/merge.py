@@ -11,6 +11,7 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, select, update
@@ -33,7 +34,7 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.names import stored_names
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import undoable
-from mixsync.library import canonical, fragmentation, tags
+from mixsync.library import canonical, fragmentation, layout, paths, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
@@ -105,6 +106,17 @@ def enqueue_undo(s: Session, now: datetime, plan_id: int) -> None:
     _enqueue(s, now, JobKind.UNDO_MERGE, plan_id)
 
 
+def _device(path: Path) -> int:
+    """The filesystem holding the path, or its nearest existing parent."""
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    return path.stat().st_dev
+
+
+def _no_tags(_staging: Path, _op_id: int) -> None:
+    """A reorganize move keeps the file's tags as they are."""
+
+
 class PlanInProgress(ValueError):
     """The group has a merge plan that is running or being undone."""
 
@@ -124,6 +136,7 @@ class Merger:
     canonical_media: tuple[str, ...] = ("Digital Media", "CD")
     canonical_countries: tuple[str, ...] = ("XW",)
     trash_days: int = 30  # an undo is possible this long after the plan finished
+    device: Callable[[Path], int] = _device  # tests fake a second mount
 
     def handlers(self) -> dict[JobKind, Callable[[JobRecord], Any]]:
         return {JobKind.MERGE: self.merge, JobKind.UNDO_MERGE: self.undo}
@@ -230,6 +243,60 @@ class Merger:
             plan.batch_id = f"delete-{plan.id}"
             return plan.id
 
+    def backfill_templates(self) -> None:
+        """On startup: rows from before ADR 0019 get the configured template. Moves nothing."""
+        with self.sessions.begin() as s:
+            layout.backfill(s, self.template)
+
+    def build_reorganize(self) -> int:
+        """Store a draft plan that refiles every track whose path came from another template,
+        and return its id (the dry run: reads tags, writes no file). Tags are not changed.
+        A move onto another filesystem is listed as `refused`, never planned."""
+        fo, lib = self.fileops, self.fileops.library
+        with self.sessions() as s:
+            tracks = list(
+                s.scalars(select(Track).where(layout.drifted(self.template)).order_by(Track.path))
+            )
+            rows = set(s.scalars(select(Track.path)))
+            busy = _delete_blocking(s, set(), {t.id for t in tracks}, None)
+        if not tracks:
+            raise LookupError("every track already follows the path template")
+        if busy:
+            raise PlanInProgress(busy)
+        taken: set[str] = set()
+        ops: list[dict[str, Any]] = []
+        for t in tracks:
+            op: dict[str, Any] = {"op": "keep", "template": self.template}
+            try:
+                if not fo.has(t.path):
+                    raise FileNotFoundError(t.path)
+                new = paths.unique(  # the track's own path is free: its original is trashed first
+                    layout.render(self.template, lib / t.path, t.path),
+                    lambda r, own=t.path: r in taken or (r != own and (r in rows or fo.has(r))),
+                )
+            except Exception as e:  # missing, unreadable or outside the library: left alone
+                op = {"op": "refused", "reason": f"cannot read the file ({e!r})"}
+            else:
+                if self.device(lib / t.path) != self.device(lib / new):
+                    op = {"op": "refused", "new_path": new, "reason": "on another filesystem"}
+                elif new != t.path:
+                    taken.add(new)
+                    op = {"op": "move", "new_path": new, "template": self.template}
+            ops.append({**op, "track_id": t.id, "old": fragmentation.row_dict(t), "done": False})
+        with self.sessions.begin() as s:
+            if busy := _delete_blocking(s, set(), {t.id for t in tracks}, None):
+                raise PlanInProgress(busy)
+            for p in s.scalars(select(Plan).where(Plan.kind == "reorganize")):
+                if p.status == "draft" and not live_job(s, p.id):  # never executed: DB only
+                    p.status = "discarded"
+            plan = Plan(
+                kind="reorganize", release_group_mbid="", canonical_release_mbid="", ops=ops
+            )
+            s.add(plan)
+            s.flush()
+            plan.batch_id = f"reorganize-{plan.id}"
+            return plan.id
+
     def _size(self, rel: str) -> int:
         try:
             return (self.fileops.library / rel).stat().st_size
@@ -266,7 +333,12 @@ class Merger:
         try:
             if not ok:
                 raise SafetyError("the canonical release changed since the plan was built")
+            if any(op.get("template", self.template) != self.template for op in ops):
+                raise SafetyError("the path template changed since the plan was built")
             for i, op in enumerate(ops):
+                if op["op"] == "keep" and "template" in op and not op["done"]:
+                    self._row(op)  # a reorganize keep: already in place, only the row is updated
+                    self._commit_op(plan_id, i, op, self._set_template(op["template"]), done=True)
                 if op["op"] in ("move", "trash") and not op["done"]:
                     if merge:
                         self._canonical_unchanged(plan_id)
@@ -323,11 +395,20 @@ class Merger:
             if canonical_db.get(s, plan.release_group_mbid) != plan.canonical_release_mbid:
                 raise SafetyError("the canonical release changed while the plan ran")
 
+    @staticmethod
+    def _set_template(template: str | None) -> Callable[[Session, Track], None]:
+        def apply(_s: Session, row: Track) -> None:
+            row.path_template = template
+
+        return apply
+
     def _row(self, op: dict[str, Any]) -> None:
-        """The op's Track row must still be exactly as the plan saw it."""
+        """The op's Track row must still be exactly as the plan saw it (in the fields the plan
+        recorded: a plan from before a new column does not compare it)."""
         with self.sessions() as s:
             row = s.scalar(select(Track).where(Track.path == op["old"]["path"]))
-            if row is None or fragmentation.row_dict(row) != op["old"]:
+            now = fragmentation.row_dict(row) if row is not None else None
+            if now is None or {k: now[k] for k in op["old"]} != op["old"]:
                 raise SafetyError(f"track row for {op['old']['path']} changed since the plan")
 
     def _move(self, plan_id: int, batch: str, i: int, op: dict[str, Any]) -> None:
@@ -343,6 +424,8 @@ class Merger:
                 )
             if not fo.has(old):
                 raise SafetyError(f"{old} is gone")
+            if self.device(fo.library / old) != self.device(fo.library / new):
+                raise SafetyError(f"{old} -> {new} would cross filesystems")
             if taken is not None or (new != old and fo.has(new)):  # checked before anything moves
                 raise SafetyError(f"{new} already exists")
             fo.trash(old, batch)
@@ -353,14 +436,19 @@ class Merger:
         if fo.find_imported(batch, src) != new:
             if fo.has(new):
                 raise SafetyError(f"{new} already exists")
-            tagset = fragmentation.tagset_from_dict(op["tags"])
-            fo.import_file(
-                src, new, snapshotting_writer(self.sessions, self.clock, new, tagset), batch
-            )
+            tg = op.get("tags")  # none on a reorganize move: the copy keeps the original's bytes
+            write = _no_tags
+            if tg is not None:
+                tagset = fragmentation.tagset_from_dict(tg)
+                write = snapshotting_writer(self.sessions, self.clock, new, tagset)
+            fo.import_file(src, new, write, batch)
 
         def apply(s: Session, row: Track) -> None:
-            tg = op["tags"]
-            row.path, row.release_mbid = new, tg["release_id"]
+            row.path, row.path_template = new, op.get("template", self.template)
+            tg = op.get("tags")
+            if tg is None:  # a reorganize: only the place changed
+                return
+            row.release_mbid = tg["release_id"]
             row.artist_mbids = list(tg["artist_ids"])
             row.album_artist, row.album, row.year = tags.names_of(
                 fragmentation.tagset_from_dict(tg)
@@ -452,6 +540,9 @@ class Merger:
             for i in reversed(range(len(ops))):
                 if ops[i]["op"] in ("move", "trash"):
                     self._undo_op(plan_id, batch, f"undo-{plan_id}", i, ops[i])
+                elif ops[i]["op"] == "keep" and ops[i]["done"]:  # a reorganize keep
+                    old = ops[i]["old"].get("path_template")
+                    self._commit_op(plan_id, i, ops[i], self._set_template(old), done=False)
         except Exception as e:  # a crash (BaseException) leaves "undoing": a retry resumes
             self._fail(plan_id, f"undo: {e or repr(e)}")
             raise
@@ -512,6 +603,7 @@ class Merger:
 
         def apply(s: Session, row: Track) -> None:
             row.path, row.release_mbid = path, old["release_mbid"]
+            row.path_template = old.get("path_template", row.path_template)
             row.artist_mbids = list(old["artist_mbids"])
             row.album_artist, row.album, row.year = names
             if s.get_one(Plan, plan_id).kind == "promote":

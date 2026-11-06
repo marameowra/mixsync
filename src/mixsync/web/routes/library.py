@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -30,7 +30,7 @@ from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.undo import undoable
-from mixsync.library import albums, fragmentation, tag_undo, tags
+from mixsync.library import albums, fragmentation, layout, tag_undo, tags
 from mixsync.library.fileops import FileOps
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -254,15 +254,42 @@ async def build_plan(
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
+@router.post("/reorganize/plan")
+def build_reorganize(user: User, db: Db, merger: Merge) -> RedirectResponse:
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    try:
+        plan_id = merger.build_reorganize()
+    except PlanInProgress as e:
+        raise HTTPException(409, str(e)) from None
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from None
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+
+
+SAMPLE, FOLDERS = 3, 100  # a reorganize page shows this many moves per folder, of this many
+
+
+def _by_folder(plan: Plan) -> dict[str, Any]:
+    """Moves and refusals grouped by the album folder they leave: (folder, count, sample) for
+    the first FOLDERS folders, and how many folders are left out."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for op in plan.ops:
+        if op["op"] in ("move", "refused"):
+            groups.setdefault(op["old"]["path"].rpartition("/")[0], []).append(op)
+    shown = [(f, len(o), o[:SAMPLE]) for f, o in list(groups.items())[:FOLDERS]]
+    return {"folders": shown, "folders_hidden": len(groups) - len(shown)}
+
+
 @router.get("/plans/{plan_id}")
 async def plan_detail(
     plan_id: int, request: Request, user: CurrentUser, db: Db, namer: Namer
 ) -> HTMLResponse:
     plan = _plan(db, plan_id, user)
-    counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
+    kinds = ("move", "trash", "keep", "refused")
+    counts = {k: sum(op["op"] == k for op in plan.ops) for k in kinds}
     refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
     for op in plan.ops:
-        if op["op"] == "move":
+        if op["op"] == "move" and "tags" in op:
             refs |= {
                 ("release", op["old"].get("release_mbid") or ""),
                 ("release", op["tags"].get("release_id") or ""),
@@ -274,6 +301,7 @@ async def plan_detail(
         "counts": counts,
         "allowed": allowed,
         "names": await resolve(db, namer, refs, MAX_LOOKUPS),
+        **(_by_folder(plan) if plan.kind == "reorganize" else {}),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
@@ -389,6 +417,7 @@ def browse(
         "total": len(found),
         "albums": found[(n - 1) * albums.PAGE : n * albums.PAGE],
         "pending": db.scalar(select(func.count()).where(Track.album.is_(None))),
+        "drift": layout.drift(db, request.app.state.settings.path_template),
     }
     return templates.TemplateResponse(request, "pages/albums.html", ctx)
 
