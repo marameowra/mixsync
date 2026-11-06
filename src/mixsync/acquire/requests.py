@@ -31,8 +31,11 @@ RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30),
 
 
 def no_results_delay(attempts: int) -> timedelta:
-    """Wait before the next search after `attempts` (>= 1) in a row found nothing."""
-    return backoff(attempts, timedelta(hours=1), timedelta(weeks=1))
+    """Wait before the next search after `attempts` (>= 1) in a row found nothing.
+
+    1 h, 4 h, 16 h, 64 h, then weekly: x4 per step keeps a dead query to ~4 Soulseek
+    searches in its first week (services etiquette)."""
+    return backoff(2 * attempts - 1, timedelta(hours=1), timedelta(weeks=1))
 
 
 def candidate_from_dict(d: dict[str, Any]) -> Candidate:

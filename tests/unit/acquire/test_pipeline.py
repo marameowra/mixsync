@@ -470,7 +470,7 @@ async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
 async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None:
     rid = request(env)
     t0 = env.clock.now()
-    waits = [1, 2, 4, 8, 16, 32, 64, 128, 168, 168]  # hours: doubling from 1h to the weekly cap
+    waits = [1, 4, 16, 64, 168, 168]  # hours: x4 from 1h to the weekly cap
     for wait in waits:
         job = None
         while job is None or job.kind is not JobKind.SEARCH:

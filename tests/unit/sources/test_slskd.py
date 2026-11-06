@@ -216,6 +216,31 @@ async def test_the_same_query_within_the_window_is_searched_once(
     assert posts == ["Test Album", "test album"]
 
 
+async def test_a_failed_search_is_not_reused(make_client: Make) -> None:
+    posts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal posts
+        if request.method == "POST":
+            posts += 1
+            return httpx.Response(500 if posts == 1 else 200, json=load("search_running.json"))
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=load("responses.json"))
+        return httpx.Response(200, json=load("search_complete.json"))
+
+    src = SlskdSource(
+        make_client("slskd", handler),
+        BASE,
+        "k",
+        downloads_dir=DOWNLOADS,
+        sleep=_no_sleep,
+        debounce=timedelta(minutes=5),
+    )
+    with pytest.raises(TransientError):
+        await src.search("test album")
+    assert len(await src.search("test album")) == 4 and posts == 2
+
+
 @pytest.mark.parametrize("code", [401, 403])
 async def test_sk_p06_auth_failure_names_the_api_key(make_client: Make, code: int) -> None:
     src = source(make_client, lambda r: httpx.Response(code))

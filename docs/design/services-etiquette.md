@@ -61,7 +61,7 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 ## Soulseek
 - At most 5 clients per IP: MixSync uses one slskd client. Bots must implement the full protocol: MixSync drives slskd, a full client, and never speaks the protocol itself.
 - Share back through slskd (users who don't share get banned by peers). Sharing copyrighted material is the user's responsibility.
-- Cap searches in flight across all workers (`MIXSYNC_SLSKD_MAX_SEARCHES`, default 2; extra searches wait). A repeated query within `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` (default 300 s) reuses the result. A request whose search finds nothing backs off from 1 h, doubling to a weekly cap.
+- Cap searches in flight across all workers (`MIXSYNC_SLSKD_MAX_SEARCHES`, default 2; extra searches wait). A repeated query within `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` (default 300 s) reuses the result. A request whose search finds nothing backs off 1 h → 4 h → 16 h → 64 h → weekly.
 - Don't queue many files from one peer at once.
 - Cap concurrent downloads (`MIXSYNC_MAX_CONCURRENT_DOWNLOADS`, default 3, counting active transfers, not albums). A full cap defers a `download` job without spending an attempt. Slow transfers (`MIXSYNC_SLOW_DOWNLOAD_*`, see [deploy](../../deploy/README.md#environment-variables)) stop counting so a stalled peer cannot block the queue.
 

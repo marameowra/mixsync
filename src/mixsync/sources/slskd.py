@@ -34,8 +34,9 @@ SEARCH_SETTINGS = {
     "minimumPeerUploadSpeed": 0,  # keep slow peers: they may be the only ones with the album
     "maximumPeerQueueLength": 1000,  # a queue this deep will not start within our patience
 }
-# Far longer than a search's ~70 s of polling: a crashed worker's slot frees itself after this.
-SEARCH_LEASE = timedelta(minutes=10)
+# Longer than the slowest search (60 polls at the client's 30 s timeout, ~31 min), so a live
+# search never loses its slot; a crashed worker's slot frees itself after this.
+SEARCH_LEASE = timedelta(minutes=45)
 _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+", re.IGNORECASE)
 
 
@@ -171,6 +172,8 @@ class SlskdSource:
     async def _capped(self, query: str) -> list[Candidate]:
         if self._slots is None:
             return await self._search(query)
+        # shortcut: cancelled mid-take (worker shutdown), the claimed slot is held until
+        # SEARCH_LEASE ends; give it back from the take thread if shutdowns stall searches.
         while (slot := await asyncio.to_thread(self._slots.take)) is None:
             await self._sleep(self._poll_interval)  # wait our turn; never dropped
         try:
