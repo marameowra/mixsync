@@ -44,6 +44,7 @@ from mixsync.wiring import Services, build_services
 log = logging.getLogger(__name__)
 
 COMPLETE_TRIES = 4
+ALIVE_EVERY = 10.0  # seconds between idle liveness writes; well inside WORKER_STALE_AFTER
 COMPLETE_PAUSE = 0.2  # seconds, times the attempt number
 
 Handler = Callable[[JobRecord], Awaitable[None]]
@@ -142,9 +143,11 @@ async def run_worker(
 ) -> None:
     pending = list(startup)
     loop = asyncio.get_running_loop()
-    retry_at = loop.time()
+    retry_at = alive_at = loop.time()
     while not stop.is_set():
-        await _alive(queue, worker)
+        if loop.time() >= alive_at:  # not every poll: an idle SQLite worker would write each second
+            await _alive(queue, worker)
+            alive_at = loop.time() + ALIVE_EVERY
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
                 if stop.is_set():

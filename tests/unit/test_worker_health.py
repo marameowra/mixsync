@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.__main__ import configure_logging, main
 from mixsync.core.config import Settings
+from mixsync.core.errors import TransientError
 from mixsync.core.jobs import WORKER_STALE_AFTER, JobKind
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
@@ -134,3 +135,41 @@ async def test_a_failed_heartbeat_write_does_not_stop_the_loop(
     await run_worker(Queue(), "w", stop, {}, poll=0)  # type: ignore[arg-type]
     assert claims == 2
     assert "recording the worker heartbeat failed" in caplog.text
+
+
+async def test_a_long_job_keeps_the_worker_fresh(settings: Settings) -> None:
+    upgrade()
+    engine = make_engine(settings)
+    clock = FakeClock()
+    queue = JobQueue(engine, clock, lambda *_: None)
+    with Session(engine) as s, s.begin():
+        enqueue_in(s, clock.now(), JobKind.NOOP, {})
+    stop = asyncio.Event()
+
+    async def slow(_job: JobRecord) -> None:
+        clock.t += timedelta(hours=1)  # the polling loop is blocked far past the threshold
+        await asyncio.sleep(0.25)  # a few lease beats (lease / 3 = 0.05 s)
+        stop.set()
+
+    lease = timedelta(seconds=0.15)
+    await run_worker(queue, "w", stop, {JobKind.NOOP: slow}, lease=lease, poll=0)  # type: ignore[arg-type]
+    assert worker_age(settings, clock.now()) == timedelta(0)
+
+
+async def test_a_failed_job_logs_a_warning_at_the_default_level(
+    settings: Settings, capsys: pytest.CaptureFixture[str]
+) -> None:
+    upgrade()
+    configure_logging()
+    engine = make_engine(settings)
+    clock = FakeClock()
+    queue = JobQueue(engine, clock, lambda *_: None)
+    with Session(engine) as s, s.begin():
+        enqueue_in(s, clock.now(), JobKind.NOOP, {})
+
+    async def flaky(_job: JobRecord) -> None:
+        raise TransientError("slskd unreachable")
+
+    await one_round(queue, {JobKind.NOOP: flaky})
+    err = capsys.readouterr().err
+    assert " WARNING mixsync.worker: job 1 failed (" in err and "slskd unreachable" in err
