@@ -18,4 +18,13 @@
 </form>
 {% if link %}<form method="post" action="/account/{{ sv }}/unlink">{{ forms.csrf() }}<button class="danger" type="submit">Unlink {{ label }}</button></form>{% endif %}
 {% endfor %}
+<h2>Matching</h2>
+{% if error and error[0] == "matching" %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
+<p>Matches at {{ auto_accept }}% confidence or more import on their own. From {{ review }}% they wait for your review; below that they are rejected.</p>
+<form method="post" action="/account/matching">
+  {{ forms.csrf() }}
+  <p class="field"><label>Auto-accept at confidence (%) <input name="auto_accept" type="number" min="{{ review }}" max="100" step="1" value="{{ auto_accept }}" required></label></p>
+  <button type="submit">Save auto-accept limit</button>
+</form>
+{% if "admin" in user.capabilities %}<p><a href="/account/cap">App-wide minimum confidence</a></p>{% endif %}
 {% endblock %}

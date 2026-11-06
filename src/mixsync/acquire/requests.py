@@ -3,7 +3,7 @@ marking candidates tried, and coalescing rescans."""
 
 import random
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -14,14 +14,14 @@ from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import Candidate, CandidateFile, Profile
-from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import albums
-from mixsync.match.profiles import BALANCED
+from mixsync.match.profiles import BALANCED, from_confidence
 
 REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
 
@@ -45,11 +45,21 @@ def candidate_dict(c: Candidate) -> dict[str, Any]:
     return asdict(c)
 
 
-def profile_for(s: Session, user_id: int) -> Profile:
-    user = s.get(User, user_id)
+def auto_accept_cap(s: Session) -> float | None:
+    """The admin's minimum auto-accept confidence as a distance; None when there is no cap."""
+    row = s.get(AppSettings, 1)
+    pct = row.min_auto_accept_confidence if row else None
+    return None if pct is None else from_confidence(pct)
+
+
+def profile_for(s: Session, user_id: int | None) -> Profile:
+    """The user's profile (or BALANCED without one), its auto-accept limit held to the cap."""
+    user = s.get(User, user_id) if user_id else None
     pid = user.matching_profile_id if user else None
     row = s.get(MatchingProfile, pid) if pid else None
-    return Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
+    p = Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
+    cap = auto_accept_cap(s)
+    return p if cap is None or p.auto_accept_max <= cap else replace(p, auto_accept_max=cap)
 
 
 def search_priority(req: Request) -> int:
