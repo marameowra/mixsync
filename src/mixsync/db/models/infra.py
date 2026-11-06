@@ -39,3 +39,12 @@ class MbName(Base):
     mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class WorkerHeartbeat(Base):
+    """When each worker's polling loop last went round; the healthcheck reads the newest."""
+
+    __tablename__ = "worker_heartbeats"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

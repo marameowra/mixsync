@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
@@ -44,6 +45,12 @@ class Settings(BaseSettings):
     trash_days: int = Field(default=30, ge=1)  # trash from day folders older than this is purged
     timezone: str = "UTC"  # the zone report days are read in
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _upper_level(cls, v: object) -> object:
+        return v.upper() if isinstance(v, str) else v
 
     @field_validator("database_url")
     @classmethod
