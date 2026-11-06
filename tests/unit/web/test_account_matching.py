@@ -194,3 +194,13 @@ def test_picking_copies_a_shared_row_and_a_cap_is_noted(
     login(client, "alice")
     assert "minimum of 92% limits auto-accept for Loose" in client.get("/account").text
     assert effective(sf, "alice").auto_accept_max == pytest.approx(0.08)
+
+
+def test_a_preset_chosen_under_a_cap_is_stored_raw_and_clamped_on_load(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    set_cap(client, login(client, "root"), "92")
+    pick(client, login(client, "alice"), "loose")
+    assert row(sf, "alice")[1:] == ("loose", 0.15, 0.55)  # no UPDATE ran after the pick
+    assert effective(sf, "alice").auto_accept_max == pytest.approx(0.08)
+    assert "minimum of 92% limits auto-accept for Loose" in client.get("/account").text
