@@ -54,6 +54,9 @@ TRANSITIONS: dict[JobState, frozenset[JobState]] = {
 }
 
 DEFAULT_LEASE = timedelta(seconds=60)
+# A running job blocks the polling loop; its lease heartbeat (every DEFAULT_LEASE / 3) keeps the
+# worker's liveness fresh meanwhile, so the threshold is a few of those beats, not of polls.
+WORKER_STALE_AFTER = timedelta(seconds=90)
 
 
 class IllegalTransitionError(ValueError):

@@ -48,7 +48,8 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 2. Set `FORWARDED_ALLOW_IPS` to the proxy's fixed IP (static `ipv4_address`). A subnet (`docker network inspect`, or pin with `ipam`) is looser; a subnet or `*` is safe only when 8080 is reachable solely through the proxy. IPs or CIDRs only: uvicorn does no DNS lookup. `mixsync all` reads the same variable from `.env`.
 
 ## Health and ops
-- `GET /healthz` backs the web healthcheck; the worker has none yet.
+- `GET /healthz` backs the web healthcheck. The worker records a heartbeat on every loop round (and during long jobs); `mixsync worker-health` exits non-zero when none is newer than 90 s and backs the worker healthcheck. Admins see "worker last seen" under Account → Worker status.
+- Logs go to stderr (timestamp, level, logger, message); `MIXSYNC_LOG_LEVEL` sets the level (default `INFO`).
 - Back up `/config` and `/data` with your host backup. Upgrade: pull → `mixsync migrate` (Alembic) → restart.
 
 - SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.

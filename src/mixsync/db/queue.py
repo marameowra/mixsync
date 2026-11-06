@@ -3,15 +3,17 @@ from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import Connection, Engine, Row, Table, select, update
+from sqlalchemy import Connection, Engine, Row, Table, func, insert, select, update
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition
+from mixsync.db.models.infra import WorkerHeartbeat
 from mixsync.db.models.work import Job
 
 _J = cast(Table, Job.__table__)
+_W = cast(Table, WorkerHeartbeat.__table__)
 
 
 class LeaseLostError(Exception):
@@ -99,6 +101,13 @@ class JobQueue:
                 .values(lease_expires_at=now + lease, updated_at=now)
             )
         return res.rowcount == 1
+
+    def alive(self, worker: str) -> None:
+        """Record that this worker's loop is going round (its liveness, not a job's lease)."""
+        now = self._clock.now()
+        with self._engine.begin() as c:
+            if not c.execute(update(_W).where(_W.c.name == worker).values(seen_at=now)).rowcount:
+                c.execute(insert(_W).values(name=worker, seen_at=now))
 
     def start(self, job_id: int, worker: str) -> None:
         self._move(job_id, worker, JobState.RUNNING, keep_lease=True)
@@ -230,3 +239,9 @@ def enqueue_in(
         )
     )
     s.flush()
+
+
+def worker_age(s: Session, now: datetime) -> timedelta | None:
+    """How long ago any worker last recorded it was alive; None if none ever has."""
+    seen = s.scalar(select(func.max(WorkerHeartbeat.seen_at)))
+    return None if seen is None else now - aware(seen)

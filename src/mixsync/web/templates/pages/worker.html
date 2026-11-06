@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Worker - MixSync{% endblock %}
+{% block content %}
+<h1>Worker</h1>
+{% if seconds is none %}
+<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The worker has never recorded a heartbeat. Downloads, imports and scheduled jobs do not run until it starts.</p>
+{% else %}
+<p>Worker last seen {{ seconds }} s ago.</p>
+{% if stale %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The worker looks stopped or stuck: check its logs and restart it.</p>{% endif %}
+{% endif %}
+{% endblock %}

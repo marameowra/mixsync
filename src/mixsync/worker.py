@@ -56,9 +56,17 @@ async def _noop(_job: JobRecord) -> None:
 HANDLERS: dict[JobKind, Handler] = {JobKind.NOOP: _noop}
 
 
+async def _alive(queue: JobQueue, worker: str) -> None:
+    try:
+        await asyncio.to_thread(queue.alive, worker)
+    except Exception:  # liveness is for the healthcheck; never stop polling or a job over it
+        log.exception("recording the worker heartbeat failed; trying again")
+
+
 async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta) -> None:
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
+        await _alive(queue, worker)  # a long job blocks the polling loop
         try:
             if not await asyncio.to_thread(queue.heartbeat, job_id, worker, lease):
                 return
@@ -99,6 +107,7 @@ async def run_job(
     hb = asyncio.create_task(_heartbeat(queue, job.id, worker, lease))
     try:
         await asyncio.to_thread(queue.start, job.id, worker)
+        log.info("job %s (%s) started", job.id, job.kind)
         await handlers[job.kind](job)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
@@ -106,7 +115,8 @@ async def run_job(
         try:
             # A locked database is momentary, never a reason to fail finished work.
             if isinstance(e, TransientError | OperationalError):
-                await asyncio.to_thread(queue.retry, job.id, worker, str(e))
+                state = await asyncio.to_thread(queue.retry, job.id, worker, str(e))
+                log.warning("job %s failed (%s): %s", job.id, state, e)
             else:  # PermanentError, SafetyError, bugs: never retried
                 log.exception("job %s failed", job.id)
                 await asyncio.to_thread(queue.fail, job.id, worker, repr(e))
@@ -116,6 +126,7 @@ async def run_job(
             log.exception("could not record the outcome of job %s", job.id)
     else:
         await _complete(queue, job.id, worker)
+        log.info("job %s finished", job.id)
     finally:
         hb.cancel()
 
@@ -133,6 +144,7 @@ async def run_worker(
     loop = asyncio.get_running_loop()
     retry_at = loop.time()
     while not stop.is_set():
+        await _alive(queue, worker)
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
                 if stop.is_set():
@@ -357,7 +369,11 @@ async def serve_all() -> None:
     stop = asyncio.Event()
     server = uvicorn.Server(
         uvicorn.Config(
-            lambda: create_app(services=services), factory=True, host="0.0.0.0", port=8080
+            lambda: create_app(services=services),
+            factory=True,
+            host="0.0.0.0",
+            port=8080,
+            log_level=services.settings.log_level.lower(),
         )
     )
     task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))

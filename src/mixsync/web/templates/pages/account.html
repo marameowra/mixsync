@@ -26,5 +26,6 @@
   <p class="field"><label>Auto-accept at confidence (%) <input name="auto_accept" type="number" min="{{ review }}" max="100" step="1" value="{{ auto_accept }}" required></label></p>
   <button type="submit">Save auto-accept limit</button>
 </form>
-{% if "admin" in user.capabilities %}<p><a href="/account/cap">App-wide minimum confidence</a></p>{% endif %}
+{% if "admin" in user.capabilities %}<p><a href="/account/cap">App-wide minimum confidence</a></p>
+<p><a href="/account/worker">Worker status</a></p>{% endif %}
 {% endblock %}
