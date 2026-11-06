@@ -1,0 +1,113 @@
+{
+ "albums": [
+  {
+   "album": "Power",
+   "albumdisambig": null,
+   "artist": "Kove",
+   "artist_ids": [
+    "3ccd8183-f0bc-4acd-a4e7-3b1d226d36fd"
+   ],
+   "catalognum": "UKF031",
+   "country": "XW",
+   "genres": [
+    "drum and bass",
+    "electronic"
+   ],
+   "label": "UKF",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2020,
+   "release_group_id": "6ec4bce4-be22-4c28-8e0e-eeefb0da5408",
+   "release_id": "cdacdced-4234-4607-8645-e3554a7ee80d",
+   "tracks": [
+    {
+     "artist": "Kove",
+     "artist_ids": [
+      "3ccd8183-f0bc-4acd-a4e7-3b1d226d36fd"
+     ],
+     "index": 1,
+     "length": 271.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "fa87c825-fa37-4050-9d53-e38094579eb5",
+     "title": "Power"
+    }
+   ],
+   "va": false,
+   "year": 2020
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Power.flac",
+    "sample_rate": null,
+    "size": 47751399
+   }
+  ],
+  "folder": "Kove\\Kove - Power",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2223,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.99970335
+    }
+   ],
+   "artist": "Kove",
+   "disc": 1,
+   "high_band": 0.002403407986528598,
+   "length": 201.37931972789116,
+   "recording_id": "fa87c825-fa37-4050-9d53-e38094579eb5",
+   "title": "Power",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "padded",
+  "reject"
+ ],
+ "likelies": {
+  "album": "Power",
+  "albumdisambig": null,
+  "artist": "Kove",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "cdacdced-4234-4607-8645-e3554a7ee80d",
+  "year": 2020
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.023809523809523808,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Power': duration off by 70s from 'Power'"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "cdacdced-4234-4607-8645-e3554a7ee80d"
+}

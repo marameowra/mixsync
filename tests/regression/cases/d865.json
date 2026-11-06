@@ -1,0 +1,446 @@
+{
+ "albums": [
+  {
+   "album": "Yaeji | Boiler Room: New York",
+   "albumdisambig": null,
+   "artist": "yaeji",
+   "artist_ids": [
+    "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "downtempo",
+    "edm",
+    "hip hop",
+    "house"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2024,
+   "release_group_id": "b9e2a699-e3b9-4d9f-b349-08448ff5a239",
+   "release_id": "e9bcea61-618c-4cea-8081-cb506481bc23",
+   "tracks": [
+    {
+     "artist": "FreeTEMPO",
+     "artist_ids": [
+      "92b9d5cd-0186-4453-a947-26f537a060a3"
+     ],
+     "index": 1,
+     "length": null,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "40931a9f-be4a-4c55-9e82-ca1b17da46f0",
+     "title": "Etude"
+    },
+    {
+     "artist": "Randomer",
+     "artist_ids": [
+      "38b7e676-2fda-44ec-bc7c-9f5a9f3623c3"
+     ],
+     "index": 2,
+     "length": null,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "8b3a5ba4-7f26-45a2-a9ed-1c194daa1a9c",
+     "title": "Freak Dub"
+    },
+    {
+     "artist": "PTMC",
+     "artist_ids": [
+      "b0ec9726-6972-4bd9-9d78-b8e842125b0f"
+     ],
+     "index": 3,
+     "length": null,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "f247ef51-09d9-4bb7-bcbe-67b28d65c498",
+     "title": "Officewerkz"
+    },
+    {
+     "artist": "TERIYAKI BOYZ",
+     "artist_ids": [
+      "afb3102c-b7e6-4140-b825-7f84ea97f73f"
+     ],
+     "index": 4,
+     "length": null,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "91219db2-fe2a-4179-9fe8-8f30f07f7246",
+     "title": "Tokyo Drift"
+    },
+    {
+     "artist": "Boddika",
+     "artist_ids": [
+      "8ddadd32-7fd1-4f2d-8c0f-cafe202f5e0f"
+     ],
+     "index": 5,
+     "length": null,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "a8bc3e95-2e1b-460e-9f85-43dfb6a3524d",
+     "title": "Heat"
+    },
+    {
+     "artist": "Aegis",
+     "artist_ids": [
+      "73c29982-0af3-4051-bbff-8f965368a6b8"
+     ],
+     "index": 6,
+     "length": null,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "8a70115e-8d19-4f87-8d9b-23ee20a28a5c",
+     "title": "AQXDM"
+    },
+    {
+     "artist": "Nintendo Co., Ltd.",
+     "artist_ids": [
+      "05e536dd-abaa-4e87-b9c0-678eb59c38c8"
+     ],
+     "index": 7,
+     "length": null,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "83b3a76e-dee4-4ec9-8f62-914fd397306d",
+     "title": "Wii Shop Channel"
+    },
+    {
+     "artist": "Crystal Castles",
+     "artist_ids": [
+      "b1570544-93ab-4b2b-8398-131735394202"
+     ],
+     "index": 8,
+     "length": null,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "f4a478ed-affc-46ee-9bcf-8b3966399b55",
+     "title": "Kerosene"
+    },
+    {
+     "artist": "Bastiengoat",
+     "artist_ids": [
+      "a12cecad-66f9-4bf6-bad6-ccd9ed66cb31"
+     ],
+     "index": 9,
+     "length": null,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "14726058-5ad1-408e-ba61-5e7043407ea7",
+     "title": "Ifyougotta"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 10,
+     "length": null,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "e0520601-432a-45a0-9cc0-6473be21ec99",
+     "title": "Raingurl"
+    },
+    {
+     "artist": "Aliyah\u2019s Interlude",
+     "artist_ids": [
+      "e3f4f0e0-125b-4d47-84ea-821e60901512"
+     ],
+     "index": 11,
+     "length": null,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "289cdff5-d607-4762-9cf9-6131a82b4cbe",
+     "title": "[unknown]"
+    },
+    {
+     "artist": "Verus",
+     "artist_ids": [
+      "71cba454-ca18-4843-9427-8ff9e779ccde"
+     ],
+     "index": 12,
+     "length": null,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "22307941-b3bf-4258-8c19-9183ee238ee7",
+     "title": "What's Poppin (Narciss' Champagne Poppin remix)"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 13,
+     "length": null,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "55e032a6-360a-4441-b167-4e1b9f189ef2",
+     "title": "booboo"
+    },
+    {
+     "artist": "Mercury",
+     "artist_ids": [
+      "a24e798a-8836-4cae-9307-7b37c28393e8"
+     ],
+     "index": 14,
+     "length": null,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "3a979349-e88d-40f4-b465-f6e244166c90",
+     "title": "RUNNING ROUND"
+    },
+    {
+     "artist": "Yves Tumor",
+     "artist_ids": [
+      "b675f327-4738-4af4-bb83-1adb0003f2d3"
+     ],
+     "index": 15,
+     "length": null,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "7f9e7d4f-d164-44c7-82d0-2643bb3a9ba5",
+     "title": "The Feeling When You Walk Away"
+    },
+    {
+     "artist": "Moodymann",
+     "artist_ids": [
+      "17d69e72-9cf2-496f-aa64-ba238de2087e"
+     ],
+     "index": 16,
+     "length": null,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "60fcddac-8b5b-476e-873c-4ea4a08256e3",
+     "title": "I Need You So Much"
+    }
+   ],
+   "va": false,
+   "year": 2024
+  },
+  {
+   "album": "EP 1+2",
+   "albumdisambig": null,
+   "artist": "Yaeji",
+   "artist_ids": [
+    "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [
+    "alternative r&b",
+    "ambient house",
+    "ambient pop",
+    "deep house",
+    "hip house",
+    "outsider house"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "3bc5329b-9c89-4a99-a693-bebc05f9e11b",
+   "release_id": "bed380ad-3d2f-4a14-aa68-c2c1b2e6e40e",
+   "tracks": [
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 1,
+     "length": 155.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "9c216cac-1b51-41a4-9db6-e7d15e1509c3",
+     "title": "Feelings Change"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 2,
+     "length": 237.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "f1451780-d6a9-4ac5-bdd9-d239c5d2facb",
+     "title": "Raingurl"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 3,
+     "length": 201.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "8eee9ba2-0629-46b4-896c-95566ac799f7",
+     "title": "Drink I\u2019m Sippin On"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 4,
+     "length": 218.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "8af042f6-25af-421c-8be0-80d1ad1d06fa",
+     "title": "After That"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 5,
+     "length": 274.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "ea5e0dcb-7413-406c-8cc2-4dfb34603dfb",
+     "title": "Passionfruit"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 6,
+     "length": 205.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "b9f4bef7-3c2a-4240-88cd-bd446736940e",
+     "title": "Noonside"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 7,
+     "length": 203.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "b228f3da-ec24-4877-bc09-22933b6f363b",
+     "title": "New York 93"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 8,
+     "length": 196.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "41760c32-dffb-416d-8919-95efb1f2580b",
+     "title": "Feel It Out"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 9,
+     "length": 340.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "3f9b27e0-84af-4279-86f9-7d10aeb62d50",
+     "title": "Guap"
+    },
+    {
+     "artist": "Yaeji",
+     "artist_ids": [
+      "2d781050-032a-4a4f-b0a9-7b4bc99449e1"
+     ],
+     "index": 10,
+     "length": 209.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "ee8aebdf-faae-4a49-960d-ef903c7ff7e9",
+     "title": "Full of It"
+    }
+   ],
+   "va": false,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Yaeji - Raingurl.flac",
+    "sample_rate": null,
+    "size": 50495227
+   }
+  ],
+  "folder": "Compilations\\Yaeji _ Boiler Room_ New York",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": "bed380ad-3d2f-4a14-aa68-c2c1b2e6e40e",
+ "decision": 865,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "78f57b92-a307-43b7-a041-9969799d1d0b",
+      "f1451780-d6a9-4ac5-bdd9-d239c5d2facb"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Yaeji",
+   "disc": 1,
+   "high_band": 8.363924425920259e-05,
+   "length": 237.23122916666668,
+   "recording_id": null,
+   "title": "Raingurl",
+   "track": 2,
+   "trailing_silence": 2.143333166666679
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "repick"
+ ],
+ "likelies": {
+  "album": "Yaeji | Boiler Room: New York",
+  "albumdisambig": null,
+  "artist": "Yaeji",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "e9bcea61-618c-4cea-8081-cb506481bc23",
+  "year": 2024
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.5345454545454545,
+  "final_action": "repick",
+  "scorer_version": 4,
+  "status": "repick",
+  "vetoes": [
+   "'Raingurl': AcoustID (1.00) says a different recording than 'Raingurl' (e0520601-432a-45a0-9cc0-6473be21ec99)"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "e9bcea61-618c-4cea-8081-cb506481bc23"
+}

@@ -1,0 +1,475 @@
+{
+ "albums": [
+  {
+   "album": "The Vibe Guide, Vol. 4",
+   "albumdisambig": null,
+   "artist": "Tep No",
+   "artist_ids": [
+    "7e3e0e05-e34c-450f-becf-b00572125048"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "deep house",
+    "dance",
+    "edm",
+    "house"
+   ],
+   "label": "Tep No Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "25682018-7135-4b69-b98b-0e70d75d5025",
+   "release_id": "9f1e1418-8212-486b-bb4b-a7197643cb47",
+   "tracks": [
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 1,
+     "length": 232.174,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "d6b41e35-640a-4a86-b1bd-29cec9b2a5f0",
+     "title": "Superpowers"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 2,
+     "length": 132.704,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "fe741d31-83da-4a18-ab81-b026da200735",
+     "title": "Bondi Beach"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 3,
+     "length": 211.377,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "8c5beac0-9158-4f48-b023-5b54c0306bd8",
+     "title": "The Best Part of Me"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 4,
+     "length": 192.681,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "4a2d1ccd-9644-4bf9-8ca6-372b43ba2682",
+     "title": "Thoughts"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 5,
+     "length": 193.11,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "09fc5d31-e382-4ff2-9d79-184572c1ee95",
+     "title": "The River"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 6,
+     "length": 196.25,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "049ba2cf-373b-4179-8680-cd9b0a008242",
+     "title": "Too Much Conversation (Took My Time)"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 7,
+     "length": 203.67,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "9fdd459f-7fe0-4bb5-be21-e31fea92e8c3",
+     "title": "She Don't Know How I Feel"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 8,
+     "length": 189.406,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "cf377304-c04f-47cd-b25b-077715f3bb2a",
+     "title": "For Eternity"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 9,
+     "length": 236.279,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "8430ee52-398b-4c91-9165-cb99a08c5e25",
+     "title": "Pacing"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 10,
+     "length": 173.673,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "f1a8fa08-1052-493e-8116-452b453e3a47",
+     "title": "Drown in Your Love"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 11,
+     "length": 145.179,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "c3058a07-466a-4fd3-bdd5-5a7facfc0be9",
+     "title": "Chronically Online"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 255,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\01 - Did Everything I Could.flac",
+    "sample_rate": 44100,
+    "size": 26235834
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 229,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\03 - Don't Be Scared To Die.flac",
+    "sample_rate": 44100,
+    "size": 26711257
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 211,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\04 - Cry For Me.flac",
+    "sample_rate": 44100,
+    "size": 25664155
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 173,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\05 - Colombian Lovers.flac",
+    "sample_rate": 44100,
+    "size": 19890003
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 184,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\06 - Taste Of Your Life.flac",
+    "sample_rate": 44100,
+    "size": 23036764
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 232,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\07 - Thinking About (The Way It Was).flac",
+    "sample_rate": 44100,
+    "size": 27438566
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 220,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\08 - Demon.flac",
+    "sample_rate": 44100,
+    "size": 24060580
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 208,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\09 - The Last Ones Standing.flac",
+    "sample_rate": 44100,
+    "size": 24529974
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 236,
+    "extension": "flac",
+    "path": "Tep No - The Vibe Guide, Vol. 1\\10 - Pacing.flac",
+    "sample_rate": 44100,
+    "size": 28354474
+   }
+  ],
+  "folder": "Tep No\\Tep No - The Vibe Guide, Vol. 1",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 15,
+  "upload_speed": 2982492,
+  "username": "peer-bd8bc8eb"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2166,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2e0c9b25-21f8-4df7-9f2a-70e6f0260571"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00018149819068130513,
+   "length": 255.70410430839001,
+   "recording_id": null,
+   "title": "Did Everything I Could",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4a28980b-7ad4-4800-838c-8dbd8c67adff"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00021413980358870975,
+   "length": 229.06539682539682,
+   "recording_id": null,
+   "title": "Don't Be Scared To Die",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d4339eae-dd7f-46be-b1fc-62de93cd5e72"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0005532206721683407,
+   "length": 211.61807256235826,
+   "recording_id": null,
+   "title": "Cry For Me",
+   "track": 4,
+   "trailing_silence": 5.998412562358254
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "882ed311-eccc-42e2-bd99-c1e458c486c5"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00026702689143940977,
+   "length": 173.35807256235827,
+   "recording_id": null,
+   "title": "Colombian Lovers",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4613e431-2321-4264-b2bf-581c9f4ef2ea"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0005529458462843878,
+   "length": 184.52056689342405,
+   "recording_id": null,
+   "title": "Taste Of Your Life",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d601d0e3-fe77-4c80-95bc-d39270f11a8f"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0011549372797835286,
+   "length": 232.70269841269842,
+   "recording_id": null,
+   "title": "Thinking About (The Way It Was)",
+   "track": 7,
+   "trailing_silence": 1.0493194126984235
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a342d68f-2e4d-45c6-b197-9bea82c66b53"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 7.234126519833861e-05,
+   "length": 220.7902947845805,
+   "recording_id": null,
+   "title": "Demon",
+   "track": 8,
+   "trailing_silence": 5.1180947845805065
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "feb52262-835f-477c-b07d-48c92c8d1567"
+     ],
+     "score": 0.97359574
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00031241321777630425,
+   "length": 208.3859410430839,
+   "recording_id": null,
+   "title": "The Last Ones Standing",
+   "track": 9,
+   "trailing_silence": 1.1814060430839106
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8430ee52-398b-4c91-9165-cb99a08c5e25"
+     ],
+     "score": 0.96080565
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0003212236406866483,
+   "length": 236.27913832199548,
+   "recording_id": null,
+   "title": "Pacing",
+   "track": 10,
+   "trailing_silence": 1.285328321995479
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "padded",
+  "reject"
+ ],
+ "likelies": {
+  "album": "The Vibe Guide, Vol. 1",
+  "albumdisambig": null,
+  "artist": "Tep No",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2025
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.5217877839323236,
+  "final_action": "reject",
+  "scorer_version": 6,
+  "status": "rejected",
+  "vetoes": [
+   "'Did Everything I Could': duration off by 24s from 'Superpowers'",
+   "'Did Everything I Could': AcoustID (1.00) says a different recording than 'Superpowers' (d6b41e35-640a-4a86-b1bd-29cec9b2a5f0)",
+   "\"Don't Be Scared To Die\": duration off by 18s from 'The Best Part of Me'",
+   "\"Don't Be Scared To Die\": AcoustID (1.00) says a different recording than 'The Best Part of Me' (8c5beac0-9158-4f48-b023-5b54c0306bd8)",
+   "'Cry For Me': duration off by 19s from 'Thoughts'",
+   "'Cry For Me': AcoustID (1.00) says a different recording than 'Thoughts' (4a2d1ccd-9644-4bf9-8ca6-372b43ba2682)",
+   "'Colombian Lovers': duration off by 20s from 'The River'",
+   "'Colombian Lovers': AcoustID (1.00) says a different recording than 'The River' (09fc5d31-e382-4ff2-9d79-184572c1ee95)",
+   "'Taste Of Your Life': AcoustID (1.00) says a different recording than 'Drown in Your Love' (f1a8fa08-1052-493e-8116-452b453e3a47)",
+   "'Thinking About (The Way It Was)': duration off by 29s from \"She Don't Know How I Feel\"",
+   "'Thinking About (The Way It Was)': AcoustID (1.00) says a different recording than \"She Don't Know How I Feel\" (9fdd459f-7fe0-4bb5-be21-e31fea92e8c3)",
+   "'Demon': duration off by 31s from 'For Eternity'",
+   "'Demon': AcoustID (1.00) says a different recording than 'For Eternity' (cf377304-c04f-47cd-b25b-077715f3bb2a)",
+   "'The Last Ones Standing': AcoustID (0.97) says a different recording than 'Too Much Conversation (Took My Time)' (049ba2cf-373b-4179-8680-cd9b0a008242)"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "9f1e1418-8212-486b-bb4b-a7197643cb47"
+}

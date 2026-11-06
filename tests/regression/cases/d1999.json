@@ -1,0 +1,686 @@
+{
+ "albums": [
+  {
+   "album": "Relieve the Pressure",
+   "albumdisambig": null,
+   "artist": "Venjent",
+   "artist_ids": [
+    "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [
+    "drum and bass",
+    "electronic",
+    "dancefloor drum and bass",
+    "neurofunk"
+   ],
+   "label": "Chilli Tribe Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "c6e33714-f922-4045-9686-0ad67e5695cb",
+   "release_id": "ae83e23e-ae29-4e33-90d2-58e6c228508f",
+   "tracks": [
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 1,
+     "length": 195.349,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "2c90494e-1dc3-4cff-aee4-7782cead3402",
+     "title": "Relieve the Pressure"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 2,
+     "length": 217.931,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "ae57b46c-625d-41d8-aad1-d46a20eb73b8",
+     "title": "Hypnosis"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 3,
+     "length": 207.907,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "2bee3d09-db52-4347-a7fb-c8d0d2e3b84a",
+     "title": "Not that Deep"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 4,
+     "length": 135.517,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "aa2f28af-a316-4ee7-b841-01077bd257e1",
+     "title": "Emotional Intelligence"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 5,
+     "length": 265.412,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "9d42cf28-5b0f-4334-9fc3-e8c71f9106eb",
+     "title": "Artificial Love"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 6,
+     "length": 204.138,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "887acea2-d6c7-4c58-b282-e3ca57575504",
+     "title": "What are you Waiting for"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 7,
+     "length": 138.667,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "84e76ed8-d7eb-411e-82b5-fdf5a4e496a1",
+     "title": "Something Greater than Us"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 8,
+     "length": 180.698,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "80f8e395-83ca-4f76-9dda-90cd1ce988a2",
+     "title": "Suffering Silence"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 9,
+     "length": 247.586,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "d1b25ae3-ff84-46ff-9380-6e2af26d880a",
+     "title": "Drop in the Ocean"
+    },
+    {
+     "artist": "Oktae & Venjent",
+     "artist_ids": [
+      "5a3986c6-0f6d-4cd4-a081-297e0f4a00b8",
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 10,
+     "length": 175.543,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "c3b71a13-3f6b-44f2-bac6-a5ec9be213fe",
+     "title": "Little World"
+    },
+    {
+     "artist": "Venjent & JAX",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6",
+      "a2507d4d-3387-4d31-a6e8-f2c9794fb37e"
+     ],
+     "index": 11,
+     "length": 220.465,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "fe08ea03-7551-4182-a5b7-b88baf00b863",
+     "title": "Never Be Ashamed"
+    },
+    {
+     "artist": "Venjent & Middle Milk",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6",
+      "ad1a6f39-1ccc-418f-b401-6c974768e1ee"
+     ],
+     "index": 12,
+     "length": 269.052,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "5f6db834-e4b1-4714-82ca-aeef47b88864",
+     "title": "Sick of It"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 13,
+     "length": 298.621,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "ed68e320-44d2-4bee-bb49-098219b12ae9",
+     "title": "Everything is Music"
+    },
+    {
+     "artist": "Venjent & X4",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6",
+      "613418f7-fcf7-42f6-81c0-537f6537f369"
+     ],
+     "index": 14,
+     "length": 184.146,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "dd585289-3aed-4887-b2ca-7d9298c90cf1",
+     "title": "Imagine That"
+    },
+    {
+     "artist": "Venjent",
+     "artist_ids": [
+      "6323a9ae-21a6-46e2-a7df-d47d29fe46d6"
+     ],
+     "index": 15,
+     "length": 206.512,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "b0f6fb2f-d019-4c3d-b0db-a27007a1f51d",
+     "title": "Tell Me I Can Love Myself"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 195,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\01 - Relieve the Pressure.flac",
+    "sample_rate": 44100,
+    "size": 44644059
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 218,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\02 - Hypnosis.flac",
+    "sample_rate": 44100,
+    "size": 50723143
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 207,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\03 - Not that Deep.flac",
+    "sample_rate": 44100,
+    "size": 44717353
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 135,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\04 - Emotional Intelligence.flac",
+    "sample_rate": 44100,
+    "size": 28124016
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 265,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\05 - Artificial Love.flac",
+    "sample_rate": 44100,
+    "size": 60239099
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 204,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\06 - What are you Waiting for.flac",
+    "sample_rate": 44100,
+    "size": 45164637
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 138,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\07 - Something Greater than Us.flac",
+    "sample_rate": 44100,
+    "size": 29153541
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 180,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\08 - Suffering Silence.flac",
+    "sample_rate": 44100,
+    "size": 39246109
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 247,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\09 - Drop in the Ocean.flac",
+    "sample_rate": 44100,
+    "size": 56499540
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 175,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\10 - Little World.flac",
+    "sample_rate": 44100,
+    "size": 36383189
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 220,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\11 - Never Be Ashamed.flac",
+    "sample_rate": 44100,
+    "size": 47752355
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 269,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\12 - Sick of It.flac",
+    "sample_rate": 44100,
+    "size": 58798089
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 298,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\13 - Everything is Music.flac",
+    "sample_rate": 44100,
+    "size": 63633248
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 184,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\14 - Imagine That.flac",
+    "sample_rate": 44100,
+    "size": 40296244
+   },
+   {
+    "bit_depth": 24,
+    "bitrate": null,
+    "duration": 206,
+    "extension": "flac",
+    "path": "Relieve the Pressure\\15 - Tell Me I Can Love Myself.flac",
+    "sample_rate": 44100,
+    "size": 44297456
+   }
+  ],
+  "folder": "Venjent\\Relieve the Pressure",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 1019159,
+  "username": "peer-4c1f3dc5"
+ },
+ "chosen_release_mbid": null,
+ "decision": 1999,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2c90494e-1dc3-4cff-aee4-7782cead3402"
+     ],
+     "score": 0.9607068
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.00039568865631534273,
+   "length": 195.39591836734695,
+   "recording_id": null,
+   "title": "Relieve the Pressure",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ae57b46c-625d-41d8-aad1-d46a20eb73b8",
+      "dc9a717d-aa1d-4978-9f75-1e37539bd28c"
+     ],
+     "score": 0.9569818
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0009585178390993216,
+   "length": 218.03537414965987,
+   "recording_id": null,
+   "title": "Hypnosis",
+   "track": 2,
+   "trailing_silence": 1.0447621496598742
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2bee3d09-db52-4347-a7fb-c8d0d2e3b84a",
+      "3cbebcc1-246c-47ef-8cb6-15ee7a270a63"
+     ],
+     "score": 0.95859706
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.00025563057682301764,
+   "length": 207.95791383219955,
+   "recording_id": null,
+   "title": "Not that Deep",
+   "track": 3,
+   "trailing_silence": 1.9862128321995556
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "aa2f28af-a316-4ee7-b841-01077bd257e1"
+     ],
+     "score": 0.9537843
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.00014959697095267896,
+   "length": 135.55809523809523,
+   "recording_id": null,
+   "title": "Emotional Intelligence",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7f7146d4-3446-4923-8c08-b4b72367bb6f",
+      "9d42cf28-5b0f-4334-9fc3-e8c71f9106eb"
+     ],
+     "score": 0.9628824
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.001116060660085961,
+   "length": 265.54340136054424,
+   "recording_id": null,
+   "title": "Artificial Love",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "887acea2-d6c7-4c58-b282-e3ca57575504"
+     ],
+     "score": 0.95714664
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0007996990866455935,
+   "length": 204.1962811791383,
+   "recording_id": null,
+   "title": "What are you Waiting for",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "84e76ed8-d7eb-411e-82b5-fdf5a4e496a1"
+     ],
+     "score": 0.9564544
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0003212182413252311,
+   "length": 138.71600907029477,
+   "recording_id": null,
+   "title": "Something Greater than Us",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "80f8e395-83ca-4f76-9dda-90cd1ce988a2",
+      "f6a1c8bb-f467-4155-b3e9-3d435b497620"
+     ],
+     "score": 0.9612671
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0006142651831581566,
+   "length": 180.83700680272108,
+   "recording_id": null,
+   "title": "Suffering Silence",
+   "track": 8,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "881ff0c9-f992-4ae4-a7bd-8296e1b29eb7",
+      "d1b25ae3-ff84-46ff-9380-6e2af26d880a"
+     ],
+     "score": 0.96097046
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0006531237851834987,
+   "length": 247.7104761904762,
+   "recording_id": null,
+   "title": "Drop in the Ocean",
+   "track": 9,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c3b71a13-3f6b-44f2-bac6-a5ec9be213fe",
+      "dcb15d8c-6fa4-4bfe-b0e4-eec865f9c3a8"
+     ],
+     "score": 0.9677611
+    }
+   ],
+   "artist": "Oktae",
+   "disc": null,
+   "high_band": 0.0009372257236693963,
+   "length": 175.6821768707483,
+   "recording_id": null,
+   "title": "Little World",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d342c79c-8bc6-444d-9b6f-493129edbabe",
+      "fe08ea03-7551-4182-a5b7-b88baf00b863"
+     ],
+     "score": 0.95315796
+    }
+   ],
+   "artist": "JAX",
+   "disc": null,
+   "high_band": 0.0002877287109249623,
+   "length": 220.51990929705215,
+   "recording_id": null,
+   "title": "Never Be Ashamed",
+   "track": 11,
+   "trailing_silence": 1.0424492970521442
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5f6db834-e4b1-4714-82ca-aeef47b88864"
+     ],
+     "score": 0.9575422
+    }
+   ],
+   "artist": "Middle Milk - Topic",
+   "disc": null,
+   "high_band": 0.0005664980248598364,
+   "length": 269.0960544217687,
+   "recording_id": null,
+   "title": "Sick of It",
+   "track": 12,
+   "trailing_silence": 2.037936421768734
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "df79d7f0-9840-4bb4-a809-31f3e224c657",
+      "ed68e320-44d2-4bee-bb49-098219b12ae9"
+     ],
+     "score": 0.95984966
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.00027628963966096643,
+   "length": 298.67827664399096,
+   "recording_id": null,
+   "title": "Everything is Music",
+   "track": 13,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "dd585289-3aed-4887-b2ca-7d9298c90cf1"
+     ],
+     "score": 0.9572785
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0006891492692851938,
+   "length": 184.20390022675738,
+   "recording_id": null,
+   "title": "Imagine That",
+   "track": 14,
+   "trailing_silence": 1.4765532267573747
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b0f6fb2f-d019-4c3d-b0db-a27007a1f51d"
+     ],
+     "score": 0.95797074
+    }
+   ],
+   "artist": "Venjent",
+   "disc": null,
+   "high_band": 0.0003907707064308631,
+   "length": 206.56471655328798,
+   "recording_id": null,
+   "title": "Tell Me I Can Love Myself",
+   "track": 15,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Relieve the Pressure",
+  "albumdisambig": null,
+  "artist": "Venjent",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": null
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.0,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": true,
+ "release_mbid": "ae83e23e-ae29-4e33-90d2-58e6c228508f"
+}

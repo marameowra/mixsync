@@ -1,0 +1,743 @@
+{
+ "albums": [
+  {
+   "album": "A Moment Apart",
+   "albumdisambig": "Dolby Atmos",
+   "artist": "ODESZA",
+   "artist_ids": [
+    "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "chillwave",
+    "electropop",
+    "future bass"
+   ],
+   "label": "Counter Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2017,
+   "release_group_id": "724699f1-9153-4c72-9ac4-cbf2d598582b",
+   "release_id": "2a8937f0-aee6-4c60-b7f9-96f3e72dc2a3",
+   "tracks": [
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 1,
+     "length": 63.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "667a2449-006b-49b2-a370-928ca6d4064d",
+     "title": "Intro"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 2,
+     "length": 234.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "2c6378c0-0415-41a9-8990-52e0b8bb3869",
+     "title": "A Moment Apart"
+    },
+    {
+     "artist": "ODESZA feat. Naomi Wild",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "f07a2fca-e37b-4f1b-bae0-9e49b8a0b412"
+     ],
+     "index": 3,
+     "length": 215.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "71eced8e-54a9-4918-8ce5-b419c66dd994",
+     "title": "Higher Ground"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 4,
+     "length": 183.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "47ff0909-a655-4ecf-bfab-7e624e747e68",
+     "title": "Boy"
+    },
+    {
+     "artist": "ODESZA feat. WYNNE & Mansionair",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "ec45d729-d459-45c7-89b3-22c4caa65ae7",
+      "b37446a3-fbde-48c9-9aeb-c8de3d752040"
+     ],
+     "index": 5,
+     "length": 236.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "7a1522b9-833a-48a8-9617-db7a3a226c35",
+     "title": "Line of Sight"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 6,
+     "length": 228.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "e1037b94-f177-4724-a775-af1636f605b4",
+     "title": "Late Night"
+    },
+    {
+     "artist": "ODESZA feat. Leon Bridges",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "69d9dfd7-19b7-4a75-8a53-9f733fb5d774"
+     ],
+     "index": 7,
+     "length": 283.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "205cc3aa-bb58-4cf4-8212-90c5a590093b",
+     "title": "Across the Room"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 8,
+     "length": 235.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "cdc8564d-3ef6-433c-897d-601ad353e43c",
+     "title": "Meridian"
+    },
+    {
+     "artist": "ODESZA feat. The Chamanas",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "4e292d27-6541-48e8-af83-33697b374763"
+     ],
+     "index": 9,
+     "length": 208.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "406000b0-06c8-46fa-b57d-035778d6626e",
+     "title": "Everything at Your Feet"
+    },
+    {
+     "artist": "ODESZA feat. Regina Spektor",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "fbb375f9-48bb-4635-824e-4120273b3ba7"
+     ],
+     "index": 10,
+     "length": 236.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "9e6b0bd1-5428-400f-b142-6d0aa308cc22",
+     "title": "Just a Memory"
+    },
+    {
+     "artist": "ODESZA feat. Kelsey Bulkin",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "16f6a72a-79cb-4741-ab4d-de9053062686"
+     ],
+     "index": 11,
+     "length": 241.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "4d3d404f-d504-4970-9865-c6435b6ca6ba",
+     "title": "Divide"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 12,
+     "length": 178.0,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "4152de5b-fbf4-42a1-8fcc-b00d6c643e9a",
+     "title": "Thin Floors and Tall Ceilings"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 13,
+     "length": 271.0,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "e24f631a-14a2-436a-b99b-80809e1044bb",
+     "title": "La Ciudad"
+    },
+    {
+     "artist": "ODESZA feat. Sasha Sloan",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "98c09f94-10b5-426c-b27a-44345bb54528"
+     ],
+     "index": 14,
+     "length": 232.0,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "e28bca6b-9904-4ea4-bbc1-8ff6ae40f7b1",
+     "title": "Falls"
+    },
+    {
+     "artist": "ODESZA",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6"
+     ],
+     "index": 15,
+     "length": 218.0,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "0e649be9-26a1-4e4e-9428-188760db4486",
+     "title": "Show Me"
+    },
+    {
+     "artist": "ODESZA feat. RY X",
+     "artist_ids": [
+      "2e222fce-02ae-4221-b1c6-3c3242b423b6",
+      "3b4cd16e-3a25-4c7b-ada6-33f5ea91e1b1"
+     ],
+     "index": 16,
+     "length": 305.0,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "d6a70866-5694-4d2b-a323-c3561f5b3b8a",
+     "title": "Corners of the Earth"
+    }
+   ],
+   "va": false,
+   "year": 2017
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 63,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 01 - Intro.flac",
+    "sample_rate": 44100,
+    "size": 3724960
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 234,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 02 - A Moment Apart.flac",
+    "sample_rate": 44100,
+    "size": 26843388
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 215,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 03 - Higher Ground.flac",
+    "sample_rate": 44100,
+    "size": 26305245
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 183,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 04 - Boy.flac",
+    "sample_rate": 44100,
+    "size": 22867840
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 237,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 05 - Line of Sight.flac",
+    "sample_rate": 44100,
+    "size": 26346036
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 228,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 06 - Late Night.flac",
+    "sample_rate": 44100,
+    "size": 27130017
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 283,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 07 - Across the Room.flac",
+    "sample_rate": 44100,
+    "size": 32312157
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 235,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 08 - Meridian.flac",
+    "sample_rate": 44100,
+    "size": 29912811
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 208,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 09 - Everything at Your Feet.flac",
+    "sample_rate": 44100,
+    "size": 25767971
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 236,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 10 - Just a Memory.flac",
+    "sample_rate": 44100,
+    "size": 26495499
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 241,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 11 - Divide.flac",
+    "sample_rate": 44100,
+    "size": 30708511
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 178,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 12 - Thin Floors and Tall Ceilings.flac",
+    "sample_rate": 44100,
+    "size": 19191820
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 271,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 13 - La ciudad.flac",
+    "sample_rate": 44100,
+    "size": 32766943
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 232,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 14 - Falls.flac",
+    "sample_rate": 44100,
+    "size": 27950478
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 218,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 15 - Show Me.flac",
+    "sample_rate": 44100,
+    "size": 25232548
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 305,
+    "extension": "flac",
+    "path": "A Moment Apart (2017)\\ODESZA - A Moment Apart - 16 - Corners of the Earth.flac",
+    "sample_rate": 44100,
+    "size": 34152547
+   }
+  ],
+  "folder": "ODESZA\\A Moment Apart (2017)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 11395411,
+  "username": "peer-11e211b8"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2443,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "667a2449-006b-49b2-a370-928ca6d4064d",
+      "747d9b3a-e090-4154-890a-259a7b8d0e5f"
+     ],
+     "score": 0.99753785
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 1.3234355608442847e-06,
+   "length": 63.97201814058957,
+   "recording_id": "747d9b3a-e090-4154-890a-259a7b8d0e5f",
+   "title": "Intro",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "73dddcb6-74d8-448b-a426-7383a5ea0025"
+     ],
+     "score": 0.9851991
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.00023089620769519437,
+   "length": 234.24437641723355,
+   "recording_id": "73dddcb6-74d8-448b-a426-7383a5ea0025",
+   "title": "A Moment Apart",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "868cdd62-00a9-4fe9-afbd-74ec9f8901fd",
+      "f0a557a4-b205-413b-9874-10c95d0398f2"
+     ],
+     "score": 0.9979562
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.00012356973064213194,
+   "length": 215.13068027210883,
+   "recording_id": "868cdd62-00a9-4fe9-afbd-74ec9f8901fd",
+   "title": "Higher Ground",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "47ff0909-a655-4ecf-bfab-7e624e747e68",
+      "74f0d3e5-2617-4b51-91f3-e4311bdc447e"
+     ],
+     "score": 0.9974288
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.0002454808396001124,
+   "length": 183.68013605442178,
+   "recording_id": "74f0d3e5-2617-4b51-91f3-e4311bdc447e",
+   "title": "Boy",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7a1522b9-833a-48a8-9617-db7a3a226c35",
+      "7b1700eb-0bb3-44d2-a872-569cb3586b05"
+     ],
+     "score": 0.99818695
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.0001005478294927654,
+   "length": 237.14043083900228,
+   "recording_id": "7b1700eb-0bb3-44d2-a872-569cb3586b05",
+   "title": "Line of Sight",
+   "track": 5,
+   "trailing_silence": 1.4916098390022796
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7b36419f-9db1-44f5-aa8d-af5c5b8545fd",
+      "e1037b94-f177-4724-a775-af1636f605b4"
+     ],
+     "score": 0.9983518
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 5.342040792184147e-05,
+   "length": 228.1545351473923,
+   "recording_id": "7b36419f-9db1-44f5-aa8d-af5c5b8545fd",
+   "title": "Late Night",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "205cc3aa-bb58-4cf4-8212-90c5a590093b",
+      "ea1d66f5-d28d-4698-a217-181ef1d4891e"
+     ],
+     "score": 0.9864847
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 4.629153692177092e-05,
+   "length": 283.5377097505669,
+   "recording_id": "ea1d66f5-d28d-4698-a217-181ef1d4891e",
+   "title": "Across the Room",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5c68761d-c5be-4e70-af00-2f19c368a1bc"
+     ],
+     "score": 0.99808806
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 8.826017820692929e-05,
+   "length": 235.86056689342405,
+   "recording_id": "5c68761d-c5be-4e70-af00-2f19c368a1bc",
+   "title": "Meridian",
+   "track": 8,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "406000b0-06c8-46fa-b57d-035778d6626e",
+      "8719b32e-97c1-4603-a176-5e45d005af37"
+     ],
+     "score": 0.98984706
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.0002587435306737583,
+   "length": 208.01789115646258,
+   "recording_id": "8719b32e-97c1-4603-a176-5e45d005af37",
+   "title": "Everything at Your Feet",
+   "track": 9,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "9e6b0bd1-5428-400f-b142-6d0aa308cc22",
+      "bd81a042-5fbb-4db7-8fd1-9cfd6a3d5bd5"
+     ],
+     "score": 0.987144
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 2.77221494197552e-05,
+   "length": 236.79467120181405,
+   "recording_id": "bd81a042-5fbb-4db7-8fd1-9cfd6a3d5bd5",
+   "title": "Just a Memory",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b9c56f45-dff0-4d54-a8ff-f29078193352"
+     ],
+     "score": 0.9904404
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.0012889120977392153,
+   "length": 241.8491156462585,
+   "recording_id": "b9c56f45-dff0-4d54-a8ff-f29078193352",
+   "title": "Divide",
+   "track": 11,
+   "trailing_silence": 1.6070066462584975
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4152de5b-fbf4-42a1-8fcc-b00d6c643e9a",
+      "a84e5eca-94e5-4c2c-84dc-b18a2eec4029"
+     ],
+     "score": 0.99627507
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 8.215702413487138e-06,
+   "length": 178.30780045351474,
+   "recording_id": "a84e5eca-94e5-4c2c-84dc-b18a2eec4029",
+   "title": "Thin Floors and Tall Ceilings",
+   "track": 12,
+   "trailing_silence": 2.55322045351474
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1dfe309b-0cec-48e0-bd7f-5315fff6563b"
+     ],
+     "score": 0.9952202
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 5.594079061598596e-05,
+   "length": 271.13643990929705,
+   "recording_id": "1dfe309b-0cec-48e0-bd7f-5315fff6563b",
+   "title": "La ciudad",
+   "track": 13,
+   "trailing_silence": 1.3013379092970467
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ab17713c-886d-45fd-9afa-aa570b67c5aa",
+      "e63a1d94-c0fe-4baa-80c2-f5706bd05ee3"
+     ],
+     "score": 0.9915282
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 5.041903161020227e-05,
+   "length": 232.93668934240364,
+   "recording_id": "e63a1d94-c0fe-4baa-80c2-f5706bd05ee3",
+   "title": "Falls",
+   "track": 14,
+   "trailing_silence": 1.5777773424036354
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0e649be9-26a1-4e4e-9428-188760db4486",
+      "715700b7-e1fc-434c-97c8-dd0aa672da0c"
+     ],
+     "score": 0.987144
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 7.960462484906526e-05,
+   "length": 218.54888888888888,
+   "recording_id": "715700b7-e1fc-434c-97c8-dd0aa672da0c",
+   "title": "Show Me",
+   "track": 15,
+   "trailing_silence": 1.0279818888888883
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b14cf3a6-0113-417b-8e31-7130348fccac"
+     ],
+     "score": 0.9895174
+    }
+   ],
+   "artist": "ODESZA",
+   "disc": 1,
+   "high_band": 0.00014038199177525046,
+   "length": 305.34886621315195,
+   "recording_id": "b14cf3a6-0113-417b-8e31-7130348fccac",
+   "title": "Corners of the Earth",
+   "track": 16,
+   "trailing_silence": 2.5459412131519343
+  }
+ ],
+ "labels": [
+  "transcode"
+ ],
+ "likelies": {
+  "album": "A Moment Apart",
+  "albumdisambig": null,
+  "artist": "ODESZA",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "d8d7147d-52a3-4457-bc30-01366f9e7f9a",
+  "year": 2017
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.38271604938271603,
+  "final_action": null,
+  "scorer_version": 7,
+  "status": "pending_review",
+  "vetoes": [
+   "'Intro': looks transcoded: almost nothing above 16 kHz",
+   "'Thin Floors and Tall Ceilings': looks transcoded: almost nothing above 16 kHz",
+   "'A Moment Apart': release does not contain recording 73dddcb6-74d8-448b-a426-7383a5ea0025",
+   "'Higher Ground': release does not contain recording 868cdd62-00a9-4fe9-afbd-74ec9f8901fd, f0a557a4-b205-413b-9874-10c95d0398f2",
+   "'Meridian': release does not contain recording 5c68761d-c5be-4e70-af00-2f19c368a1bc",
+   "'Divide': release does not contain recording b9c56f45-dff0-4d54-a8ff-f29078193352",
+   "'La ciudad': release does not contain recording 1dfe309b-0cec-48e0-bd7f-5315fff6563b",
+   "'Falls': release does not contain recording ab17713c-886d-45fd-9afa-aa570b67c5aa, e63a1d94-c0fe-4baa-80c2-f5706bd05ee3",
+   "'Corners of the Earth': release does not contain recording b14cf3a6-0113-417b-8e31-7130348fccac"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "2a8937f0-aee6-4c60-b7f9-96f3e72dc2a3"
+}

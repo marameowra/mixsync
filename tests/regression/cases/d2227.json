@@ -1,0 +1,112 @@
+{
+ "albums": [
+  {
+   "album": "Take Me Back",
+   "albumdisambig": null,
+   "artist": "Noctam",
+   "artist_ids": [
+    "f34259ee-d93a-43a5-8777-94afab687d70"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2019,
+   "release_group_id": "f73098b4-e979-4e70-a004-a5347d84f45f",
+   "release_id": "19fd583c-e63b-4336-b550-8e1dc2673ed9",
+   "tracks": [
+    {
+     "artist": "Noctam",
+     "artist_ids": [
+      "f34259ee-d93a-43a5-8777-94afab687d70"
+     ],
+     "index": 1,
+     "length": 164.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "55958aa6-3182-4bc6-95bd-3b93c1a75d15",
+     "title": "Take Me Back"
+    }
+   ],
+   "va": false,
+   "year": 2019
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Take Me Back.flac",
+    "sample_rate": null,
+    "size": 39056296
+   }
+  ],
+  "folder": "Noctam\\Noctam - Take Me Back",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2227,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "11337ed5-f63d-476c-ab55-79a35080e45d"
+     ],
+     "score": 0.99802214
+    }
+   ],
+   "artist": "Noctam",
+   "disc": 1,
+   "high_band": 0.0040560994989263756,
+   "length": 165.51723356009072,
+   "recording_id": "55958aa6-3182-4bc6-95bd-3b93c1a75d15",
+   "title": "Take Me Back",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "accept"
+ ],
+ "likelies": {
+  "album": "Take Me Back",
+  "albumdisambig": null,
+  "artist": "Noctam",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "19fd583c-e63b-4336-b550-8e1dc2673ed9",
+  "year": 2019
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.05952380952380953,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": [
+   "'Take Me Back': AcoustID (1.00) says a different recording than 'Take Me Back' (55958aa6-3182-4bc6-95bd-3b93c1a75d15)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "19fd583c-e63b-4336-b550-8e1dc2673ed9"
+}

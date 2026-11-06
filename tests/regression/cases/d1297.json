@@ -1,0 +1,779 @@
+{
+ "albums": [
+  {
+   "album": "Plastic Beach",
+   "albumdisambig": null,
+   "artist": "Gorillaz",
+   "artist_ids": [
+    "e21857d5-3256-4547-afb3-4b6ded592596"
+   ],
+   "catalognum": "[none]",
+   "country": "XW",
+   "genres": [
+    "electropop",
+    "art pop",
+    "hip hop",
+    "pop",
+    "electronic",
+    "indietronica",
+    "synth-pop",
+    "alternative dance",
+    "chillwave",
+    "pop rap",
+    "psychedelic pop",
+    "rock",
+    "alternative hip hop",
+    "alternative rock",
+    "chamber pop",
+    "downtempo",
+    "electro",
+    "pop rock",
+    "soul"
+   ],
+   "label": "Parlophone",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2010,
+   "release_group_id": "5a676824-18cd-4f7f-89f0-df21623e2042",
+   "release_id": "574166b1-78c0-4061-8781-b699f1e5b575",
+   "tracks": [
+    {
+     "artist": "Gorillaz feat. Sinfonia ViVA",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "a78bb8aa-8004-45d1-a37d-6421ea085bd1"
+     ],
+     "index": 1,
+     "length": 69.386,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "7f1f889b-1079-4fc5-b672-7becc760678b",
+     "title": "Orchestral Intro"
+    },
+    {
+     "artist": "Gorillaz feat. Snoop Dogg and Hypnotic Brass Ensemble",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "f90e8b26-9e52-4669-a5c9-e28529c47894",
+      "cc37d0c1-493d-487e-9694-3cf48ae6370d"
+     ],
+     "index": 2,
+     "length": 215.506,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "ab80a174-1b7d-41c8-bddb-5edfd849d512",
+     "title": "Welcome to the World of the Plastic Beach"
+    },
+    {
+     "artist": "Gorillaz feat. Bashy, Kano and the National Orchestra for Arabic Music",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "9452e740-00f8-4941-9214-a0a6f265f2a8",
+      "2bf3971e-8595-4bd2-aace-8a71c42afb66",
+      "2f0054f9-3934-44e7-ae61-493fbcfba76f"
+     ],
+     "index": 3,
+     "length": 223.466,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "0a030414-cd94-4a19-b025-c7f941987bec",
+     "title": "White Flag"
+    },
+    {
+     "artist": "Gorillaz",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596"
+     ],
+     "index": 4,
+     "length": 200.173,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "a44db450-2b09-4eca-936f-a939ad56ae16",
+     "title": "Rhinestone Eyes"
+    },
+    {
+     "artist": "Gorillaz feat. Mos Def and Bobby Womack",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "f5c4c27e-5902-4fc0-adfb-7775da3d5363",
+      "48e78462-2f0b-4a1a-9fa4-0585e2991e80"
+     ],
+     "index": 5,
+     "length": 270.52,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "ff70f6a8-7cfc-4974-a764-8b332f7cf88f",
+     "title": "Stylo"
+    },
+    {
+     "artist": "Gorillaz feat. Gruff Rhys and De La Soul",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "254caf14-7b63-47d1-aa9f-acc7cb541814",
+      "a8ebde98-7e91-46c7-992c-90039ba42017"
+     ],
+     "index": 6,
+     "length": 174.866,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "54f6b49f-8806-42e4-aba8-a65d356d2584",
+     "title": "Superfast Jellyfish"
+    },
+    {
+     "artist": "Gorillaz feat. Little Dragon",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "c8a9ae11-63bf-409b-8bf3-a96b3712a2ff"
+     ],
+     "index": 7,
+     "length": 283.573,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "a0481faf-70de-41de-95d6-315735ef8aea",
+     "title": "Empire Ants"
+    },
+    {
+     "artist": "Gorillaz feat. Mark E. Smith",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "35e5ce55-486d-40a4-9ab5-08de9be70d33"
+     ],
+     "index": 8,
+     "length": 243.253,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "00eb9af1-4290-401f-bfd8-cbee5bd6f519",
+     "title": "Glitter Freeze"
+    },
+    {
+     "artist": "Gorillaz feat. Lou Reed",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "9d1ebcfe-4c15-4d18-95d3-d919898638a1"
+     ],
+     "index": 9,
+     "length": 179.866,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "4c1116a5-c81c-4355-8b9c-97e90b9af25f",
+     "title": "Some Kind of Nature"
+    },
+    {
+     "artist": "Gorillaz",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596"
+     ],
+     "index": 10,
+     "length": 233.866,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "842fbdae-8839-46e6-8a02-7f500a2b6597",
+     "title": "On Melancholy Hill"
+    },
+    {
+     "artist": "Gorillaz",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596"
+     ],
+     "index": 11,
+     "length": 197.053,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "de2151e6-8cae-4561-8eb0-6bb933adeebd",
+     "title": "Broken"
+    },
+    {
+     "artist": "Gorillaz feat. Mos Def and Hypnotic Brass Ensemble",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "f5c4c27e-5902-4fc0-adfb-7775da3d5363",
+      "cc37d0c1-493d-487e-9694-3cf48ae6370d"
+     ],
+     "index": 12,
+     "length": 320.466,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "10d834ca-36f0-476c-8d38-3689ba3373e5",
+     "title": "Sweepstakes"
+    },
+    {
+     "artist": "Gorillaz feat. Mick Jones and Paul Simonon",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "01f8343c-06e2-4f05-a137-f8ea7efa85c4",
+      "64c43453-f396-42b1-bff5-01644d710d94"
+     ],
+     "index": 13,
+     "length": 227.213,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "74af797a-d3fe-4c21-b33f-bdd1e57a75e7",
+     "title": "Plastic Beach"
+    },
+    {
+     "artist": "Gorillaz feat. Little Dragon",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "c8a9ae11-63bf-409b-8bf3-a96b3712a2ff"
+     ],
+     "index": 14,
+     "length": 235.706,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "6a76d23b-bfa1-424d-b84a-9c2a4425f51e",
+     "title": "To Binge"
+    },
+    {
+     "artist": "Gorillaz feat. Bobby Womack and Sinfonia ViVA",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596",
+      "48e78462-2f0b-4a1a-9fa4-0585e2991e80",
+      "a78bb8aa-8004-45d1-a37d-6421ea085bd1"
+     ],
+     "index": 15,
+     "length": 186.12,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "77df78e8-596d-4c9e-bc7e-45c3d98e366f",
+     "title": "Cloud of Unknowing"
+    },
+    {
+     "artist": "Gorillaz",
+     "artist_ids": [
+      "e21857d5-3256-4547-afb3-4b6ded592596"
+     ],
+     "index": 16,
+     "length": 152.453,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "ab6f46b2-4938-450c-b125-14e6f223a662",
+     "title": "Pirate Jet"
+    }
+   ],
+   "va": false,
+   "year": 2010
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 69,
+    "extension": "flac",
+    "path": "Plastic Beach\\01 - Orchestral Intro.flac",
+    "sample_rate": 44100,
+    "size": 6979506
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 215,
+    "extension": "flac",
+    "path": "Plastic Beach\\02 - Welcome to the World of the Plastic Beach.flac",
+    "sample_rate": 44100,
+    "size": 27719601
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 223,
+    "extension": "flac",
+    "path": "Plastic Beach\\03 - White Flag.flac",
+    "sample_rate": 44100,
+    "size": 25934775
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 200,
+    "extension": "flac",
+    "path": "Plastic Beach\\04 - Rhinestone Eyes.flac",
+    "sample_rate": 44100,
+    "size": 25953831
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 270,
+    "extension": "flac",
+    "path": "Plastic Beach\\05 - Stylo.flac",
+    "sample_rate": 44100,
+    "size": 33587372
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 174,
+    "extension": "flac",
+    "path": "Plastic Beach\\06 - Superfast Jellyfish.flac",
+    "sample_rate": 44100,
+    "size": 22473969
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 283,
+    "extension": "flac",
+    "path": "Plastic Beach\\07 - Empire Ants.flac",
+    "sample_rate": 44100,
+    "size": 35502015
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 243,
+    "extension": "flac",
+    "path": "Plastic Beach\\08 - Glitter Freeze.flac",
+    "sample_rate": 44100,
+    "size": 33133096
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 179,
+    "extension": "flac",
+    "path": "Plastic Beach\\09 - Some Kind of Nature.flac",
+    "sample_rate": 44100,
+    "size": 22104999
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 233,
+    "extension": "flac",
+    "path": "Plastic Beach\\10 - On Melancholy Hill.flac",
+    "sample_rate": 44100,
+    "size": 29671920
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 197,
+    "extension": "flac",
+    "path": "Plastic Beach\\11 - Broken.flac",
+    "sample_rate": 44100,
+    "size": 23696287
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 320,
+    "extension": "flac",
+    "path": "Plastic Beach\\12 - Sweepstakes.flac",
+    "sample_rate": 44100,
+    "size": 37643235
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 227,
+    "extension": "flac",
+    "path": "Plastic Beach\\13 - Plastic Beach.flac",
+    "sample_rate": 44100,
+    "size": 27751475
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 235,
+    "extension": "flac",
+    "path": "Plastic Beach\\14 - To Binge.flac",
+    "sample_rate": 44100,
+    "size": 29153779
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 186,
+    "extension": "flac",
+    "path": "Plastic Beach\\15 - Cloud of Unknowing.flac",
+    "sample_rate": 44100,
+    "size": 16661183
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 152,
+    "extension": "flac",
+    "path": "Plastic Beach\\16 - Pirate Jet.flac",
+    "sample_rate": 44100,
+    "size": 18494103
+   }
+  ],
+  "folder": "Gorillaz\\Plastic Beach",
+  "has_cue": true,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 27085503,
+  "username": "peer-eda82226"
+ },
+ "chosen_release_mbid": null,
+ "decision": 1297,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "628052ca-3880-4aea-8800-78e6d15e5f3d",
+      "7f1f889b-1079-4fc5-b672-7becc760678b"
+     ],
+     "score": 0.9998261
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 2.6825220469136482e-05,
+   "length": 69.38666666666667,
+   "recording_id": "7f1f889b-1079-4fc5-b672-7becc760678b",
+   "title": "Orchestral Intro",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ab80a174-1b7d-41c8-bddb-5edfd849d512",
+      "bb6e6c48-ff76-48db-b194-4816e08e9245"
+     ],
+     "score": 0.96779406
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0073098623675829566,
+   "length": 215.50666666666666,
+   "recording_id": "ab80a174-1b7d-41c8-bddb-5edfd849d512",
+   "title": "Welcome to the World of the Plastic Beach",
+   "track": 2,
+   "trailing_silence": 1.9624036666666598
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0a030414-cd94-4a19-b025-c7f941987bec",
+      "80a6b2a8-07ac-48c3-ae3c-419c87d8f674",
+      "ef1670cc-59b6-4d4f-ad1a-cdc72d3ffabb"
+     ],
+     "score": 0.9995385
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0008383554655355108,
+   "length": 223.46666666666667,
+   "recording_id": "0a030414-cd94-4a19-b025-c7f941987bec",
+   "title": "White Flag",
+   "track": 3,
+   "trailing_silence": 1.6943306666666729
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "11b263e2-8584-4ebf-9c11-71f69525cef1",
+      "13f77f58-6b25-49d3-829e-a428eb1ef762",
+      "352f45ab-432f-4fb8-8035-38f784500e6f",
+      "a44db450-2b09-4eca-936f-a939ad56ae16"
+     ],
+     "score": 0.99920887
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.00942801793466964,
+   "length": 200.17333333333335,
+   "recording_id": "a44db450-2b09-4eca-936f-a939ad56ae16",
+   "title": "Rhinestone Eyes",
+   "track": 4,
+   "trailing_silence": 1.735918333333359
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "08368434-7afb-4a51-938e-31949e6b4f78",
+      "0c9d3a23-74c2-4fd4-9d70-1380920db13e",
+      "7ef19389-8a91-436f-b512-2f6801480a63",
+      "dd227dc6-73f2-4bb3-8483-4cb5edd83a15",
+      "e72d12b4-b0ba-4f77-838a-b01d3a855516",
+      "e939e882-3677-4141-9ee4-7da60276608d",
+      "ff70f6a8-7cfc-4974-a764-8b332f7cf88f"
+     ],
+     "score": 0.9993407
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0009624642346131036,
+   "length": 270.52,
+   "recording_id": "ff70f6a8-7cfc-4974-a764-8b332f7cf88f",
+   "title": "Stylo",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1a0f89ab-84ff-4791-ba66-c66dbf0c7a43",
+      "54f6b49f-8806-42e4-aba8-a65d356d2584",
+      "86a02557-42c3-43ef-a677-103317332e65"
+     ],
+     "score": 0.9820675
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.002840851942094652,
+   "length": 174.86666666666667,
+   "recording_id": "54f6b49f-8806-42e4-aba8-a65d356d2584",
+   "title": "Superfast Jellyfish",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4852f055-d075-484c-ba07-c154a7e77580",
+      "a0481faf-70de-41de-95d6-315735ef8aea",
+      "a860bcd8-616f-49ae-ba86-5f180b06b761",
+      "d9e086f9-c9c8-4869-bb36-43c95c6c0e5b"
+     ],
+     "score": 0.9996704
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0010207375699537108,
+   "length": 283.5733333333333,
+   "recording_id": "a0481faf-70de-41de-95d6-315735ef8aea",
+   "title": "Empire Ants",
+   "track": 7,
+   "trailing_silence": 1.9362133333333418
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "00eb9af1-4290-401f-bfd8-cbee5bd6f519",
+      "35d4b233-62a1-4c22-8fed-923ef4d2e81c",
+      "3979f1f1-9a22-4de7-92b5-29a291e07002"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0014470751978684336,
+   "length": 243.25333333333333,
+   "recording_id": "00eb9af1-4290-401f-bfd8-cbee5bd6f519",
+   "title": "Glitter Freeze",
+   "track": 8,
+   "trailing_silence": 3.4176873333333333
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4c1116a5-c81c-4355-8b9c-97e90b9af25f",
+      "ec9044a7-5c40-4f0b-bd59-df8cc94ee08a"
+     ],
+     "score": 0.97254086
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.006372305668717649,
+   "length": 179.86666666666667,
+   "recording_id": "4c1116a5-c81c-4355-8b9c-97e90b9af25f",
+   "title": "Some Kind of Nature",
+   "track": 9,
+   "trailing_silence": 1.1499996666666732
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0ae1142b-7c69-4c6b-86e9-ed1de049c6b7",
+      "4ced0d69-2b40-457a-86cc-7f32d1edfc46",
+      "680fb0ef-dfbc-4803-9b64-f8ab05ebbaae",
+      "842fbdae-8839-46e6-8a02-7f500a2b6597"
+     ],
+     "score": 0.9996044
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0008037470649161011,
+   "length": 233.86666666666667,
+   "recording_id": "842fbdae-8839-46e6-8a02-7f500a2b6597",
+   "title": "On Melancholy Hill",
+   "track": 10,
+   "trailing_silence": 4.421972666666676
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "de2151e6-8cae-4561-8eb0-6bb933adeebd"
+     ],
+     "score": 0.99920887
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0002928449910075364,
+   "length": 197.05333333333334,
+   "recording_id": "de2151e6-8cae-4561-8eb0-6bb933adeebd",
+   "title": "Broken",
+   "track": 11,
+   "trailing_silence": 1.9748983333333285
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "10d834ca-36f0-476c-8d38-3689ba3373e5",
+      "e77ba158-0a69-44e1-8479-b7d90cbf6209"
+     ],
+     "score": 0.99914294
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.001928563752922547,
+   "length": 320.46666666666664,
+   "recording_id": "10d834ca-36f0-476c-8d38-3689ba3373e5",
+   "title": "Sweepstakes",
+   "track": 12,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "74af797a-d3fe-4c21-b33f-bdd1e57a75e7",
+      "822e869a-f688-4fbe-8ae4-03f2e5780356"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0010379460966256162,
+   "length": 227.21333333333334,
+   "recording_id": "74af797a-d3fe-4c21-b33f-bdd1e57a75e7",
+   "title": "Plastic Beach",
+   "track": 13,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1b4d054d-f491-4b68-8a11-7cf16e663175",
+      "6a76d23b-bfa1-424d-b84a-9c2a4425f51e",
+      "e8cab1ea-f451-4230-b6d3-ceaca4655428"
+     ],
+     "score": 0.9995055
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.001519928645308765,
+   "length": 235.70666666666668,
+   "recording_id": "6a76d23b-bfa1-424d-b84a-9c2a4425f51e",
+   "title": "To Binge",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2612b26f-b9b6-4083-8674-d11027557498",
+      "77df78e8-596d-4c9e-bc7e-45c3d98e366f",
+      "d4d81908-2899-4392-beb9-77506d5503f6"
+     ],
+     "score": 0.9624209
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 1.043958656964847e-05,
+   "length": 186.12,
+   "recording_id": "77df78e8-596d-4c9e-bc7e-45c3d98e366f",
+   "title": "Cloud of Unknowing",
+   "track": 15,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ab6f46b2-4938-450c-b125-14e6f223a662"
+     ],
+     "score": 0.97969407
+    }
+   ],
+   "artist": "Gorillaz",
+   "disc": 1,
+   "high_band": 0.0033152554677614936,
+   "length": 152.45333333333335,
+   "recording_id": "ab6f46b2-4938-450c-b125-14e6f223a662",
+   "title": "Pirate Jet",
+   "track": 16,
+   "trailing_silence": 5.384920333333355
+  }
+ ],
+ "labels": [
+  "accept"
+ ],
+ "likelies": {
+  "album": "Plastic Beach",
+  "albumdisambig": null,
+  "artist": "Gorillaz",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "e7def36e-04dc-3a80-83c5-4f705c6eab2f",
+  "year": 2010
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.11363636363636363,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": []
+ },
+ "release_given": true,
+ "release_mbid": "574166b1-78c0-4061-8781-b699f1e5b575"
+}

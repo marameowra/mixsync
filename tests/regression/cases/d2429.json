@@ -1,0 +1,127 @@
+{
+ "albums": [
+  {
+   "album": "Wonderer",
+   "albumdisambig": null,
+   "artist": "Glacier",
+   "artist_ids": [
+    "d8f25c2d-6e01-45ef-afc0-76325ba2cd29"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "electronic"
+   ],
+   "label": "Glacier Tunes",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "5a799b0c-518f-4dea-acfb-715007c07df0",
+   "release_id": "1c2b4db2-7b32-4fc1-a2f7-a3f600ac0586",
+   "tracks": [
+    {
+     "artist": "Glacier",
+     "artist_ids": [
+      "d8f25c2d-6e01-45ef-afc0-76325ba2cd29"
+     ],
+     "index": 1,
+     "length": 232.373,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "4ce1f6e0-a3de-4b0c-a30d-f6bcb55629a8",
+     "title": "Wonderer"
+    },
+    {
+     "artist": "Glacier",
+     "artist_ids": [
+      "d8f25c2d-6e01-45ef-afc0-76325ba2cd29"
+     ],
+     "index": 2,
+     "length": 217.222,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "f298db7e-4377-4568-b037-9a81e847384b",
+     "title": "The Gizmo Garden"
+    },
+    {
+     "artist": "Glacier",
+     "artist_ids": [
+      "d8f25c2d-6e01-45ef-afc0-76325ba2cd29"
+     ],
+     "index": 3,
+     "length": 231.046,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "429adf8a-8e43-4503-a05c-0aed3e9eaf7b",
+     "title": "Pons Theme"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": 160,
+    "duration": 232,
+    "extension": "m4a",
+    "path": "Glacier - Wonderer (2026) [WEB-M4A] [160kbps] [2414692197]\\01. Wonderer.m4a",
+    "sample_rate": null,
+    "size": 4692271
+   }
+  ],
+  "folder": "Glacier [5172029]\\Glacier - Wonderer (2026) [WEB-M4A] [160kbps] [2414692197]",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 13,
+  "upload_speed": 2291714,
+  "username": "peer-bd8bc8eb"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2429,
+ "files": [
+  {
+   "acoustid": [],
+   "artist": "Glacier",
+   "disc": null,
+   "high_band": null,
+   "length": 232.43174603174603,
+   "recording_id": null,
+   "title": "Wonderer",
+   "track": 1,
+   "trailing_silence": 2.4196600317460195
+  }
+ ],
+ "labels": [
+  "reject"
+ ],
+ "likelies": {
+  "album": "Wonderer",
+  "albumdisambig": null,
+  "artist": "Glacier",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2026
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.16666666666666666,
+  "final_action": "reject",
+  "scorer_version": 7,
+  "status": "rejected",
+  "vetoes": []
+ },
+ "release_given": true,
+ "release_mbid": "1c2b4db2-7b32-4fc1-a2f7-a3f600ac0586"
+}
