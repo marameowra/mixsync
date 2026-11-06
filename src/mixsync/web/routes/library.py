@@ -306,6 +306,29 @@ async def plan_detail(
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
 
+MOVES_PAGE = 200
+
+
+@router.get("/plans/{plan_id}/moves")
+def plan_moves(
+    plan_id: int, request: Request, user: CurrentUser, db: Db, page: str = "1"
+) -> HTMLResponse:
+    """Every move and refusal of a reorganize plan, paged (data-safety rule 5)."""
+    plan = _plan(db, plan_id, user)
+    rows = [op for op in plan.ops if op["op"] in ("move", "refused")]
+    pages = max(1, -(-len(rows) // MOVES_PAGE))
+    n = min(max(_num(page, 1), 1), pages)
+    ctx = {
+        "user": user,
+        "plan": plan,
+        "total": len(rows),
+        "page": n,
+        "pages": pages,
+        "rows": rows[(n - 1) * MOVES_PAGE : n * MOVES_PAGE],
+    }
+    return templates.TemplateResponse(request, "pages/plan_moves.html", ctx)
+
+
 def _act(
     request: Request,
     user: AuthUser,

@@ -56,6 +56,7 @@
 <p>No files to move.</p>
 {% endfor %}
 {% if folders_hidden %}<p class="muted">{{ folders_hidden }} more album {{ "folders are" if folders_hidden != 1 else "folder is" }} not shown; the plan covers all {{ counts.move + counts.refused }} files.</p>{% endif %}
+<p><a href="/library/plans/{{ plan.id }}/moves">See every move ({{ counts.move + counts.refused }})</a></p>
 {% else %}
 <div class="table-wrap scroll">
 <table>

@@ -18,6 +18,7 @@ from mixsync.db.auth import create_user
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import FileOp
 from mixsync.library import fragmentation, layout, tags
+from mixsync.web.routes import library as library_routes
 
 from . import test_merge
 from .test_merge import World, _rows
@@ -202,6 +203,24 @@ def test_banner_shows_until_the_confirmed_plan_runs(world: World) -> None:
         _drain(world)
         assert world.plan(pid).status == "done", world.plan(pid).error
         assert "Layout differs" not in c.get("/library/albums").text
+
+
+def test_every_move_is_listed_before_confirm(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(library_routes, "MOVES_PAGE", 2)  # five rows over three pages
+    with _client(world, merger(world, device=other_mount)) as c:
+        pid = _plan(c, _login(c))
+        summary = c.get(f"/library/plans/{pid}").text
+        assert "and 1 more" in summary and f'href="/library/plans/{pid}/moves"' in summary
+        seen, url = "", f"/library/plans/{pid}/moves"
+        while url:
+            page = c.get(url).text
+            seen += page
+            nxt = re.search(r'href="([^"]+)">Next<', page)
+            url = nxt[1] if nxt else ""
+    for old, new in MOVES.items():  # the refused one shows where it would have gone
+        assert old in seen and new in seen
+    assert "refused: on another filesystem" in seen
+    assert world.plan(pid).status == "draft"
 
 
 def test_plan_page_reports_a_refused_move(world: World) -> None:
