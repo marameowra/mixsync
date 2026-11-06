@@ -150,12 +150,16 @@ async def _yield(_s: float) -> None:
     await asyncio.sleep(0)
 
 
+async def _tick(_s: float) -> None:  # real time passes, so a slot claim (a DB round trip) lands
+    await asyncio.sleep(0.01)
+
+
 async def test_searches_past_the_cap_wait_and_all_complete(
     settings: Settings, sessions: sessionmaker[Session]
 ) -> None:
     in_flight: set[str] = set()
     peak = 0
-    polled: set[str] = set()
+    polls: dict[str, int] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal peak
@@ -167,9 +171,11 @@ async def test_searches_past_the_cap_wait_and_all_complete(
         if request.url.path.endswith("/responses"):
             in_flight.discard(sid)
             return httpx.Response(200, json=load("responses.json"))
-        if sid in polled:  # running on the first poll, so searches overlap
+        polls[sid] = polls.get(sid, 0) + 1
+        # Run until a second search has joined (bounded): claiming a slot takes a DB round trip,
+        # so without this an instant stub search can finish before the next one starts.
+        if peak >= 2 or polls[sid] >= 50:
             return httpx.Response(200, json=load("search_complete.json"))
-        polled.add(sid)
         return httpx.Response(200, json=load("search_running.json"))
 
     clock = Clock()
@@ -179,7 +185,7 @@ async def test_searches_past_the_cap_wait_and_all_complete(
             "slskd", settings, sessions, clock=clock, transport=httpx.MockTransport(handler)
         )
         slots = Slots("slskd-search", 2, sessions, clock, timedelta(minutes=10))
-        return SlskdSource(client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_yield, slots=slots)
+        return SlskdSource(client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_tick, slots=slots)
 
     a, b = worker(), worker()
     found = await asyncio.gather(*(src.search(f"q{i}") for i, src in enumerate([a, b] * 4)))
