@@ -20,6 +20,14 @@
 {% endfor %}
 <h2>Matching</h2>
 {% if error and error[0] == "matching" %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
+<form method="post" action="/account/matching/preset">
+  {{ forms.csrf() }}
+  <fieldset><legend>Preset (current: {{ preset | capitalize }})</legend>
+  {% for name, auto, rev in presets %}<p><label><input type="radio" name="preset" value="{{ name }}"{% if name == preset %} checked{% endif %}> {{ name | capitalize }}: auto-accept at {{ auto }}%, review from {{ rev }}%</label></p>{% endfor %}
+  </fieldset>
+  {% if capped %}<p class="notice">The administrator's minimum of {{ cap }}% limits auto-accept for {{ capped | map("capitalize") | join(", ") }}.</p>{% endif %}
+  <button type="submit">Use preset</button>
+</form>
 <p>Matches at {{ auto_accept }}% confidence or more import on their own. From {{ review }}% they wait for your review; below that they are rejected.</p>
 <form method="post" action="/account/matching">
   {{ forms.csrf() }}
