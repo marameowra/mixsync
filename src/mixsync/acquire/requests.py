@@ -21,6 +21,7 @@ from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import albums
+from mixsync.match.candidates import parse_quality
 from mixsync.match.profiles import BALANCED, from_confidence
 
 REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
@@ -59,7 +60,8 @@ def profile_for(s: Session, user_id: int | None) -> Profile:
     user = s.get(User, user_id) if user_id else None
     pid = user.matching_profile_id if user else None
     row = s.get(MatchingProfile, pid) if pid else None
-    p = Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
+    quality = parse_quality(row.quality_pref) if row else None
+    p = Profile(row.name, row.auto_accept_max, row.review_max, quality) if row else BALANCED
     cap = auto_accept_cap(s)
     return p if cap is None or p.auto_accept_max <= cap else replace(p, auto_accept_max=cap)
 

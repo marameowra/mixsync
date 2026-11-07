@@ -67,7 +67,7 @@ from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, measure, tags
 from mixsync.library.encode import encodable, to_flac
 from mixsync.library.importer import Importer, ImportResult
-from mixsync.match.candidates import parse_name, present_tracks, rank
+from mixsync.match.candidates import QUALITY_SKIP, parse_name, present_tracks, rank
 from mixsync.match.features import string_dist
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
@@ -198,11 +198,18 @@ class Pipeline:
                     lifecycle.owned(req)
                 return
         ranked: list[tuple[Candidate, Any]] = []
+        skipped: dict[tuple[str, str], str] = {}  # folder -> why the quality preference skipped it
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
+            scored = rank(found, album, profile)
+            skipped |= {
+                (c.username, c.folder): r.vetoes[0]
+                for c, r in scored
+                if r.band is Band.REJECT and r.vetoes and r.vetoes[0].startswith(QUALITY_SKIP)
+            }
             ranked = [
                 cr
-                for cr in rank(found, album, profile)
+                for cr in scored
                 if cr[1].band is not Band.REJECT
                 # a folder with nothing new would only download and import nothing
                 and (
@@ -221,7 +228,9 @@ class Pipeline:
             if not ranked:
                 req.no_results_attempts += 1
                 delay = no_results_delay(req.no_results_attempts)
-                lifecycle.no_results(req)
+                first = next(iter(skipped.values()), "")
+                why = f"{len(skipped)} candidate(s) skipped by the {first}" if skipped else None
+                lifecycle.no_results(req, why)
                 req.next_search_at = now + delay
                 enqueue_in(
                     s,

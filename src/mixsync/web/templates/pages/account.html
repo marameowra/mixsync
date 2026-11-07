@@ -36,6 +36,14 @@
 </form>
 {% if "admin" in user.capabilities %}<p><a href="/account/cap">App-wide minimum confidence</a></p>
 <p><a href="/account/worker">Worker status</a></p>{% endif %}
+<h3>Quality</h3>
+<p>Number the qualities you accept, 1 for the best; leave a quality blank to refuse it. With none numbered, lossless is preferred. Lossy files below the minimum bitrate are skipped.</p>
+<form method="post" action="/account/matching/quality">
+  {{ forms.csrf() }}
+  {% for name, label, rank in tiers %}<p class="field"><label>{{ label }} <input name="rank_{{ name }}" type="number" min="1" max="{{ tiers | length }}" step="1" value="{{ rank if rank else '' }}"></label></p>{% endfor %}
+  <p class="field"><label>Minimum bitrate for lossy files (kbps) <input name="floor" type="number" min="1" max="2000" step="1" value="{{ floor if floor else '' }}"></label></p>
+  <button type="submit">Save quality</button>
+</form>
 <h2>Change password</h2>
 {% if error and error[0] == "password" %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
 <p>Your other sessions are signed out; this one stays signed in.</p>

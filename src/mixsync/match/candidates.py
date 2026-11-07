@@ -4,6 +4,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
+from typing import Any, cast
 
 from rapidfuzz import fuzz
 
@@ -15,6 +16,7 @@ from mixsync.core.matching import (
     FileTrack,
     MatchResult,
     Profile,
+    QualityPref,
     TrackInfo,
 )
 from mixsync.match.features import normalize, string_dist
@@ -52,6 +54,36 @@ LONG_QUEUE = 50
 SLOW_SPEED = 50_000  # bytes per second
 NO_TITLE_PENALTY = 0.5
 
+# The quality tiers a user may list, best first, in a quality preference (#284): name -> (label,
+# minimum kbps). lossless needs no bitrate; mp3_v0 is a VBR MP3 averaging 220 kbps or more;
+# lossy_192 is any lossy format. matching.md and /account read the names from here.
+QUALITY_TIERS: Mapping[str, tuple[str, int]] = MappingProxyType(
+    {
+        "lossless": ("Lossless (FLAC, ALAC, WAV, ...)", 0),
+        "mp3_320": ("MP3 320 kbps", 320),
+        "mp3_v0": ("MP3 V0 (VBR, 220 kbps or more)", 220),
+        "mp3_256": ("MP3 256 kbps or more", 256),
+        "lossy_192": ("Any lossy, 192 kbps or more", 192),
+    }
+)
+QUALITY_SKIP = "quality preference: "  # starts the veto of a folder the preference skips
+
+
+def parse_quality(raw: Any) -> QualityPref | None:
+    """The stored `quality_pref` JSON, `{"tiers": [...], "floor_kbps": n}`; None when it is
+    missing, invalid or sets nothing."""
+    if not isinstance(raw, dict):
+        return None
+    pref = cast(dict[str, Any], raw)
+    tiers, floor = pref.get("tiers", []), pref.get("floor_kbps")
+    if not isinstance(tiers, list) or not all(t in QUALITY_TIERS for t in cast(list[Any], tiers)):
+        return None
+    if floor is not None and (type(floor) is not int or floor <= 0):
+        return None
+    order = tuple(dict.fromkeys(cast(list[str], tiers)))
+    return QualityPref(order, floor) if order or floor else None
+
+
 _NUMBERED = re.compile(r"^(?:(\d{1,2})-)?(\d{1,3})(?:\s*[-._)]+\s*|\s+|$)(.*)$")
 _TRACK_WORD = re.compile(r"^track\s*(\d+)$", re.IGNORECASE)
 DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*(\d+)", re.IGNORECASE)
@@ -84,11 +116,49 @@ def _parse(f: CandidateFile) -> _Parsed:
     return _Parsed(f, name, disc, track, title)
 
 
-def _quality_key(f: CandidateFile) -> tuple[bool, int, int]:
-    return f.extension in LOSSLESS, f.bitrate or 0, f.size
+def _below_floor(f: CandidateFile, pref: QualityPref) -> bool:
+    """Lossless always clears the floor; an unknown bitrate cannot be shown to miss it."""
+    return (
+        pref.floor_kbps is not None
+        and f.extension not in LOSSLESS
+        and f.bitrate is not None
+        and f.bitrate < pref.floor_kbps
+    )
 
 
-def _dedupe(parsed: Sequence[_Parsed], album: AlbumInfo) -> list[_Parsed]:
+def _meets(tier: str, f: CandidateFile) -> bool | None:
+    """Whether the file satisfies the tier; None when only its unknown bitrate decides."""
+    if tier == "lossless" or f.extension in LOSSLESS:
+        return tier == "lossless" and f.extension in LOSSLESS
+    if tier != "lossy_192" and (f.extension != "mp3" or (tier == "mp3_v0" and not f.vbr)):
+        return False
+    return None if f.bitrate is None else f.bitrate >= QUALITY_TIERS[tier][1]
+
+
+def _place(f: CandidateFile, pref: QualityPref) -> int:
+    """The index of the first listed tier the file satisfies; len(tiers) when only an unknown
+    bitrate stands in the way; len(tiers) + 1 when it is outside the list or below the floor."""
+    n = len(pref.tiers)
+    if _below_floor(f, pref):
+        return n + 1
+    maybe = False
+    for i, tier in enumerate(pref.tiers):
+        ok = _meets(tier, f)
+        if ok:
+            return i
+        maybe = maybe or ok is None
+    return n if maybe else n + 1
+
+
+def _quality_key(f: CandidateFile, pref: QualityPref | None = None) -> tuple[int, int, int]:
+    if pref is None or not pref.tiers:
+        return f.extension in LOSSLESS, f.bitrate or 0, f.size
+    return -_place(f, pref), f.bitrate or 0, f.size
+
+
+def _dedupe(
+    parsed: Sequence[_Parsed], album: AlbumInfo, pref: QualityPref | None = None
+) -> list[_Parsed]:
     """One file per track, keeping the preferred format (SK-F06). A copy in another format whose
     name differs only by the album artist as a prefix is the same track; a VA release has none."""
     artist = "" if album.va else normalize(album.artist)
@@ -98,7 +168,7 @@ def _dedupe(parsed: Sequence[_Parsed], album: AlbumInfo) -> list[_Parsed]:
         # no title: the file stem
         title = normalize(p.title) or p.name.rpartition(".")[0].lower()
         key = (p.disc, p.track, title) if p.track is not None else normalize(p.title) or p.file.path
-        if key not in best or _quality_key(p.file) > _quality_key(best[key].file):
+        if key not in best or _quality_key(p.file, pref) > _quality_key(best[key].file, pref):
             best[key] = p
     for key, p in list(best.items()):
         head, sep, rest = p.title.partition(" - ")
@@ -106,13 +176,21 @@ def _dedupe(parsed: Sequence[_Parsed], album: AlbumInfo) -> list[_Parsed]:
             continue
         other = best.get((p.disc, p.track, normalize(rest)))
         if other and other.file.extension != p.file.extension and key in best:
-            drop = p if _quality_key(other.file) > _quality_key(p.file) else other
+            drop = p if _quality_key(other.file, pref) > _quality_key(p.file, pref) else other
             best = {k: v for k, v in best.items() if v is not drop}
     kept = {id(p) for p in best.values()}
     return [p for p in parsed if id(p) in kept]
 
 
-def _quality(f: CandidateFile) -> tuple[float, str]:
+def _quality(f: CandidateFile, pref: QualityPref | None = None) -> tuple[float, str]:
+    if pref is not None and pref.tiers:
+        n, place = len(pref.tiers), _place(f, pref)
+        what = f"{f.extension} {f.bitrate} kbps" if f.bitrate else f.extension
+        if place < n:
+            return place / n, f"{what} is quality choice {place + 1} of {n}"
+        if place == n:
+            return 1.0, f"{f.extension} with unknown bitrate ranks behind the listed qualities"
+        return 1.0, f"{what} is not in the quality list"
     if f.extension in LOSSLESS:
         return 0.0, ""
     if f.bitrate is None:
@@ -157,7 +235,8 @@ def score_candidate(
     if candidate.has_cue and len(candidate.files) == 1 and len(album.tracks) > 1:
         return reject("single-file album rip with a .cue sheet is not supported")
 
-    parsed = _dedupe([_parse(f) for f in candidate.files], album)
+    pref = profile.quality
+    parsed = _dedupe([_parse(f) for f in candidate.files], album, pref)
     tracks = [FileTrack(p.title, "", p.file.duration, p.track, p.disc) for p in parsed]
     by_id = {id(t): p for t, p in zip(tracks, parsed, strict=True)}
     pairs, extras, missing = assign_tracks(tracks, album.tracks)
@@ -181,6 +260,8 @@ def score_candidate(
     dist.add("folder_album", 1 - hit, f"folder {candidate.folder!r} lacks {album.album!r}")
 
     untitled = False
+    outside: list[str] = []  # files no listed tier can fit
+    below: list[str] = []  # lossy files under the floor
     for ft, track in pairs:
         p = by_id[id(ft)]
         if p.title:
@@ -198,8 +279,12 @@ def score_candidate(
                 TRACK_LENGTH_MAX,
                 f"{p.name!r} is {ft.length:.0f}s vs {track.length:.0f}s",
             )
-        penalty, why = _quality(p.file)
+        penalty, why = _quality(p.file, pref)
         dist.add("quality_fit", penalty, f"{p.name!r}: {why}")
+        if pref and _below_floor(p.file, pref):
+            below.append(p.name)
+        elif pref and pref.tiers and _place(p.file, pref) > len(pref.tiers):
+            outside.append(p.name)
         problem = _size_problem(p.file, ft.length or track.length)
         dist.add("size_plausibility", 1.0 if problem else 0.0, f"{p.name!r}: {problem}")
         if problem:
@@ -217,6 +302,22 @@ def score_candidate(
         min(1.0, sum(w for bad, w, _ in reasons if bad)),
         "; ".join(r for bad, _, r in reasons if bad),
     )
+
+    # mixed folders: one lossy file under the floor skips the folder; files outside the list
+    # skip it only when they are more than half of the scored files
+    skip = ""
+    if below and pref:
+        skip = f"{QUALITY_SKIP}{len(below)} file(s) below {pref.floor_kbps} kbps, e.g. {below[0]!r}"
+    elif len(outside) * 2 > len(pairs):
+        skip = f"{QUALITY_SKIP}{len(outside)} of {len(pairs)} files are not in the quality list"
+    if skip:
+        return MatchResult(
+            distance=dist.distance,
+            band=Band.REJECT,
+            breakdown=dist.breakdown(),
+            vetoes=(skip, *vetoes),
+            scorer_version=SCORER_VERSION,
+        )
 
     result_band = band(dist.distance, vetoes, profile)
     if missing and result_band is Band.AUTO_ACCEPT:
@@ -253,6 +354,8 @@ def rank(
         if c.username not in seen:
             seen.add(c.username)
             # only the files that were scored, so the rest is never downloaded
-            kept = tuple(p.file for p in _dedupe([_parse(f) for f in c.files], album))
+            kept = tuple(
+                p.file for p in _dedupe([_parse(f) for f in c.files], album, profile.quality)
+            )
             out.append((replace(c, files=kept), r))
     return out

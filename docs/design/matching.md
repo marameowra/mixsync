@@ -5,6 +5,12 @@ Rationale: [ADR 0005](../decisions/0005-explainable-matching-score.md), [0006](.
 ## Stage 1: pre-download candidate scoring
 Input: slskd search results and the target MB release/recording. Features: folder completeness (extra files count against), filename/title similarity (rapidfuzz), per-track duration delta, quality fit against the user's preference, size plausibility, peer health (slots, queue, speed).
 
+### Quality fit
+- With no preference the order is lossless first, then higher bitrate, with fixed penalties (lossless 0, lossy 256+ kbps 0.2, 192+ 0.4, below 1).
+- A user's preference (`matching_profiles.quality_pref`, set on `/account`) is an ordered list of tiers, best first, and an optional floor in kbps for lossy files. Tiers (`QUALITY_TIERS` in `match/candidates.py`): `lossless`, `mp3_320`, `mp3_v0` (VBR MP3, 220 kbps or more), `mp3_256`, `lossy_192` (any lossy, 192 kbps or more). A tier left off the list is not accepted. A blank or invalid preference means the built-in order.
+- Each file takes the penalty `place / tiers` for the first listed tier it satisfies, and the full penalty when none fits (an unknown bitrate ranks just behind the listed tiers). The breakdown's `quality_fit` reasons name the choice, e.g. "mp3 320 kbps is quality choice 2 of 2". Per-track dedupe keeps the better-placed copy.
+- Skips: a lossy file under the floor skips the whole folder (lossless always clears it; an unknown bitrate is not counted as under it), and a folder is skipped when more than half its scored files are outside the list. A skipped folder is REJECT with a veto starting `quality preference:`, so it is never downloaded; when that leaves nothing, the request's `no_results` note says how many folders the preference skipped.
+
 The best-scoring candidate is downloaded; the others are not stored. A dropped candidate (failed transfer, unusable files, rejection) joins the request's tried list, and the retry runs a fresh search that skips every tried folder.
 
 ## Stage 2: post-download verification

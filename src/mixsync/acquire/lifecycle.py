@@ -81,9 +81,14 @@ def dead_end(req: "Request", why: str) -> None:
     req.last_error, req.dead_end = why, True
 
 
-def no_results(req: "Request") -> None:
-    """A search found nothing. A partial album keeps its label while it waits for the rest."""
+def no_results(req: "Request", why: str | None = None) -> None:
+    """A search found nothing. A partial album keeps its label while it waits for the rest.
+    `why`: what kept the candidates it did find from being downloaded."""
     _set(req, req.status if req.status == "partial" else "no_results", keep_note=True)
+    if why:
+        req.last_error = f"partial: {req.partial_note}; {why}" if req.partial_note else why
+    elif req.last_error and "skipped by the quality preference" in req.last_error:
+        req.last_error = None  # a stale note: this search skipped nothing
 
 
 def downloading(req: "Request") -> None:

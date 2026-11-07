@@ -23,6 +23,7 @@ from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
+from mixsync.db.models.auth import MatchingProfile, User
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
@@ -490,6 +491,27 @@ async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None
     with env.sessions() as s:
         req = s.get(Request, rid)
         assert req and req.no_results_attempts == 0 and req.status == "downloading"
+
+
+async def test_a_quality_preference_skip_is_named_in_the_no_results_note(env: Env) -> None:
+    with env.sessions.begin() as s:
+        row = MatchingProfile(
+            name="custom",
+            preset="custom",
+            auto_accept_max=0.08,
+            review_max=0.40,
+            quality_pref={"tiers": ["lossless"], "floor_kbps": None},
+        )
+        s.add(row)
+        s.flush()
+        s.get_one(User, env.user_id).matching_profile_id = row.id
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")  # an mp3 folder
+    rid = request(env)
+    while (await env.step()).kind is not JobKind.SEARCH:
+        pass
+    assert status(env, rid) == "no_results" and env.source.enqueued == []
+    # the one folder counts once however many queries found it
+    assert "1 candidate(s) skipped by the quality preference" in (last_error(env, rid) or "")
 
 
 async def test_search_is_debounced_for_ten_minutes(env: Env) -> None:
