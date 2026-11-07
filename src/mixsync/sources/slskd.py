@@ -73,6 +73,7 @@ def map_responses(responses: list[dict[str, Any]]) -> list[Candidate]:
                         duration=f.get("length"),
                         bit_depth=f.get("bitDepth"),
                         sample_rate=f.get("sampleRate"),
+                        vbr=f.get("isVariableBitRate"),
                     )
                 )
         for folder, files in folders.items():

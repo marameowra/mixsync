@@ -79,10 +79,20 @@ class Band(StrEnum):
 
 
 @dataclass(frozen=True)
+class QualityPref:
+    """A user's acceptable qualities, best first (tier names: match.candidates.QUALITY_TIERS),
+    and an optional bitrate floor for lossy files."""
+
+    tiers: tuple[str, ...]
+    floor_kbps: int | None = None
+
+
+@dataclass(frozen=True)
 class Profile:
     name: str
     auto_accept_max: float  # distance <= this auto-accepts
     review_max: float  # distance <= this goes to review, above rejects
+    quality: QualityPref | None = None  # None: the built-in quality order
 
 
 @dataclass(frozen=True)
@@ -125,6 +135,7 @@ class CandidateFile:
     duration: float | None = None  # seconds
     bit_depth: int | None = None
     sample_rate: int | None = None
+    vbr: bool | None = None  # variable bitrate, as the source reports it
 
 
 @dataclass(frozen=True)

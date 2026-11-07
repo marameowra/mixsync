@@ -20,6 +20,7 @@ from mixsync.db.queue import worker_age
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.match.candidates import QUALITY_TIERS
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT, confidence, from_confidence
 from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
@@ -149,6 +150,13 @@ def _page(
         "discogs": discogs,
         "auto_accept": confidence(profile.auto_accept_max),
         "review": confidence(profile.review_max),
+        "tiers": [
+            (name, label, quality.tiers.index(name) + 1 if name in quality.tiers else None)
+            for name, (label, _) in QUALITY_TIERS.items()
+        ]
+        if (quality := profile.quality)
+        else [(name, label, None) for name, (label, _) in QUALITY_TIERS.items()],
+        "floor": profile.quality.floor_kbps if profile.quality else None,
     }
     return templates.TemplateResponse(
         request, "pages/account.html", ctx, status_code=status if error else 200
@@ -225,6 +233,35 @@ def save_matching(
         return _page(request, user, db, box, ("matching", msg))
     mine = _own_row(db, user.id, current)
     mine.name, mine.preset, mine.auto_accept_max = "custom", "custom", limit
+    return RedirectResponse("/account", 303)
+
+
+@router.post("/matching/quality")
+async def save_quality(request: Request, user: CurrentUser, db: Db, box: Box) -> Response:
+    """The user's quality order (`rank_<tier>`: 1 is best, blank leaves the tier out) and lossy
+    floor in kbps. The preset name is kept: quality does not touch the limits."""
+    form = await request.form()
+    ranks: dict[str, int] = {}
+    for name in QUALITY_TIERS:
+        text = str(form.get(f"rank_{name}", "")).strip()
+        if text:
+            if not text.isdigit() or not 1 <= int(text) <= len(QUALITY_TIERS):
+                msg = f"Number each quality you accept from 1 to {len(QUALITY_TIERS)}."
+                return _page(request, user, db, box, ("matching", msg))
+            ranks[name] = int(text)
+    floor_text = str(form.get("floor", "")).strip()
+    if floor_text and (not floor_text.isdigit() or not 1 <= int(floor_text) <= 2000):
+        msg = "Enter the minimum bitrate as a whole number of kbps, or leave it blank."
+        return _page(request, user, db, box, ("matching", msg))
+    floor = int(floor_text) if floor_text else None
+    # ties keep the listed order (dicts and sorted are both stable)
+    tiers = sorted(ranks, key=ranks.__getitem__)
+    me = db.get_one(User, user.id)
+    row = db.get(MatchingProfile, me.matching_profile_id) if me.matching_profile_id else None
+    name, preset = (row.name, row.preset) if row else (BALANCED.name, BALANCED.name)
+    mine = _own_row(db, user.id, profile_for(db, user.id))
+    mine.name, mine.preset = name, preset
+    mine.quality_pref = {"tiers": tiers, "floor_kbps": floor} if tiers or floor else None
     return RedirectResponse("/account", 303)
 
 
