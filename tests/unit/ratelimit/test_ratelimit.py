@@ -363,4 +363,5 @@ async def test_request_does_not_block_loop_on_db_lock(
         assert (await c.get("https://example.test/x")).status_code == 200
     task.cancel()
     holder.close()
-    assert ticks >= 5  # a blocked loop would have ticked ~0 times during the 0.5 s lock
+    # ~10 ticks fit in the 0.5 s lock but slow CI runners get fewer (#341); a blocked loop gets 0-1
+    assert ticks >= 2
