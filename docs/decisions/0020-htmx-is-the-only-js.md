@@ -24,6 +24,6 @@ Pages are plain full-page renders except for live regions (ADR 0017). Planned UX
 
 ## Consequences
 - Every new interactive feature is a route that returns a fragment, plus `hx-*` attributes. Route tests cover it with `HX-Request`, as live regions are tested.
-- htmx trigger filters (`[...]`, e.g. ADR 0017's `[!document.hidden]`) are evaluated with `eval`, so a strict Content Security Policy would need `'unsafe-eval'` or would have to drop filters. Tracked separately.
-- Six handlers in existing templates break this rule. They are to be converted, along with a template test that blocks new inline scripts: five `onsubmit="return confirm(...)"` handlers (`review_list.html` 1, `watchlist_follow.html` 1, `users.html` 3) and the select-all `onclick` in `watchlist_catalog.html`. Swapping in `hx-boost` + `hx-confirm` needs care: htmx 2 doesn't swap 4xx responses by default, so a rejected form would fail silently.
+- htmx trigger filters (`[...]`, e.g. ADR 0017's `[!document.hidden]`) are evaluated with `eval`, so a strict Content Security Policy would need `'unsafe-eval'` or would have to drop filters (#330).
+- Six handlers in existing templates break this rule. They are to be converted (#329), along with a template test that blocks new inline scripts: five `onsubmit="return confirm(...)"` handlers (`review_list.html` 1, `watchlist_follow.html` 1, `users.html` 3) and the select-all `onclick` in `watchlist_catalog.html`. Swapping in `hx-boost` + `hx-confirm` needs care: htmx 2 doesn't swap 4xx responses by default, so a rejected form would fail silently.
 - Preview themes under `design/themes/` are dev-only and may use their own JS; a theme's templates follow this ADR once they move into `src/mixsync/web`.
