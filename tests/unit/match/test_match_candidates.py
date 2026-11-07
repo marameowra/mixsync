@@ -5,8 +5,23 @@ from pathlib import Path
 
 import pytest
 
-from mixsync.core.matching import AlbumInfo, Band, Candidate, CandidateFile, MatchResult, TrackInfo
-from mixsync.match.candidates import parse_name, rank, score_candidate
+from mixsync.core.matching import (
+    AlbumInfo,
+    Band,
+    Candidate,
+    CandidateFile,
+    MatchResult,
+    Profile,
+    QualityPref,
+    TrackInfo,
+)
+from mixsync.match.candidates import (
+    QUALITY_SKIP,
+    parse_name,
+    parse_quality,
+    rank,
+    score_candidate,
+)
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT
 from mixsync.match.scorer import SCORER_VERSION
 from mixsync.sources.slskd import map_responses
@@ -448,3 +463,98 @@ def test_aif_scores_like_aiff() -> None:
 
     assert score(pcm("aif")).distance == score(pcm("aiff")).distance
     assert "quality_fit" not in keys(score(pcm("aif")))
+
+
+# --- quality preference (#284) ---
+
+
+def lossy_album(bitrate: int) -> list[CandidateFile]:
+    return [
+        mp3(f"{i + 1:02d} {t}", ln, bitrate)
+        for i, (t, ln) in enumerate(zip(TITLES, LENGTHS, strict=True))
+    ]
+
+
+def with_pref(*tiers: str, floor: int | None = None) -> Profile:
+    return replace(BALANCED, quality=QualityPref(tiers, floor))
+
+
+def quality_order(profile: Profile) -> list[str]:
+    cs = [cand(album_files(), user="flac"), cand(lossy_album(320), user="mp3")]
+    return [c.username for c, _ in rank(cs, ALBUM, profile)]
+
+
+def quality_penalty(r: MatchResult) -> float:
+    return next((p.penalty for p in r.breakdown if p.key == "quality_fit"), 0.0)  # 0 is unlisted
+
+
+def test_quality_without_a_preference_is_lossless_first_and_scores_are_pinned() -> None:
+    assert quality_order(BALANCED) == ["flac", "mp3"]
+    assert quality_order(replace(BALANCED, quality=QualityPref((), None))) == ["flac", "mp3"]
+    assert quality_penalty(score(cand(album_files()))) == 0
+    assert quality_penalty(score(cand(lossy_album(320)))) == 0.2
+    assert quality_penalty(score(cand(lossy_album(192)))) == 0.4
+    assert quality_penalty(score(cand(lossy_album(128)))) == 1.0
+
+
+def test_a_preference_can_rank_mp3_320_above_flac() -> None:
+    assert quality_order(with_pref("mp3_320", "lossless")) == ["mp3", "flac"]
+    assert quality_order(with_pref("lossless", "mp3_320")) == ["flac", "mp3"]
+
+
+def test_files_below_the_floor_reject_the_folder_with_a_quality_veto() -> None:
+    pref = with_pref(floor=192)
+    r = score_candidate(cand(lossy_album(128)), ALBUM, pref)
+    assert r.band is Band.REJECT and r.vetoes[0].startswith(QUALITY_SKIP)
+    ranked = rank([cand(lossy_album(128)), cand(album_files(), user="b")], ALBUM, pref)
+    assert [r.band is Band.REJECT for _, r in ranked] == [False, True]
+    assert score_candidate(cand(lossy_album(256)), ALBUM, pref).band is not Band.REJECT
+
+
+def test_one_file_under_the_floor_skips_a_mixed_folder_and_lossless_clears_it() -> None:
+    files = [*lossy_album(320)[:3], mp3("04 Closing", 300.0, 128)]
+    pref = with_pref("mp3_320", "lossless", floor=192)
+    r = score_candidate(cand(files), ALBUM, pref)
+    assert r.band is Band.REJECT and r.vetoes[0].startswith(QUALITY_SKIP)
+    assert score_candidate(cand(album_files()), ALBUM, pref).band is not Band.REJECT
+
+
+def test_a_folder_mostly_outside_the_list_is_skipped() -> None:
+    r = score_candidate(cand(lossy_album(192)), ALBUM, with_pref("lossless"))
+    assert r.band is Band.REJECT and r.vetoes[0].startswith(QUALITY_SKIP)
+
+
+def test_the_breakdown_names_quality_fit_with_a_readable_reason() -> None:
+    r = score_candidate(cand(lossy_album(320)), ALBUM, with_pref("lossless", "mp3_320"))
+    (fit,) = [p for p in r.breakdown if p.key == "quality_fit"]
+    assert "mp3 320 kbps is quality choice 2 of 2" in fit.reason
+
+
+def test_a_variable_bitrate_mp3_meets_v0_only_when_flagged() -> None:
+    vbr = [replace(f, vbr=True) for f in lossy_album(245)]
+    pref = with_pref("mp3_v0")
+    assert score_candidate(cand(vbr), ALBUM, pref).band is not Band.REJECT
+    assert score_candidate(cand(lossy_album(245)), ALBUM, pref).band is Band.REJECT
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            {"tiers": ["mp3_320", "lossless"], "floor_kbps": 192},
+            QualityPref(("mp3_320", "lossless"), 192),
+        ),
+        ({"tiers": ["lossless", "lossless"]}, QualityPref(("lossless",), None)),
+        ({"tiers": [], "floor_kbps": 128}, QualityPref((), 128)),
+        ({"tiers": ["flac"]}, None),
+        ({"tiers": "lossless"}, None),
+        ({"tiers": ["lossless"], "floor_kbps": -1}, None),
+        ({"tiers": ["lossless"], "floor_kbps": True}, None),
+        ({"tiers": [], "floor_kbps": None}, None),
+        ({}, None),
+        (None, None),
+        ("lossless", None),
+    ],
+)
+def test_parse_quality(raw: object, expected: QualityPref | None) -> None:
+    assert parse_quality(raw) == expected

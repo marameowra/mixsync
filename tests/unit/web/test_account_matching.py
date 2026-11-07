@@ -6,12 +6,13 @@ from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.requests import profile_for
 from mixsync.app import create_app
 from mixsync.core.config import Settings
-from mixsync.core.matching import Profile
+from mixsync.core.matching import Profile, QualityPref
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
@@ -194,6 +195,70 @@ def test_picking_copies_a_shared_row_and_a_cap_is_noted(
     login(client, "alice")
     assert "minimum of 92% limits auto-accept for Loose" in client.get("/account").text
     assert effective(sf, "alice").auto_accept_max == pytest.approx(0.08)
+
+
+def set_quality(c: TestClient, tok: str, **fields: str) -> Response:
+    return c.post("/account/matching/quality", data={"csrf_token": tok, **fields})
+
+
+def test_quality_saves_round_trips_and_feeds_the_profile(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "alice")
+    page = client.get("/account").text
+    assert 'name="rank_lossless"' in page and 'name="floor"' in page
+    r = set_quality(client, tok, rank_mp3_320="1", rank_lossless="2", floor="192")
+    assert r.status_code == 303
+    assert effective(sf, "alice").quality == QualityPref(("mp3_320", "lossless"), 192)
+    page = client.get("/account").text
+    assert re.search(r'name="rank_mp3_320"[^>]*value="1"', page)
+    assert re.search(r'name="rank_lossless"[^>]*value="2"', page)
+    assert re.search(r'name="floor"[^>]*value="192"', page)
+    assert effective(sf, "bob").quality is None
+    assert set_quality(client, tok).status_code == 303  # blank clears it
+    assert effective(sf, "alice").quality is None
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"rank_lossless": "0"},
+        {"rank_lossless": "x"},
+        {"rank_lossless": "9"},
+        {"floor": "abc"},
+        {"floor": "5000"},
+    ],
+)
+def test_invalid_quality_input_rerenders_with_an_error_and_saves_nothing(
+    client: TestClient, sf: sessionmaker[Session], fields: dict[str, str]
+) -> None:
+    tok = login(client, "alice")
+    r = set_quality(client, tok, **fields)
+    assert r.status_code == 400 and 'role="alert"' in r.text
+    assert effective(sf, "alice").quality is None
+
+
+def test_saving_quality_keeps_the_users_preset_and_limits(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pick(client, login(client, "alice"), "loose")
+    set_quality(client, login(client, "alice"), rank_lossless="1")
+    assert row(sf, "alice")[1:] == ("loose", 0.15, 0.55)
+    set_limit(client, login(client, "alice"), "85")
+    set_quality(client, login(client, "alice"), rank_lossless="1", floor="128")
+    assert row(sf, "alice")[1:] == ("custom", 0.15, 0.55)
+    assert effective(sf, "alice").quality == QualityPref(("lossless",), 128)
+
+
+def test_quality_under_an_admin_cap_does_not_relabel_a_capped_copy(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    set_cap(client, login(client, "root"), "95")
+    set_quality(client, login(client, "bob"), rank_lossless="1")
+    _, preset, auto, _ = row(sf, "bob")
+    assert preset == "custom" and auto == pytest.approx(0.05)  # not "balanced" at 0.08
+    assert effective(sf, "bob").quality == QualityPref(("lossless",), None)
+    assert effective(sf, "bob").auto_accept_max == pytest.approx(0.05)
 
 
 def test_a_preset_chosen_under_a_cap_is_stored_raw_and_clamped_on_load(

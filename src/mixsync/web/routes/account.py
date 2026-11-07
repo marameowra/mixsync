@@ -259,8 +259,12 @@ async def save_quality(request: Request, user: CurrentUser, db: Db, box: Box) ->
     me = db.get_one(User, user.id)
     row = db.get(MatchingProfile, me.matching_profile_id) if me.matching_profile_id else None
     name, preset = (row.name, row.preset) if row else (BALANCED.name, BALANCED.name)
+    base = row or BALANCED
+    was = (base.auto_accept_max, base.review_max)
     mine = _own_row(db, user.id, profile_for(db, user.id))
-    mine.name, mine.preset = name, preset
+    # a copy made under the admin cap holds lower limits than the preset: it is custom
+    if (mine.auto_accept_max, mine.review_max) == was:
+        mine.name, mine.preset = name, preset
     mine.quality_pref = {"tiers": tiers, "floor_kbps": floor} if tiers or floor else None
     return RedirectResponse("/account", 303)
 
