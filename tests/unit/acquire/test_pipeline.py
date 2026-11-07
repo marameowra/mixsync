@@ -510,7 +510,8 @@ async def test_a_quality_preference_skip_is_named_in_the_no_results_note(env: En
     while (await env.step()).kind is not JobKind.SEARCH:
         pass
     assert status(env, rid) == "no_results" and env.source.enqueued == []
-    assert "skipped by the quality preference" in (last_error(env, rid) or "")
+    # the one folder counts once however many queries found it
+    assert "1 candidate(s) skipped by the quality preference" in (last_error(env, rid) or "")
 
 
 async def test_search_is_debounced_for_ten_minutes(env: Env) -> None:

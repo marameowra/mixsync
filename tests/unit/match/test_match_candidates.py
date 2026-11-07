@@ -519,6 +519,27 @@ def test_one_file_under_the_floor_skips_a_mixed_folder_and_lossless_clears_it() 
     assert score_candidate(cand(album_files()), ALBUM, pref).band is not Band.REJECT
 
 
+def test_a_preference_keeps_only_the_preferred_copy_of_each_track() -> None:
+    both = [*album_files(), *lossy_album(320)]
+    ((kept, _),) = rank([cand(both)], ALBUM, with_pref("mp3_320"))
+    assert [f.extension for f in kept.files] == ["mp3"] * 4
+
+
+def test_exactly_half_the_files_outside_the_list_is_not_skipped() -> None:
+    files = [*lossy_album(320)[:2], *album_files()[2:]]
+    r = score_candidate(cand(files), ALBUM, with_pref("mp3_320"))
+    assert not any(v.startswith(QUALITY_SKIP) for v in r.vetoes)
+    assert r.band is not Band.REJECT
+
+
+def test_an_unknown_bitrate_is_not_skipped_and_the_reason_says_so() -> None:
+    files = [replace(f, bitrate=None) for f in lossy_album(320)]
+    r = score_candidate(cand(files), ALBUM, with_pref("mp3_320"))
+    assert not any(v.startswith(QUALITY_SKIP) for v in r.vetoes)
+    (fit,) = [p for p in r.breakdown if p.key == "quality_fit"]
+    assert "unknown bitrate" in fit.reason
+
+
 def test_a_folder_mostly_outside_the_list_is_skipped() -> None:
     r = score_candidate(cand(lossy_album(192)), ALBUM, with_pref("lossless"))
     assert r.band is Band.REJECT and r.vetoes[0].startswith(QUALITY_SKIP)

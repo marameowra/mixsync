@@ -198,15 +198,15 @@ class Pipeline:
                     lifecycle.owned(req)
                 return
         ranked: list[tuple[Candidate, Any]] = []
-        skipped: list[str] = []  # why the quality preference skipped a folder
+        skipped: dict[tuple[str, str], str] = {}  # folder -> why the quality preference skipped it
         for q in self.queries(album.artist, album.album):
             found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
             scored = rank(found, album, profile)
-            skipped += [
-                r.vetoes[0]
-                for _, r in scored
+            skipped |= {
+                (c.username, c.folder): r.vetoes[0]
+                for c, r in scored
                 if r.band is Band.REJECT and r.vetoes and r.vetoes[0].startswith(QUALITY_SKIP)
-            ]
+            }
             ranked = [
                 cr
                 for cr in scored
@@ -228,9 +228,8 @@ class Pipeline:
             if not ranked:
                 req.no_results_attempts += 1
                 delay = no_results_delay(req.no_results_attempts)
-                why = (
-                    f"{len(skipped)} candidate(s) skipped by the {skipped[0]}" if skipped else None
-                )
+                first = next(iter(skipped.values()), "")
+                why = f"{len(skipped)} candidate(s) skipped by the {first}" if skipped else None
                 lifecycle.no_results(req, why)
                 req.next_search_at = now + delay
                 enqueue_in(

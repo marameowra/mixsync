@@ -245,12 +245,14 @@ async def save_quality(request: Request, user: CurrentUser, db: Db, box: Box) ->
     for name in QUALITY_TIERS:
         text = str(form.get(f"rank_{name}", "")).strip()
         if text:
-            if not text.isdigit() or not 1 <= int(text) <= len(QUALITY_TIERS):
+            if not (text.isascii() and text.isdigit()) or not 1 <= int(text) <= len(QUALITY_TIERS):
                 msg = f"Number each quality you accept from 1 to {len(QUALITY_TIERS)}."
                 return _page(request, user, db, box, ("matching", msg))
             ranks[name] = int(text)
     floor_text = str(form.get("floor", "")).strip()
-    if floor_text and (not floor_text.isdigit() or not 1 <= int(floor_text) <= 2000):
+    if floor_text and (
+        not (floor_text.isascii() and floor_text.isdigit()) or not 1 <= int(floor_text) <= 2000
+    ):
         msg = "Enter the minimum bitrate as a whole number of kbps, or leave it blank."
         return _page(request, user, db, box, ("matching", msg))
     floor = int(floor_text) if floor_text else None
@@ -259,12 +261,10 @@ async def save_quality(request: Request, user: CurrentUser, db: Db, box: Box) ->
     me = db.get_one(User, user.id)
     row = db.get(MatchingProfile, me.matching_profile_id) if me.matching_profile_id else None
     name, preset = (row.name, row.preset) if row else (BALANCED.name, BALANCED.name)
-    base = row or BALANCED
-    was = (base.auto_accept_max, base.review_max)
-    mine = _own_row(db, user.id, profile_for(db, user.id))
-    # a copy made under the admin cap holds lower limits than the preset: it is custom
-    if (mine.auto_accept_max, mine.review_max) == was:
-        mine.name, mine.preset = name, preset
+    # raw limits, not profile_for's: the admin cap is applied on load, never stored
+    raw = row or BALANCED
+    mine = _own_row(db, user.id, Profile(name, raw.auto_accept_max, raw.review_max))
+    mine.name, mine.preset = name, preset
     mine.quality_pref = {"tiers": tiers, "floor_kbps": floor} if tiers or floor else None
     return RedirectResponse("/account", 303)
 

@@ -227,6 +227,8 @@ def test_quality_saves_round_trips_and_feeds_the_profile(
         {"rank_lossless": "9"},
         {"floor": "abc"},
         {"floor": "5000"},
+        {"rank_lossless": "²"},
+        {"floor": "²"},
     ],
 )
 def test_invalid_quality_input_rerenders_with_an_error_and_saves_nothing(
@@ -250,13 +252,13 @@ def test_saving_quality_keeps_the_users_preset_and_limits(
     assert effective(sf, "alice").quality == QualityPref(("lossless",), 128)
 
 
-def test_quality_under_an_admin_cap_does_not_relabel_a_capped_copy(
+def test_quality_under_an_admin_cap_stores_raw_limits_and_clamps_on_load(
     client: TestClient, sf: sessionmaker[Session]
 ) -> None:
     set_cap(client, login(client, "root"), "95")
     set_quality(client, login(client, "bob"), rank_lossless="1")
     _, preset, auto, _ = row(sf, "bob")
-    assert preset == "custom" and auto == pytest.approx(0.05)  # not "balanced" at 0.08
+    assert preset == "balanced" and auto == pytest.approx(0.08)  # stored raw, not the capped 0.05
     assert effective(sf, "bob").quality == QualityPref(("lossless",), None)
     assert effective(sf, "bob").auto_accept_max == pytest.approx(0.05)
 

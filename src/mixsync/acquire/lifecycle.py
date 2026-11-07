@@ -87,6 +87,8 @@ def no_results(req: "Request", why: str | None = None) -> None:
     _set(req, req.status if req.status == "partial" else "no_results", keep_note=True)
     if why:
         req.last_error = f"partial: {req.partial_note}; {why}" if req.partial_note else why
+    elif req.last_error and "skipped by the quality preference" in req.last_error:
+        req.last_error = None  # a stale note: this search skipped nothing
 
 
 def downloading(req: "Request") -> None:
