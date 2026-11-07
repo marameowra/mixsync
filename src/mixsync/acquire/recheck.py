@@ -219,7 +219,12 @@ class Rechecker:
                         ),
                     )
                     taken.add(new)
-                    op = {"op": "move", "new_path": new, "tags": asdict(ts)}
+                    op = {
+                        "op": "move",
+                        "new_path": new,
+                        "tags": asdict(ts),
+                        "template": self.template,
+                    }
             ops.append({**op, "track_id": row.id, "old": row_dict(row), "done": False})
         if not taken:  # nothing to promote
             return False

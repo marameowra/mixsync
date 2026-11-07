@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap, profile_for
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
+from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.core.matching import Profile
 from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
+from mixsync.db.queue import worker_age
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
@@ -260,6 +262,17 @@ def save_cap(
             .values(auto_accept_max=cap)
         )
     return RedirectResponse("/account/cap", 303)
+
+
+@router.get("/worker")
+def show_worker(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    age = worker_age(db, request.app.state.services.clock.now())
+    ctx = {
+        "user": admin,
+        "seconds": None if age is None else max(0, round(age.total_seconds())),
+        "stale": age is None or age > WORKER_STALE_AFTER,
+    }
+    return templates.TemplateResponse(request, "pages/worker.html", ctx)
 
 
 @router.post("/password")

@@ -36,7 +36,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # No healthcheck yet: the worker heartbeat row does not exist. Add one when it lands.
   mixsync-worker:
     <<: *mixsync
     command: ["worker"]
@@ -44,6 +43,12 @@ services:
     depends_on:
       mixsync-migrate:
         condition: service_completed_successfully
+    healthcheck:  # unhealthy once its loop has not recorded a heartbeat for 90 s
+      test: ["CMD", "mixsync", "worker-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # startup scans run before the loop settles
 
   slskd:
     image: slskd/slskd:0.26.2

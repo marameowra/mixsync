@@ -32,6 +32,8 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_DEEZER_SUGGESTIONS` | `true`: Mark unverified gets a "Suggest from Deezer" button that pre-fills the form on request (metadata only, 1 req/s, no audio). Deezer's terms allow private, non-commercial, single-household use only. Default off |
 | `MIXSYNC_DISCOGS_SUGGESTIONS` | `true`: Discogs joins Deezer behind one "Suggest" button on Mark unverified (release search and tracklist, on request only). Each user links their own Discogs personal token under Account (no shared token); a user without one gets no Discogs suggestions. The limits in [services](../docs/design/services-etiquette.md#discogs-and-deezer-fallbacks-off-by-default) came from an OpenAPI copy: check them by hand before enabling. Default off |
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
+| `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
+| `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
@@ -48,7 +50,8 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 2. Set `FORWARDED_ALLOW_IPS` to the proxy's fixed IP (static `ipv4_address`). A subnet (`docker network inspect`, or pin with `ipam`) is looser; a subnet or `*` is safe only when 8080 is reachable solely through the proxy. IPs or CIDRs only: uvicorn does no DNS lookup. `mixsync all` reads the same variable from `.env`.
 
 ## Health and ops
-- `GET /healthz` backs the web healthcheck; the worker has none yet.
+- `GET /healthz` backs the web healthcheck. The worker records a heartbeat every 10 s while idle (and during long jobs); `mixsync worker-health` exits non-zero when none is newer than 90 s and backs the worker healthcheck. Admins see "worker last seen" under Account → Worker status. It catches a dead or wedged worker loop, not a single job hung on a network call that never returns.
+- Logs go to stderr (timestamp, level, logger, message); `MIXSYNC_LOG_LEVEL` sets the level (default `INFO`).
 - Back up `/config` and `/data` with your host backup. Upgrade: see below.
 
 - SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.

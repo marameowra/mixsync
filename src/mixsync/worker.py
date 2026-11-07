@@ -34,9 +34,10 @@ from mixsync.library.importer import Importer
 from mixsync.library.name_backfill import NameBackfill
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.query import queries
-from mixsync.sources.slskd import SlskdSource
+from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
 from mixsync.wiring import Services, build_services
@@ -44,6 +45,7 @@ from mixsync.wiring import Services, build_services
 log = logging.getLogger(__name__)
 
 COMPLETE_TRIES = 4
+ALIVE_EVERY = 10.0  # seconds between idle liveness writes; well inside WORKER_STALE_AFTER
 COMPLETE_PAUSE = 0.2  # seconds, times the attempt number
 
 Handler = Callable[[JobRecord], Awaitable[None]]
@@ -56,9 +58,17 @@ async def _noop(_job: JobRecord) -> None:
 HANDLERS: dict[JobKind, Handler] = {JobKind.NOOP: _noop}
 
 
+async def _alive(queue: JobQueue, worker: str) -> None:
+    try:
+        await asyncio.to_thread(queue.alive, worker)
+    except Exception:  # liveness is for the healthcheck; never stop polling or a job over it
+        log.exception("recording the worker heartbeat failed; trying again")
+
+
 async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta) -> None:
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
+        await _alive(queue, worker)  # a long job blocks the polling loop
         try:
             if not await asyncio.to_thread(queue.heartbeat, job_id, worker, lease):
                 return
@@ -99,6 +109,7 @@ async def run_job(
     hb = asyncio.create_task(_heartbeat(queue, job.id, worker, lease))
     try:
         await asyncio.to_thread(queue.start, job.id, worker)
+        log.info("job %s (%s) started", job.id, job.kind)
         await handlers[job.kind](job)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
@@ -106,7 +117,8 @@ async def run_job(
         try:
             # A locked database is momentary, never a reason to fail finished work.
             if isinstance(e, TransientError | OperationalError):
-                await asyncio.to_thread(queue.retry, job.id, worker, str(e))
+                state = await asyncio.to_thread(queue.retry, job.id, worker, str(e))
+                log.warning("job %s failed (%s): %s", job.id, state, e)
             else:  # PermanentError, SafetyError, bugs: never retried
                 log.exception("job %s failed", job.id)
                 await asyncio.to_thread(queue.fail, job.id, worker, repr(e))
@@ -116,6 +128,7 @@ async def run_job(
             log.exception("could not record the outcome of job %s", job.id)
     else:
         await _complete(queue, job.id, worker)
+        log.info("job %s finished", job.id)
     finally:
         hb.cancel()
 
@@ -131,8 +144,11 @@ async def run_worker(
 ) -> None:
     pending = list(startup)
     loop = asyncio.get_running_loop()
-    retry_at = loop.time()
+    retry_at = alive_at = loop.time()
     while not stop.is_set():
+        if loop.time() >= alive_at:  # not every poll: an idle SQLite worker would write each second
+            await _alive(queue, worker)
+            alive_at = loop.time() + ALIVE_EVERY
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
                 if stop.is_set():
@@ -172,7 +188,10 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
             settings.slskd_url,
             settings.slskd_api_key,
             downloads_dir=Path(settings.downloads_dir),
+            slots=Slots("slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE),
+            debounce=timedelta(seconds=settings.slskd_search_debounce),
         ),
+        max_searches=settings.slskd_max_searches,
         gate=DownloadGate(
             settings.max_concurrent_downloads,
             timedelta(seconds=settings.slow_download_window),
@@ -327,6 +346,7 @@ def _new_queue(
         retention.start_chains()
 
     startup = (
+        merger.backfill_templates,  # labels rows only; a reorganize plan waits for the user
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
@@ -357,7 +377,11 @@ async def serve_all() -> None:
     stop = asyncio.Event()
     server = uvicorn.Server(
         uvicorn.Config(
-            lambda: create_app(services=services), factory=True, host="0.0.0.0", port=8080
+            lambda: create_app(services=services),
+            factory=True,
+            host="0.0.0.0",
+            port=8080,
+            log_level=services.settings.log_level.lower(),
         )
     )
     task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))

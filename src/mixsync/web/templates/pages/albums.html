@@ -8,6 +8,8 @@
   <input id="album-q" name="q" value="{{ q }}"></div>
   <button class="btn" type="submit">Search</button>
 </form>
+{% if drift %}<div class="notice" role="status"><p>Layout differs from the path template ({{ drift }} {{ "files" if drift != 1 else "file" }}). Nothing moves until you confirm a plan.</p>
+{% if "library.edit" in user.capabilities %}<form method="post" action="/library/reorganize/plan">{{ forms.csrf() }}<button class="btn" type="submit">Plan reorganize</button></form>{% endif %}</div>{% endif %}
 {% if pending %}<p>Names pending for {{ pending }} tracks: a background job is reading their tags.</p>{% endif %}
 <div class="table-wrap scroll">
 <table>

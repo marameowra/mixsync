@@ -3,7 +3,7 @@
 ## Path templates
 - Layout is a per-library template. Default: `{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}`.
 - Sanitization strips characters illegal on any common filesystem (Windows, macOS, Linux, SMB), trims trailing dots and spaces, caps segment length. Collisions get a deterministic suffix; never overwrite.
-- A template change moves nothing by itself: it produces a dry-run reorganize plan needing confirmation ([data safety](data-safety.md)).
+- A template change moves nothing by itself ([data safety](data-safety.md)). Each track stores the template it was filed with; when some differ from the setting, the library page says so and offers "Plan reorganize". The plan moves every drifted file to the path its current tags give under the new template (tags unchanged; collisions suffixed; a move onto another filesystem refused and listed), needs confirmation, and can be undone ([ADR 0019](../decisions/0019-path-template-per-track.md)).
 - `{genre}` comes from MusicBrainz genres (`inc=genres`, not folksonomy tags): the release group's, else the release's, else the primary artist's; ranked by votes, ties alphabetical. The `GENRE` tag gets the top 3, the path only the top 1. None at any level renders `Unknown Genre`; import is never blocked.
 
 ## Identifiers stored per track

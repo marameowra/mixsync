@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
     discogs_suggestions: bool = False  # Mark unverified offers Discogs lookups via a user token
     slskd_url: str = "http://slskd:5030"
     slskd_api_key: str = ""
+    slskd_max_searches: int = Field(default=2, ge=1)  # slskd searches in flight, all workers
+    slskd_search_debounce: int = Field(default=300, ge=0)  # seconds a query's result is reused
     max_concurrent_downloads: int = Field(default=3, ge=1)
     slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
     slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow
@@ -42,6 +45,12 @@ class Settings(BaseSettings):
     trash_days: int = Field(default=30, ge=1)  # trash from day folders older than this is purged
     timezone: str = "UTC"  # the zone report days are read in
     path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _upper_level(cls, v: object) -> object:
+        return v.upper() if isinstance(v, str) else v
 
     @field_validator("database_url")
     @classmethod

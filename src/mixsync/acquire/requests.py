@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
-from mixsync.core.jobs import LIVE, JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState, backoff
 from mixsync.core.matching import Candidate, CandidateFile, Profile
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
@@ -25,15 +25,17 @@ from mixsync.match.profiles import BALANCED, from_confidence
 
 REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
 
-NO_RESULTS_BACKOFF = (
-    timedelta(hours=1),
-    timedelta(hours=6),
-    timedelta(hours=24),
-    timedelta(weeks=1),
-)
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
+
+
+def no_results_delay(attempts: int) -> timedelta:
+    """Wait before the next search after `attempts` (>= 1) in a row found nothing.
+
+    1 h, 4 h, 16 h, 64 h, then weekly: x4 per step keeps a dead query to ~4 Soulseek
+    searches in its first week (services etiquette)."""
+    return backoff(2 * attempts - 1, timedelta(hours=1), timedelta(weeks=1))
 
 
 def candidate_from_dict(d: dict[str, Any]) -> Candidate:
@@ -201,8 +203,8 @@ def drop_candidate(
     if partial or job_failed:  # part of the album is in: repeat the search with backoff
         if partial:
             lifecycle.keep_looking(req, partial, notes)
-        delay = NO_RESULTS_BACKOFF[min(req.no_results_attempts, len(NO_RESULTS_BACKOFF) - 1)]
         req.no_results_attempts += 1
+        delay = no_results_delay(req.no_results_attempts)
         req.next_search_at = now + delay
         enqueue_in(
             s,
