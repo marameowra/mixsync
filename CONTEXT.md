@@ -77,3 +77,13 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 **Discovery**: Recommendation-driven requests (`source=discovery`) from ListenBrainz.
 
 **Provisional**: A discovery track imported into `/data/discover` on trial until kept or trashed. _Avoid_: Temporary
+
+### Playlists
+
+**Discovery playlist**: A per-user playlist generated from listening history; its unowned tracks are provisional.
+
+**Mirrored playlist**: A per-user copy of a playlist curated elsewhere, keeping its upstream order and membership. Its missing tracks become ordinary requests (`source=playlist`), never provisional; a track leaving upstream leaves the playlist only. _Avoid_: Synced, imported, external playlist
+
+**Smart playlist**: A playlist built from rules over the owned library only; it never makes requests. _Avoid_: Dynamic, auto playlist
+
+**Unresolved track**: A playlist entry that could not be matched confidently to a recording; listed on the playlist, never guessed. _Avoid_: Missing track (that is a resolved recording not yet owned)
