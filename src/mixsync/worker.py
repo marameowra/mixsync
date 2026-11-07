@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import socket
+import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
@@ -14,37 +15,37 @@ from mixsync.acquire.acoustid_submit import AcoustIdSubmitter
 from mixsync.acquire.adopter import adopter
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.gate import DownloadGate
-from mixsync.acquire.merge import Merger
 from mixsync.acquire.migration import Migrator
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
-from mixsync.core.clock import Clock, SystemClock
+from mixsync.acquire.requests import fail_request_of_job
+from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
-from mixsync.core.jobs import DEFAULT_LEASE, JobKind
-from mixsync.db.engine import make_engine, make_session_factory
-from mixsync.db.journal import SqlJournal
+from mixsync.core.jobs import DEFAULT_LEASE, JobKind, backoff
+from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
-from mixsync.db.secretbox import load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.retention import Retention
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
+from mixsync.library.name_backfill import NameBackfill
 from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
-from mixsync.metadata.coverart import CoverArtClient
-from mixsync.metadata.musicbrainz import MusicBrainzProvider
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.query import queries
-from mixsync.sources.slskd import SlskdSource
+from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
+from mixsync.wiring import Services, build_services
 
 log = logging.getLogger(__name__)
 
 COMPLETE_TRIES = 4
+ALIVE_EVERY = 10.0  # seconds between idle liveness writes; well inside WORKER_STALE_AFTER
 COMPLETE_PAUSE = 0.2  # seconds, times the attempt number
 
 Handler = Callable[[JobRecord], Awaitable[None]]
@@ -57,11 +58,19 @@ async def _noop(_job: JobRecord) -> None:
 HANDLERS: dict[JobKind, Handler] = {JobKind.NOOP: _noop}
 
 
+async def _alive(queue: JobQueue, worker: str) -> None:
+    try:
+        await asyncio.to_thread(queue.alive, worker)
+    except Exception:  # liveness is for the healthcheck; never stop polling or a job over it
+        log.exception("recording the worker heartbeat failed; trying again")
+
+
 async def _heartbeat(queue: JobQueue, job_id: int, worker: str, lease: timedelta) -> None:
     while True:
         await asyncio.sleep(lease.total_seconds() / 3)
+        await _alive(queue, worker)  # a long job blocks the polling loop
         try:
-            if not queue.heartbeat(job_id, worker, lease):
+            if not await asyncio.to_thread(queue.heartbeat, job_id, worker, lease):
                 return
         except Exception:  # a dead heartbeat lets the lease expire and the job run twice
             log.exception("heartbeat for job %s failed; trying again", job_id)
@@ -71,7 +80,7 @@ async def _complete(queue: JobQueue, job_id: int, worker: str) -> None:
     """The work is done: a locked database must never send it to retry (it would run twice)."""
     for attempt in range(COMPLETE_TRIES):
         try:
-            queue.complete(job_id, worker)
+            await asyncio.to_thread(queue.complete, job_id, worker)
             return
         except LeaseLostError:
             log.warning("lost lease on job %s", job_id)
@@ -99,7 +108,8 @@ async def run_job(
 ) -> None:
     hb = asyncio.create_task(_heartbeat(queue, job.id, worker, lease))
     try:
-        queue.start(job.id, worker)
+        await asyncio.to_thread(queue.start, job.id, worker)
+        log.info("job %s (%s) started", job.id, job.kind)
         await handlers[job.kind](job)
     except LeaseLostError:
         log.warning("lost lease on job %s", job.id)
@@ -107,16 +117,18 @@ async def run_job(
         try:
             # A locked database is momentary, never a reason to fail finished work.
             if isinstance(e, TransientError | OperationalError):
-                queue.retry(job.id, worker, str(e))
+                state = await asyncio.to_thread(queue.retry, job.id, worker, str(e))
+                log.warning("job %s failed (%s): %s", job.id, state, e)
             else:  # PermanentError, SafetyError, bugs: never retried
                 log.exception("job %s failed", job.id)
-                queue.fail(job.id, worker, repr(e))
+                await asyncio.to_thread(queue.fail, job.id, worker, repr(e))
         except LeaseLostError:  # the job row was deleted or reaped while the handler ran
             log.warning("lost lease on job %s", job.id)
         except Exception:  # the bookkeeping failed too: reap() requeues it once the lease expires
             log.exception("could not record the outcome of job %s", job.id)
     else:
         await _complete(queue, job.id, worker)
+        log.info("job %s finished", job.id)
     finally:
         hb.cancel()
 
@@ -132,9 +144,11 @@ async def run_worker(
 ) -> None:
     pending = list(startup)
     loop = asyncio.get_running_loop()
-    retry_at = loop.time()
-    # shortcut: queue calls are sync and short, run on the loop; move to threads if they block it.
+    retry_at = alive_at = loop.time()
     while not stop.is_set():
+        if loop.time() >= alive_at:  # not every poll: an idle SQLite worker would write each second
+            await _alive(queue, worker)
+            alive_at = loop.time() + ALIVE_EVERY
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
                 if stop.is_set():
@@ -149,8 +163,8 @@ async def run_worker(
         if stop.is_set():
             return
         try:
-            queue.reap()
-            job = queue.claim(worker, lease)
+            await asyncio.to_thread(queue.reap)
+            job = await asyncio.to_thread(queue.claim, worker, lease)
         except Exception:  # e.g. "database is locked": a dead loop leaves every job queued
             log.exception("polling the job queue failed; trying again")
             job = None
@@ -163,21 +177,21 @@ async def run_worker(
         await run_job(queue, job, worker, handlers, lease)
 
 
-def _pipeline(
-    settings: Settings, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock
-) -> Pipeline:
-    def client(service: str) -> PoliteClient:
-        return PoliteClient(service, settings, sessions)
+def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
+    settings, sessions, clock = services.settings, services.session_factory, services.clock
 
     return Pipeline(
         sessions=sessions,
         clock=clock,
         source=SlskdSource(
-            client("slskd"),
+            PoliteClient("slskd", settings, sessions),
             settings.slskd_url,
             settings.slskd_api_key,
             downloads_dir=Path(settings.downloads_dir),
+            slots=Slots("slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE),
+            debounce=timedelta(seconds=settings.slskd_search_debounce),
         ),
+        max_searches=settings.slskd_max_searches,
         gate=DownloadGate(
             settings.max_concurrent_downloads,
             timedelta(seconds=settings.slow_download_window),
@@ -185,17 +199,17 @@ def _pipeline(
             settings.slow_download_share,
         ),
         queries=queries,
-        metadata=MusicBrainzProvider(client("musicbrainz"), settings.mb_base_url),
+        metadata=services.musicbrainz,
         fingerprint=fingerprint,
-        acoustid=AcoustIdClient(client("acoustid"), settings),
-        importer=Importer(fileops, sessions, clock, settings.path_template),
+        acoustid=acoustid,
+        importer=Importer(services.fileops, sessions, clock, settings.path_template),
         reencode=True,
         flac_level=settings.flac_level,
         canonical_media=tuple(settings.canonical_media),
         canonical_countries=tuple(settings.canonical_countries),
-        coverart=CoverArtClient(client("coverart")),
+        coverart=services.coverart,
         target=NavidromeTarget(
-            client("navidrome"),
+            services.navidrome_http,
             settings.navidrome_url,
             settings.navidrome_user,
             settings.navidrome_password,
@@ -203,33 +217,45 @@ def _pipeline(
     )
 
 
-def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
-    settings = Settings()
-    load_box(settings)  # refuse a bad key file at startup (serve_all too), not at first use
-    engine = make_engine(settings)
-    clock = SystemClock()
-    sessions = make_session_factory(engine)
-    fileops = FileOps(
-        Path(settings.data_dir),
-        Path(settings.downloads_dir),
-        SqlJournal(sessions, clock),
-        clock,
-        settings.drop_dir,
+RECOVERY_ATTEMPTS = 7  # delays 5+10+20+30+30+30 s: about 2 minutes in total
+
+
+def _recover(
+    fileops: FileOps,
+    sessions: sessionmaker[Session],
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Startup recovery, retried while the database is locked. Idempotent, so safe to re-run."""
+    for attempt in range(1, RECOVERY_ATTEMPTS + 1):
+        try:
+            fileops.recover()
+            tag_undo.recover(sessions, fileops)
+            return
+        except OperationalError:
+            if attempt == RECOVERY_ATTEMPTS:
+                log.error("startup recovery could not commit: database stayed locked")
+                raise
+            delay = backoff(attempt, timedelta(seconds=5), timedelta(seconds=30))
+            log.warning(
+                "startup recovery attempt %d failed (locked); retrying in %s", attempt, delay
+            )
+            sleep(delay.total_seconds())
+
+
+def _new_queue(
+    services: Services,
+) -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[[], None], ...]]:
+    settings, sessions, clock, fileops = (
+        services.settings,
+        services.session_factory,
+        services.clock,
+        services.fileops,
     )
-    fileops.recover()
-    tag_undo.recover(sessions, fileops)
-    queue = JobQueue(engine, clock)
-    merger = Merger(
-        sessions,
-        clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
-        fileops,
-        settings.path_template,
-        tuple(settings.canonical_media),
-        tuple(settings.canonical_countries),
-        settings.trash_days,
-    )
-    pipeline = _pipeline(settings, fileops, sessions, clock)
+    _recover(fileops, sessions)
+    queue = JobQueue(services.engine, clock, fail_request_of_job)
+    merger = services.merger
+    acoustid = AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings)
+    pipeline = _pipeline(services, acoustid)  # the submitter reuses this one client
     rechecker = Rechecker(
         sessions,
         clock,
@@ -244,7 +270,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         clock,
         fileops,
         fingerprint,
-        AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings),
+        acoustid,
         bool(settings.acoustid_app_key and settings.acoustid_user_key),
     )
     migrator = Migrator(
@@ -252,7 +278,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         clock,
         Path(settings.import_source_dir),
         Path(settings.config_dir),
-        Path(settings.data_dir) / "library",
+        fileops.library,
         settings.mb_rate,
     )
     dropper = DropFolder(sessions, clock, settings.drop_dir, Path(settings.config_dir) / "drop")
@@ -267,20 +293,26 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
     watcher = Watcher(
         sessions,
         clock,
-        MusicBrainzProvider(PoliteClient("musicbrainz", settings, sessions), settings.mb_base_url),
+        services.musicbrainz,
         media=tuple(settings.canonical_media),
         countries=tuple(settings.canonical_countries),
     )
+    backfill = NameBackfill(sessions, clock, fileops)
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
-    navidrome_http = PoliteClient("navidrome", settings, sessions)
+    nightly = NightlyBackup(
+        sessions,
+        clock,
+        services.engine,
+        settings.backup_dir or Path(settings.config_dir) / "backups",
+    )
     discovery = Discovery(
         sessions,
         clock,
-        ListenBrainzClient(PoliteClient("listenbrainz", settings, sessions)),
+        ListenBrainzClient(services.listenbrainz_http),
         lambda user, password: NavidromeUser(
-            navidrome_http, settings.navidrome_url, user, password
+            services.navidrome_http, settings.navidrome_url, user, password
         ),
-        load_box(settings),
+        services.secret_box,
         main_library=settings.navidrome_library,
         discover_library=settings.navidrome_discover_library,
     )
@@ -303,6 +335,8 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         | submitter.handlers()
         | watcher.handlers()
         | purger.handlers()
+        | backfill.handlers()
+        | nightly.handlers()
         | discovery.handlers()
         | retention.handlers()
     )
@@ -312,9 +346,12 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
         retention.start_chains()
 
     startup = (
+        merger.backfill_templates,  # labels rows only; a reorganize plan waits for the user
         rechecker.start_chains,
         watcher.start_chains,
         purger.start_chains,
+        backfill.start_chains,
+        nightly.start_chains,
         dropper.start_chains,
         adopt.start_chains,
         discovery_startup,
@@ -324,7 +361,7 @@ def _new_queue() -> tuple[JobQueue, str, dict[JobKind, Handler], tuple[Callable[
 
 
 async def serve_worker() -> None:
-    queue, worker, handlers, startup = _new_queue()
+    queue, worker, handlers, startup = _new_queue(build_services(Settings()))
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
@@ -335,10 +372,17 @@ async def serve_all() -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    queue, worker, handlers, startup = _new_queue()
+    services = build_services(Settings())
+    queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     server = uvicorn.Server(
-        uvicorn.Config("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
+        uvicorn.Config(
+            lambda: create_app(services=services),
+            factory=True,
+            host="0.0.0.0",
+            port=8080,
+            log_level=services.settings.log_level.lower(),
+        )
     )
     task = asyncio.create_task(run_worker(queue, worker, stop, handlers, startup=startup))
 

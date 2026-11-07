@@ -1,0 +1,1182 @@
+{
+ "albums": [
+  {
+   "album": "Chillhop Essentials: Fall 2021",
+   "albumdisambig": null,
+   "artist": "Various Artists",
+   "artist_ids": [
+    "89ad4ac3-39f7-470e-963a-56509c546377"
+   ],
+   "catalognum": "[none]",
+   "country": "NL",
+   "genres": [
+    "hip hop",
+    "instrumental",
+    "boom bap",
+    "chillout",
+    "chillwave",
+    "downtempo",
+    "instrumental hip hop",
+    "lo-fi",
+    "lo-fi hip hop"
+   ],
+   "label": "Chillhop Music",
+   "media": "Cassette",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "6acc9b60-b7a4-46c5-9a98-b531392883b6",
+   "release_id": "b42abe34-9119-4833-8b7b-f2863e43205a",
+   "tracks": [
+    {
+     "artist": "Mama Aiuto",
+     "artist_ids": [
+      "94af4360-87d3-4b12-bccd-5dc1c0937cf2"
+     ],
+     "index": 1,
+     "length": 127.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "dbf7c031-279b-44b0-9ddb-a02e9ca7b935",
+     "title": "Bell Tower"
+    },
+    {
+     "artist": "Liphe",
+     "artist_ids": [
+      "aa0cfc81-9674-4385-bacd-2c89afdbbbac"
+     ],
+     "index": 2,
+     "length": 193.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "66e4c0f8-b712-47d7-bfe8-50867288ed7f",
+     "title": "Little Bird"
+    },
+    {
+     "artist": "Kreatev",
+     "artist_ids": [
+      "27f1a4c2-b16a-4597-a9bc-42e483b95325"
+     ],
+     "index": 3,
+     "length": 122.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "7041dee7-78b2-4dbd-8cbd-d2f1a79895f2",
+     "title": "Blue Coupe"
+    },
+    {
+     "artist": "Misha, Evil Needle",
+     "artist_ids": [
+      "da31f94b-86c4-4611-8f59-ce4910079ead",
+      "8e722d1e-205f-4a6c-b2b1-7f44eb216e25"
+     ],
+     "index": 4,
+     "length": 188.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "068e49ac-0020-4f24-a556-6abca1f55966",
+     "title": "Spirits"
+    },
+    {
+     "artist": "Ward Wills",
+     "artist_ids": [
+      "c967ad11-49c4-4913-a4e9-bbcf492ae519"
+     ],
+     "index": 5,
+     "length": 211.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "95fad4db-c82d-47f7-b259-4cd1f07bef11",
+     "title": "Forgive"
+    },
+    {
+     "artist": "Nymano, Suuna",
+     "artist_ids": [
+      "36c574d4-529c-435e-88e3-bc7dcca1f4fe",
+      "d101940b-9cbe-42bf-bfab-381db6bb0e54"
+     ],
+     "index": 6,
+     "length": 163.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "240595b4-1acf-4c3a-9532-840c92531625",
+     "title": "Mistral"
+    },
+    {
+     "artist": "Enzalla",
+     "artist_ids": [
+      "279abdad-98c0-486d-ae60-2ca01c497214"
+     ],
+     "index": 7,
+     "length": 152.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "ae7bec03-7700-4be6-8b5c-a756086e359f",
+     "title": "Ancient Paths"
+    },
+    {
+     "artist": "Sofasound",
+     "artist_ids": [
+      "e921fd32-1091-4845-b554-242e680ceb5b"
+     ],
+     "index": 8,
+     "length": 195.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "7ec7b79e-f52f-4a33-a5fa-2538b67e2e73",
+     "title": "How Much Longer"
+    },
+    {
+     "artist": "Smile High, Cloudchord, Teddy Roxpin",
+     "artist_ids": [
+      "f3abf698-d199-4c29-9bd7-9d9eeef17eed",
+      "96f8361a-2e99-42bc-bac2-29f22ace8d91",
+      "dfa79f04-8876-4cbf-906e-4a8036565890"
+     ],
+     "index": 9,
+     "length": 200.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "a25bf7ae-9ac2-4c90-aae1-67d6b7950704",
+     "title": "Sirens"
+    },
+    {
+     "artist": "Masked Man",
+     "artist_ids": [
+      "7a02782d-ab7c-426d-aa75-60eebc39ba81"
+     ],
+     "index": 10,
+     "length": 173.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "cfa64544-4877-486d-b321-e982640b7362",
+     "title": "Tiffany"
+    },
+    {
+     "artist": "anbuu, Blue Wednesday",
+     "artist_ids": [
+      "66a0a274-5511-445e-b4b0-231e0dac9af0",
+      "1077e53e-c8e8-4492-9813-31f71677e6f9"
+     ],
+     "index": 11,
+     "length": 171.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "4e037167-7f41-40ee-8988-d7c8a2c49f1b",
+     "title": "Rituals"
+    },
+    {
+     "artist": "Afroham, \u00d8DYSSEE",
+     "artist_ids": [
+      "5d45b492-d655-42e8-8fc6-1593b800ad3c",
+      "e099e006-e993-4c2f-8cee-30b1f51d235e"
+     ],
+     "index": 12,
+     "length": 143.0,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "d03d4a30-89c2-4357-b84e-7168bc1f2d18",
+     "title": "Later Today"
+    },
+    {
+     "artist": "Sleepy Fish, Philanthrope",
+     "artist_ids": [
+      "55913d64-5188-4afb-a294-64df35e5c749",
+      "8033e863-c3e3-4dfc-9255-bd3a67eae181"
+     ],
+     "index": 13,
+     "length": 115.0,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "356f15aa-d3d1-4676-9ec5-7cd40bd79f4f",
+     "title": "Fallcameearly"
+    },
+    {
+     "artist": "Montell Fish",
+     "artist_ids": [
+      "20634ec0-4bdb-47dc-9bf4-07ed76f8154a"
+     ],
+     "index": 14,
+     "length": 131.0,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "f9c1b5f6-bf10-4ada-9746-efb3661c062b",
+     "title": "Can\u2019t Get Enough"
+    },
+    {
+     "artist": "C Y G N",
+     "artist_ids": [
+      "78666e83-2fe4-4473-9470-1a919d89ae94"
+     ],
+     "index": 15,
+     "length": 169.0,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "77f8b0e5-1cd1-4c04-a1bd-ca7f5daf4edf",
+     "title": "Virtual Evening"
+    },
+    {
+     "artist": "Luke Otwell, Jacuzzi Jefferson, wei",
+     "artist_ids": [
+      "52962abc-9d02-4709-a542-3fc9f117d798",
+      "38abfb3d-c39b-4345-ba93-d80eb3f3fd20",
+      "83c2486b-5880-4395-b36e-80afb24c9fd6"
+     ],
+     "index": 16,
+     "length": 124.0,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "2f5512ba-288d-493f-8ec5-b4f4ecd1678b",
+     "title": "Backseat"
+    },
+    {
+     "artist": "Psalm Trees",
+     "artist_ids": [
+      "8e5038b0-f71f-4951-aa26-542cdfe9280a"
+     ],
+     "index": 17,
+     "length": 227.0,
+     "medium": 1,
+     "medium_index": 17,
+     "recording_id": "7a0c20a4-b72e-4a34-b967-9c98e4791a18",
+     "title": "The Shortest Day Alone"
+    },
+    {
+     "artist": "Stan Forebee",
+     "artist_ids": [
+      "13d95485-6e88-45d9-a9cc-feb99f5a1d18"
+     ],
+     "index": 18,
+     "length": 154.0,
+     "medium": 1,
+     "medium_index": 18,
+     "recording_id": "7192c417-59f9-41f3-821d-51b7fcbc4624",
+     "title": "Seasons"
+    },
+    {
+     "artist": "Aso",
+     "artist_ids": [
+      "71bce1a8-9a0c-43b7-b0b1-2c07f562ce64"
+     ],
+     "index": 19,
+     "length": 160.0,
+     "medium": 1,
+     "medium_index": 19,
+     "recording_id": "423f6991-8ac8-4470-bb8f-e88b370c3fa4",
+     "title": "Nice Day"
+    },
+    {
+     "artist": "Cap Kendricks",
+     "artist_ids": [
+      "16411e1c-becd-4415-bf1a-067d9f9a21aa"
+     ],
+     "index": 20,
+     "length": 150.0,
+     "medium": 1,
+     "medium_index": 20,
+     "recording_id": "e56ab406-e3ad-4138-9723-ceed1d268a71",
+     "title": "Orange"
+    },
+    {
+     "artist": "Deeb",
+     "artist_ids": [
+      "5b52725f-7e70-4ba1-b5bf-445172886628"
+     ],
+     "index": 21,
+     "length": 158.0,
+     "medium": 1,
+     "medium_index": 21,
+     "recording_id": "7c24e466-693c-4612-acc8-16aba5a6763c",
+     "title": "Sunvizor Down"
+    },
+    {
+     "artist": "Ian Ewing",
+     "artist_ids": [
+      "0e620ca7-a47e-45ec-9c20-0ab274db14c1"
+     ],
+     "index": 22,
+     "length": 198.0,
+     "medium": 1,
+     "medium_index": 22,
+     "recording_id": "af21de63-bacc-485b-a15b-080a248f645d",
+     "title": "Claire"
+    },
+    {
+     "artist": "Weird Inside",
+     "artist_ids": [
+      "4a2b2ede-dedb-40c3-9201-f5f59d055dba"
+     ],
+     "index": 23,
+     "length": 141.0,
+     "medium": 1,
+     "medium_index": 23,
+     "recording_id": "e318720a-3b16-4840-88bf-fd45720db7b1",
+     "title": "Like This"
+    },
+    {
+     "artist": "Makzo",
+     "artist_ids": [
+      "603756ad-5eb9-4c48-81b3-e61669cdd14b"
+     ],
+     "index": 24,
+     "length": 135.0,
+     "medium": 1,
+     "medium_index": 24,
+     "recording_id": "a097ce5d-cc08-4e74-959e-38ec702a3f86",
+     "title": "Shanti"
+    },
+    {
+     "artist": "Kendall Miles",
+     "artist_ids": [
+      "f4313699-8665-44fb-9ffc-b2633d34a604"
+     ],
+     "index": 25,
+     "length": 147.0,
+     "medium": 1,
+     "medium_index": 25,
+     "recording_id": "98de89f2-01ce-4905-91cf-f83fb73536a6",
+     "title": "Colors of Fall, Wool Clothes"
+    },
+    {
+     "artist": "Aves, Snoophkeen",
+     "artist_ids": [
+      "4cf37bfe-001a-4c6f-93fe-e48b24e539d8",
+      "22a17f37-faab-4ccd-8642-a60ed817ea35"
+     ],
+     "index": 26,
+     "length": 196.0,
+     "medium": 1,
+     "medium_index": 26,
+     "recording_id": "a6e12222-6a14-4e2d-92d2-33a4ee7015ab",
+     "title": "Matoki"
+    },
+    {
+     "artist": "fantompower",
+     "artist_ids": [
+      "3311ca1c-600b-4bb8-a473-abe5d71f6ae6"
+     ],
+     "index": 27,
+     "length": 193.0,
+     "medium": 1,
+     "medium_index": 27,
+     "recording_id": "52139b89-ea6c-4fe5-ae62-44d658bebf3f",
+     "title": "Brisk"
+    },
+    {
+     "artist": "Foxwood",
+     "artist_ids": [
+      "1b1e321b-02f4-4a31-b8f1-f2c3684b1fa0"
+     ],
+     "index": 28,
+     "length": 192.0,
+     "medium": 1,
+     "medium_index": 28,
+     "recording_id": "2e4512ad-6f53-41f4-93ab-890388d1045d",
+     "title": "Flowerbeds"
+    }
+   ],
+   "va": true,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Bell Tower.flac",
+    "sample_rate": null,
+    "size": 13168969
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Little Bird.flac",
+    "sample_rate": null,
+    "size": 21243058
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Blue Coupe.flac",
+    "sample_rate": null,
+    "size": 12027116
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Forgive.flac",
+    "sample_rate": null,
+    "size": 20197659
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - Mistral.flac",
+    "sample_rate": null,
+    "size": 13376082
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - Ancient Paths.flac",
+    "sample_rate": null,
+    "size": 16476576
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - How Much Longer.flac",
+    "sample_rate": null,
+    "size": 19422828
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "09 - Sirens.flac",
+    "sample_rate": null,
+    "size": 18055775
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Tiffany.flac",
+    "sample_rate": null,
+    "size": 14515947
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "11 - Rituals.flac",
+    "sample_rate": null,
+    "size": 14974526
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "12 - Later Today.flac",
+    "sample_rate": null,
+    "size": 15002942
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "13 - Fallcameearly.flac",
+    "sample_rate": null,
+    "size": 10170277
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "14 - Can\u2019t Get Enough.flac",
+    "sample_rate": null,
+    "size": 10499597
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "15 - Virtual Evening.flac",
+    "sample_rate": null,
+    "size": 16040392
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "16 - Backseat.flac",
+    "sample_rate": null,
+    "size": 12510205
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "17 - The Shortest Day Alone.flac",
+    "sample_rate": null,
+    "size": 20411383
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "18 - Seasons.flac",
+    "sample_rate": null,
+    "size": 13606113
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "19 - Nice Day.flac",
+    "sample_rate": null,
+    "size": 14033606
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "20 - Orange.flac",
+    "sample_rate": null,
+    "size": 14650250
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "21 - Sunvizor Down.flac",
+    "sample_rate": null,
+    "size": 14367453
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "22 - Claire.flac",
+    "sample_rate": null,
+    "size": 18463222
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "23 - Like This.flac",
+    "sample_rate": null,
+    "size": 15681416
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "24 - Shanti.flac",
+    "sample_rate": null,
+    "size": 13248914
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "25 - Colors of Fall, Wool Clothes.flac",
+    "sample_rate": null,
+    "size": 13971391
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "26 - Matoki.flac",
+    "sample_rate": null,
+    "size": 17886269
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "27 - Brisk.flac",
+    "sample_rate": null,
+    "size": 17848616
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "28 - Flowerbeds.flac",
+    "sample_rate": null,
+    "size": 18229008
+   }
+  ],
+  "folder": "downloads\\2021 - Chillhop Essentials - Fall 2021",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1256,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "dbf7c031-279b-44b0-9ddb-a02e9ca7b935"
+     ],
+     "score": 0.9996044
+    }
+   ],
+   "artist": "Mama Aiuto",
+   "disc": 1,
+   "high_band": 1.1210190685164406e-05,
+   "length": 127.06303854875283,
+   "recording_id": "dbf7c031-279b-44b0-9ddb-a02e9ca7b935",
+   "title": "Bell Tower",
+   "track": 1,
+   "trailing_silence": 2.2080045487528253
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "66e4c0f8-b712-47d7-bfe8-50867288ed7f"
+     ],
+     "score": 0.9997363
+    }
+   ],
+   "artist": "Liphe",
+   "disc": 1,
+   "high_band": 2.3383547591218824e-06,
+   "length": 193.19571428571427,
+   "recording_id": "66e4c0f8-b712-47d7-bfe8-50867288ed7f",
+   "title": "Little Bird",
+   "track": 2,
+   "trailing_silence": 1.2806122857142839
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7041dee7-78b2-4dbd-8cbd-d2f1a79895f2"
+     ],
+     "score": 0.99904406
+    }
+   ],
+   "artist": "Kreatev",
+   "disc": 1,
+   "high_band": 4.190177302276597e-05,
+   "length": 122.23968253968253,
+   "recording_id": "7041dee7-78b2-4dbd-8cbd-d2f1a79895f2",
+   "title": "Blue Coupe",
+   "track": 3,
+   "trailing_silence": 2.694421539682537
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "95fad4db-c82d-47f7-b259-4cd1f07bef11"
+     ],
+     "score": 0.99914294
+    }
+   ],
+   "artist": "Ward Wills",
+   "disc": 1,
+   "high_band": 6.740312001403926e-06,
+   "length": 211.96115646258502,
+   "recording_id": "95fad4db-c82d-47f7-b259-4cd1f07bef11",
+   "title": "Forgive",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "240595b4-1acf-4c3a-9532-840c92531625"
+     ],
+     "score": 0.9998352
+    }
+   ],
+   "artist": "nymano",
+   "disc": 1,
+   "high_band": 3.2755278775348903e-06,
+   "length": 163.58251700680273,
+   "recording_id": "240595b4-1acf-4c3a-9532-840c92531625",
+   "title": "Mistral",
+   "track": 6,
+   "trailing_silence": 2.137664006802737
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ae7bec03-7700-4be6-8b5c-a756086e359f"
+     ],
+     "score": 0.9995055
+    }
+   ],
+   "artist": "Enzalla",
+   "disc": 1,
+   "high_band": 0.00011668722183476669,
+   "length": 152.32,
+   "recording_id": "ae7bec03-7700-4be6-8b5c-a756086e359f",
+   "title": "Ancient Paths",
+   "track": 7,
+   "trailing_silence": 1.489908999999983
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7ec7b79e-f52f-4a33-a5fa-2538b67e2e73"
+     ],
+     "score": 0.99947256
+    }
+   ],
+   "artist": "Sofasound",
+   "disc": 1,
+   "high_band": 0.00032936428184608923,
+   "length": 195.62764172335602,
+   "recording_id": "7ec7b79e-f52f-4a33-a5fa-2538b67e2e73",
+   "title": "How Much Longer",
+   "track": 8,
+   "trailing_silence": 4.4306807233560335
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6f3126ac-e7bf-4419-bb92-63b7726b7687",
+      "a25bf7ae-9ac2-4c90-aae1-67d6b7950704"
+     ],
+     "score": 0.99986815
+    }
+   ],
+   "artist": "Smile High",
+   "disc": 1,
+   "high_band": 8.93107219432164e-07,
+   "length": 200.45612244897958,
+   "recording_id": "a25bf7ae-9ac2-4c90-aae1-67d6b7950704",
+   "title": "Sirens",
+   "track": 9,
+   "trailing_silence": 2.7507484489795786
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "cfa64544-4877-486d-b321-e982640b7362"
+     ],
+     "score": 0.99914294
+    }
+   ],
+   "artist": "masked man",
+   "disc": 1,
+   "high_band": 1.636317970665595e-05,
+   "length": 173.0524716553288,
+   "recording_id": "cfa64544-4877-486d-b321-e982640b7362",
+   "title": "Tiffany",
+   "track": 10,
+   "trailing_silence": 1.7190706553287782
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "4e037167-7f41-40ee-8988-d7c8a2c49f1b"
+     ],
+     "score": 0.99980223
+    }
+   ],
+   "artist": "Anbuu",
+   "disc": 1,
+   "high_band": 8.215184094340876e-07,
+   "length": 171.61344671201815,
+   "recording_id": "4e037167-7f41-40ee-8988-d7c8a2c49f1b",
+   "title": "Rituals",
+   "track": 11,
+   "trailing_silence": 2.7311567120181337
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d03d4a30-89c2-4357-b84e-7168bc1f2d18"
+     ],
+     "score": 0.99980223
+    }
+   ],
+   "artist": "Afroham",
+   "disc": 1,
+   "high_band": 6.232178733018964e-06,
+   "length": 143.00061224489795,
+   "recording_id": "d03d4a30-89c2-4357-b84e-7168bc1f2d18",
+   "title": "Later Today",
+   "track": 12,
+   "trailing_silence": 1.935623244897954
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "356f15aa-d3d1-4676-9ec5-7cd40bd79f4f"
+     ],
+     "score": 0.9995865
+    }
+   ],
+   "artist": "sleepy fish",
+   "disc": 1,
+   "high_band": 5.588664001586622e-07,
+   "length": 115.01430839002268,
+   "recording_id": "356f15aa-d3d1-4676-9ec5-7cd40bd79f4f",
+   "title": "Fallcameearly",
+   "track": 13,
+   "trailing_silence": 3.465328390022677
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f9c1b5f6-bf10-4ada-9746-efb3661c062b"
+     ],
+     "score": 0.9995385
+    }
+   ],
+   "artist": "Montell Fish",
+   "disc": 1,
+   "high_band": 3.50775053872715e-06,
+   "length": 131.1743537414966,
+   "recording_id": "f9c1b5f6-bf10-4ada-9746-efb3661c062b",
+   "title": "Can\u2019t Get Enough",
+   "track": 14,
+   "trailing_silence": 2.9327207414965812
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "77f8b0e5-1cd1-4c04-a1bd-ca7f5daf4edf"
+     ],
+     "score": 0.99930775
+    }
+   ],
+   "artist": "C Y G N",
+   "disc": 1,
+   "high_band": 2.135520279673441e-06,
+   "length": 169.4283446712018,
+   "recording_id": "77f8b0e5-1cd1-4c04-a1bd-ca7f5daf4edf",
+   "title": "Virtual Evening",
+   "track": 15,
+   "trailing_silence": 2.496258671201815
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2f5512ba-288d-493f-8ec5-b4f4ecd1678b"
+     ],
+     "score": 0.9996704
+    }
+   ],
+   "artist": "Luke Otwell",
+   "disc": 1,
+   "high_band": 5.607655172216714e-06,
+   "length": 124.34755102040816,
+   "recording_id": "2f5512ba-288d-493f-8ec5-b4f4ecd1678b",
+   "title": "Backseat",
+   "track": 16,
+   "trailing_silence": 2.3962810204081677
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7a0c20a4-b72e-4a34-b967-9c98e4791a18"
+     ],
+     "score": 0.9997693
+    }
+   ],
+   "artist": "Psalm Trees",
+   "disc": 1,
+   "high_band": 1.5363455258437948e-06,
+   "length": 227.9355782312925,
+   "recording_id": "7a0c20a4-b72e-4a34-b967-9c98e4791a18",
+   "title": "The Shortest Day Alone",
+   "track": 17,
+   "trailing_silence": 3.370657231292512
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7192c417-59f9-41f3-821d-51b7fcbc4624"
+     ],
+     "score": 0.99930775
+    }
+   ],
+   "artist": "Stan Forebee",
+   "disc": 1,
+   "high_band": 1.726224594668391e-05,
+   "length": 154.40566893424037,
+   "recording_id": "7192c417-59f9-41f3-821d-51b7fcbc4624",
+   "title": "Seasons",
+   "track": 18,
+   "trailing_silence": 4.3924939342403775
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "423f6991-8ac8-4470-bb8f-e88b370c3fa4"
+     ],
+     "score": 0.99980223
+    }
+   ],
+   "artist": "Aso",
+   "disc": 1,
+   "high_band": 5.197392315834756e-07,
+   "length": 160.01689342403628,
+   "recording_id": "423f6991-8ac8-4470-bb8f-e88b370c3fa4",
+   "title": "Nice Day",
+   "track": 19,
+   "trailing_silence": 4.343809424036294
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e56ab406-e3ad-4138-9723-ceed1d268a71"
+     ],
+     "score": 0.99947256
+    }
+   ],
+   "artist": "Cap Kendricks",
+   "disc": 1,
+   "high_band": 1.628165319955947e-06,
+   "length": 150.7518820861678,
+   "recording_id": "e56ab406-e3ad-4138-9723-ceed1d268a71",
+   "title": "Orange",
+   "track": 20,
+   "trailing_silence": 3.704512086167796
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7c24e466-693c-4612-acc8-16aba5a6763c"
+     ],
+     "score": 0.99970335
+    }
+   ],
+   "artist": "Deeb",
+   "disc": 1,
+   "high_band": 5.483708995715554e-06,
+   "length": 158.0722448979592,
+   "recording_id": "7c24e466-693c-4612-acc8-16aba5a6763c",
+   "title": "Sunvizor Down",
+   "track": 21,
+   "trailing_silence": 3.8627438979592057
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "af21de63-bacc-485b-a15b-080a248f645d"
+     ],
+     "score": 0.9992418
+    }
+   ],
+   "artist": "Ian Ewing",
+   "disc": 1,
+   "high_band": 1.0153844309179895e-05,
+   "length": 198.7284126984127,
+   "recording_id": "af21de63-bacc-485b-a15b-080a248f645d",
+   "title": "Claire",
+   "track": 22,
+   "trailing_silence": 3.9606576984127173
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e318720a-3b16-4840-88bf-fd45720db7b1"
+     ],
+     "score": 0.99920887
+    }
+   ],
+   "artist": "weird inside",
+   "disc": 1,
+   "high_band": 0.00010128205394066052,
+   "length": 141.2187074829932,
+   "recording_id": "e318720a-3b16-4840-88bf-fd45720db7b1",
+   "title": "Like This",
+   "track": 23,
+   "trailing_silence": 2.654625482993197
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a097ce5d-cc08-4e74-959e-38ec702a3f86"
+     ],
+     "score": 0.9997363
+    }
+   ],
+   "artist": "Makzo",
+   "disc": 1,
+   "high_band": 8.162011455947161e-07,
+   "length": 135.49777777777777,
+   "recording_id": "a097ce5d-cc08-4e74-959e-38ec702a3f86",
+   "title": "Shanti",
+   "track": 24,
+   "trailing_silence": 3.080838777777757
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "98de89f2-01ce-4905-91cf-f83fb73536a6"
+     ],
+     "score": 0.9996044
+    }
+   ],
+   "artist": "Kendall Miles",
+   "disc": 1,
+   "high_band": 8.277450646634865e-07,
+   "length": 147.19997732426305,
+   "recording_id": "98de89f2-01ce-4905-91cf-f83fb73536a6",
+   "title": "Colors of Fall, Wool Clothes",
+   "track": 25,
+   "trailing_silence": 1.8221313242630401
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a6e12222-6a14-4e2d-92d2-33a4ee7015ab"
+     ],
+     "score": 0.9997693
+    }
+   ],
+   "artist": "Aves",
+   "disc": 1,
+   "high_band": 1.0224639391492412e-06,
+   "length": 196.6119954648526,
+   "recording_id": "a6e12222-6a14-4e2d-92d2-33a4ee7015ab",
+   "title": "Matoki",
+   "track": 26,
+   "trailing_silence": 4.436190464852615
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "52139b89-ea6c-4fe5-ae62-44d658bebf3f"
+     ],
+     "score": 0.99980223
+    }
+   ],
+   "artist": "fantompower",
+   "disc": 1,
+   "high_band": 3.547798126147272e-06,
+   "length": 193.08492063492062,
+   "recording_id": "52139b89-ea6c-4fe5-ae62-44d658bebf3f",
+   "title": "Brisk",
+   "track": 27,
+   "trailing_silence": 2.5045356349206145
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2e4512ad-6f53-41f4-93ab-890388d1045d"
+     ],
+     "score": 0.9996704
+    }
+   ],
+   "artist": "Foxwood",
+   "disc": 1,
+   "high_band": 2.867398145348017e-06,
+   "length": 192.9160090702948,
+   "recording_id": "2e4512ad-6f53-41f4-93ab-890388d1045d",
+   "title": "Flowerbeds",
+   "track": 28,
+   "trailing_silence": 5.611678070294801
+  }
+ ],
+ "labels": [
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Chillhop Essentials: Fall 2021",
+  "albumdisambig": null,
+  "artist": "Various Artists",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "b42abe34-9119-4833-8b7b-f2863e43205a",
+  "year": 2021
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.014710485133020345,
+  "final_action": null,
+  "scorer_version": 5,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "b42abe34-9119-4833-8b7b-f2863e43205a"
+}

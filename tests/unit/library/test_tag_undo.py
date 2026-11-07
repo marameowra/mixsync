@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import SystemClock
 from mixsync.db.journal import SqlJournal
+from mixsync.db.models.library import Track
 from mixsync.db.models.safety import FileOp
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
@@ -33,6 +35,18 @@ def test_crash_mid_restore_is_recovered(
     sessions: sessionmaker[Session],
 ) -> None:
     ops.import_file(make_src(), REL, lambda p, _op: None, "import")
+    with sessions.begin() as s:  # id 1, the track the worker restores
+        s.add(
+            Track(
+                path=REL,
+                status="verified",
+                batch_id="import",
+                imported_at=datetime.now(UTC),
+                album_artist="Stale",
+                album="Stale",
+                year="1999",
+            )
+        )
     original = hashlib.sha256((data_dir / "library" / REL).read_bytes()).hexdigest()
     worker = Path(__file__).with_name("crash_tag_undo_worker.py")
     proc = subprocess.run(
@@ -52,6 +66,10 @@ def test_crash_mid_restore_is_recovered(
     assert hashlib.sha256((data_dir / "library" / REL).read_bytes()).hexdigest() == original
     assert purger.protected() == set()
     assert journal.pending() == []
+    with sessions() as s:  # never the stale names: pending, so the backfill re-reads the file
+        row = s.get(Track, 1)
+        assert row is not None
+        assert (row.album_artist, row.album, row.year) == (None, None, None)
 
 
 def test_trash_op_never_completed_is_still_protected(

@@ -1,0 +1,30 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/mb.html" as mb with context %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MixSync{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/themes/demo/static/demo.css">
+</head>
+<body>
+  {% if user %}
+  <nav>
+    <a href="/">Home</a>
+    <a href="/requests">Requests</a>
+    <a href="/review">Review</a>
+    <a href="/library/fragments">Fragments</a>
+    {% if "library.edit" in user.capabilities %}<a href="/library/unverified">Unverified</a>{% endif %}
+    {% if "request" in user.capabilities %}<a href="/watchlist">Watchlist</a> <a href="/discover">Discover</a>{% endif %}
+    {% if "admin" in user.capabilities %}<a href="/migration">Migration</a>{% endif %}
+    <a href="/account">Account</a>
+    <form method="post" action="/logout">{{ forms.csrf() }}<button type="submit">Log out</button></form>
+  </nav>
+  {% endif %}
+  <main class="demo-theme">
+  {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

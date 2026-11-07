@@ -49,6 +49,9 @@ class MetadataProvider(Protocol):
         self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
     ) -> list[ReleaseRef]: ...
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]: ...
+    async def recording_releases(
+        self, recording_mbid: str, limit: int = 25
+    ) -> list[ReleaseRef]: ...
 
 
 class ReleaseWatch(Protocol):
@@ -67,6 +70,12 @@ class NameLookup(Protocol):
     """A display name for a MusicBrainz id; `kind` is release, release-group, recording, artist."""
 
     async def label(self, kind: str, mbid: str, *, cached_only: bool = False) -> str | None: ...
+
+
+class NameStore(Protocol):
+    """Keeps display names of MusicBrainz ids; rows are (kind, mbid, name)."""
+
+    def save(self, rows: list[tuple[str, str, str]]) -> None: ...
 
 
 class DownloadSource(Protocol):
@@ -106,7 +115,7 @@ class UserLibrary(Protocol):
     async def play_counts(  # a song Navidrome no longer knows is left out
         self, song_ids: list[str]
     ) -> dict[str, int]: ...
-    async def music_folder_id(self, name: str) -> str | None: ...
+    async def music_folders(self) -> dict[str, str]: ...  # library name -> id
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
     ) -> str | None: ...

@@ -1,0 +1,10 @@
+{# Only authenticated same-origin artwork routes are valid. Native object fallback covers HTTP failures. #}
+{% macro artwork(title, src=none, size='sm') -%}
+{% set name = title or 'Untitled' %}
+{% set has_cover = src is valid_artwork_src %}
+<span class="art art-{{ size if size in ('xs', 'sm', 'md', 'lg') else 'sm' }}{% if not has_cover %} missing{% endif %}">
+  {% if has_cover %}<object data="{{ src }}" aria-label="Cover art for {{ name }}" tabindex="-1">{% endif %}
+  <span role="img" aria-label="No cover art for {{ name }}">{{ name | first | upper }}</span>
+  {% if has_cover %}</object>{% endif %}
+</span>
+{%- endmacro %}

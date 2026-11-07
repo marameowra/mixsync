@@ -1,8 +1,10 @@
 import asyncio
+import contextlib
 import re
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,10 +19,24 @@ from mixsync.core.matching import (
     TransferStatus,
     download_dir,
 )
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 
 AUDIO = frozenset(e[1:] for e in EXTENSIONS)  # only what import takes
 RESPONSE_TRIES = 10
+# slskd defaults stop a search at 100 responses; ask for more. Timeout is
+# milliseconds since the last response (slskd minimum 5000), so a slow search keeps going while
+# it still gets hits.
+SEARCH_SETTINGS = {
+    "responseLimit": 1000,
+    "fileLimit": 20000,
+    "searchTimeout": 15000,
+    "minimumPeerUploadSpeed": 0,  # keep slow peers: they may be the only ones with the album
+    "maximumPeerQueueLength": 1000,  # a queue this deep will not start within our patience
+}
+# Longer than the slowest search (60 polls at the client's 30 s timeout, ~31 min), so a live
+# search never loses its slot; a crashed worker's slot frees itself after this.
+SEARCH_LEASE = timedelta(minutes=45)
 _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+", re.IGNORECASE)
 
 
@@ -84,6 +100,13 @@ def _state(slskd_state: str) -> TransferStatus:
     return TransferStatus.QUEUED
 
 
+def _retryable(slskd_state: str) -> bool:
+    # Soulseek.NET TransferStates flags: Completed, then Succeeded | Cancelled | TimedOut |
+    # Errored | Rejected | Aborted. Only TimedOut/Errored are a flaky transfer; Cancelled
+    # (stopped on purpose), Rejected and Aborted drop the candidate.
+    return "TimedOut" in slskd_state or "Errored" in slskd_state
+
+
 class SlskdSource:
     def __init__(
         self,
@@ -95,6 +118,8 @@ class SlskdSource:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         poll_interval: float = 1.0,
         max_polls: int = 60,
+        slots: Slots | None = None,  # caps searches in flight across every worker
+        debounce: timedelta = timedelta(0),  # a repeated query within this reuses the result
     ) -> None:
         self._client = client
         self._base = base_url.rstrip("/") + "/api/v0"
@@ -103,6 +128,11 @@ class SlskdSource:
         self._sleep = sleep
         self._poll_interval = poll_interval
         self._max_polls = max_polls
+        self._slots = slots
+        self._debounce = debounce
+        # shortcut: debounce is per worker process; a second worker may repeat a query once.
+        self._inflight: dict[str, asyncio.Future[list[Candidate]]] = {}
+        self._recent: dict[str, tuple[datetime, list[Candidate]]] = {}
 
     async def _call(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
@@ -121,13 +151,48 @@ class SlskdSource:
         return response.json() if response.content else None
 
     async def search(self, query: str) -> list[Candidate]:
+        """Candidates for `query`. The same query (trimmed, case-folded) in flight or finished
+        within the debounce window shares that result: slskd is asked once."""
+        key = query.strip().casefold()
+        hit = self._recent.get(key)
+        if hit and self._client.clock.now() - hit[0] < self._debounce:
+            return list(hit[1])
+        if (task := self._inflight.get(key)) is None:
+            task = self._inflight[key] = asyncio.ensure_future(self._capped(query))
+            task.add_done_callback(lambda t: self._done(key, t))
+        return list(await asyncio.shield(task))  # one caller cancelled never cancels the rest
+
+    def _done(self, key: str, task: asyncio.Future[list[Candidate]]) -> None:
+        del self._inflight[key]
+        if not task.cancelled() and task.exception() is None:
+            now = self._client.clock.now()
+            self._recent = {k: v for k, v in self._recent.items() if now - v[0] < self._debounce}
+            self._recent[key] = (now, task.result())
+
+    async def _capped(self, query: str) -> list[Candidate]:
+        if self._slots is None:
+            return await self._search(query)
+        # shortcut: cancelled mid-take (worker shutdown), the claimed slot is held until
+        # SEARCH_LEASE ends; give it back from the take thread if shutdowns stall searches.
+        while (slot := await asyncio.to_thread(self._slots.take)) is None:
+            await self._sleep(self._poll_interval)  # wait our turn; never dropped
+        try:
+            return await self._search(query)
+        finally:
+            await asyncio.to_thread(self._slots.give, slot)
+
+    async def _search(self, query: str) -> list[Candidate]:
         search_id = str(uuid.uuid4())
-        await self._call("POST", "/searches", json={"id": search_id, "searchText": query})
+        await self._call(
+            "POST", "/searches", json={"id": search_id, "searchText": query, **SEARCH_SETTINGS}
+        )
         for _ in range(self._max_polls):
             state = await self._call("GET", f"/searches/{search_id}")
             if state["isComplete"]:
                 return await self._responses(search_id, state["responseCount"])
             await self._sleep(self._poll_interval)
+        with contextlib.suppress(PermanentError):  # 404: slskd already dropped it
+            await self._call("DELETE", f"/searches/{search_id}")
         raise TransientError(f"slskd search {query!r} did not complete")
 
     async def _responses(self, search_id: str, expected: int) -> list[Candidate]:
@@ -140,6 +205,7 @@ class SlskdSource:
         raise TransientError(f"slskd search {search_id} reports {expected} responses but gave none")
 
     async def enqueue(self, candidate: Candidate) -> None:
+        """Queue the candidate's files; a candidate with fewer files re-queues just those."""
         body = [{"filename": f.path, "size": f.size} for f in candidate.files]
         result = await self._call("POST", f"/transfers/downloads/{candidate.username}", json=body)
         if result and result.get("failed"):
@@ -148,12 +214,26 @@ class SlskdSource:
     async def status(self, candidate: Candidate) -> TransferInfo:
         data = await self._call("GET", f"/transfers/downloads/{candidate.username}")
         wanted = {f.path for f in candidate.files}
-        mine = [t for d in data["directories"] for t in d["files"] if t["filename"] in wanted]
+        latest: dict[str, dict[str, Any]] = {}  # a re-enqueued file has an older failed record
+        for t in (t for d in data["directories"] for t in d["files"] if t["filename"] in wanted):
+            if t["filename"] not in latest or t.get("requestedAt", "") >= latest[t["filename"]].get(
+                "requestedAt", ""
+            ):
+                latest[t["filename"]] = t
+        mine = list(latest.values())
         sent = sum(t["bytesTransferred"] for t in mine)
         states = {_state(t["state"]) for t in mine}
         if len(mine) < len(wanted):  # slskd has not listed every file yet
             return TransferInfo(TransferStatus.QUEUED, sent)
-        for s in (TransferStatus.FAILED, TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
+        if TransferStatus.FAILED in states:
+            failed = [t for t in mine if _state(t["state"]) is TransferStatus.FAILED]
+            retry = tuple(
+                f for f in candidate.files if any(f.path == t["filename"] for t in failed)
+            )
+            if all(_retryable(t["state"]) for t in failed):
+                return TransferInfo(TransferStatus.FAILED, sent, retry=retry)
+            return TransferInfo(TransferStatus.FAILED, sent)
+        for s in (TransferStatus.IN_PROGRESS, TransferStatus.QUEUED):
             if s in states:
                 return TransferInfo(s, sent)
         return TransferInfo(
@@ -173,7 +253,8 @@ class SlskdSource:
         }
 
     async def clear(self, candidate: Candidate) -> None:
-        """Drop the candidate's finished transfers from slskd's list (files are not touched)."""
+        """Cancel and remove the candidate's transfers from slskd (`remove=true` cancels one still
+        moving; files already on disk are not touched)."""
         data = await self._call("GET", f"/transfers/downloads/{candidate.username}")
         wanted = {f.path for f in candidate.files}
         for d in data["directories"]:

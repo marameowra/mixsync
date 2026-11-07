@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mixsync.acquire import lifecycle
 from mixsync.acquire.requests import hold_imports
 from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, PermanentError
@@ -94,8 +95,8 @@ class FakeLib:
     async def play_counts(self, song_ids: list[str]) -> dict[str, int]:
         return {}
 
-    async def music_folder_id(self, name: str) -> str | None:
-        return self.folders.get(name)
+    async def music_folders(self) -> dict[str, str]:
+        return self.folders
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
@@ -406,13 +407,34 @@ async def test_an_unscanned_song_is_skipped_then_pushed_after_the_import_hook(ri
     assert h.expires_at.replace(tzinfo=UTC) == rig.env.clock.now() + timedelta(days=10)
     pushes = [j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued"]
     assert len(pushes) == 2 and {j.payload["playlist_id"] for j in pushes} == {pid}  # early, late
+    early, late = pushes
+    assert late.run_after > early.run_after
     await rig.run(JobKind.DISCOVERY_PUSH)  # ...but Navidrome has not scanned it
     assert rig.lib.playlists["pl1"] == ["s1"]
     rig.lib.disc[rec(2)] = "s2"  # the rescan ran
     with rig.env.sessions.begin() as s:
         hold_imports(s, rig.env.clock.now(), "batch-2")  # same key: still one push waiting
-    await rig.disc.push(_record(rig, pid))
+    await rig.run(JobKind.DISCOVERY_PUSH)  # the later push finds it
     assert rig.lib.playlists["pl1"] == ["s1", "s2"]
+
+
+async def test_both_libraries_missing_give_one_note_naming_what_is_visible(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig.link(rig.env.user_id)
+    pid = rig.playlist()
+    own(rig.env, 1)
+    provisional(rig.env, 2)
+    rig.lib.main, rig.lib.disc = {rec(1): "s1"}, {rec(2): "s2"}
+    rig.lib.folders = {"Other": "9", "Discover": "8"}
+    rig.history.weekly = [ref(1), ref(2)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    err = rig.pl(pid).last_error or ""
+    assert "'Music Library' and 'discover' libraries are not visible" in err
+    assert "(it sees: Other, Discover)" in err
+    assert err in caplog.text
 
 
 async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
@@ -426,6 +448,7 @@ async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
     await rig.run(JobKind.DISCOVERY_PUSH)
     assert rig.lib.playlists == {"pl1": ["s2"]}
     assert "'discover' library is not visible" in (rig.pl(pid).last_error or "")
+    assert "it sees: no libraries" in (rig.pl(pid).last_error or "")
 
 
 async def test_next_build_is_one_jittered_job_and_a_rerun_adds_none(rig: Rig) -> None:
@@ -583,27 +606,6 @@ async def test_picks_on_one_release_make_one_request(rig: Rig) -> None:
     }
 
 
-async def test_the_import_hook_alone_repushes_once_navidrome_has_scanned(rig: Rig) -> None:
-    rig.link(rig.env.user_id)
-    rig.playlist()
-    own(rig.env, 1)
-    rig.lib.main = {rec(1): "s1"}
-    rig.history.weekly = [ref(1), ref(2)]
-    rig.disc.start_chains()
-    await rig.run(JobKind.DISCOVERY_BUILD)
-    await rig.run(JobKind.DISCOVERY_PUSH)
-    provisional(rig.env, 2, batch="batch-2")
-    with rig.env.sessions.begin() as s:
-        hold_imports(s, rig.env.clock.now(), "batch-2")
-    early, late = (j for j in rig.env.jobs(JobKind.DISCOVERY_PUSH) if j.status == "queued")
-    assert late.run_after > early.run_after
-    await rig.run(JobKind.DISCOVERY_PUSH)  # the scan is still running
-    assert rig.lib.playlists["pl1"] == ["s1"]
-    rig.lib.disc[rec(2)] = "s2"  # ...and has finished by the later push
-    await rig.run(JobKind.DISCOVERY_PUSH)
-    assert rig.lib.playlists["pl1"] == ["s1", "s2"]
-
-
 async def test_a_main_library_track_resolves_to_the_main_copy(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     rig.playlist()
@@ -643,33 +645,18 @@ async def test_a_rejected_listenbrainz_token_is_recorded_not_retried(rig: Rig) -
     assert any(j.status == "queued" for j in rig.env.jobs(JobKind.DISCOVERY_BUILD))
 
 
-async def test_navidrome_refusing_the_account_is_recorded_not_retried(rig: Rig) -> None:
-    rig.link(rig.env.user_id)
-    pid = rig.playlist()
-    own(rig.env, 1)
-    rig.lib.main = {rec(1): "s1"}
-    rig.history.weekly = [ref(1)]
-    rig.disc.start_chains()
-    await rig.run(JobKind.DISCOVERY_BUILD)
-    rig.lib.error = AuthError("Navidrome rejected the credentials")
-    await rig.run(JobKind.DISCOVERY_PUSH)  # does not raise
-    assert (rig.pl(pid).last_error or "").startswith("Navidrome: Navidrome rejected")
-
-
 async def test_a_recording_known_not_to_be_on_the_release_is_not_asked_for_again(rig: Rig) -> None:
     rig.link(rig.env.user_id)
     pid = rig.playlist()
     with rig.env.sessions.begin() as s:
-        s.add(
-            Request(
-                user_id=rig.env.user_id,
-                release_mbid=REL_A,
-                provisional=True,
-                recording_mbids=[rec(1)],
-                status="failed",
-                last_error="none of the wanted recordings are on the downloaded release",
-            )
+        req = Request(
+            user_id=rig.env.user_id,
+            release_mbid=REL_A,
+            provisional=True,
+            recording_mbids=[rec(1)],
         )
+        s.add(req)
+        lifecycle.dead_end(req, "none of the wanted recordings are on the downloaded release")
     rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(1, REL_B)]
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
@@ -697,7 +684,7 @@ async def test_a_good_push_clears_an_earlier_push_error(rig: Rig) -> None:
     await rig.run(JobKind.DISCOVERY_BUILD)
     rig.lib.error = AuthError("Navidrome rejected the credentials")
     await rig.run(JobKind.DISCOVERY_PUSH)
-    assert (rig.pl(pid).last_error or "").startswith("Navidrome: ")
+    assert (rig.pl(pid).last_error or "").startswith("Navidrome: Navidrome rejected")
     rig.lib.error = None  # relinked
     await rig.disc.push(_record(rig, pid))
     assert rig.pl(pid).last_error is None and rig.lib.playlists == {"pl1": ["s1"]}
@@ -721,16 +708,14 @@ async def test_a_recording_missing_from_an_imported_release_is_not_asked_for_aga
     rig.link(rig.env.user_id)
     rig.playlist()
     with rig.env.sessions.begin() as s:
-        s.add(
-            Request(
-                user_id=rig.env.user_id,
-                release_mbid=REL_A,
-                provisional=True,
-                recording_mbids=[rec(1), rec(2)],
-                status="imported",
-                last_error="1 of 2 wanted recordings not on this release",
-            )
+        req = Request(
+            user_id=rig.env.user_id,
+            release_mbid=REL_A,
+            provisional=True,
+            recording_mbids=[rec(1), rec(2)],
         )
+        s.add(req)
+        lifecycle.finished(req, [], ["1 of 2 wanted recordings not on this release"], dead_end=True)
     provisional(rig.env, 2)  # the one it did bring in
     rig.history.weekly = [ref(1, REL_A), ref(3, REL_A)]
     rig.disc.start_chains()
@@ -744,16 +729,14 @@ async def test_only_dead_pairs_for_the_asked_releases_block_a_request(rig: Rig) 
     rig.playlist()
     with rig.env.sessions.begin() as s:
         for rel, mbids in ((REL_A, [rec(1)]), (REL_B, [rec(2), rec(3)])):
-            s.add(
-                Request(
-                    user_id=rig.env.user_id,
-                    release_mbid=rel,
-                    provisional=True,
-                    recording_mbids=mbids,
-                    status="failed",
-                    last_error="none of the wanted recordings are on this release",
-                )
+            req = Request(
+                user_id=rig.env.user_id,
+                release_mbid=rel,
+                provisional=True,
+                recording_mbids=mbids,
             )
+            s.add(req)
+            lifecycle.dead_end(req, "none of the wanted recordings are on this release")
     # (REL_A, rec1) and (REL_B, rec2) are dead; the same recordings on another release are not
     rig.history.weekly = [ref(1, REL_A), ref(2, REL_A), ref(3, REL_A), ref(2, REL_B)]
     rig.disc.start_chains()

@@ -1,6 +1,5 @@
 """Re-checking unverified albums: the job, its schedule, the promote plan and the UI."""
 
-import asyncio
 import hashlib
 import shutil
 from dataclasses import asdict
@@ -32,7 +31,6 @@ from mixsync.db.models.work import Job
 from mixsync.library import fragmentation, tags
 from mixsync.library.importer import Importer, tagset_for
 from mixsync.ratelimit.bucket import aware
-from mixsync.worker import run_worker
 
 from .conftest import Env, login
 from .fakes import ALBUM, ALBUM_B, AUDIO, OTHER, RECORDINGS, FakeMetadata
@@ -132,6 +130,14 @@ class Rig:
         with self.env.sessions() as s:
             return [fragmentation.row_dict(t) for t in s.scalars(select(Track).order_by(Track.id))]
 
+    def names_match_files(self) -> bool:
+        """Every row's album columns equal the album tags of its file."""
+        with self.env.sessions() as s:
+            return all(
+                (t.album_artist, t.album, t.year) == tags.file_names(self.env.ops.library / t.path)
+                for t in s.scalars(select(Track))
+            )
+
     def library(self) -> dict[str, str]:
         lib = self.env.ops.library
         return {
@@ -173,14 +179,12 @@ async def test_backoff_sequence_ends_quarterly(env: Env) -> None:
     rig = _rig(env, match=False)
     rig.seed()
     rig.schedule()
-    assert [timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91)] == list(
-        RECHECK_INTERVALS
-    )
-    for i in range(6):
+    waits = [timedelta(weeks=2), timedelta(days=30), *[timedelta(days=91)] * 4]
+    for i, wait in enumerate(waits, 1):  # then 91 days again, for good
         await env.step()
         ((attempt, due),) = rig.queued()
-        assert attempt == i + 1  # 2 weeks, 30 days, 91 days, then 91 days again
-        assert _in_window(due, env.clock.now(), RECHECK_INTERVALS[min(i + 1, 3)])
+        assert attempt == i
+        assert _in_window(due, env.clock.now(), wait)
 
 
 async def test_confident_match_makes_a_draft_promote_plan_and_stops_the_chain(env: Env) -> None:
@@ -271,12 +275,14 @@ async def test_promote_runs_and_undoes_through_the_plan_pages(env: Env, web: Tes
         t = tags.read_fields(env.ops.library / str(r["path"]))
         assert t["mixsync_status"] == "verified" and t["musicbrainz_trackid"] == r["recording_mbid"]
     assert len(rig.trash()) == 2  # the originals
+    assert rig.names_match_files()  # the promote retagged the files and the columns
     assert "Nothing unverified" in web.get("/library/unverified").text
     assert "ready to promote" not in web.get("/").text
 
     assert web.post(f"/library/plans/{plan.id}/undo", data={"csrf_token": tok}).status_code == 303
     await env.drain(until=lambda: rig.plans("undone") != [])
     assert rig.library() == lib0 and rig.rows() == rows0
+    assert rig.names_match_files()  # and so did its undo
     t = tags.read_fields(env.ops.library / old[0])
     assert t["mixsync_status"] == "unverified" and "musicbrainz_trackid" not in t
 
@@ -316,7 +322,7 @@ async def test_a_failed_plan_blocks_a_new_draft_and_is_linked(env: Env) -> None:
     (plan,) = rig.plans()
     with env.sessions.begin() as s:
         s.get_one(Plan, plan.id).status = "failed"
-        st = statuses(s, group(read_unverified(s, env.ops.library)))
+        st = statuses(s, group(read_unverified(s)))
     assert [(x.plan_id, x.plan_failed) for x in st.values()] == [(plan.id, True)]
     rig.schedule(user_id=env.user_id)
     await env.step()
@@ -347,14 +353,19 @@ def test_one_background_check_waits_per_album(env: Env) -> None:
 TWO = {"Song One", "Song Two"}
 
 
-async def test_a_file_that_cannot_be_fingerprinted_is_skipped(env: Env) -> None:
+@pytest.mark.parametrize("failure", ["cannot_fingerprint", "fails_to_read"])
+async def test_a_bad_file_is_skipped_and_the_rest_match(env: Env, failure: str) -> None:
     rig = _rig(env)
     rig.seed()
-    BAD.add("Song Two")
+    if failure == "cannot_fingerprint":
+        BAD.add("Song Two")
+    else:
+        rig.lookup.broken.add("Song Two")
     rig.schedule()
     await env.step()
     assert rig.lookup.calls == ["Song One"]  # the other file was still looked up and scored
     assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED  # no failure
+    assert rig.queued() != []
 
 
 async def test_no_file_to_fingerprint_is_no_match_and_the_chain_goes_on(env: Env) -> None:
@@ -401,16 +412,6 @@ async def test_a_transient_failure_that_retries_to_no_match_backs_off_as_usual(e
     rig.meta.fail = None
     await env.step()
     assert [a for a, _ in rig.queued()] == [1]
-
-
-async def test_a_file_that_fails_to_read_is_skipped_and_the_rest_match(env: Env) -> None:
-    rig = _rig(env)
-    rig.seed()
-    rig.lookup.broken.add("Song Two")
-    rig.schedule()
-    await env.step()
-    assert env.jobs(JobKind.RECHECK)[0].status is JobState.SUCCEEDED
-    assert rig.lookup.calls == ["Song One"] and rig.queued() != []
 
 
 async def test_a_failing_run_still_queues_the_next_check_once(env: Env) -> None:
@@ -712,117 +713,3 @@ async def test_any_error_in_a_background_run_still_queues_the_next_check(
     await env.step()
     assert [j.status for j in env.jobs(JobKind.RECHECK)][0] is JobState.FAILED
     assert [a for a, _ in rig.queued()] == [1]
-
-
-async def test_startup_runs_in_the_worker_task_before_the_first_claim() -> None:
-    order: list[str] = []
-
-    class Queue:
-        def reap(self) -> None:
-            order.append("reap")
-
-        def claim(self, *_a: object) -> None:
-            stop.set()
-
-    stop = asyncio.Event()
-    await run_worker(Queue(), "w", stop, {}, startup=(lambda: order.append("startup"),))  # type: ignore[arg-type]
-    assert order == ["startup", "reap"]
-
-
-async def test_a_failed_startup_scan_does_not_stop_the_worker() -> None:
-    claimed: list[bool] = []
-
-    class Queue:
-        def reap(self) -> None:
-            pass
-
-        def claim(self, *_a: object) -> None:
-            claimed.append(True)
-            stop.set()
-
-    def boom() -> None:
-        raise RuntimeError("database is locked")
-
-    stop = asyncio.Event()
-    await run_worker(Queue(), "w", stop, {}, startup=(boom,))  # type: ignore[arg-type]
-    assert claimed == [True]
-
-
-async def test_failed_startup_retries_only_failed_chains_while_polling() -> None:
-    order: list[str] = []
-    attempts = 0
-    claims = 0
-    stop = asyncio.Event()
-
-    def first() -> None:
-        nonlocal attempts
-        attempts += 1
-        order.append("first")
-        if attempts == 1:
-            raise OperationalError("startup", {}, RuntimeError("database is locked"))
-
-    class Queue:
-        def reap(self) -> None:
-            pass
-
-        def claim(self, *_a: object) -> None:
-            nonlocal claims
-            claims += 1
-            order.append("claim")
-            if claims == 3:
-                stop.set()
-
-    await run_worker(
-        Queue(),  # type: ignore[arg-type] -- only the queue methods used by an idle worker
-        "w",
-        stop,
-        {},
-        poll=0,
-        startup=(first, lambda: order.append("second"), lambda: order.append("third")),
-    )
-    assert order == ["first", "second", "third", "claim", "first", "claim", "claim"]
-    assert attempts == 2
-    assert claims == 3
-
-
-async def test_shutdown_during_startup_stops_initialization_and_polling() -> None:
-    order: list[str] = []
-    stop = asyncio.Event()
-
-    def shutdown() -> None:
-        order.append("startup")
-        stop.set()
-
-    class Queue:
-        def reap(self) -> None:
-            order.append("reap")
-
-        def claim(self, *_a: object) -> None:
-            order.append("claim")
-
-    await run_worker(
-        Queue(),  # type: ignore[arg-type] -- only the queue methods used by an idle worker
-        "w",
-        stop,
-        {},
-        startup=(shutdown, lambda: order.append("other")),
-    )
-    assert order == ["startup"]
-
-
-async def test_a_locked_database_while_polling_does_not_stop_the_worker() -> None:
-    calls: list[str] = []
-
-    class Queue:
-        def reap(self) -> None:
-            calls.append("reap")
-            if len(calls) == 1:
-                raise RuntimeError("database is locked")
-
-        def claim(self, *_a: object) -> None:
-            calls.append("claim")
-            stop.set()
-
-    stop = asyncio.Event()
-    await run_worker(Queue(), "w", stop, {}, poll=0)  # type: ignore[arg-type]
-    assert calls == ["reap", "reap", "claim"]

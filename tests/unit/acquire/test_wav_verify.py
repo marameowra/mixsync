@@ -117,7 +117,9 @@ async def test_a_non_audio_file_named_wav_is_refused_and_the_next_peer_tried(env
     assert req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
     assert "unsupported audio: 02 Song Two.wav" in (req.last_error or "")
     assert env.jobs(JobKind.VERIFY)[0].status is JobState.SUCCEEDED
-    assert all(p.exists() for p in paths.values())
+    kept = {p.name for p in (env.data_dir / "quarantine" / "rejected").rglob("*") if p.is_file()}
+    assert kept == {p.name for p in paths.values()}  # quarantined, not deleted
+    assert not any(p.exists() for p in paths.values())  # and released from /downloads
 
 
 @pytest.mark.parametrize("codec", ["pcm_s32le", "pcm_f32le"])
@@ -182,4 +184,5 @@ async def test_readable_formats_never_reach_ffprobe_or_to_flac(
     rid = request(env)
     await env.drain(until=lambda: bool(decision_rows(env, 2)))
     assert [d.status for d in decision_rows(env, 2)] == ["auto_accepted"]
-    assert status(env, rid) == "importing"
+    await env.drain()  # through the import: with re-encoding off, MP3s are not handed to to_flac
+    assert status(env, rid) == "imported"

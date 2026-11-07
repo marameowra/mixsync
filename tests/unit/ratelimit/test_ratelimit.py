@@ -1,6 +1,10 @@
+import asyncio
+import sqlite3
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 import pytest
@@ -26,13 +30,6 @@ class FakeClock:
 
     async def sleep(self, seconds: float) -> None:
         self.t += timedelta(seconds=seconds)
-
-
-@pytest.fixture
-def sessions(settings: Settings) -> sessionmaker[Session]:
-    engine = make_engine(settings)
-    Base.metadata.create_all(engine)
-    return make_session_factory(engine)
 
 
 @pytest.fixture
@@ -125,21 +122,20 @@ async def test_reset_in_blocks_when_remaining_is_zero(
     assert calls[1] - calls[0] == timedelta(seconds=7)
 
 
-async def test_429_without_retry_after_uses_reset_in(
+async def test_discogs_remaining_zero_blocks_the_bucket_for_a_minute(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:
     calls: list[datetime] = []
 
     def handler(_r: httpx.Request) -> httpx.Response:
         calls.append(clock.now())
-        if len(calls) == 1:
-            return httpx.Response(429, headers={"X-RateLimit-Reset-In": "12"})
-        return httpx.Response(200)
+        headers = {"X-Discogs-Ratelimit-Remaining": "0"}
+        return httpx.Response(200, headers=headers if len(calls) == 1 else {})
 
-    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
-        r = await c.get("https://x.test/")
-    assert r.status_code == 200
-    assert calls[1] - calls[0] == timedelta(seconds=12)
+    async with client("discogs", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/a")
+        await c.get("https://x.test/b")
+    assert calls[1] - calls[0] == timedelta(seconds=60)
 
 
 async def gap_after_429(
@@ -147,6 +143,7 @@ async def gap_after_429(
     sessions: sessionmaker[Session],
     clock: FakeClock,
     headers: dict[str, str],
+    service: str = "listenbrainz",
 ) -> timedelta:
     calls: list[datetime] = []
 
@@ -154,7 +151,7 @@ async def gap_after_429(
         calls.append(clock.now())
         return httpx.Response(429, headers=headers) if len(calls) == 1 else httpx.Response(200)
 
-    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+    async with client(service, settings, sessions, clock, httpx.MockTransport(handler)) as c:
         await c.get("https://x.test/")
     return calls[1] - calls[0]
 
@@ -163,15 +160,30 @@ async def gap_after_429(
 async def test_unusable_reset_in_falls_back_to_backoff(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock, value: str
 ) -> None:
-    gap = await gap_after_429(settings, sessions, clock, {"X-RateLimit-Reset-In": value})
+    # acoustid (3/s, full bucket): pacing alone would give no gap, so only backoff can
+    gap = await gap_after_429(
+        settings, sessions, clock, {"X-RateLimit-Reset-In": value}, service="acoustid"
+    )
     assert timedelta(seconds=0.5) <= gap <= timedelta(seconds=1)
 
 
-async def test_retry_after_wins_over_reset_in(
-    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+@pytest.mark.parametrize(
+    ("headers", "seconds"),
+    [
+        ({"Retry-After": "5"}, 5),
+        ({"Retry-After": "3", "X-RateLimit-Reset-In": "9"}, 3),  # Retry-After wins
+        ({"X-RateLimit-Reset-In": "12"}, 12),
+        ({"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-In": "4"}, 4),
+    ],
+)
+async def test_429_gap_follows_headers(
+    settings: Settings,
+    sessions: sessionmaker[Session],
+    clock: FakeClock,
+    headers: dict[str, str],
+    seconds: int,
 ) -> None:
-    headers = {"Retry-After": "3", "X-RateLimit-Reset-In": "9"}
-    assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=3)
+    assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=seconds)
 
 
 @pytest.mark.parametrize("value", ["86400", "Fri, 01 Jan 2027 00:00:00 GMT"])
@@ -180,21 +192,6 @@ async def test_huge_retry_after_is_capped(
 ) -> None:
     gap = await gap_after_429(settings, sessions, clock, {"Retry-After": value})
     assert gap == timedelta(seconds=_BACKOFF_CAP)
-
-
-async def test_small_retry_after_is_exact(
-    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
-) -> None:
-    assert await gap_after_429(settings, sessions, clock, {"Retry-After": "5"}) == timedelta(
-        seconds=5
-    )
-
-
-async def test_429_with_remaining_zero_waits_reset_in(
-    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
-) -> None:
-    headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-In": "4"}
-    assert await gap_after_429(settings, sessions, clock, headers) == timedelta(seconds=4)
 
 
 async def test_503_without_header_backs_off(
@@ -207,7 +204,8 @@ async def test_503_without_header_backs_off(
         n += 1
         return httpx.Response(503 if n < 3 else 200)
 
-    async with client("musicbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+    # acoustid (3/s, full bucket): the three requests need no pacing, so only backoff waits
+    async with client("acoustid", settings, sessions, clock, httpx.MockTransport(handler)) as c:
         start = clock.now()
         assert (await c.get("https://x.test/")).status_code == 200
     assert clock.now() - start >= timedelta(seconds=1.5)
@@ -337,3 +335,32 @@ def test_first_use_race_does_not_raise(
     assert fut.result(timeout=10) == timedelta(0)
     with sessions() as s:
         assert s.get(RateBucket, "acoustid").tokens == 2  # type: ignore[union-attr]
+
+
+async def test_request_does_not_block_loop_on_db_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    db = tmp_path / "lock.db"
+    monkeypatch.setenv("MIXSYNC_DATABASE_URL", f"sqlite:///{db}")
+    settings = Settings()
+    engine = make_engine(settings)
+    Base.metadata.create_all(engine)
+    sessions = make_session_factory(engine)
+    holder = sqlite3.connect(db, isolation_level=None, check_same_thread=False)
+    holder.execute("BEGIN IMMEDIATE")
+    threading.Timer(0.5, lambda: holder.execute("COMMIT")).start()
+    ticks = 0
+
+    async def ticker() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.05)
+            ticks += 1
+
+    task = asyncio.create_task(ticker())
+    handler = httpx.MockTransport(lambda r: httpx.Response(200, json={}))
+    async with client("acoustid", settings, sessions, clock, handler) as c:
+        assert (await c.get("https://example.test/x")).status_code == 200
+    task.cancel()
+    holder.close()
+    assert ticks >= 5  # a blocked loop would have ticked ~0 times during the 0.5 s lock

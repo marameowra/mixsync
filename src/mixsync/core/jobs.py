@@ -9,8 +9,10 @@ class JobKind(StrEnum):
     VERIFY = "verify"
     IMPORT = "import"
     RESCAN = "rescan"
+    REFILE = "refile"
     MERGE = "merge"
     UNDO_MERGE = "undo_merge"
+    REORGANIZE_PLAN = "reorganize_plan"  # builds a draft; never moves a file
     RECHECK = "recheck"
     ACOUSTID_SUBMIT = "acoustid_submit"
     ACOUSTID_STATUS = "acoustid_status"
@@ -24,6 +26,8 @@ class JobKind(StrEnum):
     DISCOVERY_BUILD = "discovery_build"
     DISCOVERY_PUSH = "discovery_push"
     DISCOVERY_RETAIN = "discovery_retain"
+    DB_BACKUP = "db_backup"
+    NAME_BACKFILL = "name_backfill"
 
 
 class JobState(StrEnum):
@@ -51,6 +55,11 @@ TRANSITIONS: dict[JobState, frozenset[JobState]] = {
 }
 
 DEFAULT_LEASE = timedelta(seconds=60)
+# A running job blocks the polling loop; its lease heartbeat (every DEFAULT_LEASE / 3) keeps the
+# worker's liveness fresh meanwhile, so the threshold is a few of those beats, not of polls.
+# Limit: a job stuck forever in an await keeps beating, so it reads as healthy; only a wedged
+# polling loop or a blocked event loop goes stale.
+WORKER_STALE_AFTER = timedelta(seconds=90)
 
 
 class IllegalTransitionError(ValueError):

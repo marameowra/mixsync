@@ -45,12 +45,10 @@ class NavidromeUser:
                 continue  # deleted, or rescanned under a new id: not the same as 0 plays
         return counts
 
-    async def music_folder_id(self, name: str) -> str | None:
-        """Id of the library called `name` (e.g. the discover library), if this user can see it."""
-        for folder in await self._subsonic.get_music_folders():
-            if folder.get("name") == name:
-                return str(folder["id"])
-        return None
+    async def music_folders(self) -> dict[str, str]:
+        """Library name -> id for the libraries this user can see (one getMusicFolders call)."""
+        folders = await self._subsonic.get_music_folders()
+        return {str(f.get("name")): str(f["id"]) for f in reversed(folders)}  # first of a name wins
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None

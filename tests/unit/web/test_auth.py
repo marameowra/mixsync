@@ -10,10 +10,12 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from mixsync.app import create_app
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import aware
 from mixsync.core.config import Settings
-from mixsync.db.auth import create_session, create_user, hash_password, verify_password
+from mixsync.db.auth import create_session, create_user, user_for_session
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
+from mixsync.db.models.auth import Session as SessionRow
 from mixsync.db.models.auth import User
 from mixsync.web.deps import SESSION_COOKIE, require
 
@@ -43,22 +45,32 @@ def _login(c: TestClient, user: str, pw: str) -> httpx.Response:
     return c.post("/login", data={"username": user, "password": pw})
 
 
-def test_password_verify() -> None:
-    h = hash_password("secret")
-    assert verify_password(h, "secret")
-    assert not verify_password(h, "nope")
-    assert not verify_password("garbage", "secret")
-
-
 def test_login_html_has_autocomplete(client: TestClient) -> None:
     html = client.get("/login").text
     assert 'autocomplete="username"' in html
     assert 'autocomplete="current-password"' in html
 
 
-def test_anonymous_redirected(client: TestClient) -> None:
-    r = client.get("/")
+@pytest.mark.parametrize("url", ["/", "/account", "/discover", "/review"])
+def test_anonymous_redirected(client: TestClient, url: str) -> None:
+    r = client.get(url)
     assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/account/listenbrainz",
+        "/library/plans/1/confirm",
+        "/library/fragments/plan",
+        "/requests/delete-imported",
+        "/review/1/accept",
+        "/logout",
+    ],
+)
+def test_post_without_csrf_token_is_refused(client: TestClient, url: str) -> None:
+    _login(client, "root", "pw-root")
+    assert client.post(url).status_code == 403
 
 
 def test_login_success_and_logout(client: TestClient) -> None:
@@ -214,3 +226,17 @@ def test_multi_key_admit_in_a_full_store_keeps_its_own_keys(
     auth_routes._failures.update({mine: [clock[0]], ("o", "x"): [clock[0]], ("p", "x"): [clock[0]]})
     assert auth_routes.admit(mine, new)
     assert mine in auth_routes._failures and new in auth_routes._failures
+
+
+def test_last_seen_written_at_most_once_a_minute(sf: sessionmaker[Session]) -> None:
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    with sf() as s, s.begin():
+        uid = create_user(s, "bob", "pw-bob").id
+        token = create_session(s, uid, t0, timedelta(days=1))
+    for at, expected in [(30, 0), (61, 61)]:
+        now = t0 + timedelta(seconds=at)
+        with sf() as s, s.begin():
+            assert user_for_session(s, token, now) is not None
+        with sf() as s:
+            row = s.query(SessionRow).one()
+            assert aware(row.last_seen_at) == t0 + timedelta(seconds=expected)

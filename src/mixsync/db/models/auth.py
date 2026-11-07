@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -16,6 +16,15 @@ class MatchingProfile(TimestampMixin, Base):
     auto_accept_max: Mapped[float] = mapped_column(Float)
     review_max: Mapped[float] = mapped_column(Float)
     quality_pref: Mapped[Any] = mapped_column(JSON, nullable=True)
+
+
+class AppSettings(TimestampMixin, Base):
+    """Admin-edited, app-wide settings: one row, id 1. No row means every default."""
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    min_auto_accept_confidence: Mapped[int | None] = mapped_column(Integer)  # percent; None: no cap
 
 
 class User(TimestampMixin, Base):

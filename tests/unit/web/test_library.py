@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -95,8 +96,8 @@ def client(sf: sessionmaker[Session]) -> Iterator[TestClient]:
                 )
             )
     app = create_app(sf, Settings())
-    app.state.merger = FakeMerger(sf)
-    app.state.namer = NoNames()
+    app.state.services = replace(app.state.services, merger=FakeMerger(sf))
+    app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
 
@@ -118,9 +119,11 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "done", [_op("move", 0)])
     _login(client, "root")
     html = client.get("/library/fragments").text
-    assert f'title="{G}">Release group 11111111</a>' in html  # unknown: short id, full id on hover
     assert f'title="{R1}">Release 11111111</a> (1)' in html and "Preview merge" in html
-    assert f"/library/plans/{pid}/undo" in html
+    assert f'href="/library/plans/{pid}#plan-actions">Review undo</a>' in html
+    assert f'action="/library/plans/{pid}/undo"' not in html
+    plan_html = client.get(f"/library/plans/{pid}").text
+    assert 'id="plan-actions" class="actionbar"' in plan_html
 
 
 def test_build_and_preview(client: TestClient) -> None:
@@ -128,7 +131,8 @@ def test_build_and_preview(client: TestClient) -> None:
     r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": G})
     assert r.status_code == 303
     html = client.get(r.headers["location"]).text
-    assert "a/0.flac" in html and "b/0.flac" in html and "1 to move" in html
+    assert "a/0.flac" in html and "b/0.flac" in html
+    assert "<dt>Move</dt><dd>1</dd>" in html and "1 file to move and retag" in html
     assert "Confirm merge" in html
     missing = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": "missing"})
     assert missing.status_code == 404
@@ -140,14 +144,6 @@ def test_preview_ops_and_error(client: TestClient, sf: sessionmaker[Session]) ->
     html = client.get(f"/library/plans/{pid}").text
     assert "k/1.flac" in html and "a/2.flac" in html and "boom &lt;b&gt;" in html
     assert "Undo merge" in html
-
-
-def test_confirm_enqueues(client: TestClient, sf: sessionmaker[Session]) -> None:
-    pid = _plan(sf, "draft", [_op("move", 0)])
-    tok = _login(client, "root")
-    r = client.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok})
-    assert r.status_code == 303
-    assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
 
 
 @pytest.mark.parametrize("action", ["confirm", "undo"])
@@ -190,11 +186,11 @@ def test_undo_failed_plan(client: TestClient, sf: sessionmaker[Session]) -> None
     assert [j.kind for j in _jobs(sf)] == [JobKind.UNDO_MERGE]
 
 
-def test_csrf_required(client: TestClient, sf: sessionmaker[Session]) -> None:
+def test_post_without_csrf_enqueues_nothing(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "draft", [_op("move", 0)])
     _login(client, "root")
-    assert client.post(f"/library/plans/{pid}/confirm").status_code == 403
-    assert client.post("/library/fragments/plan", data={"group": G}).status_code == 403
+    client.post(f"/library/plans/{pid}/confirm")  # 403 asserted in test_auth.py
+    client.post("/library/fragments/plan", data={"group": G})
     assert _jobs(sf) == []
 
 
@@ -210,6 +206,42 @@ def test_non_admin_forbidden(client: TestClient, sf: sessionmaker[Session]) -> N
     ]:
         assert client.post(url, data={"csrf_token": tok, **data}).status_code == 403
     assert _jobs(sf) == []
+
+
+def _reorganize_plan(sf: sessionmaker[Session], moves: int) -> int:
+    ops = [
+        {"op": "move", "old": {"path": f"a/{i}.flac"}, "new_path": f"b/{i}.flac", "done": False}
+        for i in range(moves)
+    ]
+    with sf() as s, s.begin():
+        p = Plan(kind="reorganize", release_group_mbid="", canonical_release_mbid="", ops=ops)
+        s.add(p)
+        s.flush()
+        return p.id
+
+
+def test_reorganize_routes_need_library_edit(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _reorganize_plan(sf, 1)
+    tok = _login(client, "alice")
+    assert client.post("/library/reorganize/plan", data={"csrf_token": tok}).status_code == 403
+    assert client.get("/library/reorganize").status_code == 403
+    assert client.get(f"/library/plans/{pid}/moves").status_code == 403
+    with sf() as s:
+        assert s.scalar(select(Job.id).where(Job.kind == JobKind.REORGANIZE_PLAN)) is None
+
+
+def test_a_reorganize_of_over_50_moves_needs_the_count_typed(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _reorganize_plan(sf, 51)
+    tok = _login(client, "root")
+    assert "Type 51 to confirm" in client.get(f"/library/plans/{pid}").text
+    url = f"/library/plans/{pid}/confirm"
+    assert client.post(url, data={"csrf_token": tok}).status_code == 400
+    assert client.post(url, data={"csrf_token": tok, "count": "50"}).status_code == 400
+    assert _jobs(sf) == []
+    assert client.post(url, data={"csrf_token": tok, "count": "51"}).status_code == 303
+    assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
 
 
 def test_build_errors(client: TestClient) -> None:
@@ -303,9 +335,10 @@ def test_resume_blocked_by_live_job(client: TestClient, sf: sessionmaker[Session
 def test_discarded_is_terminal(client: TestClient, sf: sessionmaker[Session]) -> None:
     pid = _plan(sf, "discarded", [_op("move", 0)])
     tok = _login(client, "root")
-    assert "discarded" in client.get("/library/fragments").text
+    assert "discarded" in client.get("/library/fragments").text.lower()
     html = client.get(f"/library/plans/{pid}").text
-    assert "<button" not in html.split("<main>")[1]
+    main = re.search(r"<main\b[^>]*>(.*?)</main>", html, flags=re.DOTALL)
+    assert main is not None and "<button" not in main.group(1)
     for action in ("confirm", "undo"):
         r = client.post(f"/library/plans/{pid}/{action}", data={"csrf_token": tok})
         assert r.status_code == 409
@@ -343,8 +376,8 @@ def test_undo_is_offered_only_within_the_window(
     stale = _aged_plan(sf, status, 31)
     tok = _login(client, "root")
     html = client.get("/library/fragments").text
-    assert f"/library/plans/{fresh}/undo" in html
-    assert f"/library/plans/{stale}/undo" not in html
+    assert f'href="/library/plans/{fresh}#plan-actions">Review undo</a>' in html
+    assert f'href="/library/plans/{stale}#plan-actions">Review undo</a>' not in html
     assert f"/library/plans/{fresh}/undo" in client.get(f"/library/plans/{fresh}").text
     assert f"/library/plans/{stale}/undo" not in client.get(f"/library/plans/{stale}").text
     assert client.post(f"/library/plans/{stale}/undo", data={"csrf_token": tok}).status_code == 409

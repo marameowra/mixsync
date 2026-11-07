@@ -81,6 +81,9 @@ class FakeMetadata:
         self.calls: list[str] = []
         self.browsed: list[str] = []
         self.group: dict[str, ReleaseRef] = {}  # by release id; overrides the catalog's refs
+        self.holding: dict[str, list[str]] = {}  # recording id -> release ids; empty by default
+        self.looked_up: list[str] = []  # recording ids browsed for their releases
+        self.gone: set[str] = set()  # recording ids MusicBrainz answers 404 for
 
     async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         self.calls.append(mbid)
@@ -90,6 +93,12 @@ class FakeMetadata:
         self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
     ) -> list[ReleaseRef]:
         return []
+
+    async def recording_releases(self, recording_mbid: str, limit: int = 25) -> list[ReleaseRef]:
+        self.looked_up.append(recording_mbid)
+        if recording_mbid in self.gone:
+            raise PermanentError("returned 404")
+        return [ReleaseRef(r, CATALOG[r].album, "") for r in self.holding.get(recording_mbid, [])]
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
         self.browsed.append(release_group_mbid)
@@ -111,8 +120,13 @@ class FakeSource:
         self.queries: list[str] = []
         self.enqueued: list[str] = []
         self.state: dict[str, TransferStatus] = {}  # by peer; default DONE
+        self.outcomes: dict[
+            str, list[str]
+        ] = {}  # peer/file name -> how each attempt ends, in order
+        self.attempts: dict[str, int] = {}  # peer/file name -> times queued
         self.write_nothing = False  # DONE, but no file on disk
         self.cleared: list[str] = []  # peers whose transfers were cleared
+        self.landed: dict[str, int] = {}  # bytes a peer got through before its transfer ended
         self.refuse: set[str] = set()  # peers whose enqueue raises PermanentError
         self.moving: Callable[[], dict[str, int]] = dict  # the other transfers: id -> bytes
 
@@ -167,6 +181,9 @@ class FakeSource:
         if candidate.username in self.refuse:
             raise PermanentError("peer refused")
         self.enqueued.append(candidate.username)
+        for f in candidate.files:
+            key = f"{candidate.username}/{f.path.rsplit('\\', 1)[-1]}"
+            self.attempts[key] = self.attempts.get(key, 0) + 1
         d = self._dir(candidate)
         d.mkdir(parents=True, exist_ok=True)
         if not self.write_nothing:
@@ -178,8 +195,17 @@ class FakeSource:
     async def status(self, candidate: Candidate) -> TransferInfo:
         state = self.state.get(candidate.username, TransferStatus.DONE)
         if state is not TransferStatus.DONE:
-            return TransferInfo(state, 0)
+            return TransferInfo(state, self.landed.get(candidate.username, 0))
         names = [f.path.rsplit("\\", 1)[-1] for f in candidate.files]
+        keys = [f"{candidate.username}/{n}" for n in names]
+        ended = {  # the outcome of each file's latest attempt, if it failed
+            f: self.outcomes[k][self.attempts[k] - 1]
+            for f, k in zip(candidate.files, keys, strict=True)
+            if 0 < self.attempts.get(k, 0) <= len(self.outcomes.get(k, []))
+        }
+        if ended:
+            flaky = all(o in ("TimedOut", "Errored") for o in ended.values())
+            return TransferInfo(TransferStatus.FAILED, 0, retry=tuple(ended) if flaky else ())
         return TransferInfo(state, 1, tuple(str(self._dir(candidate) / n) for n in names))
 
     async def active_downloads(self) -> dict[str, int]:

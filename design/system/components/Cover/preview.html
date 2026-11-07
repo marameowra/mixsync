@@ -1,0 +1,62 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MixSync</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--canvas); color:var(--ink); font-family:var(--font-sans); overflow:hidden; }
+  .cover { position:relative; height:288px; overflow:hidden; }
+  .cover-art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .cover-art svg { display:block; }
+  .n { fill:var(--line); }
+  .tint { fill:var(--accent-tint); }
+  .accent { fill:var(--accent); }
+  .slab { fill:var(--line-strong); }
+  .pos { fill:var(--positive); }
+  .tile { rx:var(--radius-md); }
+  .blk { rx:var(--radius-md); }
+  .words { position:absolute; left:var(--space-6); bottom:var(--space-6); max-width:440px; }
+  .name { margin:0; font-size:104px; line-height:.92; font-weight:650; letter-spacing:-.03em; color:var(--ink); }
+  .cover-tag { margin:var(--space-3) 0 0 4px; font-size:14px; line-height:20px; color:var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="cover-art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      accent 136x136 (2x2 art-sm cells, the identity hue) · line-strong slab 136x208 bled off the top (mid-grey so it stays quieter than the name in both themes) · accent-tint and line tiles 64x64 · one positive tile (a confident match) · about 40% of 960x288
+  arrangement a flush modular grid, like a wall of album covers, with two merged blocks and gaps of bare canvas
+  pattern     tiles cut by the radius tokens, from "Let artwork help identify music" and "a deliberate grid": square art-sm cells
+  scales      tile side art-sm (64px); gutter space-2 (8px); pitch 72px; corners radius-md
+-->
+<rect class="blk accent" x="80" y="32" width="136" height="136"/>
+<rect class="blk slab" x="296" y="-40" width="136" height="208"/>
+<rect class="tile n" x="8" y="-40" width="64" height="64"/>
+<rect class="tile n" x="80" y="-40" width="64" height="64"/>
+<rect class="tile tint" x="224" y="-40" width="64" height="64"/>
+<rect class="tile n" x="440" y="-40" width="64" height="64"/>
+<rect class="tile tint" x="8" y="32" width="64" height="64"/>
+<rect class="tile n" x="224" y="32" width="64" height="64"/>
+<rect class="tile n" x="8" y="104" width="64" height="64"/>
+<rect class="tile n" x="440" y="104" width="64" height="64"/>
+<rect class="tile n" x="80" y="176" width="64" height="64"/>
+<rect class="tile tint" x="152" y="176" width="64" height="64"/>
+<rect class="tile n" x="224" y="176" width="64" height="64"/>
+<rect class="tile n" x="296" y="176" width="64" height="64"/>
+<rect class="tile accent" x="368" y="176" width="64" height="64"/>
+<rect class="tile tint" x="440" y="176" width="64" height="64"/>
+<rect class="tile n" x="8" y="248" width="64" height="64"/>
+<rect class="tile n" x="152" y="248" width="64" height="64"/>
+<rect class="tile pos" x="224" y="248" width="64" height="64"/>
+<rect class="tile tint" x="296" y="248" width="64" height="64"/>
+<rect class="tile n" x="368" y="248" width="64" height="64"/>
+<rect class="tile n" x="440" y="248" width="64" height="64"/>
+</svg>
+</div>
+<div class="words"><h1 class="name">MixSync</h1><p class="cover-tag">Calm, legible tools for a self-hosted music library.</p></div>
+</div>
+</body>
+</html>

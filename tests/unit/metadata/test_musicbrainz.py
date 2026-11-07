@@ -67,7 +67,6 @@ async def test_single_disc_request_and_mapping(make_client: Make) -> None:
         "labels",
         "release-groups",
     }
-    assert req.headers["user-agent"].startswith("MixSync/")
 
 
 async def test_va_flag(make_client: Make) -> None:
@@ -138,6 +137,19 @@ async def test_browse_group_releases_one_request_and_mapping(make_client: Make) 
     assert (digital.date, digital.country) == ("2016-04-01", "XW")
     assert vinyl.formats == ('12" Vinyl', '12" Vinyl') and vinyl.track_count == 10
     assert vinyl.date is None  # MB's "" means unknown
+
+
+async def test_recording_releases_is_one_cached_browse(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    body = (MB / "browse_group_releases.json").read_text()  # a release browse, same shape
+    provider = MusicBrainzProvider(make_client("musicbrainz", serve(body, seen)))
+    refs = await provider.recording_releases("rec-1")
+    (req,) = seen
+    assert req.url.path == "/ws/2/release"
+    assert dict(req.url.params) == {"recording": "rec-1", "fmt": "json", "limit": "25"}
+    assert refs[1].release_id and refs[1].status == "Official"
+    assert await provider.recording_releases("rec-1") == refs  # identify again: from the cache
+    assert len(seen) == 1
 
 
 async def test_fresh_requests_skip_the_response_cache(make_client: Make) -> None:

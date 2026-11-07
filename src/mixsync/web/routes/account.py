@@ -4,30 +4,41 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.requests import auto_accept_cap, profile_for
+from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
-from mixsync.db.auth import AuthUser
+from mixsync.core.jobs import WORKER_STALE_AFTER
+from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
+from mixsync.db.models.auth import AppSettings, MatchingProfile, User
+from mixsync.db.queue import worker_age
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
 from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.match.profiles import confidence, from_confidence
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
+    SESSION_COOKIE,
     Box,
     CurrentUser,
     Db,
+    get_discogs,
     get_listenbrainz_http,
     get_navidrome_http,
+    require,
 )
 from mixsync.web.routes.auth import admit, forget, refund
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
-SERVICES = ("listenbrainz", "navidrome")
+SERVICES = ("listenbrainz", "navidrome", "discogs")
+Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
 
 
 class Ping(StrEnum):
@@ -44,10 +55,20 @@ class LinkValidator(Protocol):
 
     async def navidrome_ping(self, username: str, password: str) -> Ping: ...
 
+    async def discogs_username(self, token: str) -> str | None:
+        """The username the token belongs to, or None if Discogs rejects it. Raises
+        TransientError when Discogs can't be reached."""
+        ...
+
 
 class DefaultValidator:
-    def __init__(self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient) -> None:
-        self._http, self._url, self._lb = http, navidrome_url, lb
+    def __init__(
+        self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient, discogs: DiscogsClient
+    ) -> None:
+        self._http, self._url, self._lb, self._discogs = http, navidrome_url, lb, discogs
+
+    async def discogs_username(self, token: str) -> str | None:
+        return await self._discogs.username(token)  # rejection is None; the text is not shown
 
     async def listenbrainz_username(self, token: str) -> str | None:
         try:
@@ -69,10 +90,11 @@ def get_validator(
     request: Request,
     http: Annotated[PoliteClient, Depends(get_navidrome_http)],
     lb_http: Annotated[PoliteClient, Depends(get_listenbrainz_http)],
+    discogs: Annotated[DiscogsClient, Depends(get_discogs)],
 ) -> LinkValidator:
     v: LinkValidator | None = getattr(request.app.state, "link_validator", None)
     return v or DefaultValidator(
-        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http)
+        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http), discogs
     )
 
 
@@ -86,8 +108,11 @@ def get_link(s: Session, user_id: int, service: str) -> UserLink | None:
     )
 
 
-def _service(service: str) -> str:
-    if service not in SERVICES:
+def _service(request: Request, service: str, *, linking: bool = True) -> str:
+    """`linking` False is for removing a stored link, which stays possible with Discogs off."""
+    if service not in SERVICES or (
+        linking and service == "discogs" and not request.app.state.settings.discogs_suggestions
+    ):
         raise HTTPException(404, "no such service")
     return service
 
@@ -100,8 +125,21 @@ def _page(
     error: tuple[str, str] | None = None,
     status: int = 400,
 ) -> HTMLResponse:
-    by_service = {link.service: link for link in user_links(s, box, user.id)}
-    ctx = {"user": user, "links": by_service, "error": error}
+    discogs = request.app.state.settings.discogs_suggestions
+    by_service = {
+        link.service: link
+        for link in user_links(s, box, user.id)
+        if discogs or link.service != "discogs"
+    }
+    profile = profile_for(s, user.id)
+    ctx = {
+        "user": user,
+        "links": by_service,
+        "error": error,
+        "discogs": discogs,
+        "auto_accept": confidence(profile.auto_accept_max),
+        "review": confidence(profile.review_max),
+    }
     return templates.TemplateResponse(
         request, "pages/account.html", ctx, status_code=status if error else 200
     )
@@ -110,6 +148,124 @@ def _page(
 @router.get("")
 def show(request: Request, user: CurrentUser, db: Db, box: Box) -> HTMLResponse:
     return _page(request, user, db, box)
+
+
+def _percent(text: str) -> int | None:
+    try:
+        pct = int(text.strip())
+    except ValueError:
+        return None
+    return pct if 0 <= pct <= 100 else None
+
+
+@router.post("/matching")
+def save_matching(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    box: Box,
+    auto_accept: Annotated[str, Form()],
+) -> Response:
+    """The user's auto-accept limit, entered as confidence. review_max is carried over."""
+    current, cap = profile_for(db, user.id), auto_accept_cap(db)
+    pct = _percent(auto_accept)
+    limit = from_confidence(pct) if pct is not None else None
+    if limit is None or limit > current.review_max:
+        msg = f"Enter a whole number from {confidence(current.review_max)} to 100."
+        return _page(request, user, db, box, ("matching", msg))
+    if cap is not None and limit > cap:
+        msg = f"The administrator's minimum is {confidence(cap)}%."
+        return _page(request, user, db, box, ("matching", msg))
+    row = db.get_one(User, user.id)
+    mine = db.get(MatchingProfile, row.matching_profile_id) if row.matching_profile_id else None
+    users = select(func.count(User.id)).where(User.matching_profile_id == row.matching_profile_id)
+    if mine is None or db.scalar(users) != 1:  # never change a row another user points at
+        mine = MatchingProfile(
+            name="custom",
+            preset="custom",
+            auto_accept_max=limit,
+            review_max=current.review_max,
+            quality_pref=mine.quality_pref if mine else None,
+        )
+        db.add(mine)
+        db.flush()
+        row.matching_profile_id = mine.id
+    mine.preset, mine.auto_accept_max = "custom", limit
+    return RedirectResponse("/account", 303)
+
+
+def _cap_page(request: Request, user: AuthUser, db: Db, error: str | None = None) -> HTMLResponse:
+    cap = auto_accept_cap(db)
+    ctx = {"user": user, "cap": None if cap is None else confidence(cap), "error": error}
+    return templates.TemplateResponse(
+        request, "pages/matching_cap.html", ctx, status_code=400 if error else 200
+    )
+
+
+@router.get("/cap")
+def show_cap(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    return _cap_page(request, admin, db)
+
+
+@router.post("/cap")
+def save_cap(
+    request: Request, admin: Admin, db: Db, minimum: Annotated[str, Form()] = ""
+) -> Response:
+    """Blank clears the cap; already clamped profiles keep their values."""
+    pct = _percent(minimum) if minimum.strip() else None
+    if minimum.strip() and pct is None:
+        return _cap_page(
+            request, admin, db, "Enter a whole number from 0 to 100, or leave it blank."
+        )
+    settings = db.get(AppSettings, 1) or AppSettings(id=1)
+    settings.min_auto_accept_confidence = pct
+    db.add(settings)
+    if pct is not None:
+        cap = from_confidence(pct)
+        db.execute(
+            update(MatchingProfile)
+            .where(MatchingProfile.auto_accept_max > cap)
+            .values(auto_accept_max=cap)
+        )
+    return RedirectResponse("/account/cap", 303)
+
+
+@router.get("/worker")
+def show_worker(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    age = worker_age(db, request.app.state.services.clock.now())
+    ctx = {
+        "user": admin,
+        "seconds": None if age is None else max(0, round(age.total_seconds())),
+        "stale": age is None or age > WORKER_STALE_AFTER,
+    }
+    return templates.TemplateResponse(request, "pages/worker.html", ctx)
+
+
+@router.post("/password")
+def change_password(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    box: Box,
+    current: Annotated[str, Form()],
+    new: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
+) -> Response:
+    """The current session stays signed in; the user's other sessions end."""
+    row = db.get_one(User, user.id)
+    key = (request.client.host if request.client else "", user.username.lower())
+    if not admit(key):  # the same budget as /login
+        msg = "Too many attempts, try again later."
+        return _page(request, user, db, box, ("password", msg), 429)
+    if not verify_password(row.password_hash, current):
+        return _page(request, user, db, box, ("password", "The current password is wrong."))
+    forget(key)
+    if not new or len(new) > MAX_LEN:
+        return _page(request, user, db, box, ("password", "Enter a new password."))
+    if new != confirm:
+        return _page(request, user, db, box, ("password", "The new passwords do not match."))
+    set_password(db, row, new, keep=request.cookies.get(SESSION_COOKIE))
+    return RedirectResponse("/account", 303)
 
 
 @router.post("/{service}")
@@ -123,7 +279,7 @@ async def save(
     secret: Annotated[str, Form()],
     username: Annotated[str, Form()] = "",
 ) -> Response:
-    _service(service)
+    _service(request, service)
     # a Navidrome password may legitimately start or end with spaces; the rest are identifiers
     secret = secret if service == "navidrome" else secret.strip()
     username = username.strip()
@@ -136,6 +292,14 @@ async def save(
                 name = (await validator.listenbrainz_username(secret) if secret else None) or ""
             except TransientError:
                 name, msg = "", "Couldn't reach ListenBrainz; try again."
+        elif service == "discogs":
+            msg = "Discogs did not accept that token."
+            try:
+                # a header value: control and non-ASCII characters are refused before any request
+                ok = secret.isascii() and secret.isprintable()
+                name = (await validator.discogs_username(secret) if secret and ok else None) or ""
+            except TransientError:
+                name, msg = "", "Couldn't reach Discogs; try again."
         else:
             name, msg = "", "Navidrome did not accept that username and password."
             keys = (("navidrome-user", str(user.id)), ("navidrome-target", username.lower()))
@@ -176,8 +340,8 @@ async def save(
 
 
 @router.post("/{service}/unlink")
-def unlink(service: str, user: CurrentUser, db: Db) -> RedirectResponse:
-    link = get_link(db, user.id, _service(service))
+def unlink(request: Request, service: str, user: CurrentUser, db: Db) -> RedirectResponse:
+    link = get_link(db, user.id, _service(request, service, linking=False))
     if link is not None:
         db.delete(link)
     return RedirectResponse("/account", 303)

@@ -1,7 +1,41 @@
 import argparse
+import logging
 import sys
 
-COMMANDS = ("web", "worker", "all", "migrate", "backup", "user-add")
+COMMANDS = ("web", "worker", "all", "migrate", "backup", "user-add", "worker-health")
+
+
+def configure_logging() -> str:
+    """Root logging for the long-running processes, at MIXSYNC_LOG_LEVEL. Returns the level.
+    uvicorn's loggers keep their own handlers and don't propagate, so nothing prints twice."""
+    from mixsync.core.config import Settings
+
+    level = Settings().log_level  # an invalid level fails here, before anything starts
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+        force=True,
+    )
+    return level
+
+
+def worker_health() -> int:
+    """0 when a worker recorded it was alive within WORKER_STALE_AFTER: the compose healthcheck."""
+    from mixsync.core.clock import SystemClock
+    from mixsync.core.jobs import WORKER_STALE_AFTER
+    from mixsync.db.engine import make_engine, make_session_factory
+    from mixsync.db.queue import worker_age
+
+    with make_session_factory(make_engine())() as s:
+        age = worker_age(s, SystemClock().now())
+    if age is None:
+        print("no worker has recorded a heartbeat", file=sys.stderr)
+        return 1
+    if age > WORKER_STALE_AFTER:
+        print(f"worker last seen {age.total_seconds():.0f}s ago", file=sys.stderr)
+        return 1
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -14,15 +48,34 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "web":
         import uvicorn
 
-        from mixsync.core.config import Settings
-        from mixsync.db.secretbox import load_box
+        from mixsync.app import create_app
 
-        load_box(Settings())  # refuse a bad key file now, not at the first /account request
-        uvicorn.run("mixsync.app:create_app", factory=True, host="0.0.0.0", port=8080)
+        # built here, not by uvicorn: a bad key file must stop startup (build_services loads it)
+        level = configure_logging()
+        uvicorn.run(create_app(), host="0.0.0.0", port=8080, log_level=level.lower())
     elif cmd == "migrate":
         from mixsync.db.migrate import upgrade
 
         upgrade()
+    elif cmd == "backup":
+        from pathlib import Path
+
+        from mixsync.core.clock import SystemClock
+        from mixsync.core.config import Settings
+        from mixsync.db.backup import backup
+        from mixsync.db.engine import make_engine
+
+        settings = Settings()
+        try:
+            path = backup(
+                make_engine(settings),
+                settings.backup_dir or Path(settings.config_dir) / "backups",
+                SystemClock(),
+            )
+        except Exception as e:
+            print(f"backup failed: {e}", file=sys.stderr)
+            return 1
+        print(path)
     elif cmd == "user-add":
         if not args.username:
             parser.error("user-add requires a username")
@@ -42,7 +95,11 @@ def main(argv: list[str] | None = None) -> int:
 
         from mixsync.worker import serve_all, serve_worker
 
+        configure_logging()
+
         asyncio.run(serve_worker() if cmd == "worker" else serve_all())
+    elif cmd == "worker-health":
+        return worker_health()
     else:
         print(f"mixsync {cmd}: not implemented yet", file=sys.stderr)
         return 1

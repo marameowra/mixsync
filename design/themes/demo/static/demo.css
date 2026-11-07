@@ -1,0 +1,5 @@
+body { background: #1b1b2f; color: #f0e9ff; font-family: Georgia, serif; }
+nav { background: #e43f5a; padding: 0.5rem 1rem; }
+nav a { color: #fff; font-weight: bold; }
+a { color: #ffb86b; }
+.demo-theme { border-left: 6px solid #e43f5a; padding-left: 1rem; }

@@ -19,6 +19,7 @@ _STATUS_BY_ACTION = {
     "reject": "rejected",
     "repick": "repick",
     "unverified": "unverified",
+    "cancel": "cancelled",  # the request was deleted before anyone judged the candidate
     "recheck": "rechecked",  # closed out so verify can decide again with the current scorer
 }
 
@@ -35,11 +36,13 @@ def record(
     user_id: int,
     stage: int,
     release_mbid: str,
+    release_given: bool = True,
 ) -> MatchDecision:
     row = MatchDecision(
         user_id=user_id,
         stage=stage,
         release_mbid=release_mbid,
+        release_given=release_given,
         band=result.band.value,
         distance=result.distance,
         breakdown=[asdict(p) for p in result.breakdown],

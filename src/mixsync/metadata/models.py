@@ -127,3 +127,64 @@ class AcoustIdSubmission(_Raw):
 class AcoustIdSubmitResponse(_Raw):
     status: str
     submissions: list[AcoustIdSubmission] = []
+
+
+class DeezerArtist(_Raw):
+    name: str
+
+
+class DeezerAlbumRaw(_Raw):
+    id: int
+    title: str
+    nb_tracks: int = 0
+    release_date: str = ""
+    artist: DeezerArtist
+
+
+class DeezerSearchRaw(_Raw):
+    data: list[DeezerAlbumRaw] = []
+
+
+class DeezerTrackRaw(_Raw):
+    title: str
+    track_position: int = 0
+    disk_number: int = 1
+    artist: DeezerArtist
+
+
+class DeezerTracksRaw(_Raw):
+    data: list[DeezerTrackRaw] = []
+
+
+class DiscogsIdentityRaw(_Raw):
+    username: str
+
+
+class DiscogsHitRaw(_Raw):
+    id: int
+    title: str  # "Artist - Title"
+    year: str = ""
+
+
+class DiscogsSearchRaw(_Raw):
+    results: list[DiscogsHitRaw] = []
+
+
+class DiscogsArtistRaw(_Raw):
+    name: str
+
+
+class DiscogsTrackRaw(_Raw):
+    position: str = ""
+    type_: str = "track"
+    title: str = ""
+    artists: list[DiscogsArtistRaw] = []
+    sub_tracks: list["DiscogsTrackRaw"] = []
+
+
+class DiscogsReleaseRaw(_Raw):
+    id: int
+    title: str
+    year: int = 0
+    artists: list[DiscogsArtistRaw] = []
+    tracklist: list[DiscogsTrackRaw] = []

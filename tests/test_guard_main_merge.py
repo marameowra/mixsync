@@ -53,6 +53,33 @@ def denied(out: str) -> bool:
         ("gh api repos/x/y/pulls/3/merge -X PUT", "dev", True),
         ("gh api graphql -f query='mutation{mergePullRequest(input:{})}'", "dev", True),
         ("gh pr merge 'unterminated", "dev", True),
+        ("gh pr create --title x", "dev", True),
+        ("gh pr create --base main", "dev", True),
+        ("gh pr create --base=main --fill", "dev", True),
+        ("gh pr create -B main", "dev", True),
+        ("gh pr create --base dev --title x", "dev", False),
+        ("gh pr create --base=dev", "dev", False),
+        ("gh pr create -B feat/x", "dev", False),
+        ("git tag v1.0.0", "dev", True),
+        ("git tag -a v1.0.0 -m 'release'", "dev", True),
+        ("git tag -s v2", "dev", True),
+        ("git tag -l", "dev", False),
+        ("git tag --list 'v*'", "dev", False),
+        ("git tag -d v1.0.0", "dev", False),
+        ("git tag -a nightly -m 'v1 notes'", "dev", False),
+        ("git push --tags", "dev", True),
+        ("git push origin --follow-tags", "dev", True),
+        ("git push origin v1.0.0", "dev", True),
+        ("git push origin HEAD:refs/tags/foo", "dev", True),
+        ("git push origin feat/x", "dev", False),
+        ("git push -u origin chore/guard-hooks", "dev", False),
+        ("gh release create v1.0.0", "dev", True),
+        ("gh release edit v1.0.0", "dev", True),
+        ("gh release delete v1.0.0", "dev", True),
+        ("gh release upload v1.0.0 f.zip", "dev", True),
+        ("gh release list", "dev", False),
+        ("gh api repos/o/r/actions/runs/1/pending_deployments -X POST", "dev", True),
+        ("gh api repos/o/r/pulls/3", "dev", False),
     ],
 )
 def test_merge_decisions(tmp_path: Path, command: str, base: str, deny: bool) -> None:
@@ -60,16 +87,25 @@ def test_merge_decisions(tmp_path: Path, command: str, base: str, deny: bool) ->
     assert denied(out) is deny
 
 
+@pytest.mark.parametrize(
+    ("command", "reason"),
+    [
+        ("gh pr create --fill", "PRs go to dev: pass --base dev (AGENTS.md)."),
+        ("git tag v1.0.0", "Releases are human-only"),
+        ("gh release create v1", "Releases are human-only"),
+        ("gh api x/pending_deployments", "Approving deployments"),
+    ],
+)
+def test_deny_reasons(tmp_path: Path, command: str, reason: str) -> None:
+    out, _ = run_hook(tmp_path, command, "dev")
+    assert reason in json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_repo_and_selector_passed_to_gh_pr_view(tmp_path: Path) -> None:
     _, calls = run_hook(tmp_path, "gh pr merge -R o/r 7 --merge", "dev")
     assert calls.split() == [
         "pr", "view", "7", "--repo", "o/r", "--json", "baseRefName", "-q", ".baseRefName",
     ]  # fmt: skip
-
-
-def test_unparseable_gh_merge_denied(tmp_path: Path) -> None:
-    out, _ = run_hook(tmp_path, "gh pr merge 'unterminated", "dev")
-    assert denied(out)
 
 
 @pytest.mark.parametrize(

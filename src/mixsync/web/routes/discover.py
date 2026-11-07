@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
+from mixsync.acquire.lifecycle import NO_FILE
 from mixsync.core.capabilities import Capability
 from mixsync.core.clock import aware
 from mixsync.db.auth import AuthUser
@@ -13,7 +14,8 @@ from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, Prov
 from mixsync.db.models.library import Track
 from mixsync.db.models.work import Request as WorkRequest
 from mixsync.discovery import playlists, retention
-from mixsync.web.deps import Db, require
+from mixsync.web.deps import Db, Namer, require
+from mixsync.web.names import resolve
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/discover")
@@ -40,12 +42,18 @@ def _status(h: ProvisionalHold | None, owned: bool, request_status: str | None) 
         return "expired"
     if h.provisional_track_id:
         return "in discover"
-    # a request that ended without a file (playlists.DONE minus imported/owned) found nothing
-    return "not found" if request_status in ("failed", "skipped") else "waiting for download"
+    # a request that ended without a file (lifecycle.NO_FILE) found nothing
+    return "not found" if request_status in NO_FILE else "waiting for download"
+
+
+def _artwork_src(release: str | None, group: str | None) -> str | None:
+    if release:
+        return f"/media/artwork/release/{release}" + (f"?group={group}" if group else "")
+    return f"/media/artwork/release-group/{group}" if group else None
 
 
 @router.get("")
-def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
+async def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     rows = db.scalars(
         select(DiscoveryPlaylist)
         .where(DiscoveryPlaylist.user_id == user.id)
@@ -57,14 +65,33 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         for h in db.scalars(select(ProvisionalHold).where(ProvisionalHold.user_id == user.id))
     }
     req_ids = [h.request_id for h in holds.values() if h.request_id]
-    req_status = {
-        i: st
-        for i, st in db.execute(
-            select(WorkRequest.id, WorkRequest.status).where(WorkRequest.id.in_(req_ids))
-        )
-    }
+    requests = list(db.scalars(select(WorkRequest).where(WorkRequest.id.in_(req_ids))))
+    req_by_id = {r.id: r for r in requests}
+    req_status = {r.id: r.status for r in requests}
+    now = datetime.now(UTC)
+    due = retention.expiring_soon(db, now, user.id)
     mbids = [e["recording_mbid"] for p in rows for e in p.entries]
-    owned = set(db.scalars(select(Track.recording_mbid).where(Track.recording_mbid.in_(mbids))))
+    mbids.extend(h.recording_mbid for h in due)
+    artwork_ids: dict[str, tuple[str | None, str | None]] = {}
+    owned_tracks = list(db.scalars(select(Track).where(Track.recording_mbid.in_(mbids))))
+    for track in owned_tracks:
+        if track.recording_mbid and (track.release_mbid or track.release_group_mbid):
+            artwork_ids.setdefault(
+                track.recording_mbid, (track.release_mbid, track.release_group_mbid)
+            )
+    for track in db.scalars(
+        select(ProvisionalTrack).where(ProvisionalTrack.recording_mbid.in_(mbids))
+    ):
+        if track.release_mbid or track.release_group_mbid:
+            artwork_ids.setdefault(
+                track.recording_mbid, (track.release_mbid, track.release_group_mbid)
+            )
+    for hold in holds.values():
+        if req := req_by_id.get(hold.request_id or 0):
+            if req.release_mbid or req.release_group_mbid:
+                for recording in req.recording_mbids:
+                    artwork_ids.setdefault(recording, (req.release_mbid, req.release_group_mbid))
+    owned = {track.recording_mbid for track in owned_tracks}
     tracks: dict[int, list[dict[str, Any]]] = {}
     for p in rows:
         tracks[p.id] = []
@@ -72,9 +99,15 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
             m = e["recording_mbid"]
             h = holds.get(m)
             rs = req_status.get(h.request_id) if h and h.request_id else None
-            tracks[p.id].append({**e, "status": _status(h, m in owned, rs), "hold": h})
-    now = datetime.now(UTC)
-    due = retention.expiring_soon(db, now, user.id)
+            release, group = artwork_ids.get(m, (None, None))
+            tracks[p.id].append(
+                {
+                    **e,
+                    "status": _status(h, m in owned, rs),
+                    "hold": h,
+                    "artwork_src": _artwork_src(release, group),
+                }
+            )
     pts = {
         t.id: t
         for t in db.scalars(
@@ -89,21 +122,30 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
     soon: list[dict[str, Any]] = []
     for h in due:
         t, e = pts.get(h.provisional_track_id or 0), names.get(h.recording_mbid, {})
-        title = (t and t.title) or e.get("title") or h.recording_mbid
+        title = (t and t.title) or e.get("title")  # no title: the template names the recording
         artist = (t and t.artist) or e.get("artist")
         soon.append(
             {
                 "mbid": h.recording_mbid,
-                "name": f"{artist} - {title}" if artist else title,
+                "name": (f"{artist} - {title}" if artist else title) if title else None,
+                "artwork_src": _artwork_src(*artwork_ids.get(h.recording_mbid, (None, None))),
                 "expires": h.expires_at,
                 "overdue": bool(h.expires_at and aware(h.expires_at) <= now),
             }
         )
+    unnamed = {
+        ("recording", t["recording_mbid"])
+        for ts in tracks.values()
+        for t in ts
+        if not t.get("title")
+    }
+    unnamed |= {("recording", h["mbid"]) for h in soon if not h["name"]}
     ctx: dict[str, Any] = {
         "user": user,
         "rows": rows,
         "tracks": tracks,
         "soon": soon,
+        "names": await resolve(db, namer, unnamed),
         "linked": {"listenbrainz", "navidrome"} <= linked,
     }
     return templates.TemplateResponse(request, "pages/discover.html", ctx)

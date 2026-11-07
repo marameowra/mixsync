@@ -25,9 +25,10 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.queue import enqueue_in
 from mixsync.discovery import retention
-from mixsync.discovery.playlists import Discovery, ensure_build
+from mixsync.discovery.playlists import NO_LINKS, Discovery, ensure_build
 from mixsync.discovery.retention import Retention
 from mixsync.library import tags
+from mixsync.wiring import build_services
 
 from .conftest import Env
 from .fakes import ALBUM, ALBUM_B, AUDIO
@@ -151,21 +152,22 @@ def assert_promoted(r: RRig, why: str) -> None:
         assert {o.kind for o in s.scalars(select(FileOp))} >= {"copy", "trash"}
 
 
-async def test_a_starred_track_is_promoted(env: Env) -> None:
+@pytest.mark.parametrize(
+    ("why", "stars", "plays", "calls"),
+    [
+        ("star", {SONG}, {}, ["stars", "plays"]),
+        ("plays", set(), {SONG: 3}, ["stars", "plays"]),  # exactly at the threshold
+    ],
+)
+async def test_a_starred_or_well_played_track_is_promoted(
+    env: Env, why: str, stars: set[str], plays: dict[str, int], calls: list[str]
+) -> None:
     r = RRig(env)
     r.hold(env.user_id)
-    r.lib.stars = {SONG}
+    r.lib.stars, r.lib.plays = stars, plays
     await r.retain(env.user_id)
-    assert_promoted(r, "star")
-
-
-async def test_plays_at_the_threshold_promote(env: Env) -> None:
-    r = RRig(env)
-    r.hold(env.user_id)
-    r.lib.plays = {SONG: 3}
-    await r.retain(env.user_id)
-    assert_promoted(r, "plays")
-    assert r.lib.calls == ["stars", "plays"]  # once per run
+    assert_promoted(r, why)
+    assert r.lib.calls == calls  # once per run
 
 
 async def test_fewer_plays_are_not_kept(env: Env) -> None:
@@ -285,7 +287,9 @@ async def test_retention_does_not_ask_to_relink_a_service_it_does_not_need(env: 
     env.clock.advance(timedelta(days=40))
     await r.retain(env.user_id)
     with env.sessions() as s:
-        assert "relinking" not in (s.scalars(select(DiscoveryPlaylist)).one().last_error or "")
+        err = s.scalars(select(DiscoveryPlaylist)).one().last_error or ""
+    assert "relinking" not in err  # the broken ListenBrainz token is not mentioned
+    assert err == NO_LINKS  # only the missing Navidrome link is
 
 
 async def test_expiring_soon(env: Env) -> None:
@@ -318,7 +322,6 @@ async def test_startup_recovery_creates_default_playlist_and_retention_chain(
             "downloads_dir": str(env.downloads),
         }
     )
-    monkeypatch.setattr(worker, "Settings", lambda: settings)
     start = Discovery.start_chains
     attempts = 0
 
@@ -330,7 +333,7 @@ async def test_startup_recovery_creates_default_playlist_and_retention_chain(
         start(discovery)
 
     monkeypatch.setattr(Discovery, "start_chains", fail_once)
-    _, _, _, startup = worker._new_queue()
+    _, _, _, startup = worker._new_queue(build_services(settings, env.sessions))
     stop = asyncio.Event()
     claims = 0
 
@@ -376,6 +379,36 @@ async def test_a_failed_promote_stays_kept_and_the_file_stays(env: Env) -> None:
 def set_song_id(r: RRig, song_id: str | None) -> None:
     with r.env.sessions.begin() as s:
         s.scalars(select(ProvisionalTrack)).one().navidrome_song_id = song_id
+
+
+async def test_a_missing_discover_library_changes_no_hold(
+    env: Env, caplog: pytest.LogCaptureFixture
+) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.folders = {"Music Library": "1"}
+    r.lib.stars = {SONG}  # would promote, were songs resolved outside the discover library
+    env.clock.advance(timedelta(days=40))  # and would expire otherwise
+    await r.retain(env.user_id)
+    assert r.lib.resolved == []
+    hold = r.holds()[0]
+    assert hold.expired_at is None and hold.kept_at is None
+    assert r.track().status == "active"
+    with env.sessions() as s:
+        err = s.scalars(select(DiscoveryPlaylist)).one().last_error or ""
+    assert "'discover' library is not visible" in err and "it sees: Music Library" in err
+    assert err in caplog.text
+
+
+async def test_a_good_run_clears_the_missing_library_note(env: Env) -> None:
+    r = RRig(env)
+    r.hold(env.user_id)
+    r.lib.folders = {"Music Library": "1"}
+    await r.retain(env.user_id)
+    r.lib.folders = {"Music Library": "1", "discover": DISCOVER_FOLDER}  # renamed by the user
+    await r.retain(env.user_id)
+    with env.sessions() as s:
+        assert s.scalars(select(DiscoveryPlaylist)).one().last_error is None
 
 
 async def test_an_unknown_song_is_never_expired(env: Env) -> None:

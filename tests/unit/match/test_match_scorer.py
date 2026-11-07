@@ -3,9 +3,9 @@ from dataclasses import replace
 
 import pytest
 
-from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, TrackInfo
+from mixsync.core.matching import AlbumInfo, Band, FileTrack, Likelies, Profile, TrackInfo
 from mixsync.core.types import AcoustIdResult
-from mixsync.match.profiles import BALANCED, LOOSE, STRICT
+from mixsync.match.profiles import BALANCED, LOOSE, RUNNER_UP_GAP, STRICT, close_gap
 from mixsync.match.scorer import (
     DEFAULT_WEIGHTS,
     SCORER_VERSION,
@@ -32,7 +32,7 @@ def test_add_methods() -> None:
     d.add_equality("album", "ghi", ["abc", "def", "ghi"], "r")
     d.add_equality("album", "xyz", ["abc", "def", "ghi"], "r")
     d.add_equality("album", "abc", "abc", "r")
-    assert [p for p, _ in d._penalties["album"]] == [0.0, 1.0, 0.0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(1 / 3)  # mean of [0, 1, 0]
 
     d = dist()
     d.add_expr("media", True, "r")
@@ -40,20 +40,20 @@ def test_add_methods() -> None:
     d.add_number("media", 1, 1, "r")
     d.add_number("media", 2, 1, "r")
     d.add_number("media", -1, 2, "r")
-    assert [p for p, _ in d._penalties["media"]] == [1, 0, 0, 1, 1, 1, 1]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(5 / 7)  # mean of [1, 0, 0, 1, 1, 1, 1]
 
     d = dist()
     d.add_ratio("year", 25, 100, "r")
     d.add_ratio("year", 10, 5, "r")
     d.add_ratio("year", -5, 5, "r")
     d.add_ratio("year", 5, 0, "r")
-    assert [p for p, _ in d._penalties["year"]] == [0.25, 1.0, 0.0, 0.0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(0.3125)  # mean of [0.25, 1, 0, 0]
 
     d = dist()
     d.add_string("label", "abc", "bcd", "r")
     d.add_string("label", "abc", None, "r")
     d.add_string("label", None, None, "r")
-    assert [p for p, _ in d._penalties["label"]] == [2 / 3, 1, 0]  # pyright: ignore[reportPrivateUsage]
+    assert d.distance == pytest.approx(5 / 9)  # mean of [2/3, 1, 0]
 
 
 def test_add_rejects_out_of_range() -> None:
@@ -340,15 +340,18 @@ def test_one_of_thirteen_with_acoustid_auto_accepts() -> None:
     full = AlbumInfo(
         artist="artist",
         album="album",
-        tracks=tuple(rec_track(f"t{i}", r) for i, r in enumerate(recs, 1)),
+        tracks=tuple(replace(rec_track(f"t{i}", r), index=i) for i, r in enumerate(recs, 1)),
     )
-    files = [sure_file("t1", "r1")]
+    # wrong title and track number: only the AcoustID confirmation carries it over the line
+    files = [sure_file("Compl3tely different", "r1", track=9)]
     pairs, _, _ = assign_tracks(files, full.tracks)
     from mixsync.match.vetoes import all_confident
 
     assert all_confident(pairs)
     free = {**DEFAULT_WEIGHTS, "missing_tracks": 0.0}
     assert score_files(files, LIKE, full, BALANCED, free).band is Band.AUTO_ACCEPT
+    unconfirmed = [replace(files[0], acoustid=())]
+    assert score_files(unconfirmed, LIKE, full, BALANCED, free).band is Band.REVIEW
 
 
 def test_standard_edition_beats_a_longer_deluxe_with_off_lengths() -> None:
@@ -364,17 +367,18 @@ def test_standard_edition_beats_a_longer_deluxe_with_off_lengths() -> None:
 
 
 @pytest.mark.parametrize(
-    ("a", "b"),
+    ("a", "b", "expected"),
     [
-        ("X", "Malcolm X"),
-        ("Mr X", "X"),
-        ("Xxx", "X"),
-        ("Ft", "Ft. Lauderdale"),
-        ("X", "Exene Cervenka & X"),
+        ("X", "Malcolm X", 0.875),
+        ("Mr X", "X", 2 / 3),
+        ("Xxx", "X", 2 / 3),
+        ("Ft", "Ft. Lauderdale", 5 / 6),
+        ("X", "Exene Cervenka & X", 16 / 17),
     ],
 )
-def test_artist_separator_words_never_crash(a: str, b: str) -> None:
-    assert 0.0 <= artist_dist(a, b) <= 1.0
+def test_artist_separator_words_stay_whole(a: str, b: str, expected: float) -> None:
+    # a one-letter or short part is no partial hit: the plain edit distance applies
+    assert artist_dist(a, b) == pytest.approx(expected)
     assert artist_dist(b, a) == artist_dist(a, b)
 
 
@@ -482,3 +486,161 @@ def test_compilation_with_more_confirmations_does_not_beat_the_tagged_album() ->
     )
     for profile in (STRICT, BALANCED, LOOSE):
         assert best_release(files, like, [b, a], profile)[0] is a
+
+
+def test_close_gap_is_inclusive_at_the_fixed_gap() -> None:
+    assert RUNNER_UP_GAP == 0.08  # the same window for every profile, strict and loose included
+    assert close_gap(RUNNER_UP_GAP)
+    assert close_gap(0.1 + 0.2 - 0.3 + RUNNER_UP_GAP)  # float noise at the limit
+    assert close_gap(RUNNER_UP_GAP - 0.001)
+    assert not close_gap(RUNNER_UP_GAP + 0.001)
+
+
+def _runner_up_case(gap_ok: bool) -> tuple[list[FileTrack], Likelies, list[AlbumInfo]]:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    a = AlbumInfo(artist="artist", album="album", release_id="a", tracks=(rec_track("One", "r1"),))
+    b = AlbumInfo(artist="other", album="diff", release_id="b", tracks=(rec_track("One", "r1"),))
+    return files, like, [a, replace(a, release_id="b") if gap_ok else b]
+
+
+def test_the_auto_accept_limit_does_not_move_the_runner_up_window() -> None:
+    files, like, far = _runner_up_case(gap_ok=False)
+    near = _runner_up_case(gap_ok=True)[2]
+    tight, wide = Profile("tight", 0.0, 0.4), Profile("wide", 0.9, 0.95)
+    gap = (
+        score_files(files, like, far[1], wide).distance
+        - score_files(files, like, far[0], wide).distance
+    )
+    assert RUNNER_UP_GAP < gap <= wide.auto_accept_max  # the old limit-sized window called it close
+    for profile in (tight, wide):
+        assert best_release(files, like, far, profile)[1].runner_up is None
+        assert best_release(files, like, near, profile)[1].runner_up is not None
+
+
+def test_a_close_runner_up_or_veto_forces_review_at_the_loosest_limit() -> None:
+    loosest = Profile("custom", 0.4, 0.4)  # a 0% limit is held to review_max
+    files, like, near = _runner_up_case(gap_ok=True)
+    assert best_release(files, like, near, loosest)[1].band is Band.REVIEW
+    vetoed = [sure_file("One", "r2", track=1)]  # AcoustID names a different recording
+    assert score_files(vetoed, like, near[0], loosest).band is Band.REVIEW
+
+
+def test_a_close_runner_up_caps_the_best_at_review() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    a = AlbumInfo(artist="artist", album="album", release_id="a", tracks=(rec_track("One", "r1"),))
+    b = replace(a, release_id="b")
+    album, result = best_release(files, like, [a, b], STRICT)
+    assert result.band is Band.REVIEW
+    assert result.runner_up is not None and result.runner_up.gap == 0.0
+    assert {album.release_id, result.runner_up.release_id} == {"a", "b"}
+    assert best_release(files, like, [a], STRICT)[1].band is Band.AUTO_ACCEPT
+
+
+def test_a_distant_runner_up_does_not_cap() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    a = AlbumInfo(artist="artist", album="album", release_id="a", tracks=(rec_track("One", "r1"),))
+    b = AlbumInfo(
+        artist="other", album="different", release_id="b", tracks=(rec_track("One", "x"),)
+    )
+    _, result = best_release(files, like, [a, b], LOOSE)
+    assert result.band is Band.AUTO_ACCEPT and result.runner_up is None
+
+
+def test_acoustid_separated_runner_up_does_not_cap() -> None:
+    files = [sure_file("One", "r1", track=1)]
+    like = Likelies(artist="artist", album="album")
+    holds = AlbumInfo(
+        artist="artist", album="album (Deluxe)", release_id="a", tracks=(rec_track("One", "r1"),)
+    )
+    tags = AlbumInfo(
+        artist="artist",
+        album="album",
+        release_id="b",
+        tracks=(replace(rec_track("One", "x"), recording_id=None),),
+    )
+    album, result = best_release(files, like, [holds, tags], LOOSE)
+    assert album is holds and tags_closer(files, like, tags, holds)
+    assert result.band is Band.AUTO_ACCEPT and result.runner_up is None
+
+
+def tags_closer(files: list[FileTrack], like: Likelies, a: AlbumInfo, b: AlbumInfo) -> bool:
+    return score_files(files, like, a, LOOSE).distance < score_files(files, like, b, LOOSE).distance
+
+
+def test_acoustid_confirmed_file_pays_no_track_or_disc_number_penalty() -> None:
+    f = sure_file("Mr. Kill Myself", "r7", track=8, disc=2)
+    t = replace(rec_track("Mr. Kill Myself", "r7"), index=7, medium_index=7, medium=1)
+    got = {p.key: p.penalty for p in track_distance(f, t).breakdown()}
+    assert "track_index" not in got and "medium" not in got  # both 0.0
+    unsure = {p.key for p in track_distance(replace(f, acoustid=()), t).breakdown()}
+    assert {"track_index", "medium"} <= unsure
+
+
+DRAINING = (  # the #278 report: a 9-track release without Newlove
+    "Intro",
+    "Yandere Complex",
+    "Burn",
+    "Sorry",
+    "Everlong",
+    "Scars",
+    "Mr. Kill Myself",
+    "Losing",
+    "Draining Love Story",
+)
+
+
+def draining() -> AlbumInfo:
+    tracks = tuple(
+        TrackInfo(title, "Kirsche", 180.0, i, i, 1, f"rec-{i}")
+        for i, title in enumerate(DRAINING, 1)
+    )
+    return AlbumInfo(artist="Kirsche", album="Draining Love Story", tracks=tracks, release_id="dls")
+
+
+def draining_files() -> list[FileTrack]:
+    """08 - Mr. Kill Myself (AcoustID: track 7) and 02 - Newlove (AcoustID: not on the release)."""
+    kill = FileTrack(
+        "Mr. Kill Myself", "Kirsche", 180.0, 8, 1, acoustid=(AcoustIdResult("a", 0.99, ("rec-7",)),)
+    )
+    newlove = FileTrack(
+        "Newlove", "Kirsche", 289.0, 2, 1, acoustid=(AcoustIdResult("b", 0.99, ("rec-new",)),)
+    )
+    return [kill, newlove]
+
+
+def test_a_file_whose_recording_the_release_lacks_is_never_paired() -> None:
+    album, (kill, newlove) = draining(), draining_files()
+    pairs, extra, missing = assign_tracks([kill, newlove], album.tracks)
+    assert [(f.title, t.title) for f, t in pairs] == [("Mr. Kill Myself", "Mr. Kill Myself")]
+    assert extra == [newlove] and album.tracks[1] in missing and len(missing) == 8
+    like = Likelies("Kirsche", "Draining Love Story")
+    result = score_files([kill, newlove], like, album, LOOSE)
+    assert result.band is Band.REVIEW
+    assert result.vetoes == ("'Newlove': release does not contain recording rec-new",)
+    reasons = " ".join(p.reason for p in result.breakdown)
+    assert "-> 'Yandere Complex'" not in reasons and "track number" not in reasons
+
+
+def test_a_confirmed_pair_beats_a_number_based_pairing() -> None:
+    album = draining()
+    kill = replace(draining_files()[0], title="Burn", track=3)  # tags say track 3, AcoustID 7
+    pairs, _, _ = assign_tracks([kill], album.tracks)
+    assert [t.title for _, t in pairs] == ["Mr. Kill Myself"]
+
+
+def test_the_release_holding_every_identified_recording_wins() -> None:
+    only_kill = draining()
+    newlove = TrackInfo("Newlove", "Kirsche", 289.0, 10, 10, 1, "rec-new")
+    both = replace(
+        only_kill,
+        album="Draining Love Story (Deluxe)",
+        release_id="dls-deluxe",
+        tracks=(*only_kill.tracks, newlove),
+    )
+    like = Likelies("Kirsche", "Draining Love Story")
+    for albums in ([only_kill, both], [both, only_kill]):
+        album, _ = best_release(draining_files(), like, albums, BALANCED)
+        assert album is both

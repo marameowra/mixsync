@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, Integer, LargeBinary, String
+from sqlalchemy import JSON, DateTime, Float, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base
@@ -28,3 +28,23 @@ class HttpCache(Base):
     body: Mapped[bytes] = mapped_column(LargeBinary)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class MbName(Base):
+    """A MusicBrainz entity's display name, kept after its response-cache entry expires."""
+
+    __tablename__ = "mb_name"
+
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class WorkerHeartbeat(Base):
+    """When each worker's polling loop last went round; the healthcheck reads the newest."""
+
+    __tablename__ = "worker_heartbeats"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

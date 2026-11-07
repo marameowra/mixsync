@@ -4,25 +4,37 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import recheck
-from mixsync.acquire.merge import PlanInProgress, enqueue_merge, enqueue_undo, live_job
+from mixsync.acquire.merge import (
+    DeleteRefused,
+    Merger,
+    PlanInProgress,
+    enqueue_merge,
+    enqueue_reorganize,
+    enqueue_undo,
+    live_job,
+    reorganize_build,
+    stale_delete_draft,
+)
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
-from mixsync.core.clock import SystemClock
 from mixsync.core.errors import TransientError
+from mixsync.core.jobs import LIVE
+from mixsync.db import progress
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
 from mixsync.db.models.safety import FileOp, TagSnapshot
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.undo import undoable
-from mixsync.library import fragmentation, tag_undo, tags
+from mixsync.library import albums, fragmentation, layout, tag_undo, tags
 from mixsync.library.fileops import FileOps
 from mixsync.submit.harmony import harmony_url
 from mixsync.submit.mb_seed import (
@@ -33,9 +45,10 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
-from mixsync.web.deps import Db, Files, Merge, Namer, require
+from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
-from mixsync.web.templating import templates
+from mixsync.web.routes.requests import delete_row
+from mixsync.web.templating import render, templates
 
 router = APIRouter(prefix="/library")
 User = Annotated[AuthUser, Depends(require(Capability.library_edit))]
@@ -48,8 +61,15 @@ def _changes(plan: Plan) -> int:
     return sum(op["op"] in ("move", "trash") for op in plan.ops)
 
 
-def _plan(db: Db, plan_id: int) -> Plan:
+def _plan(db: Db, plan_id: int, user: AuthUser) -> Plan:
+    """The plan, if the user may act on it: `library.edit`, or the owner of the request whose
+    music a delete plan removes (and nothing else)."""
     plan = db.get(Plan, plan_id)
+    mine = plan is not None and any(
+        op["op"] == "request" and op["user_id"] == user.id for op in plan.ops
+    )
+    if not (mine or Capability.library_edit in user.capabilities):
+        raise HTTPException(403, f"missing capability: {Capability.library_edit.value}")
     if plan is None:
         raise HTTPException(404, "no such plan")
     return plan
@@ -103,13 +123,9 @@ async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLR
     )
 
 
-def _read_unverified(request: Request, db: Session) -> list[recheck.Item]:
-    return recheck.read_unverified(db, Path(request.app.state.settings.data_dir) / "library")
-
-
 @router.get("/unverified")
 def unverified(request: Request, user: User, db: Db) -> HTMLResponse:
-    items = _read_unverified(request, db)
+    items = recheck.read_unverified(db)
     albums = recheck.group(items)
     ctx = {
         "user": user,
@@ -130,7 +146,7 @@ def check_now(
     year: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
     key = (albumartist, album, year)
-    if key not in recheck.group(_read_unverified(request, db)):
+    if key not in recheck.group(recheck.read_unverified(db)):
         raise HTTPException(404, "no unverified tracks for that album")
     enqueue_recheck(db, datetime.now(UTC), key, user.id)
     return RedirectResponse("/library/unverified", status_code=303)
@@ -140,11 +156,14 @@ def _num(v: str | None, default: int) -> int:
     return int(v) if v and v.isascii() and v.isdigit() else default
 
 
+_Item = tuple[Track, dict[str, str]]
+
+
 def _seed_release(
-    request: Request, items: list[recheck.Item], album: str, artist: str, year: str
+    request: Request, items: list[_Item], album: str, artist: str, year: str
 ) -> SeedRelease:
-    root = Path(request.app.state.settings.data_dir) / "library"
-    discs: dict[int, list[recheck.Item]] = {}
+    root = request.app.state.services.fileops.library
+    discs: dict[int, list[_Item]] = {}
     for it in items:
         discs.setdefault(_num(it[1].get("discnumber"), 1), []).append(it)
     mediums: list[SeedMedium] = []
@@ -185,9 +204,15 @@ def unverified_submit(
     year: str = "",
     store_url: str = "",
 ) -> HTMLResponse:
-    items = recheck.group(_read_unverified(request, db)).get((albumartist, album, year), [])
-    if not items:
+    rows = recheck.group(recheck.read_unverified(db)).get((albumartist, album, year), [])
+    if not rows:
         raise HTTPException(404, "no unverified tracks for that album")
+    items: list[_Item] = []
+    for t in rows:  # one album's files, for the seed's disc and track numbers
+        try:
+            items.append((t, tags.read_fields(request.app.state.services.fileops.library / t.path)))
+        except Exception:  # file moved or unreadable: the path alone still identifies it
+            items.append((t, {}))
     seen = Counter(
         (_num(tg.get("discnumber"), 1), _num(tg["tracknumber"], 0) or tg["tracknumber"])
         for _, tg in items
@@ -233,56 +258,130 @@ async def build_plan(
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
+@router.post("/reorganize/plan")
+def build_reorganize(user: User, db: Db) -> RedirectResponse:
+    """Queue the build: it reads the tags of every drifted file, too slow for a request."""
+    enqueue_reorganize(db, datetime.now(UTC))
+    return RedirectResponse("/library/reorganize", status_code=303)
+
+
+@router.get("/reorganize")
+def reorganize_status(request: Request, user: User, db: Db) -> HTMLResponse:
+    """A live region (ADR 0017): building, then a link to the draft or why it failed."""
+    job, plan_id = reorganize_build(db)
+    ctx = {
+        "user": user,
+        "job": job,
+        "plan_id": plan_id,
+        "building": job is not None and job.status in LIVE,
+    }
+    return render(request, "pages/reorganize.html", "pages/reorganize_live.html", ctx)
+
+
+SAMPLE, FOLDERS = 3, 100  # a reorganize page shows this many moves per folder, of this many
+
+
+def _by_folder(ops: list[dict[str, Any]]) -> dict[str, Any]:
+    """Moves and refusals grouped by the album folder they leave: (folder, count, sample) for
+    the first FOLDERS folders, and how many folders are left out."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for op in ops:
+        if op["op"] in ("move", "refused"):
+            groups.setdefault(op["old"]["path"].rpartition("/")[0], []).append(op)
+    shown = [(f, len(o), o[:SAMPLE]) for f, o in list(groups.items())[:FOLDERS]]
+    return {"folders": shown, "folders_hidden": len(groups) - len(shown)}
+
+
 @router.get("/plans/{plan_id}")
 async def plan_detail(
-    plan_id: int, request: Request, user: User, db: Db, namer: Namer
+    plan_id: int, request: Request, user: CurrentUser, db: Db, namer: Namer
 ) -> HTMLResponse:
-    plan = _plan(db, plan_id)
-    counts = {k: sum(op["op"] == k for op in plan.ops) for k in ("move", "trash", "keep")}
+    plan = _plan(db, plan_id, user)
+    kinds = ("move", "trash", "keep", "refused")
+    counts = {k: sum(op["op"] == k for op in plan.ops) for k in kinds}
     refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
     for op in plan.ops:
-        if op["op"] == "move":
+        if op["op"] == "move" and "tags" in op:
             refs |= {
                 ("release", op["old"].get("release_mbid") or ""),
                 ("release", op["tags"].get("release_id") or ""),
             }
     allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
+    ops = progress.with_done(db, plan)
     ctx = {
         "user": user,
         "plan": plan,
+        "ops": ops,
         "counts": counts,
         "allowed": allowed,
         "names": await resolve(db, namer, refs, MAX_LOOKUPS),
+        **(_by_folder(ops) if plan.kind == "reorganize" else {}),
     }
     return templates.TemplateResponse(request, "pages/plan.html", ctx)
 
 
+MOVES_PAGE = 200
+
+
+@router.get("/plans/{plan_id}/moves")
+def plan_moves(
+    plan_id: int, request: Request, user: CurrentUser, db: Db, page: str = "1"
+) -> HTMLResponse:
+    """Every move and refusal of a reorganize plan, paged (data-safety rule 5)."""
+    plan = _plan(db, plan_id, user)
+    rows = [op for op in progress.with_done(db, plan) if op["op"] in ("move", "refused")]
+    pages = max(1, -(-len(rows) // MOVES_PAGE))
+    n = min(max(_num(page, 1), 1), pages)
+    ctx = {
+        "user": user,
+        "plan": plan,
+        "total": len(rows),
+        "page": n,
+        "pages": pages,
+        "rows": rows[(n - 1) * MOVES_PAGE : n * MOVES_PAGE],
+    }
+    return templates.TemplateResponse(request, "pages/plan_moves.html", ctx)
+
+
 def _act(
     request: Request,
+    user: AuthUser,
     plan_id: int,
     action: str,
     db: Session,
     count: str,
     enqueue: Callable[[Session, datetime, int], None],
 ) -> RedirectResponse:
-    plan = _plan(db, plan_id)
+    plan = _plan(db, plan_id, user)
+    if action == "confirm" and stale_delete_draft(db, plan, request.app.state.services.clock.now()):
+        plan.status = "discarded"
+        db.commit()  # the refusal below would roll the discard back
+        raise HTTPException(409, "this delete preview is over a week old; make a new one")
     if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)
+    if action == "confirm":  # the worker deletes the request last; a refusal now aborts the confirm
+        for op in plan.ops:
+            if op["op"] == "request" and (req := db.get(AlbumRequest, op["request_id"])):
+                check = db.begin_nested()
+                try:
+                    delete_row(db, req, user.id)
+                finally:
+                    check.rollback()  # checks only: nothing is deleted yet
     enqueue(db, datetime.now(UTC), plan.id)
     return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
 
 
 @router.post("/plans/{plan_id}/confirm")
 def confirm(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "confirm", db, count, enqueue_merge)
+    return _act(request, user, plan_id, "confirm", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/discard")
-def discard(plan_id: int, request: Request, user: User, db: Db) -> RedirectResponse:
-    plan = _plan(db, plan_id)
+def discard(plan_id: int, request: Request, user: CurrentUser, db: Db) -> RedirectResponse:
+    plan = _plan(db, plan_id, user)
     if "discard" not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     plan.status = "discarded"  # a preview that never ran: DB only
@@ -291,16 +390,132 @@ def discard(plan_id: int, request: Request, user: User, db: Db) -> RedirectRespo
 
 @router.post("/plans/{plan_id}/resume")
 def resume(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "resume", db, count, enqueue_merge)
+    return _act(request, user, plan_id, "resume", db, count, enqueue_merge)
 
 
 @router.post("/plans/{plan_id}/undo")
 def undo(
-    plan_id: int, request: Request, user: User, db: Db, count: Annotated[str, Form()] = ""
+    plan_id: int, request: Request, user: CurrentUser, db: Db, count: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    return _act(request, plan_id, "undo", db, count, enqueue_undo)
+    return _act(request, user, plan_id, "undo", db, count, enqueue_undo)
+
+
+def _delete_plan(merger: Merger, track_ids: list[int]) -> RedirectResponse:
+    try:
+        plan_id = merger.build_delete(track_ids)
+    except (PlanInProgress, DeleteRefused) as e:
+        raise HTTPException(409, str(e)) from None
+    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+
+
+@router.post("/unverified/delete")
+def delete_unverified_album(
+    request: Request,
+    user: User,
+    db: Db,
+    merger: Merge,
+    album: Annotated[str, Form()] = "",
+    albumartist: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    items = recheck.group(recheck.read_unverified(db)).get((albumartist, album, year))
+    if not items:
+        raise HTTPException(404, "no unverified tracks for that album")
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    return _delete_plan(merger, [t.id for t in items])
+
+
+_KINDS = ("verified", "unverified", "untagged", "pending")
+
+
+def _album_tracks(
+    db: Session, kind: str, group: str, albumartist: str, album: str, year: str
+) -> list[Track]:
+    rows = albums.tracks_of(db, kind, group, (albumartist, album, year)) if kind in _KINDS else []
+    if not rows:
+        raise HTTPException(404, "no such album")
+    return rows
+
+
+@router.get("/albums")
+def browse(
+    request: Request, user: CurrentUser, db: Db, q: str = "", page: str = "1"
+) -> HTMLResponse:
+    found = albums.search(db, q)
+    pages = max(1, -(-len(found) // albums.PAGE))
+    n = min(max(_num(page, 1), 1), pages)
+    ctx = {
+        "user": user,
+        "q": q,
+        "page": n,
+        "pages": pages,
+        "total": len(found),
+        "albums": found[(n - 1) * albums.PAGE : n * albums.PAGE],
+        "pending": db.scalar(select(func.count()).where(Track.album.is_(None))),
+        "drift": layout.drift(db, request.app.state.settings.path_template),
+    }
+    return templates.TemplateResponse(request, "pages/albums.html", ctx)
+
+
+@router.get("/album")
+def album_page(
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    kind: str,
+    group: str = "",
+    albumartist: str = "",
+    album: str = "",
+    year: str = "",
+) -> HTMLResponse:
+    ctx = {
+        "user": user,
+        "kind": kind,
+        "group": group,
+        "albumartist": albumartist,
+        "album": album,
+        "year": year,
+        "tracks": _album_tracks(db, kind, group, albumartist, album, year),
+        # the unverified list's empty-album groups (#270): their delete is its own route
+        "bare": sorted(
+            k
+            for k in recheck.group(recheck.read_unverified(db))
+            if kind == "untagged" and not k[0] and not k[1]
+        ),
+    }
+    return templates.TemplateResponse(request, "pages/album.html", ctx)
+
+
+@router.post("/album/delete")
+def delete_album(
+    user: User,
+    db: Db,
+    merger: Merge,
+    kind: Annotated[str, Form()],
+    group: Annotated[str, Form()] = "",
+    albumartist: Annotated[str, Form()] = "",
+    album: Annotated[str, Form()] = "",
+    year: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    if kind not in ("verified", "unverified"):  # untagged and pending: per-track actions only
+        raise HTTPException(404, "no such album")
+    rows = _album_tracks(db, kind, group, albumartist, album, year)
+    db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs
+    return _delete_plan(merger, [t.id for t in rows])
+
+
+@router.post("/tracks/{track_id}/delete")
+def delete_track(track_id: int, user: User, db: Db, merger: Merge) -> RedirectResponse:
+    if db.get(Track, track_id) is None:
+        raise HTTPException(404, "no such track")
+    db.commit()
+    return _delete_plan(merger, [track_id])
+
+
+class _NoRestore(HTTPException):
+    """The file has no restorable tags; the page shows why, the restore POST answers 409."""
 
 
 _tag_lock = threading.Lock()  # one restore at a time: a double click must not run twice
@@ -345,19 +560,25 @@ def _tag_target(
     )
     snap = db.scalars(q if snapshot_id is None else q.where(TagSnapshot.id == snapshot_id)).first()
     if snap is None:
-        raise HTTPException(409, "no undo available for this file")
+        raise _NoRestore(409, "There are no earlier tags to restore for this file.")
     try:
         current = tags.read_all(path)
     except Exception:
-        raise HTTPException(409, "the file's tags cannot be read") from None
+        raise _NoRestore(409, "The file's tags cannot be read.") from None
     if current["format"] != snap.tags["format"]:
-        raise HTTPException(409, "the snapshot is of a different file format")
+        raise _NoRestore(409, "The snapshot is of a different file format.")
     return track, snap, current
 
 
 @router.get("/tracks/{track_id}/tags")
 def track_tags(track_id: int, request: Request, user: User, db: Db, fo: Files) -> HTMLResponse:
-    track, snap, current = _tag_target(db, fo, track_id)
+    try:
+        track, snap, current = _tag_target(db, fo, track_id)
+    except _NoRestore as e:
+        track = db.get(Track, track_id)
+        assert track is not None  # _tag_target found it before raising
+        ctx = {"user": user, "track": track, "snapshot": None, "unavailable": e.detail}
+        return templates.TemplateResponse(request, "pages/track_tags.html", ctx)
     ctx = {
         "user": user,
         "track": track,
@@ -384,7 +605,12 @@ def restore_track_tags(
         db.commit()  # free the SQLite write lock (login last_seen) for the snapshot write
         try:
             tag_undo.restore_tags(
-                fo, request.app.state.session_factory, SystemClock(), tid, rel, old
+                fo,
+                request.app.state.session_factory,
+                request.app.state.services.clock,
+                tid,
+                rel,
+                old,
             )
         except FileExistsError:
             raise HTTPException(

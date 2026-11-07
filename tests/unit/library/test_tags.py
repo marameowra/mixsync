@@ -165,7 +165,7 @@ def test_sk_q08_wrong_source_tags_do_not_survive_import(fmt: str, make_src: Make
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_length_ms(fmt: str, make_src: MakeSrc) -> None:
     ms = tags.length_ms(make_src(fmt))
-    assert ms is not None and ms > 0
+    assert ms is not None and ms == pytest.approx(1000, abs=100)  # the 1.000 s fixture, in ms
 
 
 def test_length_ms_unrecognised_file_is_none(tmp_path: Path) -> None:

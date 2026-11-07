@@ -1,0 +1,12 @@
+{
+  "id": 249504,
+  "title": "Discovery",
+  "year": 2001,
+  "artists": [{"name": "Daft Punk (2)", "id": 1289}],
+  "tracklist": [
+    {"position": "1-1", "type_": "track", "title": "One More Time", "duration": "5:20"},
+    {"position": "", "type_": "heading", "title": "Side break", "duration": ""},
+    {"position": "1-2", "type_": "track", "title": "Aerodynamic", "artists": [{"name": "Daft Punk (2)"}, {"name": "Guest"}]},
+    {"position": "2-1", "type_": "track", "title": "Disc Two Opener"}
+  ]
+}

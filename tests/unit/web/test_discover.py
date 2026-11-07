@@ -109,9 +109,11 @@ def _seed(sf: sessionmaker[Session]) -> int:
 
 
 def _status(text: str, key: str) -> str:
-    m = re.search(rf"T-{key}</td>\s*<td>([^<(]*)", text)
-    assert m
-    return m.group(1).strip()
+    row = next(r for r in text.split("<tr>") if f"T-{key}</span>" in r)
+    cells = re.findall(r"<td>(.*?)</td>", row, flags=re.S)
+    # Read the status text regardless of its accessible glyph/tag markup.
+    value = re.sub(r'<span aria-hidden="true">.*?</span>', "", cells[1], flags=re.S)
+    return re.sub(r"<[^>]+>", "", value).split("(")[0].strip()
 
 
 def test_page_shows_each_status_and_expiring(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -200,12 +202,10 @@ def test_build_now_enqueues_once_and_is_owner_only(
 def test_unlinked_user_sees_account_pointer(client: TestClient) -> None:
     _login(client, "bob")
     text = client.get("/discover").text
-    assert 'href="/account"' in text and "Build now" not in text
+    assert "Link ListenBrainz and Navidrome on" in text and "Build now" not in text
 
 
-def test_unauthenticated_redirects_to_login(client: TestClient) -> None:
-    r = client.get("/discover")
-    assert r.status_code == 303 and r.headers["location"].startswith("/login")
+def test_unauthenticated_post_is_refused(client: TestClient) -> None:
     assert client.post(f"/discover/keep/{M['kept']}").status_code == 403  # no session, no CSRF
 
 

@@ -182,6 +182,28 @@ def read_fields(path: Path) -> dict[str, str]:
     return out
 
 
+def year_of(date: str) -> str:
+    y = date[:4]
+    return y if y.isascii() and y.isdigit() and y != "0000" else ""
+
+
+Names = tuple[str, str, str]  # album artist, album, year: the `tracks` columns
+
+
+def names_of(t: TagSet) -> Names:
+    """The names `write(t)` leaves in a file."""
+    return t.albumartist, t.album, year_of(str(t.year or ""))
+
+
+def file_names(path: Path) -> Names:
+    """The names in the file's tags; empty strings if it is missing or unreadable."""
+    try:
+        f = read_fields(path)
+    except Exception:
+        return "", "", ""
+    return f.get("albumartist", ""), f.get("album", ""), year_of(f.get("date", ""))
+
+
 def length_ms(path: Path) -> int | None:
     """Audio length in milliseconds, or None if the file reports none."""
     length = getattr(getattr(_sniff(path), "info", None), "length", 0)

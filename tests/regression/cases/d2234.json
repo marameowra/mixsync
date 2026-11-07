@@ -1,0 +1,368 @@
+{
+ "albums": [
+  {
+   "album": "Hold Your Colour",
+   "albumdisambig": "2007 re-release",
+   "artist": "Pendulum",
+   "artist_ids": [
+    "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+   ],
+   "catalognum": "BBK002CDR",
+   "country": "GB",
+   "genres": [
+    "drum and bass",
+    "electronic",
+    "breaks"
+   ],
+   "label": "Breakbeat Kaos",
+   "media": "CD",
+   "mediums": 1,
+   "original_year": 2005,
+   "release_group_id": "8ec197ee-a888-32d7-acb5-0fac3e95e263",
+   "release_id": "c3a51884-29cf-4d8a-905d-00f44ab120e4",
+   "tracks": [
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 1,
+     "length": 54.466,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "4fcc0d95-7e4f-4843-9001-3f230489e08d",
+     "title": "Prelude"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 2,
+     "length": 346.973,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "00468335-01ae-49b0-972c-584ae2f9b3ca",
+     "title": "Slam"
+    },
+    {
+     "artist": "Pendulum feat. Fats & TC",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7",
+      "d38a3921-4bf2-4668-9e57-1262e384f0d0",
+      "32a509d0-6c4c-43c9-b169-03b601367dbd"
+     ],
+     "index": 3,
+     "length": 383.786,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "f0e4ebc9-b43d-49c8-9ca6-442e7828fb4f",
+     "title": "Plasticworld"
+    },
+    {
+     "artist": "Pendulum feat. The Freestylers",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7",
+      "60dd8303-5ee8-4c99-a19c-009e07c17aeb"
+     ],
+     "index": 4,
+     "length": 400.213,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "7f151e01-0e89-4c37-9c6d-85311eea23bf",
+     "title": "Fasten Your Seatbelt"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 5,
+     "length": 375.84,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "a7ff6bda-de0f-4835-a01f-f5fdc94286c5",
+     "title": "Through the Loop"
+    },
+    {
+     "artist": "Pendulum feat. Jasmine Yee",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7",
+      "38cda9ad-6020-4a63-95cb-6e41870a1123"
+     ],
+     "index": 6,
+     "length": 323.6,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "696d84f6-7960-46d8-b8c8-9a93355af833",
+     "title": "Sounds of Life"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 7,
+     "length": 295.52,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "7f49ea4e-58c0-4341-ae2b-a42df758ff96",
+     "title": "Girl in the Fire"
+    },
+    {
+     "artist": "Pendulum feat. Fresh, $pyda & Tenor Fly",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7",
+      "77049387-0580-4a3a-a05f-d12b5d6b5042",
+      "a0494c21-5bc6-4267-88b7-36ab879552d7",
+      "f2c38b4e-0de0-49bb-9327-2da38c87333f"
+     ],
+     "index": 8,
+     "length": 333.24,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "63094111-98c6-4ca8-863d-edd165f5175d",
+     "title": "Tarantula"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 9,
+     "length": 369.106,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "a84e3ccd-079d-4295-ac1f-f8fe6eb55700",
+     "title": "Out Here"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 10,
+     "length": 330.48,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "99f2c57e-a04e-4416-a668-f9867e5fd5e3",
+     "title": "Hold Your Colour"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 11,
+     "length": 344.733,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "231add57-01e8-42b4-84d1-09774f15381a",
+     "title": "The Terminal"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 12,
+     "length": 325.346,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "4e3099ea-f37f-4b11-97c4-d0fda2de0468",
+     "title": "Streamline"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 13,
+     "length": 317.733,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "693e57de-760e-4b76-971f-b2d3517c6fed",
+     "title": "Blood Sugar"
+    },
+    {
+     "artist": "Pendulum",
+     "artist_ids": [
+      "beff21d3-88c7-4ee0-8b7a-40b6db22c6d7"
+     ],
+     "index": 14,
+     "length": 249.92,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "43b31d5a-65fc-4c04-92d5-2d0346a2d7e4",
+     "title": "Axle Grinder"
+    }
+   ],
+   "va": false,
+   "year": 2007
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "13 - Another Planet (Original Mix).flac",
+    "sample_rate": null,
+    "size": 68848238
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "14 - Still Grey.flac",
+    "sample_rate": null,
+    "size": 71480925
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "15 - Blood Sugar (Original Mix).flac",
+    "sample_rate": null,
+    "size": 57155529
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "16 - Axel Grinder (Original Mix).flac",
+    "sample_rate": null,
+    "size": 48235518
+   }
+  ],
+  "folder": "Pendulum\\Pendulum - Hold Your Colour (Deluxe) (2007 re-release)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2234,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7a9141e6-54c4-4de3-a968-431c51fafec7"
+     ],
+     "score": 0.9975277
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.0013564109903470823,
+   "length": 467.53333333333336,
+   "recording_id": null,
+   "title": "Another Planet (Original Mix)",
+   "track": 13,
+   "trailing_silence": 15.580929333333358
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "77c955d0-e07d-4a95-b87f-139140b4130c",
+      "f57dc9ce-5c66-4709-91c6-e128a2ac7c0a"
+     ],
+     "score": 0.9997363
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.0014279733422436578,
+   "length": 471.6933333333333,
+   "recording_id": null,
+   "title": "Still Grey",
+   "track": 14,
+   "trailing_silence": 5.8188213333333465
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "693e57de-760e-4b76-971f-b2d3517c6fed"
+     ],
+     "score": 0.9784085
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.0015319098195274328,
+   "length": 315.73333333333335,
+   "recording_id": null,
+   "title": "Blood Sugar (Original Mix)",
+   "track": 15,
+   "trailing_silence": 1.8830613333333304
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "43b31d5a-65fc-4c04-92d5-2d0346a2d7e4"
+     ],
+     "score": 0.98826474
+    }
+   ],
+   "artist": "Pendulum",
+   "disc": 1,
+   "high_band": 0.0017198631842674774,
+   "length": 249.92,
+   "recording_id": null,
+   "title": "Axel Grinder (Original Mix)",
+   "track": 16,
+   "trailing_silence": 3.1712929999999915
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "padded",
+  "accept"
+ ],
+ "likelies": {
+  "album": "Hold Your Colour (Deluxe)",
+  "albumdisambig": null,
+  "artist": "Pendulum",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "c3a51884-29cf-4d8a-905d-00f44ab120e4",
+  "year": 2007
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.435824749962681,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": [
+   "'Another Planet (Original Mix)': duration off by 123s from 'The Terminal'",
+   "'Another Planet (Original Mix)': AcoustID (1.00) says a different recording than 'The Terminal' (231add57-01e8-42b4-84d1-09774f15381a)",
+   "'Still Grey': duration off by 88s from 'Plasticworld'",
+   "'Still Grey': AcoustID (1.00) says a different recording than 'Plasticworld' (f0e4ebc9-b43d-49c8-9ca6-442e7828fb4f)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "c3a51884-29cf-4d8a-905d-00f44ab120e4"
+}

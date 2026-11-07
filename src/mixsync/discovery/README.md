@@ -3,56 +3,21 @@
 ## Purpose
 Per-user playlists built from listening history, including tracks not yet owned, plus the retention rules that decide whether those provisional tracks stay.
 
-This folder holds **two kinds of code**. Keep them in separate files:
-- **Adapters** (`listenbrainz.py`) implement `HistorySource`. They follow the adapter rule: `core` + `ratelimit` only.
-- **Services** (`playlists.py`, `retention.py`) follow the service rule: `core`, `db`, `match`, `library`, with adapters injected as Protocols.
-
 ## Owns / does not own
-- **Owns:** fetching recommendations, building playlist contents, creating provisional requests, keep/expire decisions.
-- **Does not own:** downloading (normal request pipeline), file moves (`library.fileops`), or Navidrome calls (the injected `LibraryTarget`).
+- **Owns:** the ListenBrainz adapter (`listenbrainz.py`, a `HistorySource`), playlist building (`playlists.py`; unowned tracks become `Request(provisional=True, source=discovery)`), keep/expire decisions (`retention.py`).
+- **Does not own:** downloading (the normal request pipeline), file moves (`library.fileops`), or Navidrome calls (the injected `LibraryTarget`).
 
-## Proposed files
-| File | Kind | Contents |
-|---|---|---|
-| `listenbrainz.py` | adapter | Recommendations, LB Radio prompts, top artists (`liblistenbrainz` or httpx) |
-| `playlists.py` | service | `build(playlist_def, user) -> list[PlaylistEntry]`; owned resolved by recording MBID; unowned → `Request(provisional=True, source=discovery)` |
-| `retention.py` | service | Daily job: evaluate keep rules, promote kept tracks, trash expired ones |
+## Rules / invariants
+- Two kinds of code, kept in separate files: the adapter follows the adapter rule; the services get their adapters injected as Protocols.
+- A kept track is promoted: copied through `Importer.import_release` into the main library, then the discover copy is trashed, both journaled. A recording already in `tracks` is not imported again. Kept holds stay `kept` until promoted, so a failed promote retries the next day.
+- A track is trashed only when every user's row is expired, never while any user still wants it. Expiry goes through `library.fileops.trash()`; nothing is deleted outright.
+- Stars and play counts are fetched once per user per run. A user without a working Navidrome link is skipped, with a note on their playlists.
+- `DISCOVERY_RETAIN` runs daily per user (jittered, self-rescheduling, started in `start_chains`). A run that promoted or expired anything queues a rescan and a `DISCOVERY_PUSH` per affected playlist.
+- Defaults (retention, keep threshold, refresh, size, unowned share) live in the [discovery design](../../../docs/design/discovery-retention.md).
 
-## Key interfaces
-```
-HistorySource (core.protocols):
-  recommendations(user, token, count) -> list[RecordingRef]
-  weekly_exploration(user, token) -> list[RecordingRef]   # newest created-for playlist
-  lb_radio(prompt, mode, token) -> list[RecordingRef]
-  recording_metadata(mbids) -> dict[str, RecordingRef]
-  validate_token(token) -> str | None                     # username
+## May import
+- `listenbrainz`: `core`, `ratelimit`.
+- `playlists`, `retention`: `core`, `db`, `match`, `library`.
 
-Playlist definition (stored as JSON): sources[], size=50, unowned_ratio=0.3, cadence=weekly
-```
-
-## Retention rules
-```
-for each provisional_tracks row not kept and not expired:
-  kept if: starred by that user  OR  plays >= N (default 3)  OR  manual keep
-  if kept: library.importer.promote(track)   # discover → main, with canonicalization
-  elif now >= expires_at: mark expired for this user
-a track is trashed only when every user's row is expired (never while any user still wants it)
-```
-- Expiry → `library.fileops.trash()`. Never deleted outright.
-- A "Expiring in 7 days" digest query (`expiring_soon`) backs the UI page; `keep(s, now, user_id, mbid)` is the manual keep.
-- Job `DISCOVERY_RETAIN` runs daily per user (jittered, self-rescheduling, started in `start_chains`). Stars and play counts are fetched once per user per run. A user without a working Navidrome link is skipped with a note on their playlists.
-- Promote: the discover file is copied through `Importer.import_release` into the main library (filed under the group's canonical release when the track is on it), then the discover copy is trashed. Both are journaled ops. A recording already in `tracks` is not imported again. Kept holds stay `kept` until promoted, so a failed promote is retried the next day.
-- A run that promoted or expired anything queues a rescan and a `DISCOVERY_PUSH` per affected playlist.
-
-**Defaults (decided):** 30-day retention, keep after 3 plays, weekly refresh, 50 tracks with 30% unowned. See [discovery design](../../../docs/design/discovery-retention.md).
-
-## May import from
-- Adapters: `core`, `ratelimit`.
-- Services: `core`, `db`, `match`, `library`.
-
-## Tests
-- Playlist builder with fake `HistorySource`: ratio respected, owned tracks resolved, no duplicates.
-- Retention with a fake clock and fake `LibraryTarget`: star → promote; plays → promote; expiry → trash; multi-user keep.
-
-## Design docs
+## Design doc
 [Discovery and retention](../../../docs/design/discovery-retention.md)

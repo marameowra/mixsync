@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from mixsync.acquire.pipeline import Handler
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import LIVE, JobKind, JobState
+from mixsync.db import progress
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
@@ -75,8 +76,8 @@ class TrashPurger:
                 Plan.status.not_in(("undone", "discarded", "draft")), Plan.batch_id != ""
             )
             for p in s.scalars(live):
-                for op in p.ops:
-                    if op["op"] in ("move", "trash") and not op["done"]:
+                for op, done in zip(p.ops, progress.done_flags(s, p), strict=True):
+                    if op["op"] in ("move", "trash") and not done:
                         keep.update(
                             s.scalars(
                                 select(FileOp.dst).where(
@@ -111,6 +112,11 @@ class TrashPurger:
                 self.days,
                 f"purge-{self.clock.now().date().isoformat()}",
                 self.protected(),
+            )
+            await asyncio.to_thread(
+                self.fileops.purge_quarantine,
+                self.days,
+                f"purge-quarantine-{self.clock.now().date().isoformat()}",
             )
             # after the file purge, so a failing cache delete cannot skip it
             with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)

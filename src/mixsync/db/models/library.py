@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -29,6 +29,12 @@ class Track(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16))  # verified | unverified
     batch_id: Mapped[str] = mapped_column(String(64))
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # The file's album artist, album and year tags (ADR 0018); null until filled, "" if untagged.
+    album_artist: Mapped[str | None] = mapped_column(Text)
+    album: Mapped[str | None] = mapped_column(Text)
+    year: Mapped[str | None] = mapped_column(String(4))
+    # The path template `path` was rendered with (ADR 0019); null until the startup backfill.
+    path_template: Mapped[str | None] = mapped_column(Text)
 
 
 class Plan(TimestampMixin, Base):
@@ -37,7 +43,7 @@ class Plan(TimestampMixin, Base):
     __tablename__ = "plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))  # merge | promote
+    kind: Mapped[str] = mapped_column(String(16))  # merge | promote | delete | reorganize
     release_group_mbid: Mapped[str] = mapped_column(String(36))
     # for a promote plan: the matched release; the canonical choice is never touched
     canonical_release_mbid: Mapped[str] = mapped_column(String(36))
@@ -48,3 +54,14 @@ class Plan(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), default="draft")
     ops: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class PlanProgress(Base):
+    """Whether op `op_index` of a plan is done. Overrides the op's own `done` flag, which only
+    plans from before this table carry (`db.progress.done_flags`)."""
+
+    __tablename__ = "plan_progress"
+
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"), primary_key=True)
+    op_index: Mapped[int] = mapped_column(primary_key=True)
+    done: Mapped[bool]

@@ -1,22 +1,12 @@
 # `tests/integration`
 
-End-to-end tests against real containers: slskd, Navidrome, and MixSync.
-
-## Proposed files
-| File | Contents |
-|---|---|
-| `compose.test.yml` | slskd, navidrome, mixsync-web, mixsync-worker with throwaway volumes under a temp `/data` |
-| `conftest.py` | Brings compose up/down, waits for health, provides API clients |
-| `test_pipeline.py` | Request a known album → auto-import with correct MBIDs → visible in Navidrome |
-| `test_discovery.py` | Playlist pushed through Subsonic → forced expiry → file in `.trash` |
-| `test_crash.py` | Kill the worker container mid-import → restart → nothing lost, job completes |
+End-to-end tests against real containers: slskd, Navidrome and MixSync.
 
 ## Rules
-- Marked `@pytest.mark.integration`; skipped unless `-m integration`.
-- Runs nightly and on demand in CI, not on every push.
-- Default mode: slskd is replaced by a **fake slskd** serving fixture search results and files, so tests are deterministic and don't use the Soulseek network.
+- Marked `@pytest.mark.integration`; skipped unless `-m integration`. Runs nightly and on demand, not on every push.
+- CI uses a fake slskd, not the Soulseek network ([ADR 0016](../../docs/decisions/0016-fake-slskd-in-ci.md)). The fake must reproduce the [edge-case catalog](../fixtures/README.md#soulseek-edge-case-catalog).
 
-**Decided:** fake slskd in CI; the real network is used only for manual runs (`-m integration --real-soulseek`). The fake must be able to reproduce every behavior in the [edge-case catalog](../fixtures/README.md#soulseek-edge-case-catalog): slow peers, failed transfers, disconnects, and empty results.
+> Planned — not built: the compose file and the pipeline, discovery and crash-restart scenarios. Nothing runs under this folder yet.
 
-## Design docs
+## Design doc
 [Testing: integration](../../docs/testing.md#integration-tests-compose)

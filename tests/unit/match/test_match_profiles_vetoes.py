@@ -58,3 +58,20 @@ def test_all_confident_needs_acoustid_to_name_each_paired_recording() -> None:
     assert not all_confident(
         [(file(AcoustIdResult("x", 0.91, ("rec-1",)), AcoustIdResult("y", 0.99, ())), t)]
     )
+
+
+def test_transcode_veto_only_when_measured_below_the_threshold() -> None:
+    t = TrackInfo(title="Song")
+    assert find_vetoes([(FileTrack("Song", "a"), t)]) == ()  # not measured
+    assert find_vetoes([(FileTrack("Song", "a", high_band=0.01), t)]) == ()
+    (v,) = find_vetoes([(FileTrack("Song", "a", high_band=1e-7), t)])
+    assert v == "'Song': looks transcoded: almost nothing above 16 kHz"
+
+
+def test_padded_preview_veto_names_where_the_silence_starts() -> None:
+    t = TrackInfo(title="Song")
+    f = FileTrack("Song", "a", length=240.0, trailing_silence=210.0)
+    assert find_vetoes([(f, t)]) == ("'Song': silent from 0:30 to the end (4:00)",)
+    fade = FileTrack("Song", "a", length=240.0, trailing_silence=3.0)
+    assert find_vetoes([(fade, t)]) == ()
+    assert find_vetoes([(FileTrack("Song", "a", length=240.0), t)]) == ()

@@ -2,12 +2,14 @@
 # https://acoustid.org/webservice on 2026-10-10.
 import asyncio
 import gzip
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlencode
 
 import mutagen
+from mutagen.flac import FLAC
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError
@@ -43,11 +45,60 @@ def _duration(path: Path) -> float | None:
         return None
 
 
+def _flac_info(path: Path) -> Any | None:
+    try:
+        return cast(Any, FLAC(path).info)  # pyright: ignore[reportUnknownMemberType]
+    except Exception:
+        return None
+
+
+_RAW = {8: "s8", 16: "s16le", 24: "s24le", 32: "s32le"}  # what the FLAC MD5 is defined over
+
+
+async def _flac_fully_decodes(path: Path, info: Any) -> bool:
+    """Does ffmpeg decode every sample STREAMINFO promises, and (when stored, for the bit depths
+    in _RAW) to the audio its MD5 was taken from? Counting samples alone can be fooled by
+    concealment."""
+    fmt = _RAW.get(info.bits_per_sample)
+    width = info.bits_per_sample // 8 if fmt else 2
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-nostdin", "-xerror", "-v", "quiet", "-i", str(path),
+            "-map", "0:a", "-f", fmt or "s16le", "-",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )  # fmt: skip
+    except FileNotFoundError as e:
+        raise RuntimeError("ffmpeg is not installed or not on PATH") from e
+    assert proc.stdout is not None
+    size, md5 = 0, hashlib.md5(usedforsecurity=False)
+    try:
+        while chunk := await proc.stdout.read(1 << 20):  # hashed, not kept: files can be large
+            size += len(chunk)
+            md5.update(chunk)
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+        await proc.wait()
+    if size != info.total_samples * info.channels * width:
+        return False
+    return not (fmt and info.md5_signature) or md5.hexdigest() == f"{info.md5_signature:032x}"
+
+
 async def fingerprint(path: Path) -> Fingerprint:
+    # fpcalc can exit 0 on a FLAC whose last frames are corrupt, so decode it all first.
+    info = await asyncio.to_thread(_flac_info, path)
+    # shortcut: total_samples == 0 (unknown length) cannot be compared, so it is not checked
+    proven = False
+    if info is not None and info.total_samples:
+        proven = await _flac_fully_decodes(path, info)
+        if not proven:
+            raise PermanentError(f"{path} does not decode completely")
     code, out, err = await _fpcalc("-json", str(path))
-    if code != 0:
+    if code != 0 and proven:
         # Junk after the last frame makes fpcalc exit 3 on intact audio; stopping 1 s early
-        # skips it, while real corruption still fails.
+        # skips it. Safe because the whole stream decoded above.
         duration = await asyncio.to_thread(_duration, path)
         if duration is not None and duration > 1:
             code, out, _ = await _fpcalc("-length", str(int(duration) - 1), "-json", str(path))

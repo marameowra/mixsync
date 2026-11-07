@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"id": 3135553, "title": "One More Time", "track_position": 1, "disk_number": 1, "artist": {"id": 27, "name": "Daft Punk", "type": "artist"}, "type": "track"},
+    {"id": 3135554, "title": "Aerodynamic", "track_position": 2, "disk_number": 1, "artist": {"id": 27, "name": "Daft Punk", "type": "artist"}, "type": "track"},
+    {"id": 3135555, "title": "Disc Two Opener", "track_position": 1, "disk_number": 2, "artist": {"id": 27, "name": "Daft Punk feat. X", "type": "artist"}, "type": "track"}
+  ],
+  "total": 3
+}

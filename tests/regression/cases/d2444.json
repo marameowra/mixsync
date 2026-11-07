@@ -1,0 +1,511 @@
+{
+ "albums": [
+  {
+   "album": "The Vibe Guide, Vol. 5",
+   "albumdisambig": null,
+   "artist": "Tep No",
+   "artist_ids": [
+    "7e3e0e05-e34c-450f-becf-b00572125048"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "deep house",
+    "dance",
+    "edm",
+    "house"
+   ],
+   "label": "Tep No Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2026,
+   "release_group_id": "6164d182-727a-4686-9f43-b16a1496c01b",
+   "release_id": "f4428e87-f6f4-4f65-a3fc-ed9c73cb9840",
+   "tracks": [
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 1,
+     "length": 203.831,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "be56da60-2dcd-4d00-875e-13d1400bb4b9",
+     "title": "La Faune"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 2,
+     "length": 173.5,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "35021624-f33a-4a15-905d-918e2f8e52c7",
+     "title": "We"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 3,
+     "length": 181.667,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "00522150-bc0d-4ac0-b5d5-daa78b5a31ca",
+     "title": "New Rituals"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 4,
+     "length": 136.375,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "1499b9a8-a287-45ac-9b71-3f69c71bb68f",
+     "title": "InterFaith"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 5,
+     "length": 243.903,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "85896028-deed-4f2e-91c4-b9d254d92750",
+     "title": "Heaven Knows Our Hearts"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 6,
+     "length": 159.617,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "c77bcf65-b6af-47c9-bc5c-8666c19637e3",
+     "title": "Let Them See My Heart"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 7,
+     "length": 222.019,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "253f8072-9f6b-495a-aa27-8d67db2fbaf1",
+     "title": "Say You\u2019ll Forget"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 8,
+     "length": 200.907,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "40f61322-7a13-451c-8dd4-7c07f53dfc54",
+     "title": "I\u2019ve Been Wrong"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 9,
+     "length": 167.978,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "d60426e5-0816-4f8e-8491-a774978fa367",
+     "title": "Astrology Signs"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 10,
+     "length": 271.842,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "889e99f9-1f55-4025-bb6e-d902c6377b30",
+     "title": "The Resistance"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 11,
+     "length": 189.115,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "bf04b2d9-588d-4274-ad90-446f0136db20",
+     "title": "Suburbs of Sao Paulo"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 12,
+     "length": 208.386,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "feb52262-835f-477c-b07d-48c92c8d1567",
+     "title": "The Last Ones Standing"
+    },
+    {
+     "artist": "Tep No",
+     "artist_ids": [
+      "7e3e0e05-e34c-450f-becf-b00572125048"
+     ],
+     "index": 13,
+     "length": 236.279,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "8430ee52-398b-4c91-9165-cb99a08c5e25",
+     "title": "Pacing"
+    }
+   ],
+   "va": false,
+   "year": 2026
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 207,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 01 - Wannabe.flac",
+    "sample_rate": 44100,
+    "size": 26216450
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 220,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 02 - My Sacrifice.flac",
+    "sample_rate": 44100,
+    "size": 27396845
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 164,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 03 - Beverly Hills.flac",
+    "sample_rate": 44100,
+    "size": 19117398
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 168,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 04 - With Me Tonight.flac",
+    "sample_rate": 44100,
+    "size": 15786659
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 202,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 05 - Throwing Shade (She's So Crazy).flac",
+    "sample_rate": 44100,
+    "size": 25836325
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 193,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 06 - I Got That.flac",
+    "sample_rate": 44100,
+    "size": 21708661
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 161,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 07 - Morning (Forget It).flac",
+    "sample_rate": 44100,
+    "size": 15682905
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 204,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 08 - Evening In San Francisco.flac",
+    "sample_rate": 44100,
+    "size": 21179304
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 236,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 09 - Pacing.flac",
+    "sample_rate": 44100,
+    "size": 28349413
+   },
+   {
+    "bit_depth": 16,
+    "bitrate": null,
+    "duration": 208,
+    "extension": "flac",
+    "path": "The Vibe Guide, Vol. 2 (2025)\\Tep No - The Vibe Guide, Vol. 2 - 10 - The Last Ones Standing.flac",
+    "sample_rate": 44100,
+    "size": 24564620
+   }
+  ],
+  "folder": "Tep No\\The Vibe Guide, Vol. 2 (2025)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 1368412,
+  "username": "peer-375ea623"
+ },
+ "chosen_release_mbid": null,
+ "decision": 2444,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0007452860631516958,
+   "length": 207.53868480725623,
+   "recording_id": "adc6ad9b-d9a7-47d2-98dc-fe19eef08e71",
+   "title": "Wannabe",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0005826806553340583,
+   "length": 220.02721088435374,
+   "recording_id": "3492b15f-e0fc-4f0f-b0d8-448b0d8d3c6f",
+   "title": "My Sacrifice",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0007393514007317339,
+   "length": 164.5820634920635,
+   "recording_id": "f4eaced4-e695-4378-be35-97146b6fe1ce",
+   "title": "Beverly Hills",
+   "track": 3,
+   "trailing_silence": 1.112675492063488
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0005488064412869353,
+   "length": 168.29514739229026,
+   "recording_id": "75820f6a-8ee2-4c89-b8c5-a63adaf2a617",
+   "title": "With Me Tonight",
+   "track": 4,
+   "trailing_silence": 1.1734923922902567
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.004188146839916504,
+   "length": 202.4338321995465,
+   "recording_id": "0dc621b3-1333-4bc0-9e84-210f12667d54",
+   "title": "Throwing Shade (She's So Crazy)",
+   "track": 5,
+   "trailing_silence": 2.64616819954648
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7ff3fa24-f5f6-44f4-b459-2704718a8290"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00861319738751697,
+   "length": 193.5284580498866,
+   "recording_id": "7ff3fa24-f5f6-44f4-b459-2704718a8290",
+   "title": "I Got That",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a5473ecd-bbfe-4ff0-8beb-2b83eef6b5f1"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00012104019090878991,
+   "length": 161.06673469387755,
+   "recording_id": "a5473ecd-bbfe-4ff0-8beb-2b83eef6b5f1",
+   "title": "Morning (Forget It)",
+   "track": 7,
+   "trailing_silence": 1.900407693877554
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0771acbf-f9a7-4466-bc68-5a15217cf63d"
+     ],
+     "score": 0.99988943
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 3.31323926869803e-05,
+   "length": 204.1289342403628,
+   "recording_id": "0771acbf-f9a7-4466-bc68-5a15217cf63d",
+   "title": "Evening In San Francisco",
+   "track": 8,
+   "trailing_silence": 5.236462240362812
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8430ee52-398b-4c91-9165-cb99a08c5e25"
+     ],
+     "score": 0.96080565
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.0003212236406866483,
+   "length": 236.27913832199548,
+   "recording_id": "8430ee52-398b-4c91-9165-cb99a08c5e25",
+   "title": "Pacing",
+   "track": 9,
+   "trailing_silence": 1.285328321995479
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "feb52262-835f-477c-b07d-48c92c8d1567"
+     ],
+     "score": 0.97359574
+    }
+   ],
+   "artist": "Tep No",
+   "disc": 1,
+   "high_band": 0.00031241321777630425,
+   "length": 208.3859410430839,
+   "recording_id": "feb52262-835f-477c-b07d-48c92c8d1567",
+   "title": "The Last Ones Standing",
+   "track": 10,
+   "trailing_silence": 1.1814060430839106
+  }
+ ],
+ "labels": [
+  "tagged_mismatch",
+  "padded"
+ ],
+ "likelies": {
+  "album": "The Vibe Guide, Vol. 2",
+  "albumdisambig": null,
+  "artist": "Tep No",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "cf8a230e-fce9-45b5-9c2c-de9723ec48bc",
+  "year": 2025
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.6019835026380029,
+  "final_action": null,
+  "scorer_version": 7,
+  "status": "pending_review",
+  "vetoes": [
+   "'Wannabe': tagged as recording adc6ad9b-d9a7-47d2-98dc-fe19eef08e71, matched to 'La Faune' (be56da60-2dcd-4d00-875e-13d1400bb4b9)",
+   "'My Sacrifice': tagged as recording 3492b15f-e0fc-4f0f-b0d8-448b0d8d3c6f, matched to 'Say You\u2019ll Forget' (253f8072-9f6b-495a-aa27-8d67db2fbaf1)",
+   "'Beverly Hills': duration off by 17s from 'New Rituals'",
+   "'Beverly Hills': tagged as recording f4eaced4-e695-4378-be35-97146b6fe1ce, matched to 'New Rituals' (00522150-bc0d-4ac0-b5d5-daa78b5a31ca)",
+   "'With Me Tonight': tagged as recording 75820f6a-8ee2-4c89-b8c5-a63adaf2a617, matched to 'Let Them See My Heart' (c77bcf65-b6af-47c9-bc5c-8666c19637e3)",
+   "\"Throwing Shade (She's So Crazy)\": tagged as recording 0dc621b3-1333-4bc0-9e84-210f12667d54, matched to 'I\u2019ve Been Wrong' (40f61322-7a13-451c-8dd4-7c07f53dfc54)",
+   "'I Got That': release does not contain recording 7ff3fa24-f5f6-44f4-b459-2704718a8290",
+   "'Morning (Forget It)': release does not contain recording a5473ecd-bbfe-4ff0-8beb-2b83eef6b5f1",
+   "'Evening In San Francisco': release does not contain recording 0771acbf-f9a7-4466-bc68-5a15217cf63d"
+  ]
+ },
+ "release_given": true,
+ "release_mbid": "f4428e87-f6f4-4f65-a3fc-ed9c73cb9840"
+}

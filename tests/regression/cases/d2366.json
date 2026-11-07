@@ -1,0 +1,2552 @@
+{
+ "albums": [
+  {
+   "album": "the first glass beach album demos",
+   "albumdisambig": null,
+   "artist": "glass beach",
+   "artist_ids": [
+    "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [
+    "indie rock",
+    "bedroom pop",
+    "emo",
+    "punk"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 14,
+   "original_year": null,
+   "release_group_id": "37a5c89a-f24a-4688-807b-17af4c5128e9",
+   "release_id": "ee4cfe7b-599d-4731-955e-5904f39b0057",
+   "tracks": [
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 1,
+     "length": 302.681,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "3c5cf027-40f9-49c2-95a0-055b7d2bf47c",
+     "title": "classic j dies and goes to hell part 1 23 (with midi trumpet)"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 2,
+     "length": 75.937,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "a08ced29-6c27-4092-9ec2-b45c0d5a2604",
+     "title": "new 8-bit thing demo"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 3,
+     "length": 322.146,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "3866b3c8-1e2f-47dc-8267-b98485aadf54",
+     "title": "classic j dies and goes to hell part 1"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 4,
+     "length": 196.151,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "525eabd0-9135-48e2-bbac-c4f081099b30",
+     "title": "classic j dies and goes to hell part 1 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 5,
+     "length": 258.898,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "20a2c891-f492-4de9-8888-d5aeff1eaf4c",
+     "title": "part one demo bounce 04"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 6,
+     "length": 303.225,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "b6c1f0be-261a-422e-966f-694b23b4a0d1",
+     "title": "classic j dies and goes to hell part 1 05"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 7,
+     "length": 295.771,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "ed91c018-8335-443c-8bdb-2dd73d019a41",
+     "title": "classic j dies and goes to hell part 1 07"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 8,
+     "length": 354.573,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "57aba1d7-da9a-4f8b-be2b-3ab4660b77bf",
+     "title": "classic j dies and goes to hell part 1 14"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 9,
+     "length": 434.798,
+     "medium": 2,
+     "medium_index": 1,
+     "recording_id": "b9d55b87-4081-40e1-b217-f387a8ba1601",
+     "title": "bedroom community final 4 (contains old version of forever at end)"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 10,
+     "length": 366.227,
+     "medium": 2,
+     "medium_index": 2,
+     "recording_id": "bc3a97ad-b896-41d7-b66a-e6a56d52d170",
+     "title": "bedroom community demo 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 11,
+     "length": 147.428,
+     "medium": 2,
+     "medium_index": 3,
+     "recording_id": "32192a0b-61be-431e-86f9-3ceb6a94ea4a",
+     "title": "i would rather go to hell bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 12,
+     "length": 405.411,
+     "medium": 2,
+     "medium_index": 4,
+     "recording_id": "fe3cf68d-4c78-4ca2-9401-84f7fcca08ea",
+     "title": "bedroom community demo 11"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 13,
+     "length": 356.431,
+     "medium": 2,
+     "medium_index": 5,
+     "recording_id": "f976d331-1fec-4792-abad-65f161aa8c99",
+     "title": "bedroom community final 21"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 14,
+     "length": 357.656,
+     "medium": 2,
+     "medium_index": 6,
+     "recording_id": "00b5dd47-9ab3-4432-93d3-8bf46a7d682d",
+     "title": "bedroom community final 26"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 15,
+     "length": 80.5,
+     "medium": 4,
+     "medium_index": 1,
+     "recording_id": "72f74911-797c-47ee-ad50-a1a4d38de9fb",
+     "title": "bone skull 3"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 16,
+     "length": 142.725,
+     "medium": 4,
+     "medium_index": 2,
+     "recording_id": "031eb03f-fe39-4dee-8957-6e850298ce9b",
+     "title": "bone skull 7"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 17,
+     "length": 80.0,
+     "medium": 4,
+     "medium_index": 3,
+     "recording_id": "86224fd6-55ef-48c9-bb0b-af1992f84322",
+     "title": "bone skull"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 18,
+     "length": 149.27,
+     "medium": 4,
+     "medium_index": 4,
+     "recording_id": "e61c2c26-e0c0-4c52-8bda-21acb6cb78ba",
+     "title": "bone skull 12"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 19,
+     "length": 72.0,
+     "medium": 5,
+     "medium_index": 1,
+     "recording_id": "f2a59228-f737-4156-9b5d-044c8bde461c",
+     "title": "neon glow bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 20,
+     "length": 220.2,
+     "medium": 5,
+     "medium_index": 2,
+     "recording_id": "65427d5c-9e03-4f46-9a12-8fd3245b5a41",
+     "title": "neon glow 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 21,
+     "length": 180.363,
+     "medium": 5,
+     "medium_index": 3,
+     "recording_id": "4b553519-92e8-47fb-a983-96ed57438731",
+     "title": "neon glow bounce 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 22,
+     "length": 141.198,
+     "medium": 6,
+     "medium_index": 1,
+     "recording_id": "c59866c9-9fb2-4ece-bc6d-0e065a960c8d",
+     "title": "cold weather new demo bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 23,
+     "length": 123.024,
+     "medium": 6,
+     "medium_index": 2,
+     "recording_id": "233d7558-e85d-4f3c-beb5-cc755e4d9430",
+     "title": "min love song bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 24,
+     "length": 144.04,
+     "medium": 6,
+     "medium_index": 3,
+     "recording_id": "6ad94d0d-fcda-4f69-8b00-e4afed894b2a",
+     "title": "cold weather 06"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 25,
+     "length": 72.0,
+     "medium": 7,
+     "medium_index": 1,
+     "recording_id": "fa969394-677e-4c47-92f6-023a2468beb7",
+     "title": "calico2"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 26,
+     "length": 89.6,
+     "medium": 7,
+     "medium_index": 2,
+     "recording_id": "644077b3-f4b0-4a2e-bb1d-f347deeacbe1",
+     "title": "calico3"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 27,
+     "length": 61.045,
+     "medium": 7,
+     "medium_index": 3,
+     "recording_id": "b58aacae-d37f-4b41-9cdc-b02c7e852089",
+     "title": "long drive road trip guitar 2"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 28,
+     "length": 537.701,
+     "medium": 8,
+     "medium_index": 1,
+     "recording_id": "ad8dd16f-e9e2-4e46-9ded-991343525f9e",
+     "title": "glass beach final 42 (last mix before the final)"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 29,
+     "length": 96.052,
+     "medium": 8,
+     "medium_index": 2,
+     "recording_id": "6ede2a0b-a97e-4e11-8ea6-ba5b80270ce4",
+     "title": "glass beach demo bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 30,
+     "length": 60.975,
+     "medium": 8,
+     "medium_index": 3,
+     "recording_id": "588613e3-7911-4408-901a-d67bf5705704",
+     "title": "glass beach emo riff demo 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 31,
+     "length": 520.101,
+     "medium": 8,
+     "medium_index": 4,
+     "recording_id": "8861787d-fe3f-433a-ad4f-36a17bf3d924",
+     "title": "glass beach final 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 32,
+     "length": 444.901,
+     "medium": 8,
+     "medium_index": 5,
+     "recording_id": "a20a2e40-e6d2-4dfd-938e-a29409b0876d",
+     "title": "glass beach test bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 33,
+     "length": 515.301,
+     "medium": 8,
+     "medium_index": 6,
+     "recording_id": "0f26f45d-7286-4cf1-832a-ef82e76c6dbf",
+     "title": "glass beach test bounce 04"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 34,
+     "length": 532.901,
+     "medium": 8,
+     "medium_index": 7,
+     "recording_id": "be784051-7a79-4876-8fd8-304f89f70fa6",
+     "title": "glass beach final 07"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 35,
+     "length": 423.051,
+     "medium": 8,
+     "medium_index": 8,
+     "recording_id": "d09a4be0-d2d8-4843-8f66-273f288386b1",
+     "title": "glass beach new version bounce 15"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 36,
+     "length": 319.594,
+     "medium": 10,
+     "medium_index": 1,
+     "recording_id": "a1cc4807-9932-4d56-b023-ecbfd6b452e3",
+     "title": "part three 02 (originally from 2017)"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 37,
+     "length": 194.666,
+     "medium": 10,
+     "medium_index": 2,
+     "recording_id": "64cd615c-2708-4d22-b47c-38752ae5c995",
+     "title": "dallas 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 38,
+     "length": 345.6,
+     "medium": 10,
+     "medium_index": 3,
+     "recording_id": "c7781622-f7cf-4f7d-a252-fadf771d2933",
+     "title": "texas song 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 39,
+     "length": 322.666,
+     "medium": 10,
+     "medium_index": 4,
+     "recording_id": "1247b423-2cf3-4b52-a583-5420fc8c546f",
+     "title": "dallas 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 40,
+     "length": 108.86,
+     "medium": 10,
+     "medium_index": 5,
+     "recording_id": "119dd7da-85d1-4166-bb51-53a4f36c762e",
+     "title": "part 3 demo bounce 03"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 41,
+     "length": 441.6,
+     "medium": 10,
+     "medium_index": 6,
+     "recording_id": "926392da-2718-4964-9682-0e8c2d488699",
+     "title": "texas song 03"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 42,
+     "length": 444.0,
+     "medium": 10,
+     "medium_index": 7,
+     "recording_id": "6b67c78b-2220-4278-b0f2-00d53fb2a446",
+     "title": "texas song 04"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 43,
+     "length": 384.0,
+     "medium": 10,
+     "medium_index": 8,
+     "recording_id": "c791319f-8d88-4cec-b6ec-519e33306832",
+     "title": "texas song 06"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 44,
+     "length": 352.0,
+     "medium": 10,
+     "medium_index": 9,
+     "recording_id": "01f634c9-b1f0-4502-a73a-f25fcd46476b",
+     "title": "dallas 07"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 45,
+     "length": 357.333,
+     "medium": 10,
+     "medium_index": 10,
+     "recording_id": "5867a1cc-7ea5-41a9-96eb-73e863f86765",
+     "title": "dallas 09"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 46,
+     "length": 150.26,
+     "medium": 11,
+     "medium_index": 1,
+     "recording_id": "1668bdc2-deb2-4a1d-bfe0-14bec760ff6f",
+     "title": "rat castle instrumental 2"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 47,
+     "length": 104.347,
+     "medium": 11,
+     "medium_index": 2,
+     "recording_id": "3ae6a3fa-eef8-44b9-aae3-adba2b9b1ab1",
+     "title": "rat castle instrumental"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 48,
+     "length": 70.714,
+     "medium": 11,
+     "medium_index": 3,
+     "recording_id": "fc0b0150-5fe3-43dd-a37c-32257203b671",
+     "title": "rat castle original"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 49,
+     "length": 169.043,
+     "medium": 11,
+     "medium_index": 4,
+     "recording_id": "3529cab8-e661-4ed5-89b2-258debd96f1e",
+     "title": "rat castle instrumental 2"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 50,
+     "length": 171.0,
+     "medium": 12,
+     "medium_index": 1,
+     "recording_id": "afef35de-363b-4df7-a5e6-6556b04347f0",
+     "title": "new planetarium stuff 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 51,
+     "length": 110.053,
+     "medium": 12,
+     "medium_index": 2,
+     "recording_id": "f0dbf5ef-84d0-48ff-b5d8-4c647c36a8ae",
+     "title": "planetarium demo bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 52,
+     "length": 106.666,
+     "medium": 12,
+     "medium_index": 3,
+     "recording_id": "0165953f-d59b-4a0f-a123-cbd6aacfaaf8",
+     "title": "planetarium fuckery 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 53,
+     "length": 207.84,
+     "medium": 12,
+     "medium_index": 4,
+     "recording_id": "dcd8710d-ad20-47a7-a697-cbe74da52f65",
+     "title": "planetarium new bounce 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 54,
+     "length": 210.909,
+     "medium": 12,
+     "medium_index": 5,
+     "recording_id": "844a6b1e-df03-47fe-bb4d-27469781b39e",
+     "title": "planetariums 03"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 55,
+     "length": 218.181,
+     "medium": 12,
+     "medium_index": 6,
+     "recording_id": "6ce9c4dd-b20f-4995-8ffe-348a61944c7f",
+     "title": "planetarium 13"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 56,
+     "length": 292.156,
+     "medium": 12,
+     "medium_index": 7,
+     "recording_id": "a3dd3c61-8caf-467f-8117-d614641227ca",
+     "title": "planetariums final 13"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 57,
+     "length": 228.75,
+     "medium": 12,
+     "medium_index": 8,
+     "recording_id": "33a379ae-049d-4811-ba66-778260134165",
+     "title": "planetarium fuckery 14"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 58,
+     "length": 218.0,
+     "medium": 12,
+     "medium_index": 9,
+     "recording_id": "17c4bf1f-158f-405c-a81a-4851941db204",
+     "title": "planetarium 09"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 59,
+     "length": 110.896,
+     "medium": 13,
+     "medium_index": 1,
+     "recording_id": "670af151-4731-4439-a302-896f6b74806d",
+     "title": "soft 2017 version"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 60,
+     "length": 92.4,
+     "medium": 13,
+     "medium_index": 2,
+     "recording_id": "fa283351-8424-41c9-929b-dd82d020f365",
+     "title": "soft real5"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 61,
+     "length": 116.666,
+     "medium": 13,
+     "medium_index": 3,
+     "recording_id": "8778fc00-2648-4b2a-890a-f7ba8bb4570d",
+     "title": "soft 004"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 62,
+     "length": 202.666,
+     "medium": 14,
+     "medium_index": 1,
+     "recording_id": "7aaf1c12-a373-43a0-a079-54df8c59975a",
+     "title": "yoshis island lofi thing new 5"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 63,
+     "length": 152.347,
+     "medium": 14,
+     "medium_index": 2,
+     "recording_id": "9978f36a-02f3-4387-a46c-35b995e5e22a",
+     "title": "yoshis island a 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 64,
+     "length": 100.0,
+     "medium": 14,
+     "medium_index": 3,
+     "recording_id": "94ab69d6-8d9f-4ea9-9e37-84bc71feb2b8",
+     "title": "yoshis island demo bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 65,
+     "length": 338.158,
+     "medium": 14,
+     "medium_index": 4,
+     "recording_id": "b0129e56-483e-45c7-a4e2-52fe1d291b61",
+     "title": "yoshis island things 04"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 66,
+     "length": 338.158,
+     "medium": 14,
+     "medium_index": 5,
+     "recording_id": "8dd3b9de-eb9f-4add-8d17-95f460794a22",
+     "title": "yoshis island things 05"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 67,
+     "length": 374.013,
+     "medium": 14,
+     "medium_index": 6,
+     "recording_id": "58aaf531-f1eb-4161-8fec-035ade216497",
+     "title": "yoshis island 06"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 68,
+     "length": 334.663,
+     "medium": 14,
+     "medium_index": 7,
+     "recording_id": "ce59f1b0-a730-4c37-8486-60ad9e190212",
+     "title": "yoshis island demo bounce 06"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 69,
+     "length": 406.786,
+     "medium": 14,
+     "medium_index": 8,
+     "recording_id": "bf92b8bd-3085-40ec-8099-ed708c72da21",
+     "title": "yoshis island a 08"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 70,
+     "length": 320.727,
+     "medium": 14,
+     "medium_index": 9,
+     "recording_id": "c410d520-e85b-4ccd-a102-c34c3e3927f4",
+     "title": "yoshis island 2 11"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 71,
+     "length": 386.96,
+     "medium": 14,
+     "medium_index": 10,
+     "recording_id": "bfeed2f2-8d08-47fe-82d3-79640f57d5c5",
+     "title": "yoshis island a 14"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 72,
+     "length": 404.312,
+     "medium": 14,
+     "medium_index": 11,
+     "recording_id": "a70c1ddb-f44c-4921-b761-b72c6f56ee0a",
+     "title": "yoshis island a 17"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 73,
+     "length": 380.413,
+     "medium": 14,
+     "medium_index": 12,
+     "recording_id": "5d62e679-c673-495c-b166-1117d551df3b",
+     "title": "yoshis island 30"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 74,
+     "length": 174.545,
+     "medium": 15,
+     "medium_index": 1,
+     "recording_id": "f60cc306-0317-4a91-b84a-a90ede905e32",
+     "title": "blue orchids bloom bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 75,
+     "length": 192.0,
+     "medium": 15,
+     "medium_index": 2,
+     "recording_id": "c4050b8f-956c-48a0-a69e-5611aedbfe51",
+     "title": "blue orchids bloom bounce 03"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 76,
+     "length": 137.142,
+     "medium": 16,
+     "medium_index": 1,
+     "recording_id": "549e847b-2d07-40f4-a3a0-42003112378c",
+     "title": "300 bones"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 77,
+     "length": 140.864,
+     "medium": 16,
+     "medium_index": 2,
+     "recording_id": "b330ccd3-e408-4d0d-8a77-a728df13758b",
+     "title": "black hole sun"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 78,
+     "length": 105.6,
+     "medium": 16,
+     "medium_index": 3,
+     "recording_id": "9bd7768e-cbcd-4b1c-b8a1-ff479b474a6a",
+     "title": "emo is jazz"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 79,
+     "length": 57.931,
+     "medium": 16,
+     "medium_index": 4,
+     "recording_id": "a254ab64-af1d-4246-85a5-73484028722b",
+     "title": "fish tank _ live forever as you are now"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 80,
+     "length": 84.48,
+     "medium": 16,
+     "medium_index": 5,
+     "recording_id": "66f4a973-15b7-4749-8c64-cf83666c8a6c",
+     "title": "goo!!!!!!!!!"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 81,
+     "length": 140.259,
+     "medium": 16,
+     "medium_index": 6,
+     "recording_id": "7e3ab12d-82c3-415f-b5d7-e6f96f55bda7",
+     "title": "h5"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 82,
+     "length": 1081.344,
+     "medium": 16,
+     "medium_index": 7,
+     "recording_id": "614c1fbf-8a1a-4757-aed3-d30aa6b56ad5",
+     "title": "primus presents oppa gangnam style"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 83,
+     "length": 66.461,
+     "medium": 16,
+     "medium_index": 8,
+     "recording_id": "a2934fdf-07b0-4e40-a990-2102429fd66e",
+     "title": "slime theme"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 84,
+     "length": 219.428,
+     "medium": 16,
+     "medium_index": 9,
+     "recording_id": "f91cb63d-12e5-42ea-9923-e7109bbf942a",
+     "title": "youtube money interlude 2"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 85,
+     "length": 112.0,
+     "medium": 16,
+     "medium_index": 10,
+     "recording_id": "de1da3dd-1213-4371-8164-832b9a00e025",
+     "title": "color bars atmospheric thing 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 86,
+     "length": 96.0,
+     "medium": 16,
+     "medium_index": 11,
+     "recording_id": "9b28aa37-fd9e-4c5a-a822-d73ee900d095",
+     "title": "mellotron time bounce 01"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 87,
+     "length": 112.0,
+     "medium": 16,
+     "medium_index": 12,
+     "recording_id": "e83f0984-49fa-4560-911b-2abc085bba71",
+     "title": "color bars atmospheric thing 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 88,
+     "length": 105.6,
+     "medium": 16,
+     "medium_index": 13,
+     "recording_id": "45ff16e1-60ec-44bc-86d7-b90d013cd208",
+     "title": "idk maybe chorus of jazzy thing 02"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 89,
+     "length": 561.257,
+     "medium": 16,
+     "medium_index": 14,
+     "recording_id": "6c1d11f2-e682-4d0a-b393-f378a10b8e95",
+     "title": "color bars glass beach version 03"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 90,
+     "length": 152.101,
+     "medium": 16,
+     "medium_index": 15,
+     "recording_id": "c2dc3a26-185f-4900-a55f-c0e0823cf576",
+     "title": "part 2 bounce 05"
+    },
+    {
+     "artist": "glass beach",
+     "artist_ids": [
+      "013b0e68-c89c-4d1f-bf48-95800b0ef5c0"
+     ],
+     "index": 91,
+     "length": 122.181,
+     "medium": 16,
+     "medium_index": 16,
+     "recording_id": "d30a822c-01c8-48c7-930e-3ef3528b1466",
+     "title": "color bars reprise 01"
+    }
+   ],
+   "va": false,
+   "year": null
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 1\\01 - classic j dies and goes to hell part 1 01.flac",
+    "sample_rate": null,
+    "size": 35447839
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 1\\01 - classic j dies and goes to hell part 1 07.flac",
+    "sample_rate": null,
+    "size": 35615135
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 1\\02 - new 8-bit thing demo.mp3",
+    "sample_rate": null,
+    "size": 3046235
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 10\\01 - dallas 01.mp3",
+    "sample_rate": null,
+    "size": 7800168
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 10\\02 - dallas 02.mp3",
+    "sample_rate": null,
+    "size": 16874513
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 10\\03 - part 3 demo bounce 03.mp3",
+    "sample_rate": null,
+    "size": 2894913
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 10\\07 - dallas 07.mp3",
+    "sample_rate": null,
+    "size": 16874513
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 10\\09 - dallas 09.mp3",
+    "sample_rate": null,
+    "size": 16874513
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 12\\01 - planetarium demo bounce 01.flac",
+    "sample_rate": null,
+    "size": 13922152
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 12\\03 - planetariums 03.mp3",
+    "sample_rate": null,
+    "size": 6684425
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 12\\09 - planetarium 09.mp3",
+    "sample_rate": null,
+    "size": 8712050
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 12\\13 - planetarium 13.mp3",
+    "sample_rate": null,
+    "size": 8711974
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 12\\13 - planetariums final 13.mp3",
+    "sample_rate": null,
+    "size": 10935642
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 12\\14 - planetarium fuckery 14.mp3",
+    "sample_rate": null,
+    "size": 9165555
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 13\\01 - soft 2017 version.mp3",
+    "sample_rate": null,
+    "size": 4445391
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 13\\02 - soft real5.mp3",
+    "sample_rate": null,
+    "size": 3705444
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 13\\12 - soft 004.mp3",
+    "sample_rate": null,
+    "size": 5068008
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 14\\01 - yoshis island a 01.flac",
+    "sample_rate": null,
+    "size": 14048797
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 14\\01 - yoshis island demo bounce 01.mp3",
+    "sample_rate": null,
+    "size": 4010087
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 14\\06 - yoshis island 06.mp3",
+    "sample_rate": null,
+    "size": 15171699
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 14\\06 - yoshis island demo bounce 06.mp3",
+    "sample_rate": null,
+    "size": 13419807
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 14\\08 - yoshis island a 08.mp3",
+    "sample_rate": null,
+    "size": 15171627
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 14\\14 - yoshis island a 14.flac",
+    "sample_rate": null,
+    "size": 78223465
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 14\\17 - yoshis island a 17.flac",
+    "sample_rate": null,
+    "size": 43349780
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 14\\30 - yoshis island 30.mp3",
+    "sample_rate": null,
+    "size": 15171623
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 15\\01 - blue orchids bloom bounce 01.flac",
+    "sample_rate": null,
+    "size": 16545940
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 15\\03 - blue orchids bloom bounce 03.mp3",
+    "sample_rate": null,
+    "size": 7731808
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\01 - 300 bones.flac",
+    "sample_rate": null,
+    "size": 22764358
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 16\\01 - color bars atmospheric thing 01.mp3",
+    "sample_rate": null,
+    "size": 4488648
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 16\\01 - mellotron time bounce 01.mp3",
+    "sample_rate": null,
+    "size": 3848641
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\02 - black hole sun.flac",
+    "sample_rate": null,
+    "size": 8289464
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 16\\02 - color bars atmospheric thing 02.mp3",
+    "sample_rate": null,
+    "size": 4489609
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\03 - color bars glass beach version 03.flac",
+    "sample_rate": null,
+    "size": 95996630
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\03 - emo is jazz.flac",
+    "sample_rate": null,
+    "size": 19429316
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\05 - goo!!!!!!!!!.flac",
+    "sample_rate": null,
+    "size": 17063950
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\05 - part 2 bounce 05.flac",
+    "sample_rate": null,
+    "size": 20028655
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\06 - h5.flac",
+    "sample_rate": null,
+    "size": 29022512
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\07 - primus presents oppa gangnam style.flac",
+    "sample_rate": null,
+    "size": 57256537
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\08 - slime theme.flac",
+    "sample_rate": null,
+    "size": 13386618
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 16\\09 - youtube money interlude 2.flac",
+    "sample_rate": null,
+    "size": 26522546
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 4\\03 - bone skull.flac",
+    "sample_rate": null,
+    "size": 38830738
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 7\\03 - long drive road trip guitar 2.flac",
+    "sample_rate": null,
+    "size": 2936030
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "mp3",
+    "path": "Disc 8\\01 - glass beach demo bounce 01.mp3",
+    "sample_rate": null,
+    "size": 2211916
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "m4a",
+    "path": "Disc 8\\01 - glass beach emo riff demo 01.m4a",
+    "sample_rate": null,
+    "size": 3149717
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 8\\01 - glass beach final 01.flac",
+    "sample_rate": null,
+    "size": 103797152
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 8\\01 - glass beach test bounce 01.flac",
+    "sample_rate": null,
+    "size": 62552516
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 8\\04 - glass beach test bounce 04.flac",
+    "sample_rate": null,
+    "size": 48826074
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "Disc 8\\07 - glass beach final 07.flac",
+    "sample_rate": null,
+    "size": 58974521
+   }
+  ],
+  "folder": "glass beach\\glass beach - the first glass beach album demos",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2366,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "07ef5020-4c68-4947-a95f-8aee00f29ed3",
+      "3c5cf027-40f9-49c2-95a0-055b7d2bf47c"
+     ],
+     "score": 0.9995385
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 1,
+   "high_band": 0.000869998291994255,
+   "length": 304.1333333333333,
+   "recording_id": "3c5cf027-40f9-49c2-95a0-055b7d2bf47c",
+   "title": "classic j dies and goes to hell part 1 01",
+   "track": 1,
+   "trailing_silence": 3.130000333333328
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "07ef5020-4c68-4947-a95f-8aee00f29ed3",
+      "3c5cf027-40f9-49c2-95a0-055b7d2bf47c"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 1,
+   "high_band": 0.0008699982919942559,
+   "length": 304.14462585034016,
+   "recording_id": "ed91c018-8335-443c-8bdb-2dd73d019a41",
+   "title": "classic j dies and goes to hell part 1 07",
+   "track": 1,
+   "trailing_silence": 3.141020850340169
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a08ced29-6c27-4092-9ec2-b45c0d5a2604"
+     ],
+     "score": 0.987595
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 1,
+   "high_band": null,
+   "length": 76.008,
+   "recording_id": "a08ced29-6c27-4092-9ec2-b45c0d5a2604",
+   "title": "new 8-bit thing demo",
+   "track": 2,
+   "trailing_silence": 1.5566869999999966
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "64cd615c-2708-4d22-b47c-38752ae5c995"
+     ],
+     "score": 0.974255
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 10,
+   "high_band": null,
+   "length": 194.736,
+   "recording_id": null,
+   "title": "dallas 01",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7cbd6e74-8fc1-490d-8848-025099fd2bc8"
+     ],
+     "score": 0.9928468
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 10,
+   "high_band": null,
+   "length": 421.368,
+   "recording_id": "64cd615c-2708-4d22-b47c-38752ae5c995",
+   "title": "dallas 02",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f0dbf5ef-84d0-48ff-b5d8-4c647c36a8ae"
+     ],
+     "score": 0.99996394
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 10,
+   "high_band": null,
+   "length": 110.05385,
+   "recording_id": null,
+   "title": "part 3 demo bounce 03",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7cbd6e74-8fc1-490d-8848-025099fd2bc8"
+     ],
+     "score": 0.9928468
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 10,
+   "high_band": null,
+   "length": 421.368,
+   "recording_id": null,
+   "title": "dallas 07",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7cbd6e74-8fc1-490d-8848-025099fd2bc8"
+     ],
+     "score": 0.9928468
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 10,
+   "high_band": null,
+   "length": 421.368,
+   "recording_id": "01f634c9-b1f0-4502-a73a-f25fcd46476b",
+   "title": "dallas 09",
+   "track": 10,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f0dbf5ef-84d0-48ff-b5d8-4c647c36a8ae"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": 0.00018883935135411903,
+   "length": 110.0,
+   "recording_id": "afef35de-363b-4df7-a5e6-6556b04347f0",
+   "title": "planetarium demo bounce 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "186ce5d8-275f-4a6d-beea-574155657064"
+     ],
+     "score": 0.9970662
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": null,
+   "length": 166.872,
+   "recording_id": "0165953f-d59b-4a0f-a123-cbd6aacfaaf8",
+   "title": "planetariums 03",
+   "track": 12,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2db8273f-c1b8-40c5-9c41-83c9003fd7d8"
+     ],
+     "score": 0.9931764
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": null,
+   "length": 217.512,
+   "recording_id": "17c4bf1f-158f-405c-a81a-4851941db204",
+   "title": "planetarium 09",
+   "track": 12,
+   "trailing_silence": 1.1626459999999952
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2db8273f-c1b8-40c5-9c41-83c9003fd7d8"
+     ],
+     "score": 0.9931764
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": null,
+   "length": 217.512,
+   "recording_id": "6ce9c4dd-b20f-4995-8ffe-348a61944c7f",
+   "title": "planetarium 13",
+   "track": 12,
+   "trailing_silence": 1.1626459999999952
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6bf97eec-b382-46e0-b6a6-f561d71beaa2"
+     ],
+     "score": 0.9930116
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": null,
+   "length": 273.048,
+   "recording_id": "a3dd3c61-8caf-467f-8117-d614641227ca",
+   "title": "planetariums final 13",
+   "track": 13,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "33a379ae-049d-4811-ba66-778260134165"
+     ],
+     "score": 0.93908226
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 12,
+   "high_band": null,
+   "length": 228.84,
+   "recording_id": "33a379ae-049d-4811-ba66-778260134165",
+   "title": "planetarium fuckery 14",
+   "track": 14,
+   "trailing_silence": 1.0652919999999995
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "670af151-4731-4439-a302-896f6b74806d"
+     ],
+     "score": 0.94736844
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 13,
+   "high_band": null,
+   "length": 110.952,
+   "recording_id": "670af151-4731-4439-a302-896f6b74806d",
+   "title": "soft 2017 version",
+   "track": 1,
+   "trailing_silence": 1.3328750000000014
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "fa283351-8424-41c9-929b-dd82d020f365"
+     ],
+     "score": 0.9708621
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 13,
+   "high_band": null,
+   "length": 92.472,
+   "recording_id": "fa283351-8424-41c9-929b-dd82d020f365",
+   "title": "soft real5",
+   "track": 2,
+   "trailing_silence": 4.841499999999996
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "582ae52d-2e18-4888-aac0-d4741077734a"
+     ],
+     "score": 0.9920227
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 13,
+   "high_band": null,
+   "length": 126.504,
+   "recording_id": "8778fc00-2648-4b2a-890a-f7ba8bb4570d",
+   "title": "soft 004",
+   "track": 12,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a622f1e5-dd39-49af-b66a-c56acc75ac69"
+     ],
+     "score": 0.99980223
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": 0.00023997881252242257,
+   "length": 131.2,
+   "recording_id": "7aaf1c12-a373-43a0-a079-54df8c59975a",
+   "title": "yoshis island a 01",
+   "track": 14,
+   "trailing_silence": 1.6080269999999928
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "94ab69d6-8d9f-4ea9-9e37-84bc71feb2b8"
+     ],
+     "score": 0.97038007
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": null,
+   "length": 100.08,
+   "recording_id": "7aaf1c12-a373-43a0-a079-54df8c59975a",
+   "title": "yoshis island demo bounce 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3337462a-0065-4b63-9847-c793e696112c"
+     ],
+     "score": 0.9919568
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": null,
+   "length": 378.84,
+   "recording_id": "58aaf531-f1eb-4161-8fec-035ade216497",
+   "title": "yoshis island 06",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "ce59f1b0-a730-4c37-8486-60ad9e190212"
+     ],
+     "score": 0.941159
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": null,
+   "length": 335.088,
+   "recording_id": "58aaf531-f1eb-4161-8fec-035ade216497",
+   "title": "yoshis island demo bounce 06",
+   "track": 6,
+   "trailing_silence": 7.394479000000047
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3337462a-0065-4b63-9847-c793e696112c"
+     ],
+     "score": 0.9919568
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": null,
+   "length": 378.84,
+   "recording_id": "bf92b8bd-3085-40ec-8099-ed708c72da21",
+   "title": "yoshis island a 08",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3337462a-0065-4b63-9847-c793e696112c"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": 0.0013847341410464062,
+   "length": 378.81378684807254,
+   "recording_id": "bfeed2f2-8d08-47fe-82d3-79640f57d5c5",
+   "title": "yoshis island a 14",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a70c1ddb-f44c-4921-b761-b72c6f56ee0a"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": 0.0001928672996797351,
+   "length": 404.31290249433107,
+   "recording_id": "a70c1ddb-f44c-4921-b761-b72c6f56ee0a",
+   "title": "yoshis island a 17",
+   "track": 14,
+   "trailing_silence": 1.255056494331086
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3337462a-0065-4b63-9847-c793e696112c"
+     ],
+     "score": 0.9919568
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 14,
+   "high_band": null,
+   "length": 378.84,
+   "recording_id": "5d62e679-c673-495c-b166-1117d551df3b",
+   "title": "yoshis island 30",
+   "track": 14,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f60cc306-0317-4a91-b84a-a90ede905e32"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 15,
+   "high_band": 8.690620786820256e-05,
+   "length": 174.54546485260772,
+   "recording_id": "f60cc306-0317-4a91-b84a-a90ede905e32",
+   "title": "blue orchids bloom bounce 01",
+   "track": 1,
+   "trailing_silence": 2.2005218526077215
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c4050b8f-956c-48a0-a69e-5611aedbfe51"
+     ],
+     "score": 0.9719805
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 15,
+   "high_band": null,
+   "length": 193.032,
+   "recording_id": "c4050b8f-956c-48a0-a69e-5611aedbfe51",
+   "title": "blue orchids bloom bounce 03",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "549e847b-2d07-40f4-a3a0-42003112378c"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 6.726339751340407e-05,
+   "length": 137.14285714285714,
+   "recording_id": "549e847b-2d07-40f4-a3a0-42003112378c",
+   "title": "300 bones",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "de1da3dd-1213-4371-8164-832b9a00e025"
+     ],
+     "score": 0.9947976
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": null,
+   "length": 112.032,
+   "recording_id": null,
+   "title": "color bars atmospheric thing 01",
+   "track": 1,
+   "trailing_silence": 3.1236880000000014
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "9b28aa37-fd9e-4c5a-a822-d73ee900d095"
+     ],
+     "score": 0.96928877
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": null,
+   "length": 96.048,
+   "recording_id": null,
+   "title": "mellotron time bounce 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b330ccd3-e408-4d0d-8a77-a728df13758b"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 1.1680891770842499e-05,
+   "length": 140.8,
+   "recording_id": "b330ccd3-e408-4d0d-8a77-a728df13758b",
+   "title": "black hole sun",
+   "track": 2,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "e83f0984-49fa-4560-911b-2abc085bba71"
+     ],
+     "score": 0.9762882
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": null,
+   "length": 112.056,
+   "recording_id": null,
+   "title": "color bars atmospheric thing 02",
+   "track": 2,
+   "trailing_silence": 3.1250419999999934
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "6c1d11f2-e682-4d0a-b393-f378a10b8e95"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 9.197743624586116e-05,
+   "length": 561.2571428571429,
+   "recording_id": null,
+   "title": "color bars glass beach version 03",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "45ff16e1-60ec-44bc-86d7-b90d013cd208",
+      "9bd7768e-cbcd-4b1c-b8a1-ff479b474a6a"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.0006527226750621941,
+   "length": 105.6,
+   "recording_id": "9bd7768e-cbcd-4b1c-b8a1-ff479b474a6a",
+   "title": "emo is jazz",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "66f4a973-15b7-4749-8c64-cf83666c8a6c"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.004316407117573184,
+   "length": 84.48,
+   "recording_id": "66f4a973-15b7-4749-8c64-cf83666c8a6c",
+   "title": "goo!!!!!!!!!",
+   "track": 5,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c2dc3a26-185f-4900-a55f-c0e0823cf576"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.000643700875774289,
+   "length": 152.10111111111112,
+   "recording_id": null,
+   "title": "part 2 bounce 05",
+   "track": 5,
+   "trailing_silence": 2.1105441111111247
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7e3ab12d-82c3-415f-b5d7-e6f96f55bda7"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.00021438909944589767,
+   "length": 140.25975056689342,
+   "recording_id": "7e3ab12d-82c3-415f-b5d7-e6f96f55bda7",
+   "title": "h5",
+   "track": 6,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "614c1fbf-8a1a-4757-aed3-d30aa6b56ad5"
+     ],
+     "score": 0.9455432
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 3.7067517391871504e-06,
+   "length": 1081.3,
+   "recording_id": "614c1fbf-8a1a-4757-aed3-d30aa6b56ad5",
+   "title": "primus presents oppa gangnam style",
+   "track": 7,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a2934fdf-07b0-4e40-a990-2102429fd66e"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.0004959729602389148,
+   "length": 66.46154195011339,
+   "recording_id": "a2934fdf-07b0-4e40-a990-2102429fd66e",
+   "title": "slime theme",
+   "track": 8,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f91cb63d-12e5-42ea-9923-e7109bbf942a"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 16,
+   "high_band": 0.00019974103687006348,
+   "length": 219.42857142857142,
+   "recording_id": "f91cb63d-12e5-42ea-9923-e7109bbf942a",
+   "title": "youtube money interlude 2",
+   "track": 9,
+   "trailing_silence": 2.3146714285714154
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "81b43b34-d484-4539-b993-0edc17aa3cb6",
+      "bfe2d1fa-f872-4e1f-86ad-f1b92cf4d9fa"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 4,
+   "high_band": 2.0530631121614694e-05,
+   "length": 149.27074829931973,
+   "recording_id": "86224fd6-55ef-48c9-bb0b-af1992f84322",
+   "title": "bone skull",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b58aacae-d37f-4b41-9cdc-b02c7e852089"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 7,
+   "high_band": 5.388506362644632e-06,
+   "length": 60.99736961451247,
+   "recording_id": "b58aacae-d37f-4b41-9cdc-b02c7e852089",
+   "title": "long drive road trip guitar 2",
+   "track": 3,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a08ced29-6c27-4092-9ec2-b45c0d5a2604"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": null,
+   "length": 75.93795,
+   "recording_id": "ad8dd16f-e9e2-4e46-9ded-991343525f9e",
+   "title": "glass beach demo bounce 01",
+   "track": 1,
+   "trailing_silence": 1.4866350000000068
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "588613e3-7911-4408-901a-d67bf5705704"
+     ],
+     "score": 0.946457
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": null,
+   "length": 60.97560090702948,
+   "recording_id": null,
+   "title": "glass beach emo riff demo 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "8861787d-fe3f-433a-ad4f-36a17bf3d924"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": 0.00023849204634699843,
+   "length": 520.1012925170068,
+   "recording_id": "ad8dd16f-e9e2-4e46-9ded-991343525f9e",
+   "title": "glass beach final 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "36cbef35-d939-4eb4-b78d-e95866f8bd29"
+     ],
+     "score": 0.9999341
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": 0.0002644463030646837,
+   "length": 441.09600907029477,
+   "recording_id": "ad8dd16f-e9e2-4e46-9ded-991343525f9e",
+   "title": "glass beach test bounce 01",
+   "track": 1,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0f26f45d-7286-4cf1-832a-ef82e76c6dbf"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": 7.355386528301445e-05,
+   "length": 515.3012925170068,
+   "recording_id": "8861787d-fe3f-433a-ad4f-36a17bf3d924",
+   "title": "glass beach test bounce 04",
+   "track": 4,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "be784051-7a79-4876-8fd8-304f89f70fa6"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "glass beach",
+   "disc": 8,
+   "high_band": 3.3454951144526884e-05,
+   "length": 532.9012925170068,
+   "recording_id": "be784051-7a79-4876-8fd8-304f89f70fa6",
+   "title": "glass beach final 07",
+   "track": 7,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch",
+  "transcode",
+  "padded"
+ ],
+ "likelies": {
+  "album": "the first glass beach album demos",
+  "albumdisambig": null,
+  "artist": "glass beach",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "ee4cfe7b-599d-4731-955e-5904f39b0057",
+  "year": null
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.40196095706666657,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'classic j dies and goes to hell part 1 07': AcoustID (1.00) says a different recording than 'classic j dies and goes to hell part 1 07' (ed91c018-8335-443c-8bdb-2dd73d019a41)",
+   "'dallas 02': duration off by 99s from 'dallas 02'",
+   "'dallas 02': tagged as recording 64cd615c-2708-4d22-b47c-38752ae5c995, matched to 'dallas 02' (1247b423-2cf3-4b52-a583-5420fc8c546f)",
+   "'dallas 02': AcoustID (0.99) says a different recording than 'dallas 02' (1247b423-2cf3-4b52-a583-5420fc8c546f)",
+   "'part 3 demo bounce 03': AcoustID (1.00) says a different recording than 'part 3 demo bounce 03' (119dd7da-85d1-4166-bb51-53a4f36c762e)",
+   "'dallas 07': duration off by 69s from 'dallas 07'",
+   "'dallas 07': AcoustID (0.99) says a different recording than 'dallas 07' (01f634c9-b1f0-4502-a73a-f25fcd46476b)",
+   "'dallas 09': duration off by 64s from 'dallas 09'",
+   "'dallas 09': tagged as recording 01f634c9-b1f0-4502-a73a-f25fcd46476b, matched to 'dallas 09' (5867a1cc-7ea5-41a9-96eb-73e863f86765)",
+   "'dallas 09': AcoustID (0.99) says a different recording than 'dallas 09' (5867a1cc-7ea5-41a9-96eb-73e863f86765)",
+   "'planetariums 03': tagged as recording 0165953f-d59b-4a0f-a123-cbd6aacfaaf8, matched to 'new planetarium stuff 01' (afef35de-363b-4df7-a5e6-6556b04347f0)",
+   "'planetariums 03': AcoustID (1.00) says a different recording than 'new planetarium stuff 01' (afef35de-363b-4df7-a5e6-6556b04347f0)",
+   "'planetarium 09': AcoustID (0.99) says a different recording than 'planetarium 09' (17c4bf1f-158f-405c-a81a-4851941db204)",
+   "'planetarium 13': AcoustID (0.99) says a different recording than 'planetarium 13' (6ce9c4dd-b20f-4995-8ffe-348a61944c7f)",
+   "'planetariums final 13': duration off by 19s from 'planetariums final 13'",
+   "'planetariums final 13': AcoustID (0.99) says a different recording than 'planetariums final 13' (a3dd3c61-8caf-467f-8117-d614641227ca)",
+   "'soft 004': AcoustID (0.99) says a different recording than 'soft 004' (8778fc00-2648-4b2a-890a-f7ba8bb4570d)",
+   "'yoshis island a 01': duration off by 21s from 'yoshis island a 01'",
+   "'yoshis island a 01': tagged as recording 7aaf1c12-a373-43a0-a079-54df8c59975a, matched to 'yoshis island a 01' (9978f36a-02f3-4387-a46c-35b995e5e22a)",
+   "'yoshis island a 01': AcoustID (1.00) says a different recording than 'yoshis island a 01' (9978f36a-02f3-4387-a46c-35b995e5e22a)",
+   "'yoshis island 06': AcoustID (0.99) says a different recording than 'yoshis island 06' (58aaf531-f1eb-4161-8fec-035ade216497)",
+   "'yoshis island a 08': duration off by 28s from 'yoshis island a 08'",
+   "'yoshis island a 08': AcoustID (0.99) says a different recording than 'yoshis island a 08' (bf92b8bd-3085-40ec-8099-ed708c72da21)",
+   "'yoshis island a 14': AcoustID (1.00) says a different recording than 'yoshis island a 14' (bfeed2f2-8d08-47fe-82d3-79640f57d5c5)",
+   "'yoshis island 30': AcoustID (0.99) says a different recording than 'yoshis island 30' (5d62e679-c673-495c-b166-1117d551df3b)",
+   "'primus presents oppa gangnam style': looks transcoded: almost nothing above 16 kHz",
+   "'bone skull': tagged as recording 86224fd6-55ef-48c9-bb0b-af1992f84322, matched to 'bone skull 7' (031eb03f-fe39-4dee-8957-6e850298ce9b)",
+   "'bone skull': AcoustID (1.00) says a different recording than 'bone skull 7' (031eb03f-fe39-4dee-8957-6e850298ce9b)",
+   "'long drive road trip guitar 2': looks transcoded: almost nothing above 16 kHz",
+   "'glass beach demo bounce 01': duration off by 20s from 'glass beach demo bounce 01'",
+   "'glass beach demo bounce 01': tagged as recording ad8dd16f-e9e2-4e46-9ded-991343525f9e, matched to 'glass beach demo bounce 01' (6ede2a0b-a97e-4e11-8ea6-ba5b80270ce4)",
+   "'glass beach demo bounce 01': AcoustID (1.00) says a different recording than 'glass beach demo bounce 01' (6ede2a0b-a97e-4e11-8ea6-ba5b80270ce4)",
+   "'glass beach test bounce 01': tagged as recording ad8dd16f-e9e2-4e46-9ded-991343525f9e, matched to 'glass beach test bounce 01' (a20a2e40-e6d2-4dfd-938e-a29409b0876d)",
+   "'glass beach test bounce 01': AcoustID (1.00) says a different recording than 'glass beach test bounce 01' (a20a2e40-e6d2-4dfd-938e-a29409b0876d)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "ee4cfe7b-599d-4731-955e-5904f39b0057"
+}

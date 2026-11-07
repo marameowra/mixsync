@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Fragments - MixSync{% endblock %}
 {% block content %}
+{% from "macros/ui.html" import status %}
 <h1>Fragmented release groups</h1>
 {% if items %}
-<div class="scroll">
+<div class="table-wrap scroll">
 <table>
   <thead><tr><th>Release group</th><th>Releases (tracks)</th><th>Canonical</th><th></th></tr></thead>
   <tbody>
@@ -12,7 +13,7 @@
     <td>{{ mb.link("release-group", f.group_mbid) }}</td>
     <td>{% for rel, n in f.releases.items() %}{{ mb.link("release", rel) }} ({{ n }}){% if not loop.last %}<br>{% endif %}{% endfor %}</td>
     <td>{% if f.canonical %}{{ mb.link("release", f.canonical) }}{% else %}not chosen yet{% endif %}</td>
-    <td><form method="post" action="/library/fragments/plan">{{ forms.csrf() }}<input type="hidden" name="group" value="{{ f.group_mbid }}"><button type="submit">Preview merge</button></form></td>
+    <td><form method="post" action="/library/fragments/plan">{{ forms.csrf() }}<input type="hidden" name="group" value="{{ f.group_mbid }}"><button class="btn" type="submit">Preview merge</button></form></td>
   </tr>
   {% endfor %}
   </tbody>
@@ -23,7 +24,7 @@
 {% endif %}
 <h2>Recent plans</h2>
 {% if plans %}
-<div class="scroll">
+<div class="table-wrap scroll">
 <table>
   <thead><tr><th>#</th><th>Release group</th><th>Status</th><th></th></tr></thead>
   <tbody>
@@ -31,8 +32,8 @@
   <tr>
     <td><a href="/library/plans/{{ p.id }}">{{ p.id }}</a></td>
     <td>{{ mb.link("release-group", p.release_group_mbid) }}</td>
-    <td>{{ p.status }}{% if p.error %}: {{ p.error }}{% endif %}</td>
-    <td>{% if "undo" in allowed[p.id] %}{{ forms.plan_action(p, "undo", "Undo") }}{% endif %}</td>
+    <td>{{ status(p.status) }}{% if p.error %}: {{ p.error }}{% endif %}</td>
+    <td>{% if "undo" in allowed[p.id] %}<a class="btn danger" href="/library/plans/{{ p.id }}#plan-actions">Review undo</a>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

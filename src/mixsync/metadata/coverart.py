@@ -11,10 +11,10 @@ class CoverArtClient:
         self._client = client
         self._base = base_url.rstrip("/")
 
-    async def front(self, release_mbid: str, release_group_mbid: str | None) -> bytes | None:
+    async def front(self, release_mbid: str | None, release_group_mbid: str | None) -> bytes | None:
         """Front cover: the release's 1200 px thumbnail, else its original image, then the same
         for the release group. A thumbnail can 404 while the original exists (CAA docs)."""
-        entities = [("release", release_mbid)]
+        entities = [("release", release_mbid)] if release_mbid else []
         if release_group_mbid:
             entities.append(("release-group", release_group_mbid))
         for kind, mbid in entities:

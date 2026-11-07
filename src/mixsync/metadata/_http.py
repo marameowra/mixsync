@@ -18,4 +18,7 @@ async def get_json(
         raise TransientError(f"{url} returned {response.status_code}")
     if response.status_code != 200:
         raise PermanentError(f"{url} returned {response.status_code}")
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as e:  # the body is not shown: it could echo what we sent
+        raise PermanentError(f"{url} returned a body that is not JSON") from e

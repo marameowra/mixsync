@@ -1,0 +1,1157 @@
+{
+ "albums": [
+  {
+   "album": "Chillhop Essentials: Summer 2021",
+   "albumdisambig": null,
+   "artist": "Various Artists",
+   "artist_ids": [
+    "89ad4ac3-39f7-470e-963a-56509c546377"
+   ],
+   "catalognum": "[none]",
+   "country": "NL",
+   "genres": [
+    "hip hop",
+    "boom bap",
+    "chillout",
+    "chillwave",
+    "downtempo",
+    "instrumental",
+    "instrumental hip hop",
+    "lo-fi",
+    "lo-fi hip hop"
+   ],
+   "label": "Chillhop Music",
+   "media": "Cassette",
+   "mediums": 1,
+   "original_year": 2021,
+   "release_group_id": "0ff3077d-b900-4bd9-ae8d-6d8f41fd9f98",
+   "release_id": "ac55689c-b3f6-4aaf-a994-d59abad60a11",
+   "tracks": [
+    {
+     "artist": "Middle School & Henry Gritton",
+     "artist_ids": [
+      "a6e8a485-fbe9-4005-8db1-1cb13d025e8b",
+      "8f660f11-7277-4fe8-b2ab-f09e9a3c1d15"
+     ],
+     "index": 1,
+     "length": 146.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "7133d297-1f02-4122-a32c-1ae1b2903592",
+     "title": "Solstice"
+    },
+    {
+     "artist": "Xander.",
+     "artist_ids": [
+      "f4021ddc-eff5-4a98-9921-2f3d14476d28"
+     ],
+     "index": 2,
+     "length": 168.0,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "3dea4cca-141c-4177-a72c-5dd17d689035",
+     "title": "Evening Stroll"
+    },
+    {
+     "artist": "Mama Aiuto",
+     "artist_ids": [
+      "94af4360-87d3-4b12-bccd-5dc1c0937cf2"
+     ],
+     "index": 3,
+     "length": 179.0,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "2aada1a4-1766-48da-8514-5950ee2c8fff",
+     "title": "Solar Cove"
+    },
+    {
+     "artist": "Misha",
+     "artist_ids": [
+      "da31f94b-86c4-4611-8f59-ce4910079ead"
+     ],
+     "index": 4,
+     "length": 152.0,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "c0f3d971-cf81-4ddf-8887-ae42e867074e",
+     "title": "Talk"
+    },
+    {
+     "artist": "Mo Anando",
+     "artist_ids": [
+      "a3fa7a23-135a-421c-beef-36bb963bbe90"
+     ],
+     "index": 5,
+     "length": 181.0,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "f49d3156-01a2-4f3b-a6a3-93c4259d2af5",
+     "title": "Easy Now"
+    },
+    {
+     "artist": "Ben Bada Boom",
+     "artist_ids": [
+      "9f938492-62ed-416f-9868-9025e9943b02"
+     ],
+     "index": 6,
+     "length": 144.0,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "fee4ba12-7b64-42ec-85bd-affe2f42b880",
+     "title": "Caipi"
+    },
+    {
+     "artist": "Oddfish",
+     "artist_ids": [
+      "7e32a6a7-2771-468c-bef9-a0df1acba0b3"
+     ],
+     "index": 7,
+     "length": 142.0,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "63c3d39b-71b1-445d-888f-0bc5bb4348a4",
+     "title": "Toddle"
+    },
+    {
+     "artist": "The Breed",
+     "artist_ids": [
+      "9fe8b420-52f0-4b3d-83d5-799a5562322a"
+     ],
+     "index": 8,
+     "length": 148.0,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "93d36161-c023-45f1-91d7-eee5edecdc0b",
+     "title": "Flip Flop Vibe"
+    },
+    {
+     "artist": "chromonicci",
+     "artist_ids": [
+      "56ee44d2-7168-4e4e-b3f1-59eb7938e692"
+     ],
+     "index": 9,
+     "length": 234.0,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "fb4c9fe9-364a-42d0-9455-ce195c8b8a5f",
+     "title": "Hillside."
+    },
+    {
+     "artist": "Psalm Trees",
+     "artist_ids": [
+      "8e5038b0-f71f-4951-aa26-542cdfe9280a"
+     ],
+     "index": 10,
+     "length": 195.0,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "2fcb3d70-5fcb-4a28-ad4b-0a56e6965f77",
+     "title": "Antes"
+    },
+    {
+     "artist": "dryhope",
+     "artist_ids": [
+      "92095c7f-2dd1-423f-9f33-0ee68527a58f"
+     ],
+     "index": 11,
+     "length": 150.0,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "427b892d-17ec-4464-80de-6fc4abdbaa82",
+     "title": "Folds"
+    },
+    {
+     "artist": "Molly McPhaul & g mills",
+     "artist_ids": [
+      "629fc31e-0435-46d6-9e6c-f85fcedce6ae",
+      "cbad43e0-f510-4deb-a979-26a5ea8c24b7"
+     ],
+     "index": 12,
+     "length": 157.0,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "1020010a-9598-42a8-adeb-18d501289db6",
+     "title": "Waterfalls"
+    },
+    {
+     "artist": "Monma",
+     "artist_ids": [
+      "21ec9aec-c067-4b0f-ba7f-0837bae6e31a"
+     ],
+     "index": 13,
+     "length": null,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "01a77cf4-781c-4962-9bf6-9494e8858bc2",
+     "title": "Clear Skies"
+    },
+    {
+     "artist": "invention_",
+     "artist_ids": [
+      "3f1f7d94-e5c5-4ef9-a14f-4542ba609963"
+     ],
+     "index": 14,
+     "length": 135.0,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "dba4c6ca-577f-4ce9-9e9f-73bccafd7e2c",
+     "title": "Makai"
+    },
+    {
+     "artist": "Makzo, solicit",
+     "artist_ids": [
+      "603756ad-5eb9-4c48-81b3-e61669cdd14b",
+      "5b13320a-6b75-4341-a0a6-45bde16f8164"
+     ],
+     "index": 15,
+     "length": 147.0,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "9475cf87-155d-4048-b169-00adbf3655c4",
+     "title": "Ladybug"
+    },
+    {
+     "artist": "Taro",
+     "artist_ids": [
+      "f09f1682-5d1c-4eef-bcea-61a008fc5a09"
+     ],
+     "index": 16,
+     "length": 151.0,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "f3b0f232-22bf-4141-9596-0f07ed1b1b62",
+     "title": "7pm"
+    },
+    {
+     "artist": "Sebastian Kamae & Dayle",
+     "artist_ids": [
+      "269b0cc0-9f70-4513-9a23-af98e5bf1738",
+      "9d24fa43-a37f-4db4-8869-9cdc1f2df56a"
+     ],
+     "index": 17,
+     "length": 169.0,
+     "medium": 1,
+     "medium_index": 17,
+     "recording_id": "b926f559-e6fb-41ff-b284-6d491415ac31",
+     "title": "Flux"
+    },
+    {
+     "artist": "Luke Otwell, Kyle McEvoy",
+     "artist_ids": [
+      "52962abc-9d02-4709-a542-3fc9f117d798",
+      "89d36b7f-2273-4003-93d3-c306a1260f7b"
+     ],
+     "index": 18,
+     "length": 142.0,
+     "medium": 1,
+     "medium_index": 18,
+     "recording_id": "b3690ec1-c70a-43c0-aadd-7fe5b82bef4e",
+     "title": "Ocean View, Pt. 2"
+    },
+    {
+     "artist": "Hanz",
+     "artist_ids": [
+      "78ff50dc-edd5-49da-9698-0c1e26d74420"
+     ],
+     "index": 19,
+     "length": 168.0,
+     "medium": 1,
+     "medium_index": 19,
+     "recording_id": "9c0daf44-805d-4cc3-b9f5-5d130dd74d62",
+     "title": "Crown"
+    },
+    {
+     "artist": "Grisp & C4C",
+     "artist_ids": [
+      "3ce4feaf-d312-47a9-bbd6-89fca77a5628",
+      "c3e06f4c-f0f1-4224-af3c-e7251a50a27d"
+     ],
+     "index": 20,
+     "length": 141.0,
+     "medium": 1,
+     "medium_index": 20,
+     "recording_id": "acb791f2-44df-47dd-8017-758f8d0c9e74",
+     "title": "Take Initiative"
+    },
+    {
+     "artist": "Evil Needle",
+     "artist_ids": [
+      "8e722d1e-205f-4a6c-b2b1-7f44eb216e25"
+     ],
+     "index": 21,
+     "length": 138.0,
+     "medium": 1,
+     "medium_index": 21,
+     "recording_id": "540aec20-a547-4493-9d73-eb95dac9ab0c",
+     "title": "Despair"
+    },
+    {
+     "artist": "Ian Ewing",
+     "artist_ids": [
+      "0e620ca7-a47e-45ec-9c20-0ab274db14c1"
+     ],
+     "index": 22,
+     "length": 156.0,
+     "medium": 1,
+     "medium_index": 22,
+     "recording_id": "d284e4c4-5e86-4619-897a-7bc40f2acdef",
+     "title": "Silver Glen"
+    },
+    {
+     "artist": "\u00d8DYSSEE & Guillaume Muschalle",
+     "artist_ids": [
+      "e099e006-e993-4c2f-8cee-30b1f51d235e",
+      "e299faf0-5330-47fa-ad31-148a92a551eb"
+     ],
+     "index": 23,
+     "length": 173.0,
+     "medium": 1,
+     "medium_index": 23,
+     "recording_id": "5710fa96-dfde-418c-ba5a-2fb6554f3946",
+     "title": "Wish It Never Ends"
+    },
+    {
+     "artist": "leavv",
+     "artist_ids": [
+      "63cdbeb7-73b2-4752-acf9-f566d7960105"
+     ],
+     "index": 24,
+     "length": 89.0,
+     "medium": 1,
+     "medium_index": 24,
+     "recording_id": "0192acc2-13ee-4968-bf86-6bf0ca82dea0",
+     "title": "Blue View"
+    },
+    {
+     "artist": "SwuM, brillion.",
+     "artist_ids": [
+      "07236348-572d-4a28-9405-a547b5c968d4",
+      "43c8138b-d13c-444b-9f4c-e0efc9334cec"
+     ],
+     "index": 25,
+     "length": 167.0,
+     "medium": 1,
+     "medium_index": 25,
+     "recording_id": "b54049b5-7606-4099-9b8e-3257600a3ca9",
+     "title": "With Time"
+    },
+    {
+     "artist": "Aarigod",
+     "artist_ids": [
+      "66af8d00-e10a-4b77-9932-243c70a70397"
+     ],
+     "index": 26,
+     "length": 175.0,
+     "medium": 1,
+     "medium_index": 26,
+     "recording_id": "b9197a4b-e48e-404a-8cad-7092bc3ac25a",
+     "title": "Ocean in a Shell"
+    },
+    {
+     "artist": "arbour",
+     "artist_ids": [
+      "af0f34ae-01f3-4c65-b9b8-934964312c96"
+     ],
+     "index": 27,
+     "length": 196.0,
+     "medium": 1,
+     "medium_index": 27,
+     "recording_id": "0a5b72f9-e410-48e3-98b7-cb64edddd388",
+     "title": "Golden Gardens"
+    }
+   ],
+   "va": true,
+   "year": 2021
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Solstice.flac",
+    "sample_rate": null,
+    "size": 14049997
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "02 - Evening Stroll.flac",
+    "sample_rate": null,
+    "size": 17380104
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Solar Cove.flac",
+    "sample_rate": null,
+    "size": 17554596
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "04 - Talk.flac",
+    "sample_rate": null,
+    "size": 13047035
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "05 - Easy Now.flac",
+    "sample_rate": null,
+    "size": 15832002
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "06 - Caipi.flac",
+    "sample_rate": null,
+    "size": 14453006
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "07 - Toddle.flac",
+    "sample_rate": null,
+    "size": 12681930
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "08 - Flip Flop Vibe.flac",
+    "sample_rate": null,
+    "size": 18117118
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "09 - Hillside.flac",
+    "sample_rate": null,
+    "size": 23218662
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "10 - Antes.flac",
+    "sample_rate": null,
+    "size": 18170856
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "11 - Folds.flac",
+    "sample_rate": null,
+    "size": 14796550
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "12 - Waterfalls.flac",
+    "sample_rate": null,
+    "size": 17761922
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "13 - Clear Skies.flac",
+    "sample_rate": null,
+    "size": 17158669
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "14 - Makai.flac",
+    "sample_rate": null,
+    "size": 14407313
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "15 - Ladybug.flac",
+    "sample_rate": null,
+    "size": 13272076
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "16 - 7pm.flac",
+    "sample_rate": null,
+    "size": 15727045
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "17 - Flux.flac",
+    "sample_rate": null,
+    "size": 17684937
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "18 - Ocean View, Pt. 2.flac",
+    "sample_rate": null,
+    "size": 14863520
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "19 - Crown.flac",
+    "sample_rate": null,
+    "size": 15613401
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "20 - Take Initiative.flac",
+    "sample_rate": null,
+    "size": 11385097
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "21 - Despair.flac",
+    "sample_rate": null,
+    "size": 12766079
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "22 - Silver Glen.flac",
+    "sample_rate": null,
+    "size": 16288148
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "23 - Wish It Never Ends.flac",
+    "sample_rate": null,
+    "size": 15364986
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "24 - Blue View.flac",
+    "sample_rate": null,
+    "size": 8418347
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "25 - With Time.flac",
+    "sample_rate": null,
+    "size": 16266253
+   },
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "26 - Ocean in a Shell.flac",
+    "sample_rate": null,
+    "size": 17016185
+   }
+  ],
+  "folder": "downloads\\2021 - Chillhop Essentials - Summer 2021",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2350,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "7133d297-1f02-4122-a32c-1ae1b2903592"
+     ],
+     "score": 0.9957806
+    }
+   ],
+   "artist": "middle school",
+   "disc": 1,
+   "high_band": 7.1552761576396316e-06,
+   "length": 145.93757369614514,
+   "recording_id": "7133d297-1f02-4122-a32c-1ae1b2903592",
+   "title": "Solstice",
+   "track": 1,
+   "trailing_silence": 2.404580696145132
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "3dea4cca-141c-4177-a72c-5dd17d689035"
+     ],
+     "score": 0.9924512
+    }
+   ],
+   "artist": "xander.",
+   "disc": 1,
+   "high_band": 3.070693714360888e-06,
+   "length": 167.63757369614513,
+   "recording_id": "3dea4cca-141c-4177-a72c-5dd17d689035",
+   "title": "Evening Stroll",
+   "track": 2,
+   "trailing_silence": 2.2637186961451334
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2aada1a4-1766-48da-8514-5950ee2c8fff"
+     ],
+     "score": 0.9939676
+    }
+   ],
+   "artist": "Mama Aiuto",
+   "disc": 1,
+   "high_band": 2.1890914261143295e-06,
+   "length": 179.33120181405894,
+   "recording_id": "2aada1a4-1766-48da-8514-5950ee2c8fff",
+   "title": "Solar Cove",
+   "track": 3,
+   "trailing_silence": 2.019138814058948
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "c0f3d971-cf81-4ddf-8887-ae42e867074e"
+     ],
+     "score": 0.996308
+    }
+   ],
+   "artist": "Misha",
+   "disc": 1,
+   "high_band": 1.3398136559761965e-06,
+   "length": 152.38027210884354,
+   "recording_id": "c0f3d971-cf81-4ddf-8887-ae42e867074e",
+   "title": "Talk",
+   "track": 4,
+   "trailing_silence": 3.4130381088435513
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f49d3156-01a2-4f3b-a6a3-93c4259d2af5"
+     ],
+     "score": 0.995352
+    }
+   ],
+   "artist": "Mo Anando.",
+   "disc": 1,
+   "high_band": 1.253148100074605e-06,
+   "length": 180.6395918367347,
+   "recording_id": "f49d3156-01a2-4f3b-a6a3-93c4259d2af5",
+   "title": "Easy Now",
+   "track": 5,
+   "trailing_silence": 2.0624488367346885
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "fee4ba12-7b64-42ec-85bd-affe2f42b880"
+     ],
+     "score": 0.9941983
+    }
+   ],
+   "artist": "BEN BADA BOOM",
+   "disc": 1,
+   "high_band": 4.21659898615878e-05,
+   "length": 143.9939909297052,
+   "recording_id": "fee4ba12-7b64-42ec-85bd-affe2f42b880",
+   "title": "Caipi",
+   "track": 6,
+   "trailing_silence": 2.632675929705215
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "63c3d39b-71b1-445d-888f-0bc5bb4348a4"
+     ],
+     "score": 0.9985166
+    }
+   ],
+   "artist": "oddfish",
+   "disc": 1,
+   "high_band": 1.3976779058456638e-05,
+   "length": 142.167641723356,
+   "recording_id": "63c3d39b-71b1-445d-888f-0bc5bb4348a4",
+   "title": "Toddle",
+   "track": 7,
+   "trailing_silence": 2.5449207233560003
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "93d36161-c023-45f1-91d7-eee5edecdc0b"
+     ],
+     "score": 0.9901877
+    }
+   ],
+   "artist": "The BREED",
+   "disc": 1,
+   "high_band": 0.0011511022425474049,
+   "length": 148.45961451247166,
+   "recording_id": "93d36161-c023-45f1-91d7-eee5edecdc0b",
+   "title": "Flip Flop Vibe",
+   "track": 8,
+   "trailing_silence": 1.6847615124716526
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "fb4c9fe9-364a-42d0-9455-ce195c8b8a5f"
+     ],
+     "score": 0.996341
+    }
+   ],
+   "artist": "chromonicci",
+   "disc": 1,
+   "high_band": 9.500853030381394e-06,
+   "length": 233.7632879818594,
+   "recording_id": "fb4c9fe9-364a-42d0-9455-ce195c8b8a5f",
+   "title": "Hillside.",
+   "track": 9,
+   "trailing_silence": 3.6742859818594127
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "2fcb3d70-5fcb-4a28-ad4b-0a56e6965f77"
+     ],
+     "score": 0.997231
+    }
+   ],
+   "artist": "Psalm Trees",
+   "disc": 1,
+   "high_band": 6.318468140551229e-07,
+   "length": 194.88755102040815,
+   "recording_id": "2fcb3d70-5fcb-4a28-ad4b-0a56e6965f77",
+   "title": "Antes",
+   "track": 10,
+   "trailing_silence": 2.513810020408158
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "427b892d-17ec-4464-80de-6fc4abdbaa82"
+     ],
+     "score": 0.9948906
+    }
+   ],
+   "artist": "dryhope",
+   "disc": 1,
+   "high_band": 6.895533933329019e-06,
+   "length": 149.72142857142856,
+   "recording_id": "427b892d-17ec-4464-80de-6fc4abdbaa82",
+   "title": "Folds",
+   "track": 11,
+   "trailing_silence": 2.564376571428568
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "1020010a-9598-42a8-adeb-18d501289db6"
+     ],
+     "score": 0.9948906
+    }
+   ],
+   "artist": "Molly McPhaul",
+   "disc": 1,
+   "high_band": 0.0010798757782442205,
+   "length": 156.5726984126984,
+   "recording_id": "1020010a-9598-42a8-adeb-18d501289db6",
+   "title": "Waterfalls",
+   "track": 12,
+   "trailing_silence": 2.6321314126984134
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "a426abb7-35a7-4cf1-ad07-347cafe3a677"
+     ],
+     "score": 0.99515426
+    }
+   ],
+   "artist": "Monma",
+   "disc": 1,
+   "high_band": 2.9049509249808432e-05,
+   "length": 187.98861678004536,
+   "recording_id": "01a77cf4-781c-4962-9bf6-9494e8858bc2",
+   "title": "Clear Skies",
+   "track": 13,
+   "trailing_silence": 4.628888780045372
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "dba4c6ca-577f-4ce9-9e9f-73bccafd7e2c"
+     ],
+     "score": 0.99433017
+    }
+   ],
+   "artist": "invention_",
+   "disc": 1,
+   "high_band": 4.007278257203213e-06,
+   "length": 135.30786848072563,
+   "recording_id": "dba4c6ca-577f-4ce9-9e9f-73bccafd7e2c",
+   "title": "Makai",
+   "track": 14,
+   "trailing_silence": 1.2361224807256406
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "9475cf87-155d-4048-b169-00adbf3655c4"
+     ],
+     "score": 0.9955828
+    }
+   ],
+   "artist": "Makzo",
+   "disc": 1,
+   "high_band": 5.433587936244191e-06,
+   "length": 147.47503401360544,
+   "recording_id": "9475cf87-155d-4048-b169-00adbf3655c4",
+   "title": "Ladybug",
+   "track": 15,
+   "trailing_silence": 3.1618370136054352
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "f3b0f232-22bf-4141-9596-0f07ed1b1b62"
+     ],
+     "score": 0.99759364
+    }
+   ],
+   "artist": "Taro",
+   "disc": 1,
+   "high_band": 4.658566507226897e-06,
+   "length": 151.05659863945579,
+   "recording_id": "f3b0f232-22bf-4141-9596-0f07ed1b1b62",
+   "title": "7pm",
+   "track": 16,
+   "trailing_silence": 0.0
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b926f559-e6fb-41ff-b284-6d491415ac31"
+     ],
+     "score": 0.99554986
+    }
+   ],
+   "artist": "Sebastian Kamae",
+   "disc": 1,
+   "high_band": 0.00014156966357175527,
+   "length": 169.37884353741498,
+   "recording_id": "b926f559-e6fb-41ff-b284-6d491415ac31",
+   "title": "Flux",
+   "track": 17,
+   "trailing_silence": 2.852834537414992
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b3690ec1-c70a-43c0-aadd-7fe5b82bef4e"
+     ],
+     "score": 0.9946268
+    }
+   ],
+   "artist": "Luke Otwell",
+   "disc": 1,
+   "high_band": 8.234478500860867e-06,
+   "length": 141.75836734693877,
+   "recording_id": "b3690ec1-c70a-43c0-aadd-7fe5b82bef4e",
+   "title": "Ocean View, Pt. 2",
+   "track": 18,
+   "trailing_silence": 3.014716346938769
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "9c0daf44-805d-4cc3-b9f5-5d130dd74d62"
+     ],
+     "score": 0.996308
+    }
+   ],
+   "artist": "Hanz",
+   "disc": 1,
+   "high_band": 6.559751688617364e-05,
+   "length": 168.46321995464854,
+   "recording_id": "9c0daf44-805d-4cc3-b9f5-5d130dd74d62",
+   "title": "Crown",
+   "track": 19,
+   "trailing_silence": 4.059183954648546
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "acb791f2-44df-47dd-8017-758f8d0c9e74"
+     ],
+     "score": 0.99538505
+    }
+   ],
+   "artist": "Grisp",
+   "disc": 1,
+   "high_band": 0.0014767436089686403,
+   "length": 141.1791836734694,
+   "recording_id": "acb791f2-44df-47dd-8017-758f8d0c9e74",
+   "title": "Take Initiative",
+   "track": 20,
+   "trailing_silence": 5.9584126734693825
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "540aec20-a547-4493-9d73-eb95dac9ab0c"
+     ],
+     "score": 0.9948576
+    }
+   ],
+   "artist": "Evil Needle",
+   "disc": 1,
+   "high_band": 6.336302461598511e-05,
+   "length": 138.3780045351474,
+   "recording_id": "540aec20-a547-4493-9d73-eb95dac9ab0c",
+   "title": "Despair",
+   "track": 21,
+   "trailing_silence": 2.6737865351474
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "d284e4c4-5e86-4619-897a-7bc40f2acdef"
+     ],
+     "score": 0.9939676
+    }
+   ],
+   "artist": "Ian Ewing",
+   "disc": 1,
+   "high_band": 7.4243630388697304e-06,
+   "length": 155.86061224489796,
+   "recording_id": "d284e4c4-5e86-4619-897a-7bc40f2acdef",
+   "title": "Silver Glen",
+   "track": 22,
+   "trailing_silence": 2.918412244897951
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5710fa96-dfde-418c-ba5a-2fb6554f3946"
+     ],
+     "score": 0.9952202
+    }
+   ],
+   "artist": "\u00d8DYSSEE",
+   "disc": 1,
+   "high_band": 1.743732652232749e-05,
+   "length": 172.5724036281179,
+   "recording_id": "5710fa96-dfde-418c-ba5a-2fb6554f3946",
+   "title": "Wish It Never Ends",
+   "track": 23,
+   "trailing_silence": 2.338412628117908
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "0192acc2-13ee-4968-bf86-6bf0ca82dea0"
+     ],
+     "score": 0.9931777
+    }
+   ],
+   "artist": "Leavv",
+   "disc": 1,
+   "high_band": 1.2785608439770164e-05,
+   "length": 89.27297052154195,
+   "recording_id": "0192acc2-13ee-4968-bf86-6bf0ca82dea0",
+   "title": "Blue View",
+   "track": 24,
+   "trailing_silence": 3.366439521541949
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b54049b5-7606-4099-9b8e-3257600a3ca9"
+     ],
+     "score": 0.99581355
+    }
+   ],
+   "artist": "SwuM",
+   "disc": 1,
+   "high_band": 3.3103239794510295e-06,
+   "length": 167.49197278911564,
+   "recording_id": "b54049b5-7606-4099-9b8e-3257600a3ca9",
+   "title": "With Time",
+   "track": 25,
+   "trailing_silence": 2.2561677891156364
+  },
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "b9197a4b-e48e-404a-8cad-7092bc3ac25a"
+     ],
+     "score": 0.9948576
+    }
+   ],
+   "artist": "Aarigod",
+   "disc": 1,
+   "high_band": 1.8206799096483864e-06,
+   "length": 175.00673469387755,
+   "recording_id": "b9197a4b-e48e-404a-8cad-7092bc3ac25a",
+   "title": "Ocean in a Shell",
+   "track": 26,
+   "trailing_silence": 2.3158726938775374
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "transcode"
+ ],
+ "likelies": {
+  "album": "Chillhop Essentials: Summer 2021",
+  "albumdisambig": null,
+  "artist": "Various Artists",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "ac55689c-b3f6-4aaf-a994-d59abad60a11",
+  "year": 2021
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.028740672359412266,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'Solstice': looks transcoded: almost nothing above 16 kHz",
+   "'Evening Stroll': looks transcoded: almost nothing above 16 kHz",
+   "'Solar Cove': looks transcoded: almost nothing above 16 kHz",
+   "'Talk': looks transcoded: almost nothing above 16 kHz",
+   "'Easy Now': looks transcoded: almost nothing above 16 kHz",
+   "'Hillside.': looks transcoded: almost nothing above 16 kHz",
+   "'Antes': looks transcoded: almost nothing above 16 kHz",
+   "'Folds': looks transcoded: almost nothing above 16 kHz",
+   "'Clear Skies': AcoustID (1.00) says a different recording than 'Clear Skies' (01a77cf4-781c-4962-9bf6-9494e8858bc2)",
+   "'Makai': looks transcoded: almost nothing above 16 kHz",
+   "'Ladybug': looks transcoded: almost nothing above 16 kHz",
+   "'7pm': looks transcoded: almost nothing above 16 kHz",
+   "'Ocean View, Pt. 2': looks transcoded: almost nothing above 16 kHz",
+   "'Silver Glen': looks transcoded: almost nothing above 16 kHz",
+   "'With Time': looks transcoded: almost nothing above 16 kHz",
+   "'Ocean in a Shell': looks transcoded: almost nothing above 16 kHz"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "ac55689c-b3f6-4aaf-a994-d59abad60a11"
+}

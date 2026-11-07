@@ -1,0 +1,125 @@
+{
+ "albums": [
+  {
+   "album": "System / Second Connection",
+   "albumdisambig": null,
+   "artist": "Nu:Tone",
+   "artist_ids": [
+    "380e2880-567d-4991-a9b5-93a07e428652"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "electronic",
+    "drum and bass"
+   ],
+   "label": "Hospital Records",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2007,
+   "release_group_id": "ebb0449f-e658-380a-89b8-021d11b40b26",
+   "release_id": "f5e8ee54-57e4-4197-b35a-bef0a2863fb9",
+   "tracks": [
+    {
+     "artist": "Nu:Tone & Matrix & Futurebound",
+     "artist_ids": [
+      "380e2880-567d-4991-a9b5-93a07e428652",
+      "4a945ad5-5f21-449d-ac51-fac9d6b8c118"
+     ],
+     "index": 1,
+     "length": 425.823,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "5f9d642a-9914-4340-ae65-cd29935a7312",
+     "title": "System (Matrix and Futurebound remix)"
+    },
+    {
+     "artist": "Nu:Tone",
+     "artist_ids": [
+      "380e2880-567d-4991-a9b5-93a07e428652"
+     ],
+     "index": 2,
+     "length": 314.908,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "1707740d-542b-4ca9-b20f-2836a6b4bc31",
+     "title": "Second Connection"
+    }
+   ],
+   "va": false,
+   "year": 2007
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - System (Matrix and Futurebound Remix).flac",
+    "sample_rate": null,
+    "size": 54418221
+   }
+  ],
+  "folder": "Nu_Tone\\Nu_Tone - System",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2233,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5f9d642a-9914-4340-ae65-cd29935a7312"
+     ],
+     "score": 0.99248415
+    }
+   ],
+   "artist": "Nu:Tone",
+   "disc": 1,
+   "high_band": 0.0012346361815324784,
+   "length": 425.8230612244898,
+   "recording_id": "c9575a61-9228-4840-b7a3-9c72e500f71e",
+   "title": "System (Matrix and Futurebound Remix)",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "accept"
+ ],
+ "likelies": {
+  "album": "System",
+  "albumdisambig": null,
+  "artist": "Nu:Tone",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2007
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.31129476584022037,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": []
+ },
+ "release_given": false,
+ "release_mbid": "f5e8ee54-57e4-4197-b35a-bef0a2863fb9"
+}

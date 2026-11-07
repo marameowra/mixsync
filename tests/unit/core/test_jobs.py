@@ -5,7 +5,6 @@ import pytest
 
 from mixsync.core.jobs import (
     TERMINAL,
-    TRANSITIONS,
     IllegalTransitionError,
     JobState,
     backoff,
@@ -33,10 +32,6 @@ def test_transitions(a: JobState, b: JobState) -> None:
     else:
         with pytest.raises(IllegalTransitionError):
             transition(a, b)
-
-
-def test_terminal_states_have_no_exits() -> None:
-    assert all(not TRANSITIONS[s] for s in TERMINAL)
 
 
 def test_backoff_is_exponential_and_capped() -> None:

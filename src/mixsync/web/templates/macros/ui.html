@@ -1,0 +1,20 @@
+{# Status always includes a semantic glyph and a readable word; unknown states stay neutral. #}
+{% macro status(value, label=none) -%}
+{% set states = {
+  "auto_accept": ("confident", "●", "Confident"), "confident": ("confident", "●", "Confident"),
+  "accepted": ("confident", "●", "Accepted"), "auto_accepted": ("confident", "●", "Accepted"),
+  "verified": ("confident", "●", "Verified"), "done": ("confident", "●", "Done"),
+  "owned": ("confident", "●", "Already in your library"), "kept": ("confident", "●", "Kept"),
+  "imported": ("confident", "●", "Imported"), "linked": ("confident", "●", "Linked"),
+  "review": ("review", "◐", "Needs review"), "pending_review": ("review", "◐", "Needs review"),
+  "unverified": ("review", "◐", "Unverified"), "failed": ("reject", "✕", "Failed"),
+  "reject": ("reject", "✕", "Rejected"), "rejected": ("reject", "✕", "Rejected"),
+  "rejected_auto": ("reject", "✕", "Rejected"), "error": ("reject", "✕", "Error"),
+  "not found": ("review", "◐", "Not found"), "not_found": ("review", "◐", "Not found"),
+  "expired": ("review", "◐", "Expired"), "skipped_cap": ("review", "◐", "Weekly limit reached"),
+  "skipped_filter": ("review", "◐", "Filtered out"), "skipped_owned": ("confident", "●", "Already owned"),
+  "skipped_requested": ("neutral", "○", "Already requested"), "skipped": ("neutral", "○", "Skipped")
+} %}
+{% set tone, glyph, word = states.get(value, ("neutral", "○", value|replace("_", " ")|capitalize if value else "Pending")) %}
+<span class="tag status {{ tone }}"><span aria-hidden="true">{{ glyph }}</span>{{ label if label is not none else word }}</span>
+{%- endmacro %}

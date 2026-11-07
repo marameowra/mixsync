@@ -52,6 +52,8 @@ class FileTrack:
     disc: int | None = None
     recording_id: str | None = None
     acoustid: tuple[AcoustIdResult, ...] = ()  # lookup results for the audio, any order
+    high_band: float | None = None  # share of power above 16 kHz; lossless files only
+    trailing_silence: float | None = None  # seconds of silence at the end of the file
 
 
 @dataclass(frozen=True)
@@ -94,12 +96,22 @@ class Penalty:
 
 
 @dataclass(frozen=True)
+class RunnerUp:
+    """The second-best release, close enough to the best to make the choice a coin flip."""
+
+    release_id: str
+    title: str
+    gap: float  # its distance minus the best's
+
+
+@dataclass(frozen=True)
 class MatchResult:
     distance: float
     band: Band
     breakdown: tuple[Penalty, ...]
     vetoes: tuple[str, ...]
     scorer_version: int
+    runner_up: RunnerUp | None = None  # set when it caps the band at review
 
 
 @dataclass(frozen=True)
@@ -140,6 +152,7 @@ class TransferInfo:
     state: TransferStatus
     bytes: int
     local_paths: tuple[str, ...] = ()  # one per candidate file, same order; set once DONE
+    retry: tuple[CandidateFile, ...] = ()  # FAILED only by TimedOut/Errored files: worth another go
 
 
 def download_dir(downloads: Path, remote_path: str) -> Path:

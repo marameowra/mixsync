@@ -57,6 +57,7 @@ def row_dict(t: Track) -> dict[str, Any]:
         "status": t.status,
         "batch_id": t.batch_id,
         "imported_at": t.imported_at.isoformat(),
+        "path_template": t.path_template,
     }
 
 
@@ -111,7 +112,7 @@ def build_ops(
         )
         taken.add(new)
         moved.setdefault(str(t.recording_mbid), new)
-        ops.append((t, {"op": "move", "new_path": new, "tags": asdict(ts)}))
+        ops.append((t, {"op": "move", "new_path": new, "tags": asdict(ts), "template": template}))
     for path, track, _ in bonus:  # one copy only: extras of a moved recording are trashed
         keeper = moved.get(str(track.recording_id))
         extra = {"op": "trash", "keeper": keeper} if keeper else {"op": "keep"}

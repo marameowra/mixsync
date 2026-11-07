@@ -1,0 +1,1104 @@
+{
+ "albums": [
+  {
+   "album": "Surge Compilation Vol. 1",
+   "albumdisambig": null,
+   "artist": "Various Artists",
+   "artist_ids": [
+    "89ad4ac3-39f7-470e-963a-56509c546377"
+   ],
+   "catalognum": "DY01",
+   "country": "XW",
+   "genres": [
+    "experimental",
+    "hip hop",
+    "nightcore"
+   ],
+   "label": "Dismiss Yourself",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2020,
+   "release_group_id": "9bbe8b1d-0800-434c-895f-80b9e25ef975",
+   "release_id": "c9056cbf-a956-4e0e-8071-85982a967b10",
+   "tracks": [
+    {
+     "artist": "Yabujin",
+     "artist_ids": [
+      "2791a048-7546-450e-aeda-a692a74f65c0"
+     ],
+     "index": 1,
+     "length": 57.572,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "46b5f5bc-f609-4b6a-8ea1-78fc507080af",
+     "title": "Mereana Mordegard Glesgorv"
+    },
+    {
+     "artist": "Yabujin",
+     "artist_ids": [
+      "2791a048-7546-450e-aeda-a692a74f65c0"
+     ],
+     "index": 2,
+     "length": 121.374,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "f96283ac-703d-4ed7-86cd-aa1b03c0b792",
+     "title": "angel witta knife"
+    },
+    {
+     "artist": "$PIRIT GURLZ",
+     "artist_ids": [
+      "2beb8e4a-0415-4286-8820-1d1577299455"
+     ],
+     "index": 3,
+     "length": 160.636,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "cce035b9-eb69-427a-81b9-d86cc7f5ea78",
+     "title": "Gardenz"
+    },
+    {
+     "artist": "AERO GROS M",
+     "artist_ids": [
+      "ebfcf2ab-8c63-4eca-8f01-97c26de41fd3"
+     ],
+     "index": 4,
+     "length": 241.766,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "a3b11f5a-ed58-4846-85f5-75885dc8c84d",
+     "title": "ON GOD"
+    },
+    {
+     "artist": "Yabujin",
+     "artist_ids": [
+      "2791a048-7546-450e-aeda-a692a74f65c0"
+     ],
+     "index": 5,
+     "length": 173.106,
+     "medium": 1,
+     "medium_index": 5,
+     "recording_id": "1b98dbc3-7b06-40e9-b459-9b7af0cbea2f",
+     "title": "HARDSTYLE DRILL 2009 NOKIA ANGELZ \u0645\u0633\u062f\u0633\u0627\u062a \u0645\u062c\u0645\u062f\u0629 1.6"
+    },
+    {
+     "artist": "Marcy Mane w/ WifiGawd",
+     "artist_ids": [
+      "2c3d3928-ff56-4381-9880-c30d95c63608",
+      "6b354a47-e724-4610-be34-2af1603721df"
+     ],
+     "index": 6,
+     "length": 116.301,
+     "medium": 1,
+     "medium_index": 6,
+     "recording_id": "8050bb61-1ae5-4faa-9364-0035326d9407",
+     "title": "See Through"
+    },
+    {
+     "artist": "Hi\u2010C",
+     "artist_ids": [
+      "201b2d1c-1502-42ce-8e68-400a63388803"
+     ],
+     "index": 7,
+     "length": 156.827,
+     "medium": 1,
+     "medium_index": 7,
+     "recording_id": "bfba86dd-8256-4295-b1c8-ff5ff989277d",
+     "title": "LSD On My Tongue"
+    },
+    {
+     "artist": "666dash - SpaceGhostPurrp",
+     "artist_ids": [
+      "54183b75-a320-40b1-b0ee-cfe42758e5f3",
+      "6c0143f4-f950-4608-8572-6ebefc2a37c9"
+     ],
+     "index": 8,
+     "length": 160.759,
+     "medium": 1,
+     "medium_index": 8,
+     "recording_id": "d73c8963-a2c0-4ccb-97d3-4ed802b5cf3a",
+     "title": "Molly Brazy Cuban Doll"
+    },
+    {
+     "artist": "rezco - Diamondsonmydick",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "d545917b-3786-4e4c-931e-73af8e9030c0"
+     ],
+     "index": 9,
+     "length": 104.241,
+     "medium": 1,
+     "medium_index": 9,
+     "recording_id": "0af93d32-d5ef-4c28-87f5-22bc32df285e",
+     "title": "Run Wit My Drip"
+    },
+    {
+     "artist": "$PIRIT GURLZ",
+     "artist_ids": [
+      "2beb8e4a-0415-4286-8820-1d1577299455"
+     ],
+     "index": 10,
+     "length": 124.704,
+     "medium": 1,
+     "medium_index": 10,
+     "recording_id": "50b5ff28-7d5e-4484-a9bc-8c3c6a5ef0cf",
+     "title": "Night Time Rider Remix"
+    },
+    {
+     "artist": "rezco - Hi\u2010C",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "201b2d1c-1502-42ce-8e68-400a63388803"
+     ],
+     "index": 11,
+     "length": 153.796,
+     "medium": 1,
+     "medium_index": 11,
+     "recording_id": "80c90b19-053d-4e44-8f98-fc947be90ea0",
+     "title": "No Emotionzzz"
+    },
+    {
+     "artist": "666dash",
+     "artist_ids": [
+      "54183b75-a320-40b1-b0ee-cfe42758e5f3"
+     ],
+     "index": 12,
+     "length": 55.02,
+     "medium": 1,
+     "medium_index": 12,
+     "recording_id": "17917d11-7219-4744-95b8-d031785ad19c",
+     "title": "858778g87g"
+    },
+    {
+     "artist": "Hexmasta T - Yung Bruh",
+     "artist_ids": [
+      "3448ce4f-d99c-4916-acd7-8911adb29553",
+      "dc5cf852-4a53-4ea7-a95e-f55ab6df21a4"
+     ],
+     "index": 13,
+     "length": 40.48,
+     "medium": 1,
+     "medium_index": 13,
+     "recording_id": "329dbbcd-3545-4514-81cc-262883137470",
+     "title": "When My Phone Ring"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 14,
+     "length": 77.854,
+     "medium": 1,
+     "medium_index": 14,
+     "recording_id": "ca50cd84-0428-4d03-8a59-4cb018bd1bd6",
+     "title": "hexdlsd22 4"
+    },
+    {
+     "artist": "dior5tar w/ cargoboym",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5",
+      "696b00ef-c5f8-4bf9-aa71-135b57f4119d"
+     ],
+     "index": 15,
+     "length": 126.369,
+     "medium": 1,
+     "medium_index": 15,
+     "recording_id": "36e36846-c01a-48c4-8f52-e62ee269f921",
+     "title": "%HEXD ANTHEM(FUGAZI)%%"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 16,
+     "length": 95.277,
+     "medium": 1,
+     "medium_index": 16,
+     "recording_id": "4d7edf10-bc7f-4fa8-b40a-4d72ba7e33a3",
+     "title": "#ALL ALONE HEXDUP#"
+    },
+    {
+     "artist": "444Altars_ - Reptilian Club Boyz",
+     "artist_ids": [
+      "6aaa32f5-6c06-4adb-b9f7-a8742b3e8e8d",
+      "acf7c30f-0514-463f-a58f-8674101251ef"
+     ],
+     "index": 17,
+     "length": 175.0,
+     "medium": 1,
+     "medium_index": 17,
+     "recording_id": "44ff5fcc-4cac-4311-ba14-c3400b6bbd71",
+     "title": "Bloody Nikes"
+    },
+    {
+     "artist": "rezco - Diamondsonmydick",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "d545917b-3786-4e4c-931e-73af8e9030c0"
+     ],
+     "index": 18,
+     "length": 125.653,
+     "medium": 1,
+     "medium_index": 18,
+     "recording_id": "970329f0-e8a6-447b-b781-44031445e2e5",
+     "title": "Blah Blah Blah"
+    },
+    {
+     "artist": "$PIRIT GURLZ",
+     "artist_ids": [
+      "2beb8e4a-0415-4286-8820-1d1577299455"
+     ],
+     "index": 19,
+     "length": 117.847,
+     "medium": 1,
+     "medium_index": 19,
+     "recording_id": "0febfca0-f1b5-4f56-8e6f-67dc119d2bdd",
+     "title": "Graveyards"
+    },
+    {
+     "artist": "AERO GROS M",
+     "artist_ids": [
+      "ebfcf2ab-8c63-4eca-8f01-97c26de41fd3"
+     ],
+     "index": 20,
+     "length": 89.21,
+     "medium": 1,
+     "medium_index": 20,
+     "recording_id": "b2610043-5144-4c0c-8a5b-554019d93714",
+     "title": "computerlab"
+    },
+    {
+     "artist": "Fax Gang",
+     "artist_ids": [
+      "a23db069-271a-4a18-8cba-171cb44f9176"
+     ],
+     "index": 21,
+     "length": 149.79,
+     "medium": 1,
+     "medium_index": 21,
+     "recording_id": "10eae9da-578d-4167-8043-0994db0a9231",
+     "title": "Centrifuge"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 22,
+     "length": 135.0,
+     "medium": 1,
+     "medium_index": 22,
+     "recording_id": "1bf0c3ab-aace-4fa7-a07f-b8ff5bf484bc",
+     "title": "Jabbar"
+    },
+    {
+     "artist": "dvd.gnome",
+     "artist_ids": [
+      "590e9ed7-53e4-44a8-984f-2ac5e90eee59"
+     ],
+     "index": 23,
+     "length": 79.5,
+     "medium": 1,
+     "medium_index": 23,
+     "recording_id": "3de91a96-0108-4ba3-bbcd-0f59943e1b04",
+     "title": "\ud83c\udf10\ud83d\udccd\ud83d\udd31\ud83d\udccd\ud83c\udf10"
+    },
+    {
+     "artist": "Yabujin",
+     "artist_ids": [
+      "2791a048-7546-450e-aeda-a692a74f65c0"
+     ],
+     "index": 24,
+     "length": 153.214,
+     "medium": 1,
+     "medium_index": 24,
+     "recording_id": "faafd086-3fc8-4ffd-a553-fc99941dfc4e",
+     "title": "unfamiliar oasis"
+    },
+    {
+     "artist": "$PIRIT GURLZ",
+     "artist_ids": [
+      "2beb8e4a-0415-4286-8820-1d1577299455"
+     ],
+     "index": 25,
+     "length": 93.38,
+     "medium": 1,
+     "medium_index": 25,
+     "recording_id": "69120407-35c3-40b1-bb51-38ebd6362f85",
+     "title": "Catscan"
+    },
+    {
+     "artist": "444Altars_",
+     "artist_ids": [
+      "6aaa32f5-6c06-4adb-b9f7-a8742b3e8e8d"
+     ],
+     "index": 26,
+     "length": 108.0,
+     "medium": 1,
+     "medium_index": 26,
+     "recording_id": "417fdaff-ef4c-40c4-9d03-7ae14950ef65",
+     "title": "VAMPIRE IN THE MOONLIGHT COUNTIN MONEY UP"
+    },
+    {
+     "artist": "dior5tar",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5"
+     ],
+     "index": 27,
+     "length": 53.382,
+     "medium": 1,
+     "medium_index": 27,
+     "recording_id": "6c9e1786-041f-4723-ad94-ee74595e2309",
+     "title": "cokewitch (sayda)"
+    },
+    {
+     "artist": "Yabujin",
+     "artist_ids": [
+      "2791a048-7546-450e-aeda-a692a74f65c0"
+     ],
+     "index": 28,
+     "length": 60.118,
+     "medium": 1,
+     "medium_index": 28,
+     "recording_id": "d40656f9-0a61-45fd-a6ce-b4c47096b5bc",
+     "title": "drugs in her room"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 29,
+     "length": 111.0,
+     "medium": 1,
+     "medium_index": 29,
+     "recording_id": "a93a61d9-be2f-4d5e-a595-f916238d5b63",
+     "title": "hexdlsd22 7"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 30,
+     "length": 160.5,
+     "medium": 1,
+     "medium_index": 30,
+     "recording_id": "d1422122-5f55-408b-94db-8d7343c687e6",
+     "title": "hexdlsd22 8"
+    },
+    {
+     "artist": "AERO GROS M",
+     "artist_ids": [
+      "ebfcf2ab-8c63-4eca-8f01-97c26de41fd3"
+     ],
+     "index": 31,
+     "length": 124.917,
+     "medium": 1,
+     "medium_index": 31,
+     "recording_id": "f19db798-38eb-438b-b257-73e4b422ef43",
+     "title": "pomegranate"
+    },
+    {
+     "artist": "[unknown]",
+     "artist_ids": [
+      "125ec42a-7229-4250-afc5-e057484327fe"
+     ],
+     "index": 32,
+     "length": 96.751,
+     "medium": 1,
+     "medium_index": 32,
+     "recording_id": "4172a926-fb19-48e1-9954-f662768e9d4e",
+     "title": "rare hexd files (mix excerpt)"
+    },
+    {
+     "artist": "rezco - SpaceGhostPurrp",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "6c0143f4-f950-4608-8572-6ebefc2a37c9"
+     ],
+     "index": 33,
+     "length": 138.332,
+     "medium": 1,
+     "medium_index": 33,
+     "recording_id": "3cf56f9c-f723-4206-ada8-ab00c27e703d",
+     "title": "Hexhale"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 34,
+     "length": 236.0,
+     "medium": 1,
+     "medium_index": 34,
+     "recording_id": "93fda8b0-1e41-4139-83d6-853ca4c7ce5a",
+     "title": "\u2111 \ud835\udd09\ud835\udd1e\ud835\udd29\ud835\udd29 \u2111\ud835\udd2b\ud835\udd31\ud835\udd2c \ud835\udd16\ud835\udd29\ud835\udd22\ud835\udd22\ud835\udd2d \ud835\udd08\ud835\udd33\ud835\udd22\ud835\udd2f\ud835\udd36\ud835\udd34\ud835\udd25\ud835\udd22\ud835\udd2f\ud835\udd22 \u2111 \ud835\udd0a\ud835\udd2c (mix excerpt)"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 35,
+     "length": 114.0,
+     "medium": 1,
+     "medium_index": 35,
+     "recording_id": "d933c4c7-504b-45fe-b05a-f3d98f0fc0e3",
+     "title": "\u2111 \ud835\udd09\ud835\udd1e\ud835\udd29\ud835\udd29 \u2111\ud835\udd2b\ud835\udd31\ud835\udd2c \ud835\udd16\ud835\udd29\ud835\udd22\ud835\udd22\ud835\udd2d \ud835\udd08\ud835\udd33\ud835\udd22\ud835\udd2f\ud835\udd36\ud835\udd34\ud835\udd25\ud835\udd22\ud835\udd2f\ud835\udd22 \u2111 \ud835\udd0a\ud835\udd2c (mix excerpt) 2"
+    },
+    {
+     "artist": "$PIRIT GURLZ",
+     "artist_ids": [
+      "2beb8e4a-0415-4286-8820-1d1577299455"
+     ],
+     "index": 36,
+     "length": 91.5,
+     "medium": 1,
+     "medium_index": 36,
+     "recording_id": "ec9af0a1-a74e-49d4-9e4e-ef4a2880bde2",
+     "title": "friEND"
+    },
+    {
+     "artist": "*\uff65\u309c\uff9f\uff65 nyn \u2606",
+     "artist_ids": [
+      "c02ca887-c2c2-4b42-be9c-3da3b3a9c348"
+     ],
+     "index": 37,
+     "length": 79.0,
+     "medium": 1,
+     "medium_index": 37,
+     "recording_id": "4b2ca89b-508a-49ce-8ea5-b7a41eb22bcd",
+     "title": "splat\u00f6on"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 38,
+     "length": 73.153,
+     "medium": 1,
+     "medium_index": 38,
+     "recording_id": "356ba74b-4bd8-4635-b007-e370c7b616b2",
+     "title": "\ud835\udd04\ud835\udd2b\ud835\udd22\ud835\udd2a\ud835\udd26\ud835\udd20 \ud835\udd05\ud835\udd36 \ud835\udd10\ud835\udd36 \ud835\udd16\ud835\udd31\ud835\udd2c\ud835\udd2a\ud835\udd1e\ud835\udd20\ud835\udd25 \u211c\ud835\udd22\ud835\udd24\ud835\udd26\ud835\udd2c\ud835\udd2b (mix excerpt)"
+    },
+    {
+     "artist": "COUNTUP 1000",
+     "artist_ids": [
+      "d017631c-e72d-4e32-b6e3-89a146d50eb6"
+     ],
+     "index": 39,
+     "length": 93.348,
+     "medium": 1,
+     "medium_index": 39,
+     "recording_id": "1123e5f9-5087-40a1-8609-cc816bfbdfae",
+     "title": "Riser Freesong"
+    },
+    {
+     "artist": "dvd.gnome w/ Soy Champion",
+     "artist_ids": [
+      "590e9ed7-53e4-44a8-984f-2ac5e90eee59",
+      "fdb1a683-ebca-4773-b801-9bc9c22fe622"
+     ],
+     "index": 40,
+     "length": 88.181,
+     "medium": 1,
+     "medium_index": 40,
+     "recording_id": "f4af312c-f9f4-4500-b092-4d7be9aafb00",
+     "title": "\ud83d\udc8b"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 41,
+     "length": 108.896,
+     "medium": 1,
+     "medium_index": 41,
+     "recording_id": "f7fac3e3-ce9b-46b0-9c52-80a6b7f19881",
+     "title": "Johnson"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 42,
+     "length": 140.36,
+     "medium": 1,
+     "medium_index": 42,
+     "recording_id": "46233146-fdb4-404c-8eaa-2195227daa4e",
+     "title": "AngelcoreShawty444 (mix excerpt)"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 43,
+     "length": 202.36,
+     "medium": 1,
+     "medium_index": 43,
+     "recording_id": "98d90ad9-0070-4179-8507-8f41b3fec101",
+     "title": "AngelcoreShawty444 (mix excerpt) 2"
+    },
+    {
+     "artist": "\u2606\uff9f.*\u30fbcargoboym(^_^)v *:\uff65\uff9f\u2727 w/ Xtxsy",
+     "artist_ids": [
+      "696b00ef-c5f8-4bf9-aa71-135b57f4119d",
+      "297f6275-7880-4392-bd42-fc5e841b6be3"
+     ],
+     "index": 44,
+     "length": 129.779,
+     "medium": 1,
+     "medium_index": 44,
+     "recording_id": "1aca497d-86b6-41d5-86e3-9098b113037a",
+     "title": "%# (Hextxcy) #%"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 45,
+     "length": 118.687,
+     "medium": 1,
+     "medium_index": 45,
+     "recording_id": "2e2abfe2-70d3-4fa9-b78e-9c98084730bb",
+     "title": "#HexdUrBoyfriend (sayda)"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 46,
+     "length": 109.876,
+     "medium": 1,
+     "medium_index": 46,
+     "recording_id": "39e35db5-5c56-421a-bf39-a4d67f5d3ba2",
+     "title": "#skullgurlz (altars)"
+    },
+    {
+     "artist": "rezco - SpaceGhostPurrp",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "6c0143f4-f950-4608-8572-6ebefc2a37c9"
+     ],
+     "index": 47,
+     "length": 286.447,
+     "medium": 1,
+     "medium_index": 47,
+     "recording_id": "f78f4597-fefb-46ee-89be-491cdbccbff5",
+     "title": "Night Ridaz"
+    },
+    {
+     "artist": "rezco - Yung Bruh",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "dc5cf852-4a53-4ea7-a95e-f55ab6df21a4"
+     ],
+     "index": 48,
+     "length": 70.139,
+     "medium": 1,
+     "medium_index": 48,
+     "recording_id": "0e07c503-dec6-4f94-bd46-ece63836e9b1",
+     "title": "Pull Up"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 49,
+     "length": 128.818,
+     "medium": 1,
+     "medium_index": 49,
+     "recording_id": "dc113231-f44b-4af4-8e78-d95bd38004d0",
+     "title": "httpsh3x3dth3movi3mp3 7"
+    },
+    {
+     "artist": "DKT cherrycrush",
+     "artist_ids": [
+      "932e8ddd-86f9-483f-a7cb-72f728b8f19c"
+     ],
+     "index": 50,
+     "length": 113.685,
+     "medium": 1,
+     "medium_index": 50,
+     "recording_id": "1b981d8c-2ce6-4be5-bcf9-c2ddcaf45e12",
+     "title": "fuck 2.0 Tokyo drift"
+    },
+    {
+     "artist": "AERO GROS M",
+     "artist_ids": [
+      "ebfcf2ab-8c63-4eca-8f01-97c26de41fd3"
+     ],
+     "index": 51,
+     "length": 129.564,
+     "medium": 1,
+     "medium_index": 51,
+     "recording_id": "bbdefe83-c7f1-46e2-b824-6cdb11c97e7c",
+     "title": "runningnakeddownthelobby"
+    },
+    {
+     "artist": "Fax Gang",
+     "artist_ids": [
+      "a23db069-271a-4a18-8cba-171cb44f9176"
+     ],
+     "index": 52,
+     "length": 391.0,
+     "medium": 1,
+     "medium_index": 52,
+     "recording_id": "0170c98c-d8b2-4631-948f-5e1bd95b48cc",
+     "title": "Jeopardy"
+    },
+    {
+     "artist": "COUNTUP 1000",
+     "artist_ids": [
+      "d017631c-e72d-4e32-b6e3-89a146d50eb6"
+     ],
+     "index": 53,
+     "length": 118.143,
+     "medium": 1,
+     "medium_index": 53,
+     "recording_id": "a40087f1-8fcb-4ca1-8521-8b71ff963cd6",
+     "title": "WAS FED UP WITH MY LOVE SO SHORTLY AFTER I VEHEMENTLY EXPLODED I WAS SHOWN TRUTH"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 54,
+     "length": 171.357,
+     "medium": 1,
+     "medium_index": 54,
+     "recording_id": "80775bc5-0b42-4b7e-a46d-258d091f7ec0",
+     "title": "httpsh3x3dth3movi3mp3 6"
+    },
+    {
+     "artist": "Altars",
+     "artist_ids": [
+      "cf2e5952-5f02-4c9a-bd28-ddf8c8967b1b"
+     ],
+     "index": 55,
+     "length": 132.659,
+     "medium": 1,
+     "medium_index": 55,
+     "recording_id": "a1aeceee-5e12-4719-9d87-640be561c59c",
+     "title": "Hexdpradawitch"
+    },
+    {
+     "artist": "rezco - Boards of Canada",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "69158f97-4c07-4c4e-baf8-4e4ab1ed666e"
+     ],
+     "index": 56,
+     "length": 86.341,
+     "medium": 1,
+     "medium_index": 56,
+     "recording_id": "463a92dd-4eed-4bb9-b9e6-1be0d5acf5df",
+     "title": "roygbiv"
+    },
+    {
+     "artist": "*\uff65\u309c\uff9f\uff65 nyn \u2606",
+     "artist_ids": [
+      "c02ca887-c2c2-4b42-be9c-3da3b3a9c348"
+     ],
+     "index": 57,
+     "length": 81.497,
+     "medium": 1,
+     "medium_index": 57,
+     "recording_id": "fe664e7d-ba44-4063-b411-71fd46d286c6",
+     "title": "s\u0279\u01dd\u028e\u0250\u0279d \u0279no\u028e u\u0131 \u01dd\u026f d\u01dd\u01dd\u029e"
+    },
+    {
+     "artist": "rezco - SpaceGhostPurrp",
+     "artist_ids": [
+      "96f46aff-8534-4b33-9af3-3ad3c0faba94",
+      "6c0143f4-f950-4608-8572-6ebefc2a37c9"
+     ],
+     "index": 58,
+     "length": 131.533,
+     "medium": 1,
+     "medium_index": 58,
+     "recording_id": "4d13b0aa-10f3-4d68-ba58-0e652f334d86",
+     "title": "NBA"
+    },
+    {
+     "artist": "666dash",
+     "artist_ids": [
+      "54183b75-a320-40b1-b0ee-cfe42758e5f3"
+     ],
+     "index": 59,
+     "length": 154.967,
+     "medium": 1,
+     "medium_index": 59,
+     "recording_id": "a8b40f93-30d6-4d99-9c69-97315cfffd51",
+     "title": "runup"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 60,
+     "length": 149.0,
+     "medium": 1,
+     "medium_index": 60,
+     "recording_id": "3fa0bf36-74ea-4d4b-94da-3b8dd902a2f9",
+     "title": "httpsh3x3dth3movi3mp3 2"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 61,
+     "length": 94.0,
+     "medium": 1,
+     "medium_index": 61,
+     "recording_id": "6278e452-74b9-4556-8363-aac94c091c16",
+     "title": "Hexd Radio (mix excerpt)"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 62,
+     "length": 120.0,
+     "medium": 1,
+     "medium_index": 62,
+     "recording_id": "7ba84cb7-95f5-4b93-af2e-6ff676ef72bc",
+     "title": "Hexd Radio (mix excerpt) 2"
+    },
+    {
+     "artist": "Hexcastcrew",
+     "artist_ids": [
+      "66135e0a-615a-4175-8cb8-b47dee5d2d9a"
+     ],
+     "index": 63,
+     "length": 82.0,
+     "medium": 1,
+     "medium_index": 63,
+     "recording_id": "11f7da68-3f4f-4705-9282-7a7ac3da2cc1",
+     "title": "hexd dreams (Eisheths suck me Up)"
+    },
+    {
+     "artist": "[unknown]",
+     "artist_ids": [
+      "125ec42a-7229-4250-afc5-e057484327fe"
+     ],
+     "index": 64,
+     "length": 115.102,
+     "medium": 1,
+     "medium_index": 64,
+     "recording_id": "17224e59-2de5-4240-a83b-b679beffca7d",
+     "title": "rare hexd files (mix excerpt) 2"
+    },
+    {
+     "artist": "AOL",
+     "artist_ids": [
+      "19e4072f-5248-4bf1-aec1-949544091059"
+     ],
+     "index": 65,
+     "length": 264.175,
+     "medium": 1,
+     "medium_index": 65,
+     "recording_id": "9e3e6c5b-61b5-48c7-a711-ebd5aeb5b14e",
+     "title": "xXx_sc3n3_qu33n_xXx.zip"
+    },
+    {
+     "artist": "dior5tar",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5"
+     ],
+     "index": 66,
+     "length": 91.265,
+     "medium": 1,
+     "medium_index": 66,
+     "recording_id": "8de567d5-37ce-45e9-8108-5c64b74110ea",
+     "title": "#buffy222"
+    },
+    {
+     "artist": "blairw1tch",
+     "artist_ids": [
+      "0337b566-0cfb-44ea-8b50-ad254614d4c0"
+     ],
+     "index": 67,
+     "length": 142.546,
+     "medium": 1,
+     "medium_index": 67,
+     "recording_id": "cb5b2ee8-9581-48cf-9537-922241ff00e1",
+     "title": "#hexchalice"
+    },
+    {
+     "artist": "Altars",
+     "artist_ids": [
+      "cf2e5952-5f02-4c9a-bd28-ddf8c8967b1b"
+     ],
+     "index": 68,
+     "length": 78.829,
+     "medium": 1,
+     "medium_index": 68,
+     "recording_id": "bba1eed5-3aa3-4b5c-a7d4-b0ac6ba5415e",
+     "title": "%%Ashes 2 Ashes HEXD"
+    },
+    {
+     "artist": "Altars",
+     "artist_ids": [
+      "cf2e5952-5f02-4c9a-bd28-ddf8c8967b1b"
+     ],
+     "index": 69,
+     "length": 102.192,
+     "medium": 1,
+     "medium_index": 69,
+     "recording_id": "c08d6c4d-8356-4dc5-b723-b9eb5cb6422c",
+     "title": "XanderMilliano ## Deadlover"
+    },
+    {
+     "artist": "*\uff65\u309c\uff9f\uff65 nyn \u2606",
+     "artist_ids": [
+      "c02ca887-c2c2-4b42-be9c-3da3b3a9c348"
+     ],
+     "index": 70,
+     "length": 74.736,
+     "medium": 1,
+     "medium_index": 70,
+     "recording_id": "2a934cb3-4694-47f5-8c68-2906b743872a",
+     "title": "\u3010\uff50\uff52\uff45\uff54\uff54\uff59 \uff4c\uff49\uff54\uff54\uff4c\uff45 \uff53\uff45\uff43\uff52\uff45\uff54\u3011"
+    },
+    {
+     "artist": "dior5tar",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5"
+     ],
+     "index": 71,
+     "length": 90.251,
+     "medium": 1,
+     "medium_index": 71,
+     "recording_id": "6d32e11f-fc38-4ea1-96f5-1dd1af08377a",
+     "title": "((AngelBite))"
+    },
+    {
+     "artist": "*\uff65\u309c\uff9f\uff65 nyn \u2606 + bl_zz & P4NTRY",
+     "artist_ids": [
+      "c02ca887-c2c2-4b42-be9c-3da3b3a9c348",
+      "7d94d507-c86b-456e-9f3d-03f4bc9fdc31",
+      "57a37640-70f5-4b94-a823-070abcb0d2a5"
+     ],
+     "index": 72,
+     "length": 50.405,
+     "medium": 1,
+     "medium_index": 72,
+     "recording_id": "2f14b972-74b3-430d-b110-9f46cf8706e2",
+     "title": "\uff61.\u2606._\uff61\uff65\uff9f\u272b_. nu faces"
+    },
+    {
+     "artist": "tomoe_\u2727theundying",
+     "artist_ids": [
+      "4bd85273-26ee-4d55-af66-34bfb9427cb9"
+     ],
+     "index": 73,
+     "length": 117.5,
+     "medium": 1,
+     "medium_index": 73,
+     "recording_id": "62aa991e-a7b3-4fdb-994d-80aeabb4418e",
+     "title": "hexdlsd22 6"
+    },
+    {
+     "artist": "ISLURWHENITALK",
+     "artist_ids": [
+      "28567c8c-1ef3-446a-a784-e3f62723f3c6"
+     ],
+     "index": 74,
+     "length": 87.0,
+     "medium": 1,
+     "medium_index": 74,
+     "recording_id": "91ba056d-d21c-412f-9ed7-54957debbaf4",
+     "title": "*DJ XXLUR X TENEBRIXX XXILVAM* (\u31cf(\u2022\u0300\u1d65\u1d65\u2022\u0301)\u30ce)"
+    },
+    {
+     "artist": "\u2606\uff9f.*\u30fbcargoboym(^_^)v *:\uff65\uff9f\u2727",
+     "artist_ids": [
+      "696b00ef-c5f8-4bf9-aa71-135b57f4119d"
+     ],
+     "index": 75,
+     "length": 89.0,
+     "medium": 1,
+     "medium_index": 75,
+     "recording_id": "038809b5-ca4e-46b3-8abb-651a552a908d",
+     "title": "Itsokay"
+    },
+    {
+     "artist": "Hexcastcrew",
+     "artist_ids": [
+      "66135e0a-615a-4175-8cb8-b47dee5d2d9a"
+     ],
+     "index": 76,
+     "length": 152.0,
+     "medium": 1,
+     "medium_index": 76,
+     "recording_id": "7b853fe2-3e9b-453d-9b39-fe1faf9cb23f",
+     "title": "Hexworldwar222"
+    },
+    {
+     "artist": "dior5tar",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5"
+     ],
+     "index": 77,
+     "length": 160.0,
+     "medium": 1,
+     "medium_index": 77,
+     "recording_id": "b2be90f0-3833-42b1-85cc-5aa1baf5f9e4",
+     "title": "hex4yu"
+    },
+    {
+     "artist": "999 \ud835\udc3b\ud835\udc52\ud835\udcb6\ud835\udcc7\ud835\udcc9\ud835\udcb6\ud835\udcc0\ud835\udc52 \ud835\udcae\ud835\udcb6\ud835\udcb7\ud835\udcbe\ud835\udcc1\ud835\udc52\ud835\udcce\ud835\udc52",
+     "artist_ids": [
+      "fada526f-2d65-4a2c-8439-d496b7c90790"
+     ],
+     "index": 78,
+     "length": 175.5,
+     "medium": 1,
+     "medium_index": 78,
+     "recording_id": "ef1e3d93-70e6-4213-b876-ab226633bcdb",
+     "title": "James"
+    },
+    {
+     "artist": "*\uff65\u309c\uff9f\uff65 nyn \u2606",
+     "artist_ids": [
+      "c02ca887-c2c2-4b42-be9c-3da3b3a9c348"
+     ],
+     "index": 79,
+     "length": 55.5,
+     "medium": 1,
+     "medium_index": 79,
+     "recording_id": "b0f663d0-da15-4783-ac48-9cfd1b7e0971",
+     "title": "\ua4b0\u2022\u02c3\u0323\u0323\u0325\u1dc4\u2322\u02c2\u0323\u0323\u0325\u1dc5\ua4b1 ohfuq"
+    },
+    {
+     "artist": "dior5tar",
+     "artist_ids": [
+      "85448ecc-ceef-4cef-90f7-6bc6ad0252d5"
+     ],
+     "index": 80,
+     "length": 159.0,
+     "medium": 1,
+     "medium_index": 80,
+     "recording_id": "f172c001-1f18-4e9b-8144-5c440b0e46db",
+     "title": "Hexposiartgoon #realhex"
+    },
+    {
+     "artist": "Fax Gang",
+     "artist_ids": [
+      "a23db069-271a-4a18-8cba-171cb44f9176"
+     ],
+     "index": 81,
+     "length": 223.5,
+     "medium": 1,
+     "medium_index": 81,
+     "recording_id": "5db4b8bf-e379-4f56-b2a1-9d88e37b67ca",
+     "title": "Jailbroken"
+    },
+    {
+     "artist": "[unknown]",
+     "artist_ids": [
+      "125ec42a-7229-4250-afc5-e057484327fe"
+     ],
+     "index": 82,
+     "length": 177.0,
+     "medium": 1,
+     "medium_index": 82,
+     "recording_id": "1cc5d8c1-d483-4d36-93e7-914e77b531ac",
+     "title": "?"
+    }
+   ],
+   "va": true,
+   "year": 2020
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "84 - Fax Gang - Jailbroken.flac",
+    "sample_rate": null,
+    "size": 28903937
+   }
+  ],
+  "folder": "Compilations\\Surge Compilation Vol. 1",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1068,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "5db4b8bf-e379-4f56-b2a1-9d88e37b67ca",
+      "9f574b3a-01cb-4bcb-ae4d-62e34fab90b6"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Fax Gang",
+   "disc": 1,
+   "high_band": 0.004133787998017384,
+   "length": 224.40754166666667,
+   "recording_id": "5db4b8bf-e379-4f56-b2a1-9d88e37b67ca",
+   "title": "Jailbroken",
+   "track": 2,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "partial",
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Surge Compilation Vol. 1",
+  "albumdisambig": null,
+  "artist": "Fax Gang",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2020
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.002380952380952381,
+  "final_action": null,
+  "scorer_version": 4,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": true,
+ "release_mbid": "c9056cbf-a956-4e0e-8071-85982a967b10"
+}

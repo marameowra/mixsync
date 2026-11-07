@@ -1,0 +1,145 @@
+{
+ "albums": [
+  {
+   "album": "Burn Rubber",
+   "albumdisambig": "Shorter Version",
+   "artist": "SOPHIE feat. Sarah Bonito",
+   "artist_ids": [
+    "774b02d7-5056-4b0f-9d69-a82b6ae27cde",
+    "329ef27a-0555-4698-babc-f69c0814a097"
+   ],
+   "catalognum": null,
+   "country": null,
+   "genres": [
+    "electronic",
+    "hyperpop",
+    "deconstructed club",
+    "pop",
+    "dance-pop",
+    "bubblegum bass",
+    "experimental",
+    "alternative dance",
+    "leftfield",
+    "art pop",
+    "avant-garde pop",
+    "bassline",
+    "breakbeat",
+    "breaks",
+    "club",
+    "dance",
+    "drum and bass",
+    "edm",
+    "electronica",
+    "future bass",
+    "grime",
+    "hip hop",
+    "house",
+    "melodic house",
+    "melodic techno",
+    "r&b",
+    "tech house",
+    "trance",
+    "trap",
+    "uk garage"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": null,
+   "release_group_id": "0bd1b451-354f-4001-a88b-8fc706c82422",
+   "release_id": "d2b1f056-8a5b-4790-b1a2-eaec2af6293f",
+   "tracks": [
+    {
+     "artist": "SOPHIE feat. Sarah Bonito",
+     "artist_ids": [
+      "774b02d7-5056-4b0f-9d69-a82b6ae27cde",
+      "329ef27a-0555-4698-babc-f69c0814a097"
+     ],
+     "index": 1,
+     "length": 142.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "f7e6d7dd-f18c-4571-b5f3-9e5ed11b4f9c",
+     "title": "Burn Rubber"
+    }
+   ],
+   "va": false,
+   "year": null
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - Burn Rubber.flac",
+    "sample_rate": null,
+    "size": 16409914
+   }
+  ],
+  "folder": "SOPHIE\\SOPHIE - Burn Rubber (Shorter Version)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2239,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "54859a8f-98bf-423d-a474-92809e8d539c"
+     ],
+     "score": 0.9618605
+    }
+   ],
+   "artist": "SOPHIE, Sarah Bonito",
+   "disc": 1,
+   "high_band": 0.00014994317408238947,
+   "length": 142.80272108843536,
+   "recording_id": "f7e6d7dd-f18c-4571-b5f3-9e5ed11b4f9c",
+   "title": "Burn Rubber",
+   "track": 1,
+   "trailing_silence": 1.4488660884353521
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "accept"
+ ],
+ "likelies": {
+  "album": "Burn Rubber",
+  "albumdisambig": null,
+  "artist": "SOPHIE",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": "d2b1f056-8a5b-4790-b1a2-eaec2af6293f",
+  "year": null
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.08058608058608059,
+  "final_action": "accept",
+  "scorer_version": 6,
+  "status": "accepted",
+  "vetoes": [
+   "'Burn Rubber': AcoustID (0.96) says a different recording than 'Burn Rubber' (f7e6d7dd-f18c-4571-b5f3-9e5ed11b4f9c)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "d2b1f056-8a5b-4790-b1a2-eaec2af6293f"
+}

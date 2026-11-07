@@ -1,31 +1,41 @@
 """Request state shared by the pipeline handlers and the web layer: creating a request,
-marking candidates tried, coalescing rescans and applying a reviewer's decision."""
+marking candidates tried, and coalescing rescans."""
 
 import random
-from collections.abc import Iterable
-from dataclasses import asdict
+from collections.abc import Iterable, Sequence
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
-from mixsync.core.jobs import LIVE, JobKind, JobState
+from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
+from mixsync.core.jobs import LIVE, JobKind, JobState, backoff
 from mixsync.core.matching import Candidate, CandidateFile, Profile
-from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import enqueue_in
-from mixsync.library import tags
-from mixsync.match.profiles import BALANCED
+from mixsync.library import albums
+from mixsync.match.profiles import BALANCED, from_confidence
+
+REQUEST_BUDGET = 5  # dropped candidates (after bytes landed) a request may spend before it fails
 
 RESCAN_DELAY = timedelta(seconds=30)  # lets a burst of imports share one rescan
 LATE_PUSH = timedelta(minutes=10)
 RECHECK_INTERVALS = (timedelta(weeks=1), timedelta(weeks=2), timedelta(days=30), timedelta(days=91))
-VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
+
+
+def no_results_delay(attempts: int) -> timedelta:
+    """Wait before the next search after `attempts` (>= 1) in a row found nothing.
+
+    1 h, 4 h, 16 h, 64 h, then weekly: x4 per step keeps a dead query to ~4 Soulseek
+    searches in its first week (services etiquette)."""
+    return backoff(2 * attempts - 1, timedelta(hours=1), timedelta(weeks=1))
 
 
 def candidate_from_dict(d: dict[str, Any]) -> Candidate:
@@ -37,11 +47,21 @@ def candidate_dict(c: Candidate) -> dict[str, Any]:
     return asdict(c)
 
 
-def profile_for(s: Session, user_id: int) -> Profile:
-    user = s.get(User, user_id)
+def auto_accept_cap(s: Session) -> float | None:
+    """The admin's minimum auto-accept confidence as a distance; None when there is no cap."""
+    row = s.get(AppSettings, 1)
+    pct = row.min_auto_accept_confidence if row else None
+    return None if pct is None else from_confidence(pct)
+
+
+def profile_for(s: Session, user_id: int | None) -> Profile:
+    """The user's profile (or BALANCED without one), its auto-accept limit held to the cap."""
+    user = s.get(User, user_id) if user_id else None
     pid = user.matching_profile_id if user else None
     row = s.get(MatchingProfile, pid) if pid else None
-    return Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
+    p = Profile(row.name, row.auto_accept_max, row.review_max) if row else BALANCED
+    cap = auto_accept_cap(s)
+    return p if cap is None or p.auto_accept_max <= cap else replace(p, auto_accept_max=cap)
 
 
 def search_priority(req: Request) -> int:
@@ -105,20 +125,97 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
                 )
 
 
-def retry_search(s: Session, now: datetime, req: Request, peer: str, folder: str, why: str) -> None:
-    """The candidate is out (never deleted: its files stay in /downloads); look for the next."""
-    if req.from_files:  # nothing to search for: a person must look at the files
-        req.status, req.last_error = "failed", why
+def _has_tracks(s: Session, req: Request) -> bool:
+    return (
+        s.scalar(select(Track.id).where(verify.in_request(Track.batch_id, req.id)).limit(1))
+        is not None
+    )
+
+
+def _failed_candidate(s: Session, payload: dict[str, Any]) -> list[str] | None:
+    """[peer, folder] of a DOWNLOAD / VERIFY job's candidate, or of an IMPORT job's decision."""
+    if "candidate" in payload:
+        c = payload["candidate"]
+        return [c["username"], c["folder"]]
+    d = s.get(MatchDecision, payload["decision_id"]) if "decision_id" in payload else None
+    if d is None:
+        return None
+    ev = Evidence.parse(d.evidence)
+    return [ev.peer, ev.folder]
+
+
+def fail_request_of_job(
+    c: Connection, job_id: int, payload: dict[str, Any], error: str, now: datetime
+) -> None:
+    """The queue's final-failure hook: a job that failed for good must not leave its request in
+    progress forever, unless a newer job for the request has taken over."""
+    rid = payload.get("request_id")
+    if rid is None:
         return
-    req.tried = [*req.tried, [peer, folder]]
-    if s.scalar(
-        select(Track.id).where(Track.batch_id.like(f"request-{req.id}-%")).limit(1)
-    ):  # part of the album is already in: it stays a partial request while the rest is sought
-        kept = (req.last_error or "").split("; ")[0]
-        req.status = "partial"
-        req.last_error = "; ".join([kept if kept.startswith("partial: ") else "partial", why])
-    else:
-        req.status, req.last_error = "searching", why
+    with Session(c) as s:  # joins the queue's transaction: the caller commits
+        req = s.get(Request, rid)
+        newer = s.scalar(
+            select(Job.id)
+            .where(Job.id > job_id, Job.payload["request_id"].as_integer() == rid)
+            .limit(1)
+        )
+        if req and req.status in lifecycle.IN_PROGRESS and newer is None:
+            lifecycle.job_failed(req, _has_tracks(s, req), error)
+            req.updated_at = now  # the queue's clock, as the job rows use
+            if req.status == "partial":  # a partial request always has a repeat search queued
+                peer, folder = _failed_candidate(s, payload) or ("", "")
+                drop_candidate(s, now, req, peer, folder, error, job_failed=True)
+            s.flush()
+
+
+def drop_candidate(
+    s: Session,
+    now: datetime,
+    req: Request,
+    peer: str,
+    folder: str,
+    why: str,
+    *,
+    partial: str = "",  # "N of M tracks present": some tracks are in, keep looking with backoff
+    notes: Sequence[str] = (),
+    job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
+    spent: bool = False,  # its first bytes landed: uses one unit of the request budget
+) -> None:
+    """The one way a candidate is dropped: it joins the request's tried list (verify has already
+    moved its files into quarantine, never deleted) and the request searches again, or fails
+    when it has nothing to search for. The next search is fresh and skips every tried
+    [peer, folder]."""
+    if req.from_files:  # nothing to search for: a person must look at the files
+        if not partial and not job_failed:
+            lifecycle.download_failed(req, False, why)
+        return
+    if (
+        peer and [peer, folder] not in req.tried
+    ):  # no candidate known, or else the search re-picks it, hourly, forever
+        req.tried = [*req.tried, [peer, folder]]
+    if spent:  # a job_failed job is the queue's fault, not the candidate's: never spends
+        req.dropped += 1
+        if req.dropped >= REQUEST_BUDGET:
+            lifecycle.failed(
+                req, f"gave up after {REQUEST_BUDGET} dropped candidates (request budget): {why}"
+            )
+            return
+    if partial or job_failed:  # part of the album is in: repeat the search with backoff
+        if partial:
+            lifecycle.keep_looking(req, partial, notes)
+        req.no_results_attempts += 1
+        delay = no_results_delay(req.no_results_attempts)
+        req.next_search_at = now + delay
+        enqueue_in(
+            s,
+            now,
+            JobKind.SEARCH,
+            {"request_id": req.id},
+            run_after=now + delay,
+            priority=search_priority(req),
+        )
+        return
+    lifecycle.download_failed(req, _has_tracks(s, req), why)
     enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
 
 
@@ -134,7 +231,7 @@ def enqueue_rescan(s: Session, now: datetime) -> None:
 
 
 def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) -> None:
-    req.status = "importing"
+    lifecycle.importing(req)
     enqueue_in(
         s,
         now,
@@ -144,53 +241,7 @@ def enqueue_import(s: Session, now: datetime, req: Request, decision_id: int) ->
     )
 
 
-def enqueue_verify(
-    s: Session, now: datetime, req: Request, release_mbid: str | None, evidence: dict[str, Any]
-) -> None:
-    """Verify the downloaded files again, against `release_mbid` (a repick, or a release that
-    changed under a stored assignment)."""
-    req.status = "verifying"
-    enqueue_in(
-        s,
-        now,
-        JobKind.VERIFY,
-        {
-            "request_id": req.id,
-            "release_mbid": release_mbid,
-            "candidate": evidence["candidate"],
-            "paths": [f["local_path"] for f in evidence["source"]["files"]],
-        },
-        max_attempts=VERIFY_ATTEMPTS,
-    )
-
-
-def apply_review(s: Session, now: datetime, decision_id: int) -> None:
-    """Carry out a reviewer's accept / repick / reject of a stage 2 decision."""
-    d = s.get(MatchDecision, decision_id)
-    req = s.get(Request, d.evidence.get("request_id", 0)) if d else None
-    if d is None or req is None:  # a decision that did not come from a request
-        return
-    src = d.evidence["source"]
-    if d.final_action in ("accept", "unverified"):  # unverified: the edits are in the evidence
-        enqueue_import(s, now, req, d.id)
-    elif d.final_action == "repick":
-        enqueue_verify(s, now, req, d.chosen_release_mbid, d.evidence)
-    elif req.from_files:  # no other candidate to look for: the album stays out
-        req.status, req.last_error = "skipped", "rejected in review"
-    else:
-        retry_search(s, now, req, src["peer"], src["folder"], "rejected in review")
-
-
-AlbumKey = tuple[str, str, str]  # (artist, album, year) as the unverified list groups them
-
-
-def year_of(tg: dict[str, str]) -> str:
-    y = tg.get("date", "")[:4]
-    return y if y.isascii() and y.isdigit() and y != "0000" else ""
-
-
-def album_key(tg: dict[str, str]) -> AlbumKey:
-    return tg.get("albumartist") or tg.get("artist", ""), tg.get("album", ""), year_of(tg)
+AlbumKey = tuple[str, str, str]  # (album artist, album, year) as the unverified list groups them
 
 
 def all_live_rechecks(s: Session) -> list[Job]:
@@ -243,30 +294,24 @@ def add_recheck(
     )
 
 
-Item = tuple[Track, dict[str, str]]
+def read_unverified(db: Session) -> list[Track]:
+    """Unverified tracks whose names are filled in (ADR 0018): no file is read."""
+    return list(
+        db.scalars(
+            select(Track)
+            .where(Track.status == "unverified", Track.album.is_not(None))
+            .order_by(Track.id)
+        )
+    )
 
 
-def read_unverified(db: Session, root: Path) -> list[Item]:
-    # shortcut: reads the tags of every unverified file per call; move the album fields
-    # into DB columns when unverified sets get large.
-    rows = db.scalars(select(Track).where(Track.status == "unverified").order_by(Track.id)).all()
-    items: list[Item] = []
-    for t in rows:
-        try:
-            items.append((t, tags.read_fields(root / t.path)))
-        except Exception:  # file moved or unreadable: the path alone still identifies it
-            items.append((t, {}))
-    return items
-
-
-def group(items: list[Item]) -> dict[AlbumKey, list[Item]]:
-    """Group by tags, not import batch (a batch can mix albums). A year-less group joins the one
-    dated group with the same artist and album, if there is exactly one."""
-    albums: dict[AlbumKey, list[Item]] = {}
-    for it in items:
-        albums.setdefault(album_key(it[1]), []).append(it)
-    for key in [k for k in albums if not k[2]]:
-        dated = [k for k in albums if k[:2] == key[:2] and k[2]]
-        if len(dated) == 1:
-            albums[dated[0]] += albums.pop(key)
-    return albums
+def group(tracks: list[Track]) -> dict[AlbumKey, list[Track]]:
+    """Group by the name columns, not import batch (a batch can mix albums)."""
+    raw: dict[AlbumKey, list[Track]] = {}
+    for t in tracks:
+        raw.setdefault((t.album_artist or "", t.album or "", t.year or ""), []).append(t)
+    into = albums.fold(raw)
+    out: dict[AlbumKey, list[Track]] = {}
+    for key, ts in raw.items():
+        out.setdefault(into[key], []).extend(ts)
+    return out

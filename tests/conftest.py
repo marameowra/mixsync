@@ -52,6 +52,12 @@ def _block_sockets(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[
     monkeypatch.setattr(socket, "create_connection", blocked)
 
 
+@pytest.fixture(autouse=True)
+def _config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
+    # create_app/build_services load the secret key eagerly, which creates it under config_dir
+    monkeypatch.setenv("MIXSYNC_CONFIG_DIR", str(tmp_path / "config"))
+
+
 @pytest.fixture
 def settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest

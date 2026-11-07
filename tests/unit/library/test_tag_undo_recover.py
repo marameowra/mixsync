@@ -24,6 +24,7 @@ def test_rolled_back_restore_is_not_redone_after_the_track_moved(
     (data_dir / "library" / REL).unlink()
     assert not ops.has(REL)
 
+    assert tag_undo.unfinished(sessions, ops) == []  # the done restore settles the batch
     tag_undo.recover(sessions, ops)  # must not raise
     assert not ops.has(REL)
 

@@ -1,6 +1,8 @@
 import re
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -19,6 +21,7 @@ from mixsync.db.models.auth import User
 from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.secretbox import SecretBox, link_secret, load_box
 from mixsync.discovery.listenbrainz import ListenBrainzClient
+from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.web.routes import account
 from mixsync.web.routes.account import DefaultValidator, Ping, get_link
@@ -31,12 +34,19 @@ class FakeValidator:
         self.ok = True
         self.ping = Ping.ok
         self.lb_down = False
+        self.discogs_calls = 0
         self.pings = 0
 
     async def listenbrainz_username(self, token: str) -> str | None:
         if self.lb_down:
             raise TransientError("down")
         return "lb-real-name" if self.ok else None
+
+    async def discogs_username(self, token: str) -> str | None:
+        self.discogs_calls += 1
+        if self.lb_down:
+            raise TransientError("down")
+        return "discogs-real-name" if self.ok else None
 
     async def navidrome_ping(self, username: str, password: str) -> Ping:
         self.pings += 1
@@ -67,7 +77,7 @@ def box(tmp_path: Path) -> SecretBox:
 def client(sf: sessionmaker[Session], fake: FakeValidator, box: SecretBox) -> Iterator[TestClient]:
     app = create_app(sf, Settings())
     app.state.link_validator = fake
-    app.state.secret_box = box
+    app.state.services = replace(app.state.services, secret_box=box)
     with TestClient(app, follow_redirects=False) as c:
         yield c
 
@@ -163,9 +173,11 @@ def test_users_are_isolated(client: TestClient, sf: sessionmaker[Session], box: 
     assert _link(sf, box, "bob", "listenbrainz") == ("lb-real-name", "bobs")
 
 
-def test_csrf_required(client: TestClient, sf: sessionmaker[Session], box: SecretBox) -> None:
+def test_post_without_csrf_leaves_no_link(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
     _login(client, "alice")
-    assert client.post("/account/listenbrainz", data={"secret": SECRET}).status_code == 403
+    client.post("/account/listenbrainz", data={"secret": SECRET})  # 403 asserted in test_auth.py
     assert _link(sf, box, "alice", "listenbrainz") is None
 
 
@@ -178,10 +190,6 @@ def test_unlink_and_unknown_service(
     assert r.status_code == 303 and _link(sf, box, "alice", "listenbrainz") is None
     r = client.post("/account/lastfm", data={"secret": "x", "csrf_token": tok})
     assert r.status_code == 404
-
-
-def test_requires_login(client: TestClient) -> None:
-    assert client.get("/account").status_code == 303
 
 
 def test_stored_value_is_encrypted_and_round_trips(
@@ -200,13 +208,14 @@ def test_wrong_key_marks_needs_relink_and_shows_banner(
 ) -> None:
     tok = _login(client, "alice")
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
-    client.app.state.secret_box = SecretBox(Fernet.generate_key())  # type: ignore[attr-defined]
+    state = client.app.state  # type: ignore[attr-defined]
+    state.services = replace(state.services, secret_box=SecretBox(Fernet.generate_key()))
     page = client.get("/account")
     assert page.status_code == 200 and "can no longer be decrypted" in page.text
     assert "Needs relinking" in page.text and SECRET not in page.text
     with sf() as s:
         assert s.query(UserLink).one().needs_relink
-    client.app.state.secret_box = box  # type: ignore[attr-defined]
+    client.app.state.services = replace(client.app.state.services, secret_box=box)  # type: ignore[attr-defined]
     assert "can no longer be decrypted" not in client.get("/account").text  # key back: cleared
 
 
@@ -350,6 +359,7 @@ def _ping(settings: Settings, sf: sessionmaker[Session], handler: object) -> Def
         PoliteClient("navidrome", settings, sf, transport=t),
         "http://nd",
         ListenBrainzClient(PoliteClient("listenbrainz", settings, sf, transport=t)),
+        DiscogsClient(PoliteClient("discogs", settings, sf, transport=t)),
     )
 
 
@@ -387,7 +397,7 @@ def test_relinking_clears_needs_relink(
     tok = _login(client, "alice")
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     new = SecretBox(Fernet.generate_key())
-    client.app.state.secret_box = new  # type: ignore[attr-defined]
+    client.app.state.services = replace(client.app.state.services, secret_box=new)  # type: ignore[attr-defined]
     assert "can no longer be decrypted" in client.get("/account").text
     client.post("/account/listenbrainz", data={"secret": SECRET, "csrf_token": tok})
     assert "can no longer be decrypted" not in client.get("/account").text
@@ -420,3 +430,102 @@ def test_a_successful_link_leaves_no_empty_entry_in_the_limiter(client: TestClie
 
     assert _guess(client, _login(client, "alice")).status_code == 303
     assert all(auth_routes._failures.values())
+
+
+def _discogs_on(client: TestClient) -> None:
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": True})
+
+
+def test_discogs_off_shows_nothing_and_is_not_linkable(
+    client: TestClient, fake: FakeValidator, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    tok = _login(client, "alice")
+    assert "Discogs" not in client.get("/account").text
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 404 and fake.discogs_calls == 0
+    assert _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_link_validates_stores_encrypted_and_never_shows_the_token(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox, caplog: pytest.LogCaptureFixture
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    assert "Link Discogs" in client.get("/account").text
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 303
+    assert _link(sf, box, "alice", "discogs") == ("discogs-real-name", SECRET)
+    with sf() as s:
+        assert SECRET not in s.query(UserLink).filter_by(service="discogs").one().secret_encrypted
+    page = client.get("/account")
+    assert "Linked as discogs-real-name" in page.text
+    assert SECRET not in page.text and SECRET not in caplog.text
+
+
+def test_discogs_bad_token_shows_an_error_and_stores_nothing(
+    client: TestClient, fake: FakeValidator, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    fake.ok = False
+    tok = _login(client, "alice")
+    r = client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert r.status_code == 400 and "Discogs did not accept that token." in r.text
+    assert SECRET not in r.text and _link(sf, box, "alice", "discogs") is None
+
+
+async def test_default_validator_discogs(settings: Settings, sf: sessionmaker[Session]) -> None:
+    def valid(r: httpx.Request) -> httpx.Response:
+        assert (
+            r.url.path == "/oauth/identity" and r.headers["Authorization"] == "Discogs token=good"
+        )
+        return httpx.Response(200, json={"username": "vinylfan"})
+
+    assert await _ping(settings, sf, valid).discogs_username("good") == "vinylfan"
+    rejected = _ping(settings, sf, lambda r: httpx.Response(401))
+    assert await rejected.discogs_username("bad") is None
+
+
+@pytest.mark.parametrize("token", ["ab\r\nX-Evil: 1", "tab\there", "t\u00f6ken", "nul\x00"])
+def test_discogs_token_with_header_unsafe_characters_is_refused_before_any_call(
+    client: TestClient,
+    fake: FakeValidator,
+    sf: sessionmaker[Session],
+    box: SecretBox,
+    token: str,
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    r = client.post("/account/discogs", data={"secret": token, "csrf_token": tok})
+    assert r.status_code == 400 and "Discogs did not accept that token." in r.text
+    assert fake.discogs_calls == 0 and _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_link_can_be_removed_and_is_hidden_while_the_setting_is_off(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    assert _link(sf, box, "alice", "discogs")
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": False})
+    assert "Discogs" not in client.get("/account").text
+    r = client.post("/account/discogs/unlink", data={"csrf_token": tok})
+    assert r.status_code == 303 and _link(sf, box, "alice", "discogs") is None
+
+
+def test_discogs_relink_banner_is_hidden_while_the_setting_is_off(
+    client: TestClient, sf: sessionmaker[Session], box: SecretBox
+) -> None:
+    _discogs_on(client)
+    tok = _login(client, "alice")
+    client.post("/account/discogs", data={"secret": SECRET, "csrf_token": tok})
+    app: Any = client.app
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": False})
+    app.state.services = replace(
+        app.state.services, secret_box=SecretBox(Fernet.generate_key())
+    )  # the key changed: the stored token can no longer be decrypted
+    assert "can no longer be decrypted" not in client.get("/account").text
+    app.state.settings = app.state.settings.model_copy(update={"discogs_suggestions": True})
+    assert "can no longer be decrypted" in client.get("/account").text

@@ -1,0 +1,122 @@
+{
+ "albums": [
+  {
+   "album": "WHERE U ARE (lullaby version)",
+   "albumdisambig": null,
+   "artist": "\u2665 GOJII \u2665",
+   "artist_ids": [
+    "4950088e-be4d-4839-89b0-6bb5f9f4ca42"
+   ],
+   "catalognum": null,
+   "country": "XW",
+   "genres": [
+    "kawaii future bass",
+    "bubblegum bass",
+    "electronic",
+    "electropop",
+    "future bass",
+    "house",
+    "rave",
+    "uk garage"
+   ],
+   "label": null,
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2023,
+   "release_group_id": "8438d9b8-212f-4400-98f1-1fea60c91083",
+   "release_id": "5485d70c-28a7-4393-b081-e4dde3a65e47",
+   "tracks": [
+    {
+     "artist": "\u2665 GOJII \u2665",
+     "artist_ids": [
+      "4950088e-be4d-4839-89b0-6bb5f9f4ca42"
+     ],
+     "index": 1,
+     "length": 222.0,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "c6b33da3-721c-46e1-a90a-d32fbc7d72dc",
+     "title": "WHERE U ARE (lullaby version)"
+    }
+   ],
+   "va": false,
+   "year": 2023
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "01 - WHERE U ARE (lullaby version).flac",
+    "sample_rate": null,
+    "size": 26932141
+   }
+  ],
+  "folder": "\u2665 GOJII \u2665\\\u2665 GOJII \u2665 - WHERE U ARE (lullaby version)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 2299,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "da79d097-c8cd-4c2a-b378-7e30a6df5c09"
+     ],
+     "score": 0.99996704
+    }
+   ],
+   "artist": "\u2665 GOJII \u2665",
+   "disc": 1,
+   "high_band": 0.0011776119389194293,
+   "length": 226.0848299319728,
+   "recording_id": "da79d097-c8cd-4c2a-b378-7e30a6df5c09",
+   "title": "WHERE U ARE",
+   "track": 1,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "acoustid_contradicts",
+  "tagged_mismatch"
+ ],
+ "likelies": {
+  "album": "WHERE U ARE",
+  "albumdisambig": null,
+  "artist": "\u2665 GOJII \u2665",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2023
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "review",
+  "distance": 0.16360708534621576,
+  "final_action": null,
+  "scorer_version": 6,
+  "status": "pending_review",
+  "vetoes": [
+   "'WHERE U ARE': tagged as recording da79d097-c8cd-4c2a-b378-7e30a6df5c09, matched to 'WHERE U ARE (lullaby version)' (c6b33da3-721c-46e1-a90a-d32fbc7d72dc)",
+   "'WHERE U ARE': AcoustID (1.00) says a different recording than 'WHERE U ARE (lullaby version)' (c6b33da3-721c-46e1-a90a-d32fbc7d72dc)"
+  ]
+ },
+ "release_given": false,
+ "release_mbid": "5485d70c-28a7-4393-b081-e4dde3a65e47"
+}

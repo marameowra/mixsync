@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from mixsync.core.matching import AlbumInfo, TrackInfo
+from mixsync.core.protocols import NameStore
 from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
 from mixsync.metadata._http import get_json
 from mixsync.metadata.models import (
@@ -116,8 +117,14 @@ def _fresh(fresh: bool) -> dict[str, Any]:
 
 
 class MusicBrainzProvider:
-    def __init__(self, client: PoliteClient, base_url: str = "https://musicbrainz.org") -> None:
+    def __init__(
+        self,
+        client: PoliteClient,
+        base_url: str = "https://musicbrainz.org",
+        names: NameStore | None = None,
+    ) -> None:
         self._client = client
+        self._names = names
         self._base = base_url.rstrip("/") + "/ws/2"
 
     async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
@@ -127,7 +134,24 @@ class MusicBrainzProvider:
             {"inc": _INC, "fmt": "json"},
             **_fresh(fresh),
         )
-        return _album(MbRelease.model_validate(data))
+        rel = MbRelease.model_validate(data)
+        self._remember(rel)
+        return _album(rel)
+
+    def _remember(self, rel: MbRelease) -> None:
+        """Keep the names this body already carries; a failure never breaks the pipeline."""
+        if self._names is None:
+            return
+        rows = [("release", rel.id, _release_name(rel))]
+        if (g := rel.release_group) and g.id:
+            credit = g.artist_credit or rel.artist_credit
+            rows.append(
+                ("release-group", g.id, _named(g.title, credit, [_year(g.first_release_date)]))
+            )
+        try:
+            self._names.save([(k, i, n) for k, i, n in rows if n])
+        except Exception:
+            log.warning("could not save MusicBrainz names", exc_info=True)
 
     async def search_releases(
         self, artist: str, album: str, limit: int = 10, *, fresh: bool = False
@@ -168,6 +192,18 @@ class MusicBrainzProvider:
                 tuple(m.format for m in r.media if m.format),
                 r.status,
             )
+            for r in MbSearch.model_validate(data).releases
+        ]
+
+    async def recording_releases(self, recording_mbid: str, limit: int = 25) -> list[ReleaseRef]:
+        """The releases holding a recording: one cached browse page of at most `limit`."""
+        data = await get_json(
+            self._client,
+            f"{self._base}/release",
+            {"recording": recording_mbid, "fmt": "json", "limit": limit},
+        )
+        return [
+            ReleaseRef(r.id, r.title, "", r.date or None, r.country, status=r.status)
             for r in MbSearch.model_validate(data).releases
         ]
 
@@ -279,9 +315,12 @@ class MusicBrainzProvider:
         if kind == "release-group":
             g = MbReleaseGroup.model_validate(data)
             return _named(g.title, g.artist_credit, [_year(g.first_release_date)])
-        rel = MbRelease.model_validate(data)
-        media = next((m.format for m in rel.media if m.format), None)
-        return _named(rel.title, rel.artist_credit, [_year(rel.date), media])
+        return _release_name(MbRelease.model_validate(data))
+
+
+def _release_name(rel: MbRelease) -> str | None:
+    media = next((m.format for m in rel.media if m.format), None)
+    return _named(rel.title, rel.artist_credit, [_year(rel.date), media])
 
 
 def _named(title: str, credit: list[MbCredit], extra: list[object]) -> str | None:

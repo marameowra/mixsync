@@ -5,33 +5,65 @@ from mixsync.core.types import AcoustIdResult
 
 MAX_DURATION_DELTA = 15.0  # seconds
 ACOUSTID_VETO_SCORE = 0.9
+# Share of a lossless file's power above 16 kHz. A lossy source low-passed near 16 kHz leaves
+# about 1e-6..1e-5; real masters rarely go below 1e-4. Set low: prefer missing a transcode.
+MIN_HIGH_BAND_SHARE = 1e-5
+MAX_TRAILING_SILENCE_SHARE = 0.5  # of the file's length: a padded preview is mostly silence
 
 
-def _best(file: FileTrack) -> AcoustIdResult | None:
+def confident(file: FileTrack) -> AcoustIdResult | None:
+    """AcoustID's best result for the file when it is confident and names recordings."""
     best = max(file.acoustid, key=lambda r: r.score, default=None)
     return best if best and best.score >= ACOUSTID_VETO_SCORE and best.recording_ids else None
 
 
 def acoustid_confirms(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID's confident best result names the track's recording."""
-    best = _best(file)
+    best = confident(file)
     return bool(best and track.recording_id in best.recording_ids)
 
 
 def acoustid_contradicts(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID is confident the file is a different recording than the track's."""
-    best = _best(file)
+    best = confident(file)
     return bool(best and track.recording_id and track.recording_id not in best.recording_ids)
 
 
-def find_vetoes(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> tuple[str, ...]:
-    """Reasons to force review regardless of the score, for matched (file, track) pairs."""
+def off_release(file: FileTrack, tracks: Sequence[TrackInfo]) -> bool:
+    """AcoustID is confident the file is a recording the release (with recording ids) lacks."""
+    best = confident(file)
+    ids = {t.recording_id for t in tracks if t.recording_id}
+    return bool(best and ids and ids.isdisjoint(best.recording_ids))
+
+
+def _clock(seconds: float) -> str:
+    return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+
+
+def find_vetoes(
+    pairs: Sequence[tuple[FileTrack, TrackInfo]],
+    extras: Sequence[FileTrack] = (),
+    tracks: Sequence[TrackInfo] = (),
+) -> tuple[str, ...]:
+    """Reasons to force review regardless of the score, for matched (file, track) pairs and the
+    extra files AcoustID places off the release `tracks`."""
     out: list[str] = []
     for file, track in pairs:
         if file.length is not None and track.length is not None:
             delta = abs(file.length - track.length)
             if delta > MAX_DURATION_DELTA:
                 out.append(f"{file.title!r}: duration off by {delta:.0f}s from {track.title!r}")
+        if file.high_band is not None and file.high_band < MIN_HIGH_BAND_SHARE:
+            out.append(f"{file.title!r}: looks transcoded: almost nothing above 16 kHz")
+        if (
+            file.trailing_silence is not None
+            and file.length
+            and file.trailing_silence > MAX_TRAILING_SILENCE_SHARE * file.length
+        ):
+            out.append(
+                f"{file.title!r}: silent from {_clock(file.length - file.trailing_silence)} "
+                f"to the end ({_clock(file.length)})"
+            )
         # A confident AcoustID match outranks a stale or wrong recording id in the tags.
         if (
             file.recording_id
@@ -42,12 +74,16 @@ def find_vetoes(pairs: Sequence[tuple[FileTrack, TrackInfo]]) -> tuple[str, ...]
                 f"{file.title!r}: tagged as recording {file.recording_id}, "
                 f"matched to {track.title!r} ({track.recording_id})"
             )
-        best = _best(file)
+        best = confident(file)
         if best and acoustid_contradicts(file, track):
             out.append(
                 f"{file.title!r}: AcoustID ({best.score:.2f}) says a different recording than "
                 f"{track.title!r} ({track.recording_id})"
             )
+    for file in extras:
+        if (best := confident(file)) and off_release(file, tracks):
+            ids = ", ".join(best.recording_ids)
+            out.append(f"{file.title!r}: release does not contain recording {ids}")
     return tuple(out)
 
 

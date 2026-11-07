@@ -1,18 +1,19 @@
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import Connection, Engine, Row, Table, exists, select, update
+from sqlalchemy import Connection, Engine, Row, Table, func, insert, select, update
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from mixsync.core.clock import Clock
+from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, JobState, backoff, transition
-from mixsync.db.models.work import Job, Request
+from mixsync.db.models.infra import WorkerHeartbeat
+from mixsync.db.models.work import Job
 
 _J = cast(Table, Job.__table__)
-_R = cast(Table, Request.__table__)
-_IN_PROGRESS = ("searching", "no_results", "partial", "downloading", "verifying", "importing")
+_W = cast(Table, WorkerHeartbeat.__table__)
 
 
 class LeaseLostError(Exception):
@@ -37,31 +38,21 @@ def _record(r: Row[Any]) -> JobRecord:
     return JobRecord(**{f.name: getattr(r, f.name) for f in fields(JobRecord)})
 
 
-def _fail_request(c: Connection, job_id: int, error: str, now: datetime) -> None:
-    """A pipeline job that failed for good must not leave its request in progress forever,
-    unless a newer job for the request has taken over."""
-    payload: dict[str, Any] = (
-        c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
-    )
-    if "request_id" in payload:
-        c.execute(
-            update(_R)
-            .where(
-                _R.c.id == payload["request_id"],
-                _R.c.status.in_(_IN_PROGRESS),
-                ~exists().where(
-                    _J.c.id > job_id,
-                    _J.c.payload["request_id"].as_integer() == payload["request_id"],
-                ),
-            )
-            .values(status="failed", last_error=error, updated_at=now)
-        )
+# (connection, job id, payload, error, now): runs in the transaction that fails the job (ADR 0004)
+FailureHook = Callable[[Connection, int, dict[str, Any], str, datetime], None]
 
 
 class JobQueue:
-    def __init__(self, engine: Engine, clock: Clock) -> None:
+    def __init__(self, engine: Engine, clock: Clock, on_final_failure: FailureHook) -> None:
         self._engine = engine
         self._clock = clock
+        self._on_final_failure = on_final_failure
+
+    def _failed_for_good(self, c: Connection, job_id: int, error: str, now: datetime) -> None:
+        payload: dict[str, Any] = (
+            c.execute(select(_J.c.payload).where(_J.c.id == job_id)).scalar() or {}
+        )
+        self._on_final_failure(c, job_id, payload, error, now)
 
     def get(self, job_id: int) -> JobRecord:
         with self._engine.connect() as c:
@@ -111,6 +102,13 @@ class JobQueue:
             )
         return res.rowcount == 1
 
+    def alive(self, worker: str) -> None:
+        """Record that this worker's loop is going round (its liveness, not a job's lease)."""
+        now = self._clock.now()
+        with self._engine.begin() as c:
+            if not c.execute(update(_W).where(_W.c.name == worker).values(seen_at=now)).rowcount:
+                c.execute(insert(_W).values(name=worker, seen_at=now))
+
     def start(self, job_id: int, worker: str) -> None:
         self._move(job_id, worker, JobState.RUNNING, keep_lease=True)
 
@@ -144,9 +142,7 @@ class JobQueue:
                 _J.c.lease_expires_at < now,
                 _J.c.attempts >= _J.c.max_attempts,
             )
-            for (job_id,) in c.execute(select(_J.c.id).where(*dead)).all():
-                _fail_request(c, job_id, "lease expired with no attempts left", now)
-            n += c.execute(
+            failed = c.execute(
                 update(_J)
                 .where(*dead)
                 .values(
@@ -158,7 +154,11 @@ class JobQueue:
                     last_error="lease expired with no attempts left",
                     updated_at=now,
                 )
-            ).rowcount
+                .returning(_J.c.id)
+            ).all()
+            for (job_id,) in failed:  # the hook sees FAILED, only for rows this update took
+                self._failed_for_good(c, job_id, "lease expired with no attempts left", now)
+            n += len(failed)
             for src, due in (
                 (JobState.LEASED, _J.c.lease_expires_at < now),
                 (JobState.RUNNING, _J.c.lease_expires_at < now),
@@ -192,7 +192,7 @@ class JobQueue:
             if res.rowcount != 1:
                 raise LeaseLostError(f"job {job_id} is no longer held by {worker}")
             if new is JobState.FAILED:
-                _fail_request(c, job_id, values["last_error"], now)
+                self._failed_for_good(c, job_id, values["last_error"], now)
 
     @staticmethod
     def _status(c: Connection, job_id: int, worker: str) -> JobState:
@@ -239,3 +239,9 @@ def enqueue_in(
         )
     )
     s.flush()
+
+
+def worker_age(s: Session, now: datetime) -> timedelta | None:
+    """How long ago any worker last recorded it was alive; None if none ever has."""
+    seen = s.scalar(select(func.max(WorkerHeartbeat.seen_at)))
+    return None if seen is None else now - aware(seen)

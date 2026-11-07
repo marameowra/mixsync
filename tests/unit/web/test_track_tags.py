@@ -1,3 +1,4 @@
+import hashlib
 import re
 import shutil
 from collections.abc import Iterator
@@ -6,7 +7,8 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from httpx import Response
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
@@ -18,7 +20,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.journal import SqlJournal
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.library import Plan, Track
-from mixsync.db.models.safety import TagSnapshot
+from mixsync.db.models.safety import FileOp, TagSnapshot
 from mixsync.db.models.work import Job
 from mixsync.library import tags
 from mixsync.library.fileops import FileOps
@@ -42,7 +44,15 @@ class Env:
         ops = FileOps(self.data, tmp_path / "dl", SqlJournal(self.sf, clock), clock)
         ops.import_file(src, REL, snapshotting_writer(self.sf, clock, REL, NEW), "b1")
         with self.sf() as s, s.begin():
-            row = Track(path=REL, status="verified", batch_id="b1", imported_at=datetime.now(UTC))
+            row = Track(
+                path=REL,
+                status="verified",
+                batch_id="b1",
+                imported_at=datetime.now(UTC),
+                album_artist="X",
+                album="Al",
+                year="",
+            )
             s.add(row)
             create_user(s, "alice", "pw")
             create_user(s, "root", "pw", admin=True)
@@ -53,6 +63,13 @@ class Env:
 
     def title(self) -> str:
         return tags.read_fields(self.file)["title"]
+
+    def names(self) -> tuple[str | None, str | None, str | None]:
+        """The row's album columns; they must equal the file's tags."""
+        with self.sf() as s:
+            row = s.scalars(select(Track)).one()
+        assert (row.album_artist, row.album, row.year) == tags.file_names(self.file)
+        return row.album_artist, row.album, row.year
 
     def snapshots(self) -> int:
         with self.sf() as s:
@@ -85,11 +102,18 @@ def _snap(client: TestClient, env: Env) -> str:
     return m.group(1)
 
 
+def _no_restore(r: Response, env: Env, message: str) -> None:
+    assert r.status_code == 200 and message in r.text
+    assert "Restore these tags" not in r.text and "snapshot_id" not in r.text
+    assert f"/library/tracks/{env.track}/delete" in r.text
+
+
 def test_preview_shows_diff(client: TestClient, env: Env) -> None:
     _login(client)
     html = client.get(env.url).text
     assert "Original" in html and "Imported" in html and "Restore these tags" in html
     assert "not changed" in html
+    assert f"/library/tracks/{env.track}/delete" in html  # restore and delete together
     assert env.title() == "Imported"  # a preview writes nothing
 
 
@@ -99,11 +123,13 @@ def test_restore_then_undo_the_restore(client: TestClient, env: Env) -> None:
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": _snap(client, env)})
     assert r.status_code == 303
     assert env.title() == "Original"
+    assert env.names() == ("OA", "OA", "")
     assert env.snapshots() == before + 1
     # the newest snapshot now holds the pre-undo tags, so the same action reverses it
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": _snap(client, env)})
     assert r.status_code == 303
     assert env.title() == "Imported"
+    assert env.names() == ("X", "Al", "")
     with env.sf() as s:
         assert s.scalars(select(Track)).one().path == REL
     assert len(list((env.data / ".trash").rglob("*.flac"))) == 2  # each replaced copy is kept
@@ -132,14 +158,6 @@ def test_snapshot_of_another_path_refused(client: TestClient, env: Env) -> None:
     assert r.status_code == 409 and env.title() == "Imported"
 
 
-def test_nothing_to_restore(client: TestClient, env: Env) -> None:
-    tok = _login(client)
-    snap = _snap(client, env)
-    client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
-    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
-    assert r.status_code == 409 and env.title() == "Original"
-
-
 def test_csrf_and_role(client: TestClient, env: Env) -> None:
     _login(client)
     snap = _snap(client, env)
@@ -155,7 +173,7 @@ def test_snapshot_of_a_replaced_file_refused(client: TestClient, env: Env) -> No
     tok = _login(client)
     snap = _snap(client, env)
     tags.write(env.file, tags.TagSet("Other recording", "Z", "Z", "Z", 1, 1))
-    assert client.get(env.url).status_code == 409
+    _no_restore(client.get(env.url), env, "no earlier tags")
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
     assert r.status_code == 409 and env.title() == "Other recording"
 
@@ -196,3 +214,34 @@ def test_refused_while_a_plan_is_changing_the_track(
         )
     r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
     assert r.status_code == 409 and env.title() == "Imported"
+
+
+def test_no_snapshot_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    _login(client)
+    with env.sf() as s, s.begin():
+        s.execute(delete(TagSnapshot))
+    _no_restore(client.get(env.url), env, "no earlier tags")
+
+
+def test_unreadable_tags_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    env.file.write_bytes(b"not audio")
+    with env.sf() as s, s.begin():  # keep the journaled hash matching the damaged file
+        op = s.scalars(select(FileOp).where(FileOp.dst_hash.is_not(None))).one()
+        op.dst_hash = hashlib.sha256(b"not audio").hexdigest()
+    _no_restore(client.get(env.url), env, "cannot be read")
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409  # the POST is unchanged
+
+
+def test_format_mismatch_page_still_offers_delete(client: TestClient, env: Env) -> None:
+    tok = _login(client)
+    snap = _snap(client, env)
+    with env.sf() as s, s.begin():
+        row = s.scalars(select(TagSnapshot)).one()
+        row.tags = {**row.tags, "format": "mp3"}  # the file is a flac
+    before = env.title()
+    _no_restore(client.get(env.url), env, "different file format")
+    r = client.post(env.url, data={"csrf_token": tok, "snapshot_id": snap})
+    assert r.status_code == 409 and env.title() == before

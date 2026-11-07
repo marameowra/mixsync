@@ -45,6 +45,13 @@ async def test_nothing_found(make_client: Make) -> None:
     assert await art.front("R", None) is None and seen == ORDER[:2]
 
 
+async def test_group_only_skips_release_requests(make_client: Make) -> None:
+    seen: list[str] = []
+    art = CoverArtClient(make_client("coverart", serve(None, seen)))
+    assert await art.front(None, "G") is None
+    assert seen == ["/release-group/G/front-1200", "/release-group/G/front"]
+
+
 async def test_server_error_raises(make_client: Make) -> None:
     art = CoverArtClient(make_client("coverart", lambda _r: httpx.Response(500)))
     with pytest.raises(TransientError):

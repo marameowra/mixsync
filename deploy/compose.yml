@@ -1,8 +1,5 @@
 x-mixsync: &mixsync
-  build:
-    context: ..
-    dockerfile: deploy/Dockerfile
-  image: mixsync:local
+  image: ghcr.io/marameowra/mixsync:${MIXSYNC_TAG:-latest}
   user: "${PUID}:${PGID}"
   env_file: .env
   volumes:
@@ -39,7 +36,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # No healthcheck yet: the worker heartbeat row does not exist. Add one when it lands.
   mixsync-worker:
     <<: *mixsync
     command: ["worker"]
@@ -47,9 +43,15 @@ services:
     depends_on:
       mixsync-migrate:
         condition: service_completed_successfully
+    healthcheck:  # unhealthy once its loop has not recorded a heartbeat for 90 s
+      test: ["CMD", "mixsync", "worker-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # startup scans run before the loop settles
 
   slskd:
-    image: slskd/slskd
+    image: slskd/slskd:0.26.2
     user: "${PUID}:${PGID}"
     environment:
       SLSKD_API_KEY: ${MIXSYNC_SLSKD_API_KEY}
@@ -60,7 +62,7 @@ services:
     restart: unless-stopped
 
   navidrome:
-    image: deluan/navidrome
+    image: deluan/navidrome:0.64.2
     user: "${PUID}:${PGID}"
     environment:
       ND_DATAFOLDER: /nd-data

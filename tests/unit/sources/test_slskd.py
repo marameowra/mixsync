@@ -1,14 +1,20 @@
+import asyncio
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.matching import Candidate, CandidateFile, TransferStatus
+from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.slskd import SlskdSource, map_responses
 
@@ -96,11 +102,25 @@ async def test_search_polls_until_complete(make_client: Make) -> None:
     assert post.headers["X-API-Key"] == "key-123"
     body = json.loads(post.content)
     assert body["searchText"] == "Test Artist Test Album"
+    assert {
+        "responseLimit",
+        "fileLimit",
+        "searchTimeout",
+        "minimumPeerUploadSpeed",
+        "maximumPeerQueueLength",
+    } <= body.keys()
+    assert body["responseLimit"] > 100
+    assert body["searchTimeout"] >= 5000  # slskd reads milliseconds
     assert seen[-1].url.path == f"/api/v0/searches/{body['id']}/responses"
 
 
-async def test_search_gives_up(make_client: Make) -> None:
+async def test_search_gives_up_and_deletes_the_search(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "DELETE":
+            return httpx.Response(204)
         return httpx.Response(200, json=load("search_running.json"))
 
     src = SlskdSource(
@@ -113,6 +133,118 @@ async def test_search_gives_up(make_client: Make) -> None:
     )
     with pytest.raises(TransientError):
         await src.search("x")
+    post, last = seen[0], seen[-1]
+    search_id = json.loads(post.content)["id"]
+    assert last.method == "DELETE" and last.url.path == f"/api/v0/searches/{search_id}"
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        return self.t
+
+
+async def _yield(_s: float) -> None:
+    await asyncio.sleep(0)
+
+
+async def _tick(_s: float) -> None:  # real time passes, so a slot claim (a DB round trip) lands
+    await asyncio.sleep(0.01)
+
+
+async def test_searches_past_the_cap_wait_and_all_complete(
+    settings: Settings, sessions: sessionmaker[Session]
+) -> None:
+    in_flight: set[str] = set()
+    peak = 0
+    polls: dict[str, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal peak
+        if request.method == "POST":
+            in_flight.add(json.loads(request.content)["id"])
+            peak = max(peak, len(in_flight))
+            return httpx.Response(200, json=load("search_running.json"))
+        sid = request.url.path.split("/")[4]
+        if request.url.path.endswith("/responses"):
+            in_flight.discard(sid)
+            return httpx.Response(200, json=load("responses.json"))
+        polls[sid] = polls.get(sid, 0) + 1
+        # Run until a second search has joined (bounded): claiming a slot takes a DB round trip,
+        # so without this an instant stub search can finish before the next one starts.
+        if peak >= 2 or polls[sid] >= 50:
+            return httpx.Response(200, json=load("search_complete.json"))
+        return httpx.Response(200, json=load("search_running.json"))
+
+    clock = Clock()
+
+    def worker() -> SlskdSource:  # two workers: the cap is shared through the DB
+        client = PoliteClient(
+            "slskd", settings, sessions, clock=clock, transport=httpx.MockTransport(handler)
+        )
+        slots = Slots("slskd-search", 2, sessions, clock, timedelta(minutes=10))
+        return SlskdSource(client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_tick, slots=slots)
+
+    a, b = worker(), worker()
+    found = await asyncio.gather(*(src.search(f"q{i}") for i, src in enumerate([a, b] * 4)))
+    assert peak == 2 and not in_flight
+    assert all(len(cands) == 4 for cands in found)
+
+
+async def test_the_same_query_within_the_window_is_searched_once(
+    settings: Settings, sessions: sessionmaker[Session]
+) -> None:
+    posts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posts.append(json.loads(request.content)["searchText"])
+            return httpx.Response(200, json=load("search_running.json"))
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=load("responses.json"))
+        return httpx.Response(200, json=load("search_complete.json"))
+
+    clock = Clock()
+    client = PoliteClient(
+        "slskd", settings, sessions, clock=clock, transport=httpx.MockTransport(handler)
+    )
+    src = SlskdSource(
+        client, BASE, "k", downloads_dir=DOWNLOADS, sleep=_yield, debounce=timedelta(minutes=5)
+    )
+    together = await asyncio.gather(src.search("Test Album"), src.search(" test album "))
+    clock.t += timedelta(minutes=4)
+    again = await src.search("TEST ALBUM")
+    assert posts == ["Test Album"] and len(again) == 4 and together[0] == together[1] == again
+    clock.t += timedelta(minutes=2)  # the window has passed: slskd is asked again
+    await src.search("test album")
+    assert posts == ["Test Album", "test album"]
+
+
+async def test_a_failed_search_is_not_reused(make_client: Make) -> None:
+    posts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal posts
+        if request.method == "POST":
+            posts += 1
+            return httpx.Response(500 if posts == 1 else 200, json=load("search_running.json"))
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(200, json=load("responses.json"))
+        return httpx.Response(200, json=load("search_complete.json"))
+
+    src = SlskdSource(
+        make_client("slskd", handler),
+        BASE,
+        "k",
+        downloads_dir=DOWNLOADS,
+        sleep=_no_sleep,
+        debounce=timedelta(minutes=5),
+    )
+    with pytest.raises(TransientError):
+        await src.search("test album")
+    assert len(await src.search("test album")) == 4 and posts == 2
 
 
 @pytest.mark.parametrize("code", [401, 403])
@@ -146,18 +278,22 @@ def candidate() -> Candidate:
     return cands[0]
 
 
-async def test_enqueue_posts_files(make_client: Make) -> None:
+@pytest.mark.parametrize("start", [0, 3])  # a whole folder, then a retry of the last file
+async def test_enqueue_posts_files(make_client: Make, start: int) -> None:
+    cand = candidate()
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return httpx.Response(201, json={"enqueued": [], "failed": []})
 
-    await source(make_client, handler).enqueue(candidate())
-    assert seen[0].url.path == "/api/v0/transfers/downloads/peer-001"
-    body = json.loads(seen[0].content)
-    assert [b["filename"] for b in body][0] == "Music\\Test Artist\\Test Album\\01 Opening.flac"
-    assert len(body) == 4 and all(b["size"] > 0 for b in body)
+    await source(make_client, handler).enqueue(replace(cand, files=cand.files[start:]))
+    (post,) = seen
+    assert post.url.path == "/api/v0/transfers/downloads/peer-001"
+    body = json.loads(post.content)
+    assert body == [{"filename": f.path, "size": f.size} for f in cand.files[start:]]
+    assert len(body) == 4 - start and all(b["size"] > 0 for b in body)
+    assert body[0]["filename"].endswith(("\\01 Opening.flac", "\\04 Closing.flac"))
 
 
 async def test_enqueue_failure_is_permanent(make_client: Make) -> None:
@@ -174,7 +310,7 @@ async def test_status_aggregates_transfers(make_client: Make) -> None:
     assert info.bytes == 880 * 125 * 200 + 1000
 
 
-async def test_clear_deletes_only_this_candidates_transfers(make_client: Make) -> None:
+async def test_clear_cancels_and_removes_only_this_candidates_transfers(make_client: Make) -> None:
     cand = Candidate("p", "d", (CandidateFile("d\\a.flac", 1, "flac"),))
     files = [{"id": "ID-A", "filename": "d\\a.flac"}, {"id": "ID-B", "filename": "d\\other.flac"}]
     body = {"username": "p", "directories": [{"directory": "d", "files": files}]}
@@ -194,7 +330,6 @@ async def test_clear_deletes_only_this_candidates_transfers(make_client: Make) -
     ("states", "expected"),
     [
         (["Completed, Succeeded"] * 4, TransferStatus.DONE),
-        (["Completed, Succeeded"] * 3 + ["Completed, Errored"], TransferStatus.FAILED),
         (["Completed, Succeeded"] * 3 + ["Queued, Remotely"], TransferStatus.QUEUED),
         (["Requested"] * 4, TransferStatus.QUEUED),
     ],
@@ -210,6 +345,46 @@ async def test_status_states(
     body = {"username": "peer-001", "directories": [{"directory": "d", "files": files}]}
     src = source(make_client, lambda r: httpx.Response(200, json=body))
     assert (await src.status(cand)).state is expected
+
+
+@pytest.mark.parametrize(
+    ("failure", "retry"),
+    [
+        ("Completed, Errored", True),
+        ("Completed, TimedOut", True),
+        ("Completed, Rejected", False),
+        ("Completed, Cancelled", False),
+    ],
+)
+async def test_only_timed_out_or_errored_files_are_worth_a_retry(
+    make_client: Make, failure: str, retry: bool
+) -> None:
+    cand = candidate()
+    states = ["Completed, Succeeded"] * 3 + [failure]
+    files = [
+        {"filename": f.path, "state": s, "bytesTransferred": 0}
+        for f, s in zip(cand.files, states, strict=True)
+    ]
+    body = {"username": "peer-001", "directories": [{"directory": "d", "files": files}]}
+    info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+    assert info.state is TransferStatus.FAILED
+    assert info.retry == ((cand.files[3],) if retry else ())
+
+
+async def test_a_requeued_file_is_judged_by_its_newest_transfer(make_client: Make) -> None:
+    cand = candidate()
+    files = [
+        {"filename": f.path, "state": "Completed, Succeeded", "bytesTransferred": 0}
+        for f in cand.files
+    ]
+    old = {**files[3], "state": "Completed, Errored", "requestedAt": "2026-01-01T00:00:00Z"}
+    new = {**files[3], "state": "Queued, Remotely", "requestedAt": "2026-01-01T00:05:00Z"}
+    body = {
+        "username": "peer-001",
+        "directories": [{"directory": "d", "files": [*files[:3], old, new]}],
+    }
+    info = await source(make_client, lambda r: httpx.Response(200, json=body)).status(cand)
+    assert info.state is TransferStatus.QUEUED
 
 
 async def test_done_reports_local_paths_by_each_files_own_folder(make_client: Make) -> None:

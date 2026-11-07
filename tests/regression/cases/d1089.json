@@ -1,0 +1,150 @@
+{
+ "albums": [
+  {
+   "album": "Get Crazy / Feeling Stronger (The Remixes)",
+   "albumdisambig": null,
+   "artist": "Muzzy",
+   "artist_ids": [
+    "6cfdec30-4730-4513-bfb4-5db3ff566900"
+   ],
+   "catalognum": "MCEP076",
+   "country": "XW",
+   "genres": [
+    "dance"
+   ],
+   "label": "Monstercat",
+   "media": "Digital Media",
+   "mediums": 1,
+   "original_year": 2015,
+   "release_group_id": "0e430676-c1c4-45ed-a74a-53aa314e5f77",
+   "release_id": "dc94a294-d83e-4764-89e6-4673c6745668",
+   "tracks": [
+    {
+     "artist": "Muzzy",
+     "artist_ids": [
+      "6cfdec30-4730-4513-bfb4-5db3ff566900"
+     ],
+     "index": 1,
+     "length": 252.421,
+     "medium": 1,
+     "medium_index": 1,
+     "recording_id": "343b85a1-5e29-4b33-9639-b253a5ece7ed",
+     "title": "Get Crazier"
+    },
+    {
+     "artist": "Muzzy",
+     "artist_ids": [
+      "6cfdec30-4730-4513-bfb4-5db3ff566900"
+     ],
+     "index": 2,
+     "length": 265.839,
+     "medium": 1,
+     "medium_index": 2,
+     "recording_id": "6b0e2bf5-3aed-4896-94b1-4fdc03385d0a",
+     "title": "Get Crazy (AgNO3 remix)"
+    },
+    {
+     "artist": "Muzzy feat. Charlotte Colley",
+     "artist_ids": [
+      "6cfdec30-4730-4513-bfb4-5db3ff566900",
+      "0c7ba06d-8af0-4b97-845d-80889b8f54be"
+     ],
+     "index": 3,
+     "length": 252.215,
+     "medium": 1,
+     "medium_index": 3,
+     "recording_id": "148e7bae-0020-4842-976d-631aaa006c80",
+     "title": "Feeling Stronger (High Maintenance remix)"
+    },
+    {
+     "artist": "Muzzy feat. Charlotte Colley",
+     "artist_ids": [
+      "6cfdec30-4730-4513-bfb4-5db3ff566900",
+      "0c7ba06d-8af0-4b97-845d-80889b8f54be"
+     ],
+     "index": 4,
+     "length": 289.744,
+     "medium": 1,
+     "medium_index": 4,
+     "recording_id": "b7ef0866-aa68-404f-9b04-9ecaec68618f",
+     "title": "Feeling Stronger (Priority One & NCT remix)"
+    }
+   ],
+   "va": false,
+   "year": 2015
+  }
+ ],
+ "candidate": {
+  "files": [
+   {
+    "bit_depth": null,
+    "bitrate": null,
+    "duration": null,
+    "extension": "flac",
+    "path": "03 - Feeling Stronger (High Maintenance remix).flac",
+    "sample_rate": null,
+    "size": 37655495
+   }
+  ],
+  "folder": "MUZZ\\MUZZ - Get Crazy _ Feeling Stronger (The Remixes)",
+  "has_cue": false,
+  "has_free_slot": true,
+  "queue_length": 0,
+  "upload_speed": 0,
+  "username": ""
+ },
+ "chosen_release_mbid": null,
+ "decision": 1089,
+ "files": [
+  {
+   "acoustid": [
+    {
+     "id": "",
+     "recording_ids": [
+      "148e7bae-0020-4842-976d-631aaa006c80"
+     ],
+     "score": 1.0
+    }
+   ],
+   "artist": "Muzzy feat. Charlotte Colley",
+   "disc": 1,
+   "high_band": 0.004029323159114923,
+   "length": 252.21514739229025,
+   "recording_id": null,
+   "title": "Feeling Stronger (High Maintenance remix)",
+   "track": 3,
+   "trailing_silence": 0.0
+  }
+ ],
+ "labels": [
+  "partial",
+  "auto_accept"
+ ],
+ "likelies": {
+  "album": "Get Crazy / Feeling Stronger (The Remixes)",
+  "albumdisambig": null,
+  "artist": "Muzzy feat. Charlotte Colley",
+  "catalognum": null,
+  "country": null,
+  "disctotal": null,
+  "label": null,
+  "media": null,
+  "release_id": null,
+  "year": 2015
+ },
+ "profile": {
+  "auto_accept_max": 0.08,
+  "name": "balanced",
+  "review_max": 0.4
+ },
+ "recorded": {
+  "band": "auto_accept",
+  "distance": 0.02638888888888889,
+  "final_action": null,
+  "scorer_version": 4,
+  "status": "auto_accepted",
+  "vetoes": []
+ },
+ "release_given": true,
+ "release_mbid": "dc94a294-d83e-4764-89e6-4673c6745668"
+}

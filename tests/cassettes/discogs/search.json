@@ -1,0 +1,7 @@
+{
+  "pagination": {"page": 1, "pages": 1, "per_page": 5, "items": 2},
+  "results": [
+    {"id": 249504, "type": "release", "title": "Daft Punk (2) - Discovery", "year": "2001", "format": ["CD", "Album"]},
+    {"id": 8800, "type": "release", "title": "Daft Punk - Discovery (Live)", "country": "UK"}
+  ]
+}

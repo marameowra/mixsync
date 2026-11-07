@@ -1,0 +1,26 @@
+name: close-issues-on-dev
+# GitHub ignores closing keywords for PRs merged into non-default branches, so close them here.
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+permissions:
+  issues: write
+  contents: read
+jobs:
+  close:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          for n in $(printf '%s' "$PR_BODY" | scripts/closing_issues.sh); do
+            state=$(gh issue view "$n" --json state --jq .state) || continue
+            [ "$state" = OPEN ] || continue
+            gh issue close "$n" --comment "Fixed in #$PR_NUMBER, merged to dev."
+          done

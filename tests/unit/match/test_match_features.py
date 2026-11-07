@@ -24,7 +24,7 @@ def test_matching_distance(a: str, b: str) -> None:
 
 
 def test_different_distance() -> None:
-    assert string_dist("Some String", "Totally Different") != 0.0
+    assert string_dist("Some String", "Totally Different") == pytest.approx(0.8125)
 
 
 @pytest.mark.parametrize(
@@ -54,9 +54,9 @@ def test_relative_weights(worse: str, better: str, reference: str) -> None:
 
 
 def test_solo_pattern_does_not_crash() -> None:
-    string_dist("The ", "")
-    string_dist("(EP)", "(EP)")
-    string_dist(", An", "")
+    assert string_dist("The ", "") == pytest.approx(0.1)
+    assert string_dist("(EP)", "(EP)") == 0.0
+    assert string_dist(", An", "") == 1.0
 
 
 def test_none_handling() -> None:

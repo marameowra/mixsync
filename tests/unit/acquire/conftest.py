@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire.pipeline import Pipeline
+from mixsync.acquire.requests import fail_request_of_job
 from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.jobs import JobKind, JobState
@@ -41,7 +43,7 @@ class Env:
     def __init__(self, tmp_path: Path, settings: Settings, sessions: sessionmaker[Session]) -> None:
         self.settings, self.sessions = settings, sessions
         self.clock = FixedClock(datetime.now(UTC).replace(microsecond=0))
-        self.queue = JobQueue(make_engine(settings), self.clock)
+        self.queue = JobQueue(make_engine(settings), self.clock, fail_request_of_job)
         self.data_dir, self.downloads = tmp_path / "data", tmp_path / "downloads"
         (self.data_dir / "library").mkdir(parents=True)
         self.downloads.mkdir()
@@ -130,7 +132,7 @@ def web(env: Env, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         s.execute(delete(UserRole).where(UserRole.user_id == uid))
         s.add(UserRole(user_id=uid, role_id=role.id))
     app = create_app(env.sessions, Settings())
-    app.state.namer = NoNames()
+    app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
 

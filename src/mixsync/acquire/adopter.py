@@ -2,7 +2,8 @@
 
 The drop folder over `downloads_dir`: same scan, settle check and pipeline, but a verified import
 releases the originals and a rejected one goes to review. What MixSync itself downloaded or
-verified is left alone, whatever became of it: rejected and failed downloads stay in downloads.
+verified is left alone, whatever became of it: failed downloads stay in downloads, and rejected
+ones sit in quarantine (under the data dir, outside the scan root).
 """
 
 from datetime import timedelta

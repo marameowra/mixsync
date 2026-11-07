@@ -13,12 +13,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import pipeline
+from mixsync.acquire import pipeline, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import AlbumInfo, TrackInfo, TransferStatus
-from mixsync.core.types import AcoustIdResult, ReleaseRef
+from mixsync.core.matching import AlbumInfo, Candidate, TrackInfo, TransferStatus
+from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
@@ -26,12 +27,12 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
-from mixsync.library import tags
+from mixsync.library import measure, tags
 from mixsync.library.fileops import WriteTags
 from mixsync.watchlist.poller import owned_groups
 
 from .conftest import Env, login
-from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS
+from .fakes import ALBUM, ALBUM_B, CATALOG, COVER, OTHER, RECORDINGS, fake_fingerprint
 
 FIRST = "Alpha Band/Alpha Album (2020)/01-01 Song One.mp3"
 SECOND = "Alpha Band/Alpha Album (2020)/01-02 Song Two.mp3"
@@ -49,6 +50,13 @@ def status(env: Env, rid: int) -> str:
         return req.status
 
 
+def last_error(env: Env, rid: int) -> str | None:
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req
+        return req.last_error
+
+
 def tried(env: Env, rid: int) -> list[list[str]]:
     with env.sessions() as s:
         req = s.get(Request, rid)
@@ -59,6 +67,10 @@ def tried(env: Env, rid: int) -> list[list[str]]:
 def library(env: Env) -> list[str]:
     lib = env.data_dir / "library"
     return sorted(str(p.relative_to(lib)) for p in lib.rglob("*.mp3"))
+
+
+def quarantined(env: Env, kind: str) -> list[Path]:
+    return sorted((env.data_dir / "quarantine" / kind).rglob("*.mp3"))
 
 
 def decision_rows(env: Env, stage: int) -> list[MatchDecision]:
@@ -77,6 +89,14 @@ def veto_second_file(env: Env, folder: str = "Alpha Album") -> None:
     ]
 
 
+def contradict_second_file(env: Env, folder: str = "Alpha Album") -> None:
+    """AcoustID is sure (0.95) that the second file is the first track's recording: both files
+    stay paired with their own tracks, and the contradiction is a veto."""
+    env.acoustid.override[f"{folder}/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.95, (RECORDINGS["Song One"],))
+    ]
+
+
 async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> None:
     """Exit criterion 1: a requested album auto-imports with correct MBIDs, then a rescan."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
@@ -85,6 +105,8 @@ async def test_e1_requested_album_imports_with_mbids_and_rescans(env: Env) -> No
 
     assert status(env, rid) == "imported"
     assert library(env) == [FIRST, SECOND]
+    with env.sessions() as s:
+        assert s.get_one(Request, rid).origin is None  # found by searching
     for rel, track in zip((FIRST, SECOND), ALBUM.tracks, strict=True):
         t = tags.read_all(env.data_dir / "library" / rel)["tags"]
         assert t["TXXX:MusicBrainz Album Id"] == [ALBUM.release_id]
@@ -261,8 +283,28 @@ async def test_two_imports_close_together_share_one_rescan(env: Env) -> None:
     assert env.target.rescans == 1
 
 
+async def test_a_padded_preview_lands_in_review_with_its_veto_text(
+    env: Env, web: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def silent_tail(path: Path, duration: float) -> float:
+        return duration * 0.9 if "Two" in path.name else 0.0
+
+    monkeypatch.setattr(measure, "trailing_silence", silent_tail)
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "review" and library(env) == []
+    (d,) = decision_rows(env, 2)
+    assert d.status == "pending_review"
+    assert d.vetoes == ["'Song Two': silent from 0:00 to the end (0:01)"]
+    login(web, "alice")
+    assert "silent from 0:00 to the end" in web.get(f"/review/{d.id}").text
+
+
 async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient) -> None:
-    """Exit criterion 2: a file AcoustID disagrees with is held for review, not imported."""
+    """Exit criterion 2: a file AcoustID disagrees with is held for review, not imported. A file
+    whose recording the release lacks is never paired, so accepting imports only the rest."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     veto_second_file(env)
     rid = request(env)
@@ -271,10 +313,13 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert status(env, rid) == "review"
     assert library(env) == []
     (d,) = [d for d in decision_rows(env, 2)]
-    assert d.status == "pending_review" and d.vetoes
+    assert d.status == "pending_review"
+    assert d.vetoes == ["'Song Two': release does not contain recording somebody-elses-recording"]
+    ev = Evidence.parse(d.evidence)
+    assert [a["recording_id"] for a in ev.assignment] == [RECORDINGS["Song One"]]
     tok = login(web, "alice")
     page = web.get(f"/review/{d.id}")
-    assert page.status_code == 200 and "AcoustID (0.95) says a different recording" in page.text
+    assert page.status_code == 200 and "release does not contain recording" in page.text
     assert "somebody-elses-recording" in page.text
     assert f'href="/review/{d.id}"' in web.get("/review").text
 
@@ -282,14 +327,45 @@ async def test_e2_bad_file_lands_in_review_then_accept(env: Env, web: TestClient
     assert r.status_code == 303
     assert status(env, rid) == "importing"
     await env.drain()
-    assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
+    assert status(env, rid) == "imported" and library(env) == [FIRST]
+    assert [p.name for p in quarantined(env, "review")] == ["02 Song Two.mp3"]  # kept, unpaired
     assert env.target.rescans == 1
+
+
+async def test_accept_never_imports_an_off_release_file_and_keeps_it_in_quarantine(
+    env: Env, web: TestClient
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    veto_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    (held,) = [p for p in quarantined(env, "review") if p.name == "02 Song Two.mp3"]
+    (off,) = d.evidence["off_release"]
+    assert Path(off["local_path"]) == held and off["recording_ids"] == ["somebody-elses-recording"]
+    body = held.read_bytes()
+
+    tok = login(web, "alice")
+    assert web.post(f"/review/{d.id}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported" and library(env) == [FIRST]
+    assert quarantined(env, "review") == [held] and held.read_bytes() == body
+
+
+async def test_a_contradicted_pair_lands_in_review(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    contradict_second_file(env)
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    assert status(env, rid) == "review" and len(Evidence.parse(d.evidence).assignment) == 2
+    assert any("AcoustID (0.95) says a different recording" in v for v in d.vetoes)
 
 
 async def _held_for_review(env: Env, web: TestClient) -> tuple[int, int, str]:
     """Verify the album with one vetoed file; return the request, decision and csrf token."""
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
-    veto_second_file(env)
+    contradict_second_file(env)
     rid = request(env)
     await env.drain()
     (d,) = decision_rows(env, 2)
@@ -391,20 +467,29 @@ async def test_accept_of_a_decision_stored_without_recording_ids_still_imports(
     assert status(env, rid) == "imported" and library(env) == [FIRST, SECOND]
 
 
-async def test_no_results_backs_off_then_caps(env: Env) -> None:
+async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None:
     rid = request(env)
     t0 = env.clock.now()
-    for wait in [1, 6, 24, 168, 168]:  # hours: 1h, 6h, 24h, 1 week, then the cap
+    waits = [1, 4, 16, 64, 168, 168]  # hours: x4 from 1h to the weekly cap
+    for wait in waits:
         job = None
         while job is None or job.kind is not JobKind.SEARCH:
             job = await env.step()
         assert status(env, rid) == "no_results"
         (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
-        assert nxt.run_after.replace(tzinfo=env.clock.t.tzinfo) - env.clock.now() == timedelta(
-            hours=wait
-        )
-    assert env.clock.now() - t0 == timedelta(hours=1 + 6 + 24 + 168)
+        due = nxt.run_after.replace(tzinfo=env.clock.t.tzinfo)
+        assert due - env.clock.now() == timedelta(hours=wait)
+    assert env.clock.now() - t0 == timedelta(hours=sum(waits[:-1]))
     assert env.source.enqueued == []
+    login(web, "alice")  # the user sees when the next search runs
+    assert f"Next search {due:%Y-%m-%d %H:%M}" in web.get("/requests").text
+    # a search that finds something resets the backoff
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    while (job := await env.step()) is None or job.kind is not JobKind.SEARCH:
+        pass
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.no_results_attempts == 0 and req.status == "downloading"
 
 
 async def test_search_is_debounced_for_ten_minutes(env: Env) -> None:
@@ -436,6 +521,60 @@ async def test_failed_transfer_marks_tried_and_picks_next(env: Env) -> None:
         req = s.get(Request, rid)
         assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
     assert status(env, rid) == "imported" and len(library(env)) == 2
+    assert env.source.cleared[0] == "peer1"  # the dropped candidate's transfers are cancelled
+
+
+def first_file(cand: Candidate) -> str:
+    return f"{cand.username}/{cand.files[0].path.rsplit('\\', 1)[-1]}"
+
+
+async def test_a_file_that_errors_twice_then_succeeds_completes_the_candidate(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.outcomes[first_file(cand)] = ["Errored", "TimedOut"]
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 3
+    assert status(env, rid) == "imported" and len(library(env)) == 2
+    assert env.source.cleared == ["peer1"]  # only the release after import, never a drop
+
+
+async def test_a_file_that_fails_a_fourth_time_drops_the_candidate(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.outcomes[first_file(cand)] = ["Errored"] * 4
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 4  # queued once, retried three times
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert env.source.cleared[0] == "peer1" and status(env, rid) == "imported"
+
+
+async def test_a_rejected_file_drops_the_candidate_at_once(env: Env) -> None:
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.outcomes[first_file(cand)] = ["Rejected"]
+    rid = request(env)
+    await env.drain()
+    assert env.source.attempts[first_file(cand)] == 1
+    assert env.source.cleared[0] == "peer1" and status(env, rid) == "imported"
+
+
+async def test_a_failed_cancel_does_not_block_the_drop(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.add("peer2", "Music\\Alpha Band\\Alpha Album [2]")
+    env.source.state["peer1"] = TransferStatus.FAILED
+
+    async def down(_cand: Candidate) -> None:
+        raise TransientError("slskd unreachable")
+
+    monkeypatch.setattr(env.source, "clear", down)
+    rid = request(env)
+    await env.drain()
+    assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
 
 
 async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
@@ -450,6 +589,55 @@ async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
         req = s.get(Request, rid)
         assert req and req.tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
     assert status(env, rid) == "imported"
+
+
+def dropped(env: Env, rid: int) -> int:
+    with env.sessions() as s:
+        return s.get_one(Request, rid).dropped
+
+
+def offer_failing_peers(env: Env, n: int, landed: int) -> None:
+    for i in range(n):  # every peer's transfer dies, after `landed` bytes
+        env.source.add(f"peer{i}", f"Music\\Alpha Band\\Alpha Album [{i}]")
+        env.source.state[f"peer{i}"] = TransferStatus.FAILED
+        env.source.landed[f"peer{i}"] = landed
+
+
+@pytest.mark.parametrize("source", ["manual", "watchlist"])
+async def test_five_dropped_candidates_with_bytes_fail_the_request(
+    env: Env, web: TestClient, source: str
+) -> None:
+    offer_failing_peers(env, 6, landed=100)
+    with env.sessions.begin() as s:
+        rid = create_request(s, env.clock.now(), env.user_id, str(ALBUM.release_id), source).id
+    await env.drain()
+
+    assert status(env, rid) == "failed" and dropped(env, rid) == 5
+    assert "5 dropped candidates (request budget)" in (last_error(env, rid) or "")
+    assert len(env.source.enqueued) == 5  # the sixth peer is never tried
+    login(web, "alice")
+    assert "5 of 5" in web.get("/requests").text
+
+
+async def test_a_refusal_before_any_bytes_uses_no_budget(env: Env) -> None:
+    for i in range(6):
+        env.source.add(f"refuser{i}", f"Music\\Alpha Band\\Alpha Album [r{i}]")
+        env.source.refuse.add(f"refuser{i}")
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain()
+
+    assert len(tried(env, rid)) == 6 and dropped(env, rid) == 0
+    assert status(env, rid) == "imported"
+
+
+async def test_a_transfer_that_failed_before_any_bytes_uses_no_budget(env: Env) -> None:
+    offer_failing_peers(env, 6, landed=0)  # e.g. a remote-queue timeout
+    rid = request(env)
+    await env.drain(until=lambda: len(tried(env, rid)) == 6)
+
+    assert len(tried(env, rid)) == 6 and dropped(env, rid) == 0
+    assert status(env, rid) != "failed"
 
 
 @pytest.mark.parametrize("fault", ["wrong_size", "missing"])
@@ -469,19 +657,58 @@ async def test_bad_download_is_never_imported(env: Env, fault: str) -> None:
         assert req and req.tried and req.last_error
 
 
-async def test_acoustid_outage_retries_verify_and_imports_nothing(env: Env) -> None:
+async def test_acoustid_outage_waits_and_imports_nothing(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     env.acoustid.fail = 1
     rid = request(env)
-    await env.drain(until=lambda: bool(env.jobs(JobKind.VERIFY)) and env.acoustid.fail == 0)
+    await env.drain(until=lambda: len(env.jobs(JobKind.VERIFY)) == 2)
 
-    (verify,) = env.jobs(JobKind.VERIFY)
-    assert verify.status is JobState.RETRY_WAIT and verify.max_attempts == 10
+    first, again = env.jobs(JobKind.VERIFY)
+    assert first.status is JobState.SUCCEEDED and again.status is JobState.QUEUED
+    assert again.run_after > first.run_after
     assert status(env, rid) == "verifying" and library(env) == []
+    assert last_error(env, rid) == "waiting for AcoustID"
     assert decision_rows(env, 2) == []
 
     await env.drain()
     assert status(env, rid) == "imported" and len(library(env)) == 2
+
+
+async def test_acoustid_outage_under_a_day_recovers(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.fail = 10**6
+    rid = request(env)
+    start = env.clock.now()
+    await env.drain(until=lambda: env.clock.now() > start + timedelta(hours=20))
+    assert status(env, rid) == "verifying"
+    assert last_error(env, rid) == "waiting for AcoustID"
+
+    env.acoustid.fail = 0
+    await env.drain()
+    assert status(env, rid) == "imported" and len(library(env)) == 2
+
+
+async def test_acoustid_outage_past_a_day_fails_the_request(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.fail = 10**6
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "failed" and library(env) == []
+    assert "24 hours" in (last_error(env, rid) or "")
+
+
+async def test_a_missing_acoustid_key_fails_at_once(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+
+    async def no_key(fp: Fingerprint) -> list[AcoustIdResult]:
+        raise RuntimeError("MIXSYNC_ACOUSTID_APP_KEY is not set")
+
+    env.acoustid.lookup = no_key  # type: ignore[method-assign]
+    rid = request(env)
+    await env.drain()
+
+    assert status(env, rid) == "failed" and len(env.jobs(JobKind.VERIFY)) == 1
 
 
 async def test_review_reject_tries_next_candidate_and_keeps_files(
@@ -501,7 +728,8 @@ async def test_review_reject_tries_next_candidate_and_keeps_files(
 
     assert env.source.enqueued == ["peer1", "peer2"]
     assert status(env, rid) == "imported" and len(library(env)) == 2
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2  # rejected files are kept
+    # rejected files are kept, re-filed in quarantine/rejected for the purge (#244)
+    assert quarantined(env, "review") == [] and len(quarantined(env, "rejected")) == 2
     with env.sessions() as s:
         req = s.get(Request, rid)
         assert req and req.tried[0][0] == "peer1"
@@ -525,6 +753,8 @@ async def test_repick_verifies_against_the_chosen_release(env: Env, web: TestCli
     assert (old.status, old.chosen_release_mbid) == ("repick", ALBUM_B.release_id)
     assert new.release_mbid == ALBUM_B.release_id and new.status == "pending_review"
     assert status(env, rid) == "review" and library(env) == []
+    files = [f["local_path"] for f in old.evidence["source"]["files"]]
+    assert files and [f["local_path"] for f in new.evidence["source"]["files"]] == files
 
 
 async def test_stage_one_decisions_never_need_review(env: Env) -> None:
@@ -685,9 +915,36 @@ async def test_search_stops_when_every_recording_is_owned(env: Env) -> None:
         }
 
 
-async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
+@pytest.mark.parametrize(
+    ("state", "year"),
+    [
+        ("other_release_canonical", "2020"),
+        ("own_release_canonical", "2020"),
+        ("canonical_shares_no_recording", "2021"),
+        ("no_canonical", "2021"),
+    ],
+)
+async def test_import_skips_recordings_the_group_already_has(
+    env: Env, monkeypatch: pytest.MonkeyPatch, state: str, year: str
+) -> None:
+    offered = ALBUM if state == "own_release_canonical" else ALBUM_B
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", offered)
+    if state == "no_canonical":
+
+        async def nothing(_group: str) -> list[ReleaseRef]:
+            return []
+
+        env.metadata.browse_group_releases = nothing  # type: ignore[method-assign]
     with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
+        if state == "canonical_shares_no_recording":
+            foreign = replace(
+                ALBUM,
+                release_id="55555555-5555-5555-5555-555555555555",
+                year=1999,
+                tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
+            )
+            monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
+            canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))
         s.add(
             Track(
                 path="elsewhere.mp3",
@@ -698,30 +955,11 @@ async def test_import_skips_recordings_the_group_already_has(env: Env) -> None:
                 imported_at=env.clock.now(),
             )
         )
-    rid = request(env, str(ALBUM_B.release_id))
+    rid = request(env, str(offered.release_id))
     await env.drain()
 
-    assert status(env, rid) == "imported" and library(env) == [SECOND]
-    assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
-
-
-async def test_import_skips_owned_recordings_when_own_release_is_canonical(env: Env) -> None:
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM)
-    with env.sessions.begin() as s:  # Song One is owned (from some other release of the group)
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported" and library(env) == [SECOND]
+    assert status(env, rid) == "imported"
+    assert library(env) == [SECOND.replace("(2020)", f"({year})")]
     assert [p.name for p in (env.downloads / "Alpha Album").iterdir()] == ["01 Song One.mp3"]
 
 
@@ -820,36 +1058,6 @@ async def test_canonical_without_shared_recordings_is_ignored(
     assert release_tags(env, rels[0])["TXXX:MusicBrainz Album Id"] == [ALBUM_B.release_id]
 
 
-async def test_owned_recordings_are_skipped_when_the_canonical_shares_none(
-    env: Env, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    foreign = replace(
-        ALBUM,
-        release_id="55555555-5555-5555-5555-555555555555",
-        year=1999,
-        tracks=tuple(replace(t, recording_id=f"x-{i}") for i, t in enumerate(ALBUM.tracks)),
-    )
-    monkeypatch.setitem(CATALOG, str(foreign.release_id), foreign)
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
-    with env.sessions.begin() as s:
-        canonical_db.store(s, str(ALBUM.release_group_id), str(foreign.release_id))
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM_B.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported"
-    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
-
-
 async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     async def nothing(_group: str) -> list[ReleaseRef]:
         return []
@@ -862,30 +1070,6 @@ async def test_empty_browse_imports_under_the_own_release(env: Env) -> None:
     assert library(env) == [FIRST.replace("(2020)", "(2021)"), SECOND.replace("(2020)", "(2021)")]
     with env.sessions() as s:
         assert canonical_db.get(s, str(ALBUM.release_group_id)) is None
-
-
-async def test_owned_recordings_are_skipped_when_the_group_has_no_canonical(env: Env) -> None:
-    async def nothing(_group: str) -> list[ReleaseRef]:
-        return []
-
-    env.metadata.browse_group_releases = nothing  # type: ignore[method-assign]
-    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album", ALBUM_B)
-    with env.sessions.begin() as s:
-        s.add(
-            Track(
-                path="elsewhere.mp3",
-                recording_mbid="Alpha-rec-1",
-                release_group_mbid=ALBUM.release_group_id,
-                status="verified",
-                batch_id="old",
-                imported_at=env.clock.now(),
-            )
-        )
-    rid = request(env, str(ALBUM_B.release_id))
-    await env.drain()
-
-    assert status(env, rid) == "imported"
-    assert library(env) == [SECOND.replace("(2020)", "(2021)")]
 
 
 def test_store_keeps_an_existing_choice(env: Env) -> None:
@@ -1042,16 +1226,18 @@ async def test_unverified_partial_failure_releases_nothing(
     rid, did, form = await _review_form(env, web)
     real = env.ops.import_file
 
-    def flaky(src: Path, rel: str, write_tags: WriteTags, batch: str) -> str:
+    def flaky(
+        src: Path, rel: str, write_tags: WriteTags, batch: str, origin: Path, root: str = "library"
+    ) -> str:
         if "Two" in src.name:
             raise OSError("disk full")
-        return real(src, rel, write_tags, batch)
+        return real(src, rel, write_tags, batch, origin, root)
 
     monkeypatch.setattr(env.ops, "import_file", flaky)
     assert web.post(f"/review/{did}/unverified", data=form).status_code == 303
     await env.drain()
     assert status(env, rid) == "failed"
-    assert len(list((env.downloads / "Alpha Album").iterdir())) == 2
+    assert len(quarantined(env, "review")) == 2  # nothing released: the review copies remain
     assert env.source.cleared == []
 
 
@@ -1327,3 +1513,161 @@ async def test_a_partial_request_stays_partial_when_the_next_candidate_fails(env
         req = s.get(Request, rid)
         assert req and (req.last_error or "").startswith("partial: 1 of 2 tracks present; ")
         assert owned_groups(s, [str(ALBUM.release_group_id)]) == set()
+
+
+async def test_a_download_starts_a_verify_for_the_requested_release(env: Env) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain(until=lambda: bool(env.jobs(JobKind.VERIFY)))
+    (job,) = env.jobs(JobKind.VERIFY)
+    download = env.jobs(JobKind.DOWNLOAD)[-1]  # the last status check of the transfer
+    p = job.payload
+    assert (p["request_id"], p["release_mbid"]) == (rid, ALBUM.release_id)
+    assert len(p["paths"]) == len(ALBUM.tracks) and p["candidate"]["username"] == "peer1"
+    assert job.max_attempts == verify.VERIFY_ATTEMPTS
+    assert job.idempotency_key == f"verify:{download.id}"
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and req.status == "verifying"
+    await env.drain()
+    assert decision_rows(env, 2)[0].release_given is True  # started with a release
+
+
+async def test_recheck_verifies_again_against_the_decisions_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    assert web.post("/review/recheck", data={"csrf_token": tok}).status_code == 303
+    assert status(env, rid) == "verifying"
+    await env.drain()
+    old, new = decision_rows(env, 2)
+    assert (old.id, old.status, old.final_action) == (did, "rechecked", "recheck")
+    assert (new.status, new.release_mbid) == ("pending_review", ALBUM.release_id)
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_of_an_identified_request_identifies_the_release_again(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # how a migration or a drop leaves its decision
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_given = False
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ""  # the fake MusicBrainz finds nothing to identify it by
+    assert new.release_given is False
+
+
+async def test_recheck_after_a_reopened_bad_repick_uses_the_decisions_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    ghost = "44444444-4444-4444-4444-444444444444"
+    real = env.pipeline.metadata.get_release
+
+    async def get_release(mbid: str, *, fresh: bool = False) -> AlbumInfo:
+        if mbid == ghost:
+            raise PermanentError("returned 404")
+        return await real(mbid, fresh=fresh)
+
+    env.pipeline.metadata.get_release = get_release  # type: ignore[method-assign]
+    web.post(f"/review/{did}/repick", data={"csrf_token": tok, "release": ghost})
+    await env.drain()
+    assert status(env, rid) == "review"  # reopened: the decision never recorded the ghost
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    assert [d.status for d in decision_rows(env, 2)] == ["rechecked", "pending_review"]
+    assert decision_rows(env, 2)[-1].release_mbid == ALBUM.release_id
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_without_a_matched_release_uses_the_requested_one(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_mbid = ""  # the decision never named a release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id  # the request's own release
+    assert status(env, rid) == "review"
+
+
+async def test_recheck_prefers_the_decisions_release_to_the_requests(
+    env: Env, web: TestClient
+) -> None:
+    rid, _, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:
+        req = s.get(Request, rid)
+        assert req
+        req.release_mbid = str(ALBUM_B.release_id)  # differs from the decision's release
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    _, new = decision_rows(env, 2)
+    assert new.release_mbid == ALBUM.release_id
+
+
+async def test_recheck_follows_the_decision_not_a_later_verify_of_the_request(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # a later VERIFY of the request had the release identified
+        req = s.get(Request, rid)
+        assert req
+        verify.start(s, env.clock.now(), req, None, {}, [])
+        req.status = "review"
+        s.flush()
+        for j in s.scalars(
+            select(Job).where(Job.kind == JobKind.VERIFY, Job.status != "succeeded")
+        ):
+            j.status = JobState.SUCCEEDED
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    old, new = decision_rows(env, 2)
+    assert old.id == did and old.release_given is True
+    assert (new.release_mbid, new.release_given) == (ALBUM.release_id, True)
+
+
+async def test_recheck_of_an_identified_request_after_a_repick_uses_the_repicked_release(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, tok = await _held_for_review(env, web)
+    with env.sessions.begin() as s:  # how a migration or a drop leaves its decision
+        d = s.get(MatchDecision, did)
+        assert d
+        d.release_given = False
+    web.post(f"/review/{did}/repick", data={"csrf_token": tok, "release": str(ALBUM_B.release_id)})
+    await env.drain()
+    web.post("/review/recheck", data={"csrf_token": tok})
+    await env.drain()
+    last = decision_rows(env, 2)[-1]
+    assert (last.status, last.release_mbid) == ("pending_review", ALBUM_B.release_id)
+    assert last.release_given is True  # the repick gave a release
+
+
+async def test_a_downloaded_file_that_will_not_fingerprint_drops_the_peer_and_searches_again(
+    env: Env,
+) -> None:
+    async def fingerprint(path: Path) -> Fingerprint:
+        if path.name.startswith("02 "):
+            raise PermanentError("fpcalc failed: Invalid data")
+        return await fake_fingerprint(path)
+
+    env.pipeline = replace(env.pipeline, fingerprint=fingerprint)
+    env.handlers = env.pipeline.handlers()
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    rid = request(env)
+    await env.drain(until=lambda: bool(tried(env, rid)))
+
+    assert tried(env, rid) == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    with env.sessions() as s:
+        req = s.get(Request, rid)
+        assert req and "unreadable: 02 " in (req.last_error or "")
+    assert len(env.jobs(JobKind.SEARCH)) == 2  # the first, and the one after the drop
+    assert decision_rows(env, 2) == []

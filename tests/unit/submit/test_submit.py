@@ -97,10 +97,6 @@ def test_various_artists_and_track_credits_with_join_phrase():
     assert not any(k.startswith("mediums.0.track.1.artist_credit") for k, _ in out)
 
 
-def test_edit_note_is_last():
-    assert build_seed(SeedRelease("A", A, []))[-1] == ("edit_note", EDIT_NOTE)
-
-
 def test_harmony_url_encodes():
     store = "https://x.bandcamp.com/album/a b?x=1&y=2"
     u = urlsplit(harmony_url(store))

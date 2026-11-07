@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import stat
+import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
@@ -23,8 +24,10 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire import lifecycle, verify
+from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.pipeline import Handler
-from mixsync.acquire.requests import VERIFY_ATTEMPTS, candidate_dict
+from mixsync.acquire.requests import candidate_dict
 from mixsync.core.audio import EXTENSIONS, UNSUPPORTED
 from mixsync.core.clock import Clock, aware
 from mixsync.core.jobs import JobKind
@@ -32,7 +35,7 @@ from mixsync.core.matching import Candidate, CandidateFile
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.safety import FileOp
-from mixsync.db.models.work import Job, Migration, Request
+from mixsync.db.models.work import Migration, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import tags
 from mixsync.match.candidates import DISC_DIR
@@ -105,8 +108,14 @@ def _album_dir(path: Path) -> Path:
     return path.parent.parent if DISC_DIR.match(path.parent.name) else path.parent
 
 
-def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -> dict[str, Any]:
-    """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`."""
+def scan(
+    root: Path,
+    out: Path,
+    exclude: Callable[[Path], bool] | None = None,
+    progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
+    """Hash and group the source. Writes `manifest.jsonl` and `groups.json` in `out`.
+    `progress(files, bytes)` is called after each hashed file."""
     out.mkdir(parents=True, exist_ok=True)
     unreadable: list[dict[str, str]] = []
     by_dir: dict[Path, list[tuple[Path, int, dict[str, str]]]] = {}
@@ -121,6 +130,8 @@ def scan(root: Path, out: Path, exclude: Callable[[Path], bool] | None = None) -
                 continue
             manifest.write(json.dumps({"path": str(rel), "size": size, "sha256": digest}) + "\n")
             count, total = count + 1, total + size
+            if progress:
+                progress(count, total)
             ext = path.suffix.lower()
             if ext in UNSUPPORTED:
                 unreadable.append(_skip(rel, UNSUPPORTED_WHY))
@@ -226,25 +237,21 @@ def confirm(s: Session, now: datetime, m: Migration) -> int:
             release_mbid="",
             artist=g.artist[:255],
             album=(g.album or Path(g.folder).name)[:255],
-            status="verifying",
             migration_id=m.id,
         )
+        lifecycle.verifying(req)
         s.add(req)
         s.flush()
         files = tuple(
             CandidateFile(rel, size, Path(rel).suffix.lower().lstrip(".")) for rel, size in g.files
         )
-        enqueue_in(
+        verify.start(
             s,
             now,
-            JobKind.VERIFY,
-            {
-                "request_id": req.id,
-                "release_mbid": None,
-                "candidate": candidate_dict(Candidate("", g.folder, files)),
-                "paths": [str(Path(g.folder) / rel) for rel, _ in g.files],
-            },
-            max_attempts=VERIFY_ATTEMPTS,
+            req,
+            None,
+            candidate_dict(Candidate("", g.folder, files)),
+            [str(Path(g.folder) / rel) for rel, _ in g.files],
             priority=MIGRATION_PRIORITY,
             idempotency_key=f"migrate:{m.id}:{i}",
         )
@@ -256,12 +263,12 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     same decision again (it skips what is in); else re-match from the first VERIFY, so it lands
     in review (or imports) with fresh choices. Returns why it cannot, else None."""
     batch = s.scalar(
-        select(Track.batch_id).where(Track.batch_id.like(f"request-{req.id}-decision-%")).limit(1)
+        select(Track.batch_id).where(verify.in_request(Track.batch_id, req.id)).limit(1)
     )
     copied = s.scalar(
         select(FileOp.id)
         .where(
-            FileOp.batch_id.like(f"request-{req.id}-decision-%"),
+            verify.in_request(FileOp.batch_id, req.id),
             FileOp.kind == "copy",
             FileOp.status == "done",
             FileOp.src != "(generated)",
@@ -270,24 +277,17 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     )
     if batch is None and copied is not None:  # a re-match could copy back what a merge removed
         return "its imported files were later merged or removed"
-    first = s.scalar(
-        select(Job)
-        .where(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == req.id)
-        .order_by(Job.id)
-        .limit(1)
-    )
-    if batch is None and first is None:
+    if batch is None and req.origin is None:
         return "it was never matched"
-    values = (
-        {"status": "importing", "last_error": None}
-        if batch
-        else {"status": "verifying", "release_mbid": "", "last_error": None}
+    # SQL, not lifecycle: an atomic compare-and-set, so a double click claims the retry once
+    values = {"dead_end": False, "partial_note": None, "last_error": None, "dropped": 0} | (
+        {"status": "importing"} if batch else {"status": "verifying", "release_mbid": ""}
     )
     claimed = cast(
         CursorResult[Any],
         s.execute(
             update(Request)
-            .where(Request.id == req.id, Request.status.in_(("failed", "skipped")))
+            .where(Request.id == req.id, Request.status.in_(lifecycle.NO_FILE))
             .values(values)
         ),
     )
@@ -295,17 +295,10 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     if claimed.rowcount != 1:  # not failed (any more): a double click retries once
         return "it has not failed"
     if batch:  # no idempotency key: the first import's job exists already
-        payload = {"request_id": req.id, "decision_id": int(batch.rpartition("-")[2])}
+        payload = {"request_id": req.id, "decision_id": verify.decision_of(batch)}
         enqueue_in(s, now, JobKind.IMPORT, payload, priority=MIGRATION_PRIORITY)
-    elif first:
-        enqueue_in(
-            s,
-            now,
-            JobKind.VERIFY,
-            {**first.payload, "release_mbid": None},
-            max_attempts=VERIFY_ATTEMPTS,
-            priority=MIGRATION_PRIORITY,
-        )
+    else:
+        verify.rematch(s, now, req, MIGRATION_PRIORITY)
     return None
 
 
@@ -328,24 +321,21 @@ def report(
         )
     )
     ids = {r.id for r in reqs}
-    first: dict[int, dict[str, Any]] = {}  # the VERIFY job each request started with
-    for j in s.scalars(select(Job).where(Job.kind == JobKind.VERIFY).order_by(Job.id)):
-        if j.payload["request_id"] in ids:
-            first.setdefault(j.payload["request_id"], j.payload)
     partial: dict[int, str] = {}  # latest decision per request wins: a retry may be complete
     # every decision since the migration began, not just the window: a row shows its current state
     since = select(MatchDecision).where(MatchDecision.created_at >= began)
     for d in s.scalars(since.order_by(MatchDecision.id)):
-        if d.evidence.get("request_id") in ids:
-            partial[d.evidence["request_id"]] = d.evidence.get("partial", "")
-    rows = [
+        ev = Evidence.parse(d.evidence)
+        if ev.request_id in ids:
+            partial[ev.request_id] = ev.partial
+    rows: list[dict[str, Any]] = [
         {
-            "folder": first.get(r.id, {}).get("candidate", {}).get("folder", ""),
+            "folder": (r.origin or {}).get("candidate", {}).get("folder", ""),
             "status": "partial" if r.status == "imported" and partial.get(r.id) else r.status,
             "artist": r.artist,
             "album": r.album,
             "release_mbid": r.release_mbid,
-            "files": len(first.get(r.id, {}).get("paths", [])),
+            "files": len((r.origin or {}).get("paths", [])),
             "reason": (r.status == "imported" and partial.get(r.id)) or r.last_error or "",
             "request_id": r.id,
         }
@@ -384,9 +374,26 @@ class Migrator:
     config_dir: Path
     library: Path
     mb_rate: float
+    progress_every: float = 5.0  # seconds between progress writes during a scan
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.MIGRATE_PREFLIGHT: self.preflight, JobKind.MIGRATE_CHECK: self.check}
+
+    def _progress(self, mid: int) -> Callable[[int, int], None]:
+        """Runs in the scan thread, so it opens its own session."""
+        last = time.monotonic()
+
+        def save(files: int, size: int) -> None:
+            nonlocal last
+            if time.monotonic() - last < self.progress_every:
+                return
+            last = time.monotonic()
+            with self.sessions.begin() as s:
+                m = s.get(Migration, mid)
+                if m is not None and m.status == "preflight":
+                    m.summary = {"progress": {"files": files, "bytes": size}}  # a new dict: JSON
+
+        return save
 
     async def preflight(self, job: JobRecord) -> None:
         mid = job.payload["migration_id"]
@@ -400,7 +407,8 @@ class Migrator:
         try:
             if not self.source.is_dir():
                 raise ValueError(f"{self.source} is not a folder")
-            found = await asyncio.to_thread(scan, self.source, out)  # the heartbeat keeps running
+            # the heartbeat keeps running
+            found = await asyncio.to_thread(scan, self.source, out, None, self._progress(mid))
             scanned = True
             groups: list[Group] = found["groups"]
             free = shutil.disk_usage(self.library if self.library.exists() else self.library.parent)

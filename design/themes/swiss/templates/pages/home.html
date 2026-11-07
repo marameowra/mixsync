@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% macro row(n, href, one, many, sub, action, idle, first) -%}
+<li{% if n == 0 %} class="empty"{% endif %}><span class="n">{{ n }}</span>
+  <span class="what">{% if n == 0 %}{{ many|capitalize }}<span>Nothing to {{ idle }}</span>{% else %}<a href="{{ href }}">{{ one if n == 1 else many }}</a><span>{{ sub }}</span>{% endif %}</span>
+  {% if n == 0 %}<span></span>{% else %}<a class="btn{% if first %} primary{% endif %}" href="{{ href }}">{{ action }}</a>{% endif %}</li>
+{%- endmacro %}
+{% block content %}
+{# "In progress", "New in Discover" and "Since you were last here" need route data the home route does not provide. #}
+{% set rows = [(pending, "review")] %}
+{% if promotions is not none %}{% set rows = rows + [(promotions, "promote")] %}{% endif %}
+{% if unverified is not none %}{% set rows = rows + [(unverified, "unverified")] %}{% endif %}
+{% set ns = namespace(first="") %}
+{% for n, key in rows %}{% if not ns.first and n > 0 %}{% set ns.first = key %}{% endif %}{% endfor %}
+<div class="head">
+  <h1>Home</h1>
+  <p class="muted">Signed in as {{ user.username }}</p>
+</div>
+<section aria-labelledby="h-work">
+  <h2 id="h-work">Waiting on you</h2>
+  <ul class="queue">
+    {{ row(pending, "/review", "item awaiting review", "items awaiting review", "Compare each match with the evidence, then accept or reject it", "Start reviewing", "review", ns.first == "review") }}
+    {%- if promotions is not none %}
+    {{ row(promotions, "/library/unverified", "album ready to promote to verified", "albums ready to promote to verified", "Found on MusicBrainz since import", "Promote", "promote", ns.first == "promote") }}
+    {%- endif %}
+    {%- if unverified is not none %}
+    {{ row(unverified, "/library/unverified", "unverified track", "unverified tracks", "Imported without MusicBrainz ids", "Open unverified", "verify", ns.first == "unverified") }}
+    {%- endif %}
+  </ul>
+</section>
+{% endblock %}

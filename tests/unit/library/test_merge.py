@@ -18,10 +18,12 @@ from mixsync.core.jobs import JobKind
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.types import ReleaseRef
 from mixsync.db import canonical as canonical_db
+from mixsync.db import progress
 from mixsync.db.journal import SqlJournal
 from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
+from mixsync.db.names import SqlNameStore
 from mixsync.db.undo import undoable
 from mixsync.library import fileops, fragmentation, tags
 from mixsync.library.fileops import FileOps
@@ -92,12 +94,25 @@ class World:
         with self.sessions() as s:
             return s.get_one(Plan, plan_id)
 
+    def plan_ops(self, plan_id: int) -> list[dict[str, Any]]:
+        """The plan's ops with their current `done` flags."""
+        with self.sessions() as s:
+            return progress.with_done(s, s.get_one(Plan, plan_id))
+
     def canonical(self) -> str | None:
         with self.sessions() as s:
             return canonical_db.get(s, GROUP)
 
     def lib(self) -> dict[str, str]:
         return {f: sha(self.ops.library / f) for f in files(self.ops.library)}
+
+    def names_match_files(self) -> bool:
+        """Every row's album columns equal the album tags of its file."""
+        with self.sessions() as s:
+            return all(
+                (t.album_artist, t.album, t.year) == tags.file_names(self.ops.library / t.path)
+                for t in s.scalars(select(Track))
+            )
 
     def trashed(self) -> list[str]:
         return files(self.ops.trash_dir)
@@ -129,7 +144,7 @@ def build(w: World) -> int:
 
 def ops_by_kind(w: World, plan_id: int) -> dict[str, list[dict[str, Any]]]:
     out: dict[str, list[dict[str, Any]]] = {}
-    for op in w.plan(plan_id).ops:
+    for op in w.plan_ops(plan_id):
         out.setdefault(op["op"], []).append(op)
     return out
 
@@ -212,6 +227,9 @@ def test_execute_moves_retags_and_trashes(world: World) -> None:
     got = tags.read_fields(world.ops.library / now["r1"][0])
     assert got["musicbrainz_albumid"] == CANON and got["date"] == "1999"
     assert got["acoustid_id"] == "ac-r1" and got["mixsync_status"] == "verified"
+    assert world.names_match_files()
+    with world.sessions() as s:  # the canonical release is 1999: the column changed with the file
+        assert s.scalar(select(Track.year).where(Track.path == now["r1"][0])) == "1999"
     # every original is in the trash, byte for byte
     trash = {f.rpartition("/")[2]: sha(world.ops.trash_dir / f) for f in world.trashed()}
     for rec in ("r1", "r2", "r3"):
@@ -328,6 +346,7 @@ def test_undo_restores_everything(world: World) -> None:
     world.merger.undo_plan(pid)
 
     assert world.plan(pid).status == "undone" and world.canonical() == OLD
+    assert world.names_match_files()
     assert world.lib() == lib_before  # byte-identical, nothing extra in the library
     assert {p: tags.read_all(world.ops.library / p) for p in lib_before} == tags_before
     assert world.tracks() == paths_before
@@ -359,7 +378,7 @@ def test_undo_of_a_failed_partial_plan_undoes_only_what_ran(world: World) -> Non
         s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "changed"
     with pytest.raises(SafetyError):
         world.merger.execute(pid)
-    assert [o["done"] for o in world.plan(pid).ops].count(True) == 2
+    assert [o["done"] for o in world.plan_ops(pid)].count(True) == 2
     with world.sessions.begin() as s:
         s.scalars(select(Track).where(Track.path == victim)).one().acoustid_id = "ac-r2"
     world.merger.undo_plan(pid)
@@ -542,7 +561,7 @@ def test_canonical_is_rechecked_before_each_op(
     monkeypatch.setattr(Merger, "_commit_op", commit_then_switch)
     with pytest.raises(SafetyError, match="canonical"):
         world.merger.execute(pid)
-    assert [o["done"] for o in world.plan(pid).ops].count(True) == 1
+    assert [o["done"] for o in world.plan_ops(pid)].count(True) == 1
     assert world.canonical() == "elsewhere"
 
 
@@ -632,6 +651,21 @@ def test_build_refuses_while_a_plan_is_active(world: World, status: str) -> None
     with pytest.raises(PlanInProgress):
         build(world)
     assert world.plan(pid).status == status
+
+
+@pytest.mark.parametrize(("stored", "shown"), [(True, "Group Name — Band"), (False, GROUP)])
+def test_refusal_names_the_group_when_a_name_is_stored(
+    world: World, stored: bool, shown: str
+) -> None:
+    pid = build(world)
+    with world.sessions.begin() as s:
+        s.get_one(Plan, pid).status = "running"
+    if stored:
+        SqlNameStore(world.sessions, SystemClock()).save(
+            [("release-group", GROUP, "Group Name — Band")]
+        )
+    with pytest.raises(PlanInProgress, match=f"release group {shown} is running"):
+        build(world)
 
 
 def test_undoing_a_plan_that_set_nothing_leaves_the_canonical_alone(world: World) -> None:
@@ -809,7 +843,7 @@ def test_undo_refuses_up_front_when_only_some_trashed_originals_are_gone(world: 
     (world.ops.trash_dir / trashed.dst).unlink()
     with pytest.raises(SafetyError, match="is gone"):
         world.merger.undo_plan(pid)
-    assert world.lib() == lib and world.plan(pid).status != "undoing"
+    assert world.lib() == lib and world.plan(pid).status == "failed"
 
 
 def test_import_after_a_failed_move_does_not_take_the_trashed_path_so_undo_works(
