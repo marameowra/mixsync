@@ -4,7 +4,7 @@ The design system behind the UI, copied from <https://claude.ai/artifact/7TKmFQq
 
 MixSync is a self-hosted tool that downloads music, checks it against MusicBrainz, and files it into a library. The interface uses a calm Swiss utility style: system type, a strict grid, hairline rules, one accent colour. Every screen leads with the task, the evidence and the next action. Pages are server-rendered Jinja. There is no CSS framework, no web fonts and no runtime fetches from other origins.
 
-> Planned — not built (#221): HTMX enhancement. Every page works without JS today.
+Every page works without JS. htmx is the only JS and adds behaviour on top ([ADR 0020](../../docs/decisions/0020-htmx-is-the-only-js.md)).
 
 ## Principles
 

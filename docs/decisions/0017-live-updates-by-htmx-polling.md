@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-20
 - **Supersedes:** the SSE consequence of [ADR 0003](0003-htmx-server-rendered-ui.md). The rest of 0003 stands.
+- **Extended by:** [ADR 0020](0020-htmx-is-the-only-js.md): htmx is also used for UX on any page, not only for live regions.
 - **Note:** the foundation is built (#221): vendored htmx, `macros/live.html`, and `render()` in `web/templating.py`. The requests status (#233) and migration progress (#234) pages use it.
 
 ## Context
