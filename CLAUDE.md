@@ -18,6 +18,10 @@ Skill roles map one-to-one to the repo's label names:
 | `ready-for-human` | Requires human implementation |
 | `wontfix` | Will not be actioned |
 | `epic` | Parent issue split into sub-issues; needs a `/grill-with-docs` session before work starts |
+| `ready-to-implement` | Epic only: grilled and split, sub-issues filed, none started |
+| `in-progress` | Epic only: at least one sub-issue is being worked on or merged |
+
+`ready-for-agent` and `ready-for-human` are for sub-issues and standalone issues, never epics. An epic carries at most one of `needs-triage`, `ready-to-implement` or `in-progress`.
 
 ### Domain docs
 
