@@ -19,6 +19,8 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome (Plex/Jellyfin
 - Epics (`epic` label) need a `/grill-with-docs` session before any work on them or their
   sub-issues, recorded as a "Grilled" comment on the epic. Agents can't run that skill: if
   the comment is missing, stop and ask the user to run `/grill-with-docs` on the epic.
+  The grilling session swaps the epic's `needs-triage` for `ready-to-implement`. Starting its
+  first sub-issue swaps that for `in-progress`.
 - Shipping: branch from `origin/dev`, then `/ship`. It runs the checks, opens the PR with
   `--base dev` and `Fixes #n` lines, and queues `gh pr merge --auto --merge` only if checks
   passed; otherwise it leaves the PR for the user. The `dev` ruleset requires the `check`
