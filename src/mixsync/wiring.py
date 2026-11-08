@@ -2,6 +2,7 @@
 recovery and no startup chains (the worker runs those). A bad key file fails here."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import Engine
@@ -37,10 +38,13 @@ class Services:
     navidrome_http: PoliteClient
     listenbrainz_http: PoliteClient
     secret_box: SecretBox
+    settings_version: datetime | None  # app_settings.updated_at when `settings` was loaded
 
 
 def build_services(
-    settings: Settings, session_factory: sessionmaker[Session] | None = None
+    settings: Settings,
+    session_factory: sessionmaker[Session] | None = None,
+    settings_version: datetime | None = None,
 ) -> Services:
     """`session_factory` lets a caller that already has a database (tests) keep using it."""
     if session_factory is None:
@@ -83,4 +87,5 @@ def build_services(
         navidrome_http=PoliteClient("navidrome", settings, session_factory),
         listenbrainz_http=PoliteClient("listenbrainz", settings, session_factory),
         secret_box=load_box(settings),
+        settings_version=settings_version,
     )

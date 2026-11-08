@@ -25,6 +25,8 @@ class AppSettings(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
     min_auto_accept_confidence: Mapped[int | None] = mapped_column(Integer)  # percent; None: no cap
+    # the settings version (ADR 0021): last change to an app setting, not to the live-read cap
+    settings_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # App settings (ADR 0021): NULL is not saved; mixsync.db.app_settings resolves them at startup
     mb_contact: Mapped[str | None] = mapped_column(Text)
     mb_rate: Mapped[float | None] = mapped_column(Float)

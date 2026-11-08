@@ -43,10 +43,17 @@ FailureHook = Callable[[Connection, int, dict[str, Any], str, datetime], None]
 
 
 class JobQueue:
-    def __init__(self, engine: Engine, clock: Clock, on_final_failure: FailureHook) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        clock: Clock,
+        on_final_failure: FailureHook,
+        settings_version: datetime | None = None,
+    ) -> None:
         self._engine = engine
         self._clock = clock
         self._on_final_failure = on_final_failure
+        self._settings_version = settings_version  # recorded with each liveness write
 
     def _failed_for_good(self, c: Connection, job_id: int, error: str, now: datetime) -> None:
         payload: dict[str, Any] = (
@@ -104,10 +111,10 @@ class JobQueue:
 
     def alive(self, worker: str) -> None:
         """Record that this worker's loop is going round (its liveness, not a job's lease)."""
-        now = self._clock.now()
+        row = {"seen_at": self._clock.now(), "settings_version": self._settings_version}
         with self._engine.begin() as c:
-            if not c.execute(update(_W).where(_W.c.name == worker).values(seen_at=now)).rowcount:
-                c.execute(insert(_W).values(name=worker, seen_at=now))
+            if not c.execute(update(_W).where(_W.c.name == worker).values(**row)).rowcount:
+                c.execute(insert(_W).values(name=worker, **row))
 
     def start(self, job_id: int, worker: str) -> None:
         self._move(job_id, worker, JobState.RUNNING, keep_lease=True)

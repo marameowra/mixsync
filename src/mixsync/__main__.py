@@ -4,6 +4,8 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from mixsync.core.config import Settings
 
 COMMANDS = ("web", "worker", "all", "migrate", "backup", "user-add", "worker-health")
@@ -25,15 +27,16 @@ def configure_logging(settings: "Settings | None" = None) -> str:
     return level
 
 
-def startup_settings() -> "Settings":
-    """The snapshot web, worker and `all` build services from (ADR 0021), logged at its level.
-    Logging starts at the env level so an invalid saved setting is reported while resolving."""
+def startup_settings() -> "tuple[Settings, datetime | None]":
+    """The snapshot web, worker and `all` build services from (ADR 0021), and its settings
+    version, logged at its level. Logging starts at the env level so an invalid saved setting
+    is reported while resolving."""
     from mixsync.db.app_settings import load_settings
 
     configure_logging()
-    settings = load_settings()
+    settings, version = load_settings()
     configure_logging(settings)
-    return settings
+    return settings, version
 
 
 def worker_health() -> int:
@@ -65,11 +68,12 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         from mixsync.app import create_app
+        from mixsync.wiring import build_services
 
         # built here, not by uvicorn: a bad key file must stop startup (build_services loads it)
-        settings = startup_settings()
+        settings, version = startup_settings()
         uvicorn.run(
-            create_app(settings=settings),
+            create_app(services=build_services(settings, settings_version=version)),
             host="0.0.0.0",
             port=8080,
             log_level=settings.log_level.lower(),
@@ -116,8 +120,9 @@ def main(argv: list[str] | None = None) -> int:
 
         from mixsync.worker import serve_all, serve_worker
 
-        settings = startup_settings()
-        asyncio.run(serve_worker(settings) if cmd == "worker" else serve_all(settings))
+        settings, version = startup_settings()
+        serve = serve_worker if cmd == "worker" else serve_all
+        asyncio.run(serve(settings, version))
     elif cmd == "worker-health":
         return worker_health()
     else:
