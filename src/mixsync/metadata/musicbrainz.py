@@ -1,15 +1,17 @@
 import logging
 from typing import Any
 
+from mixsync.core.errors import PermanentError
 from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.core.protocols import NameStore
-from mixsync.core.types import EntityRef, ReleaseGroupHit, ReleaseRef
+from mixsync.core.types import EntityRef, RecordingRef, ReleaseGroupHit, ReleaseRef
 from mixsync.metadata._http import get_json
 from mixsync.metadata.models import (
     MbCredit,
     MbEntity,
     MbEntitySearch,
     MbGenre,
+    MbIsrc,
     MbRecording,
     MbRelease,
     MbReleaseGroup,
@@ -205,6 +207,23 @@ class MusicBrainzProvider:
         return [
             ReleaseRef(r.id, r.title, "", r.date or None, r.country, status=r.status)
             for r in MbSearch.model_validate(data).releases
+        ]
+
+    async def isrc_recordings(self, isrc: str) -> list[RecordingRef]:
+        """Recordings carrying an ISRC; a 404 means none."""
+        try:
+            data = await get_json(
+                self._client,
+                f"{self._base}/isrc/{isrc}",
+                {"fmt": "json", "inc": "artist-credits"},
+            )
+        except PermanentError as e:
+            if str(e).endswith("returned 404"):
+                return []
+            raise
+        return [
+            RecordingRef(r.id, None, _credit(r.artist_credit), r.title)
+            for r in MbIsrc.model_validate(data).recordings
         ]
 
     async def new_release_groups(

@@ -89,6 +89,13 @@ class _MetaMap(RootModel[dict[str, _Meta]]):
     pass
 
 
+class _Lookup(BaseModel):
+    recording_mbid: str | None = None
+    release_mbid: str | None = None
+    artist_credit_name: str = ""
+    recording_name: str = ""
+
+
 class _Valid(BaseModel):
     valid: bool = False
     user_name: str | None = None
@@ -156,6 +163,17 @@ class ListenBrainzClient:
                     (m.recording.name if m.recording else None) or "",
                 )
         return out
+
+    async def lookup(self, artist: str, title: str) -> RecordingRef | None:
+        """The recording ListenBrainz matches to artist+title, or None (no token, so cacheable)."""
+        body = await self._get(
+            _Lookup, "/1/metadata/lookup/", artist_name=artist, recording_name=title
+        )
+        if not body or not body.recording_mbid:
+            return None
+        return RecordingRef(
+            body.recording_mbid, body.release_mbid, body.artist_credit_name, body.recording_name
+        )
 
     async def recommendations(self, user: str, token: str, count: int) -> list[RecordingRef]:
         body = await self._get(

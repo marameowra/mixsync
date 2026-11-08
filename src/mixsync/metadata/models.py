@@ -30,6 +30,10 @@ class MbRecording(_Raw):
     artist_credit: list[MbCredit] = Field(default=[], alias="artist-credit")
 
 
+class MbIsrc(_Raw):
+    recordings: list[MbRecording] = []
+
+
 class MbTrack(_Raw):
     title: str
     position: int
