@@ -92,3 +92,20 @@ def test_sqlite_url_unchanged() -> None:
 def test_other_drivers_rejected(url: str) -> None:
     with pytest.raises(ValidationError, match=r"postgresql\+psycopg://"):
         Settings(database_url=url)
+
+
+@pytest.mark.parametrize(
+    ("url", "want"),
+    [
+        ("postgresql://u:p@h/db?sslmode=require", "postgresql+psycopg://u:p@h/db?sslmode=require"),
+        ("postgresql:///db", "postgresql+psycopg:///db"),
+    ],
+)
+def test_postgres_url_rewrite_keeps_rest(url: str, want: str) -> None:
+    assert Settings(database_url=url).database_url == want
+
+
+def test_rejected_url_does_not_leak_password() -> None:
+    with pytest.raises(ValidationError) as e:
+        Settings(database_url="postgresql+psycopg2://u:secret@h/db")
+    assert "secret" not in str(e.value)

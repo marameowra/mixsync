@@ -18,7 +18,7 @@ PATH_FIELDS = {
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MIXSYNC_")
+    model_config = SettingsConfigDict(env_prefix="MIXSYNC_", hide_input_in_errors=True)
 
     database_url: str = "sqlite:////config/mixsync.db"
     config_dir: str = "/config"

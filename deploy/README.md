@@ -52,8 +52,9 @@ With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` an
 ## Postgres
 SQLite is the default and fits one home server. Choose Postgres to run several workers or to use your own database tooling.
 1. In `.env` set `POSTGRES_PASSWORD` and `MIXSYNC_DATABASE_URL=postgresql://mixsync:<POSTGRES_PASSWORD>@postgres:5432/mixsync` (URL-encode special characters in the password). `postgresql+psycopg://` also works; other drivers such as `+psycopg2` are rejected at startup.
-2. Start with the override: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml up -d`. Add the same `-f` flags to every later `docker compose` command. Migrations run on the new database; existing SQLite data is not copied over.
-3. Backups are yours: mixsync's nightly backup is SQLite-only. Example: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml exec postgres pg_dump -U mixsync mixsync > mixsync.sql`. The data lives in `${CONFIG_DIR}/postgres`.
+2. Create the data dir as your own user so `PUID:PGID` owns it (Docker would make it root-owned and Postgres could not start): `mkdir -p "$CONFIG_DIR/postgres"`.
+3. Start with the override: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml up -d`. Add the same `-f` flags to every later `docker compose` command. Migrations run on the new database; existing SQLite data is not copied over.
+4. Backups are yours: mixsync's nightly backup is SQLite-only. Example: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml exec postgres pg_dump -U mixsync mixsync > mixsync.sql`. The data lives in `${CONFIG_DIR}/postgres`.
 
 ## Health and ops
 - `GET /healthz` backs the web healthcheck. The worker records a heartbeat every 10 s while idle (and during long jobs); `mixsync worker-health` exits non-zero when none is newer than 90 s and backs the worker healthcheck. Admins see "worker last seen" under Account → Worker status. It catches a dead or wedged worker loop, not a single job hung on a network call that never returns.
