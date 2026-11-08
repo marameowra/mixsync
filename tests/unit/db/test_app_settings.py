@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 from mixsync.__main__ import startup_settings
@@ -85,6 +85,28 @@ def test_saving_the_env_value_counts_as_saved_and_clearing_falls_back(
     assert _resolved(settings)["trash_days"] == Resolved(7, "environment", True)
     monkeypatch.delenv("MIXSYNC_TRASH_DAYS")
     assert _resolved(settings)["trash_days"] == Resolved(30, "default", False)
+
+
+def test_clearing_a_saved_list_stores_sql_null_and_falls_back(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("MIXSYNC_CANONICAL_MEDIA", raising=False)
+    upgrade()
+    _save(settings, canonical_media=["Vinyl"])
+    _save(settings, canonical_media=None)
+    with Session(make_engine(settings)) as s:
+        cleared = s.scalars(
+            select(AppSettings.id).where(AppSettings.canonical_media.is_(None))
+        ).all()
+    assert cleared == [1]
+    assert _resolved(settings)["canonical_media"] == Resolved(
+        ["Digital Media", "CD"], "default", False
+    )
+
+
+def test_an_unmigrated_database_says_to_migrate(settings: Settings) -> None:
+    with pytest.raises(RuntimeError, match="not migrated.*mixsync migrate"):
+        load_settings()
 
 
 def test_bootstrap_mount_and_secret_settings_stay_env_only(

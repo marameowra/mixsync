@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from mixsync.core.config import Settings
@@ -75,5 +76,10 @@ def load_settings() -> Settings:
     try:
         with Session(engine) as s:
             return resolve(s)[0]
+    except (OperationalError, ProgrammingError) as e:  # usually app_settings table/column missing
+        raise RuntimeError(
+            "could not read app settings: the database is not migrated (or not reachable);"
+            " run `mixsync migrate`"
+        ) from e
     finally:
         engine.dispose()
