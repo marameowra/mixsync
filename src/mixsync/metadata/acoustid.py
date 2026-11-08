@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlencode
 
+import httpx
 import mutagen
 from mutagen.flac import FLAC
 
 from mixsync.core.config import Settings
-from mixsync.core.errors import PermanentError
+from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.types import AcoustIdResult, Fingerprint
 from mixsync.metadata._http import get_json
 from mixsync.metadata.models import AcoustIdResponse, AcoustIdSubmitResponse
@@ -21,6 +22,8 @@ from mixsync.ratelimit.client import PoliteClient
 _URL = "https://api.acoustid.org/v2/lookup"
 _SUBMIT_URL = "https://api.acoustid.org/v2/submit"
 _STATUS_URL = "https://api.acoustid.org/v2/submission_status"
+_PING_TRACK = "9ff43b6a-4f16-427c-93c2-92307ca505e0"  # the track id in AcoustID's docs
+_INVALID_KEY = 4  # AcoustID error code: invalid API key
 
 
 async def _fpcalc(*args: str) -> tuple[int | None, bytes, bytes]:
@@ -137,6 +140,27 @@ class AcoustIdClient:
         return [
             AcoustIdResult(h.id, h.score, tuple(r.id for r in h.recordings)) for h in resp.results
         ]
+
+    async def ping(self) -> None:
+        """One uncached lookup by track id (the settings page's Test button). AuthError when
+        AcoustID rejects the app key, TransientError when unreachable."""
+        params = {"client": self._key, "trackid": _PING_TRACK, "format": "json"}
+        try:
+            response = await self._client.get(
+                _URL, params=params, headers={"Cache-Control": "no-cache"}
+            )
+        except httpx.TransportError as e:  # the URL carries the key: name the type only
+            raise TransientError(f"AcoustID unreachable ({type(e).__name__})") from e
+        try:
+            body: dict[str, Any] = response.json()
+            error: dict[str, Any] = body.get("error") or {}
+            code = error.get("code")
+        except (ValueError, AttributeError) as e:
+            raise PermanentError(f"AcoustID returned {response.status_code}") from e
+        if code == _INVALID_KEY:
+            raise AuthError("AcoustID rejected the app key")
+        if response.status_code != 200 or body.get("status") != "ok":
+            raise PermanentError(f"AcoustID returned {response.status_code}")
 
     async def submit(self, items: list[tuple[Fingerprint, str]]) -> list[int]:
         """One batched, gzip-compressed POST; returns the submission ids."""

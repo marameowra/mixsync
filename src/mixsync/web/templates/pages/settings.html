@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Settings - MixSync{% endblock %}
 {% block content %}
+{% set connection_tests = {"slskd_url": "slskd", "navidrome_url": "navidrome", "mb_base_url": "musicbrainz", "acoustid_app_key": "acoustid"} %}
+{% macro test_button(service) %}
+      <span class="help"><button class="btn quiet" type="button" hx-post="/settings/test/{{ service }}" hx-target="#test-{{ service }}">Test {{ service }} connection</button>
+        <span id="test-{{ service }}" role="status"></span></span>
+{%- endmacro %}
 <h1>Settings</h1>
 <p>A saved value beats the environment, which beats the default. Changes apply when mixsync-web and mixsync-worker restart. A blank field is left as it is; use Reset to clear a saved value.</p>
 {% if saved %}<p class="notice ok" role="status"><span aria-hidden="true">●</span> Saved. Restart mixsync-web and mixsync-worker to apply.</p>{% endif %}
@@ -31,6 +36,7 @@
       {% else %}
       <input id="f-{{ f.name }}" name="{{ f.name }}" type="text" value="{{ f.value }}" placeholder="{{ f.effective }}"{% if f.error %} aria-invalid="true"{% endif %}>
       {% endif %}
+      {% if f.name in connection_tests %}{{ test_button(connection_tests[f.name]) }}{% endif %}
       <span class="help"><span class="tag neutral">source: {{ f.source }}</span> Effective value: {{ f.effective }}
         {% if f.source == "saved" %}<button class="btn quiet" type="submit" form="reset-{{ f.name }}">Reset {{ f.name }}</button>{% endif %}</span>
       {% if f.warn %}<span class="help">{{ f.env }} is set but ignored: the saved value wins.</span>{% endif %}
@@ -46,6 +52,7 @@
     <div class="field">
       <label for="f-{{ f.name }}">{{ f.name }}</label>
       <input id="f-{{ f.name }}" name="{{ f.name }}" type="password" autocomplete="new-password" value="">
+      {% if f.name in connection_tests %}{{ test_button(connection_tests[f.name]) }}{% endif %}
       <span class="help"><span class="tag neutral">{% if f.source == "saved" %}saved{% elif f.source == "environment" %}from environment{% else %}not set{% endif %}</span>
         {% if f.source == "saved" or f.unreadable %}<button class="btn quiet" type="submit" form="clear-{{ f.name }}">Clear {{ f.name }}</button>{% endif %}</span>
       {% if f.unreadable %}<span class="error" role="alert">Saved value unreadable, re-enter.</span>{% endif %}
