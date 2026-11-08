@@ -8,11 +8,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
-from mixsync.core.config import Settings
+from mixsync.core.config import PATH_FIELDS, Settings
+from mixsync.db.app_settings import EDITABLE
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import AppSettings
+from mixsync.library.paths import render
+from mixsync.web.routes.settings import GROUPS
 
 RESTART = "Saved. Restart mixsync-web and mixsync-worker to apply."
 
@@ -71,6 +74,7 @@ def test_save_persists_then_reset_clears(client: TestClient, sf: sessionmaker[Se
         "canonical_media": "CD, Vinyl",
         "log_level": "debug",
         "mb_contact": "",
+        "canonical_countries": " , ",
     }
     r = client.post("/settings", data=data)
     assert r.status_code == 303 and r.headers["location"] == "/settings?saved=1"
@@ -78,6 +82,7 @@ def test_save_persists_then_reset_clears(client: TestClient, sf: sessionmaker[Se
     assert saved(sf, "trash_days") == 7 and saved(sf, "adopt_downloads") is True
     assert saved(sf, "canonical_media") == ["CD", "Vinyl"] and saved(sf, "log_level") == "DEBUG"
     assert saved(sf, "mb_contact") is None  # blank is not saved
+    assert saved(sf, "canonical_countries") is None  # only commas: blank too
     assert client.post("/settings", data={"csrf_token": tok}).status_code == 303
     assert saved(sf, "trash_days") == 7 and saved(sf, "slskd_url") is None  # blank: left as is
     assert client.post("/settings/reset/trash_days", data={"csrf_token": tok}).status_code == 303
@@ -113,6 +118,9 @@ def test_source_badges_and_the_env_override_warning(
         ("log_level", "LOUD"),
         ("trash_days", "abc"),
         ("flac_level", "9"),
+        ("path_template", "{artist}.{ext}"),
+        ("path_template", "{title}.flac"),
+        ("path_template", "{title}.{ext}.{ext}"),
     ],
 )
 def test_an_invalid_value_is_rejected_and_nothing_is_saved(
@@ -133,3 +141,38 @@ def test_read_only_settings_are_shown_and_secrets_are_not(client: TestClient) ->
     assert "config_dir" in page and "data_dir" in page
     for secret in ("slskd_api_key", "navidrome_password", "acoustid", "secret_key", "database_url"):
         assert secret not in page
+
+
+def test_every_editable_field_is_in_exactly_one_group() -> None:
+    grouped = [n for names in GROUPS.values() for n in names]
+    assert sorted(grouped) == sorted(EDITABLE)
+
+
+def _render(template: str) -> str:
+    return render(
+        template, albumartist="a", album="a", year=1, disc=1, track=1, title="t", ext="flac"
+    )
+
+
+def test_path_fields_match_what_render_fills_in() -> None:
+    for name in PATH_FIELDS:
+        _render(f"{{{name}}}.{{ext}}")
+    with pytest.raises(KeyError):
+        _render("{bogus}.{ext}")
+    assert Settings().path_template  # the default validates
+
+
+def test_the_first_button_saves_and_reset_changes_only_its_field(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "trash_days": "7", "flac_level": "3"})
+    page = client.get("/settings").text
+    main = re.search(r'<form method="post" action="/settings">.*?</form>', page, re.S)
+    assert main
+    # a button with form="..." belongs to another form, so Enter never picks it
+    first = re.search(r"<button(?![^>]*\sform=)[^>]*>([^<]*)", main.group(0))
+    assert first and first.group(1) == "Save settings"
+    assert 'id="reset-trash_days" method="post" action="/settings/reset/trash_days"' in page
+    client.post("/settings/reset/trash_days", data={"csrf_token": tok})
+    assert saved(sf, "trash_days") is None and saved(sf, "flac_level") == 3

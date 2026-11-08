@@ -5,6 +5,17 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# the fields library/paths.render fills in; tests/unit/web/test_settings.py checks they match
+PATH_FIELDS = {
+    "albumartist": "a",
+    "album": "a",
+    "year": 2000,
+    "disc": 1,
+    "track": 1,
+    "title": "t",
+    "genre": "g",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MIXSYNC_")
@@ -71,6 +82,17 @@ class Settings(BaseSettings):
             if drop == other or drop.is_relative_to(other) or other.is_relative_to(drop):
                 raise ValueError(f"MIXSYNC_DROP_DIR must not overlap {name} ({other})")
         return self
+
+    @field_validator("path_template")
+    @classmethod
+    def _renderable(cls, v: str) -> str:
+        if not v.endswith(".{ext}"):
+            raise ValueError("MIXSYNC_PATH_TEMPLATE must end in .{ext}")
+        try:
+            v.removesuffix(".{ext}").format(**PATH_FIELDS)
+        except (KeyError, ValueError, IndexError, AttributeError, TypeError):
+            raise ValueError(f"MIXSYNC_PATH_TEMPLATE is not a valid template: {v!r}") from None
+        return v
 
     @field_validator("timezone")
     @classmethod

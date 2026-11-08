@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
-from mixsync.db.app_settings import EDITABLE, ENV_ONLY, resolve
+from mixsync.db.app_settings import EDITABLE, resolve
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
 from mixsync.match.profiles import confidence, from_confidence
@@ -70,7 +70,6 @@ READ_ONLY = (
     "import_source_dir",
     "backup_dir",
 )
-assert set(READ_ONLY) <= ENV_ONLY and {n for g in GROUPS.values() for n in g} == set(EDITABLE)
 
 CAP_ERROR = "Enter a whole number from 0 to 100, or leave it blank."
 
@@ -87,7 +86,7 @@ def _parse(name: str, raw: str) -> Any:
     value: Any = (
         [p.strip() for p in raw.split(",") if p.strip()] if isinstance(default, list) else raw
     )
-    return getattr(Settings(**{name: value}), name)
+    return getattr(Settings(**{name: value}), name) if value != [] else None  # ",": blank
 
 
 def _page(
@@ -144,7 +143,8 @@ async def save(request: Request, admin: Admin, db: Db) -> Response:
         if name == "cap" or not raw:
             continue
         try:
-            values[name] = _parse(name, raw)
+            if (value := _parse(name, raw)) is not None:
+                values[name] = value
         except ValidationError as e:
             errors[name] = str(e.errors()[0]["msg"]).removeprefix("Value error, ")
     cap_text = submitted["cap"]

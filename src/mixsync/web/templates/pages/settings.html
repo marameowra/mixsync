@@ -32,7 +32,7 @@
       <input id="f-{{ f.name }}" name="{{ f.name }}" type="text" value="{{ f.value }}" placeholder="{{ f.effective }}"{% if f.error %} aria-invalid="true"{% endif %}>
       {% endif %}
       <span class="help"><span class="tag neutral">source: {{ f.source }}</span> Effective value: {{ f.effective }}
-        {% if f.source == "saved" %}<button class="btn quiet" type="submit" formaction="/settings/reset/{{ f.name }}">Reset {{ f.name }}</button>{% endif %}</span>
+        {% if f.source == "saved" %}<button class="btn quiet" type="submit" form="reset-{{ f.name }}">Reset {{ f.name }}</button>{% endif %}</span>
       {% if f.warn %}<span class="help">{{ f.env }} is set but ignored: the saved value wins.</span>{% endif %}
       {% if f.error %}<span class="error" role="alert">{{ f.error }}</span>{% endif %}
     </div>
@@ -41,6 +41,9 @@
   {% endfor %}
   <button type="submit">Save settings</button>
 </form>
+{% for fields in groups.values() %}{% for f in fields if f.source == "saved" %}
+<form id="reset-{{ f.name }}" method="post" action="/settings/reset/{{ f.name }}">{{ forms.csrf() }}</form>
+{% endfor %}{% endfor %}
 <h2>Set in the environment only</h2>
 <dl>
   {% for name, value in read_only.items() %}<dt>{{ name }}</dt><dd><code>{{ value }}</code></dd>{% endfor %}
