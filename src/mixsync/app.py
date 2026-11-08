@@ -25,6 +25,7 @@ from mixsync.web.routes import (
     users,
     watchlist,
 )
+from mixsync.web.routes import settings as settings_routes
 from mixsync.web.templating import templates
 from mixsync.wiring import Services, build_services
 
@@ -67,6 +68,7 @@ def create_app(
     app.include_router(media.router)
     app.include_router(migration.router)
     app.include_router(users.router)
+    app.include_router(settings_routes.router)
     app.include_router(watchlist.router)
     app.include_router(discover.router)
 
