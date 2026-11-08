@@ -1,7 +1,8 @@
 """Admin settings page (ADR 0021): view, save and reset app settings; changes apply at restart.
 
 Form semantics: a non-blank field is saved (even if equal to the environment), a blank one is
-left as it is, and Reset is the only way to clear a saved value. Saved values are prefilled; the
+left as it is, and Reset is the only way to clear a saved value. Secrets are write-only: never
+rendered back, blank keeps the saved one, Clear removes it. Saved values are prefilled; the
 effective value of an unsaved one is shown as a placeholder, so Save never saves it by accident.
 The auto-accept cap is the exception: it is its own value, and blank clears it."""
 
@@ -16,11 +17,11 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
-from mixsync.db.app_settings import EDITABLE, resolve
+from mixsync.db.app_settings import EDITABLE, SECRETS, resolve
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
 from mixsync.match.profiles import confidence, from_confidence
-from mixsync.web.deps import Db, require
+from mixsync.web.deps import Box, Db, require
 from mixsync.web.routes.account import percent
 from mixsync.web.templating import templates
 
@@ -114,8 +115,19 @@ def _page(
             "warn": mine and r.env_set,
             "error": errors.get(name),
         }
+    secrets = [
+        {
+            "name": n,
+            "env": f"MIXSYNC_{n.upper()}",
+            "source": resolved[n].source,
+            "unreadable": resolved[n].unreadable,
+            "warn": resolved[n].source == "saved" and resolved[n].env_set,
+        }
+        for n in SECRETS
+    ]
     ctx = {
         "user": user,
+        "secrets": secrets,
         "groups": {title: [fields[n] for n in names] for title, names in GROUPS.items()},
         "read_only": {n: _text(getattr(settings, n)) or "not set" for n in READ_ONLY},
         "cap": submitted["cap"] if "cap" in submitted else "" if cap is None else confidence(cap),
@@ -134,7 +146,7 @@ def show(request: Request, admin: Admin, db: Db, saved: int = 0) -> HTMLResponse
 
 
 @router.post("")
-async def save(request: Request, admin: Admin, db: Db) -> Response:
+async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
     form = await request.form()
     submitted = {n: str(form.get(n, "")).strip() for n in (*EDITABLE, "cap")}
     errors: dict[str, str] = {}
@@ -156,6 +168,9 @@ async def save(request: Request, admin: Admin, db: Db) -> Response:
     row = db.get(AppSettings, 1) or AppSettings(id=1)
     for name, value in values.items():
         setattr(row, name, value)
+    for name in SECRETS:
+        if plain := str(form.get(name, "")).strip():
+            setattr(row, f"{name}_encrypted", box.encrypt(plain))
     row.min_auto_accept_confidence = pct
     db.add(row)
     if pct is not None:
@@ -175,4 +190,14 @@ def reset(name: str, admin: Admin, db: Db) -> Response:
     row = db.get(AppSettings, 1)
     if row:
         setattr(row, name, None)
+    return RedirectResponse("/settings?saved=1", 303)
+
+
+@router.post("/clear/{name}")
+def clear(name: str, admin: Admin, db: Db) -> Response:
+    if name not in SECRETS:
+        raise HTTPException(404)
+    row = db.get(AppSettings, 1)
+    if row:
+        setattr(row, f"{name}_encrypted", None)
     return RedirectResponse("/settings?saved=1", 303)

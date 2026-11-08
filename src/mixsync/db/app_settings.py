@@ -13,10 +13,11 @@ from sqlalchemy.orm import Session
 from mixsync.core.config import Settings
 from mixsync.db.engine import make_engine
 from mixsync.db.models.auth import AppSettings
+from mixsync.db.secretbox import load_box
 
 log = logging.getLogger(__name__)
 
-# bootstrap and mount settings stay env-only; the secrets get their own saved columns in #346
+# bootstrap and mount settings stay env-only
 ENV_ONLY = frozenset(
     {
         "database_url",
@@ -27,13 +28,11 @@ ENV_ONLY = frozenset(
         "drop_dir",
         "import_source_dir",
         "backup_dir",
-        "slskd_api_key",
-        "navidrome_password",
-        "acoustid_app_key",
-        "acoustid_user_key",
     }
 )
-EDITABLE = tuple(name for name in Settings.model_fields if name not in ENV_ONLY)
+# saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page
+SECRETS = ("slskd_api_key", "navidrome_password", "acoustid_app_key", "acoustid_user_key")
+EDITABLE = tuple(n for n in Settings.model_fields if n not in ENV_ONLY and n not in SECRETS)
 
 Source = Literal["saved", "environment", "default"]
 
@@ -43,6 +42,7 @@ class Resolved:
     value: Any
     source: Source
     env_set: bool  # MIXSYNC_<NAME> is set, whether or not a saved value overrides it
+    unreadable: bool = False  # a saved secret that this key can't decrypt
 
 
 def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
@@ -60,13 +60,23 @@ def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
             log.error("saved setting %s is invalid; using the environment or default: %s", name, e)
             continue
         saved[name] = value
+    unreadable: set[str] = set()
+    for name in SECRETS:
+        token = getattr(row, f"{name}_encrypted") if row else None
+        if token is None:
+            continue
+        if (plain := load_box(Settings()).decrypt(token)) is None:
+            log.error("saved setting %s cannot be decrypted with this key; ignoring it", name)
+            unreadable.add(name)
+        else:
+            saved[name] = plain
     settings = Settings(**saved)
     env = {k.upper() for k in os.environ}
     out: dict[str, Resolved] = {}
-    for name in EDITABLE:
+    for name in (*EDITABLE, *SECRETS):
         env_set = f"MIXSYNC_{name.upper()}" in env
         source: Source = "saved" if name in saved else "environment" if env_set else "default"
-        out[name] = Resolved(getattr(settings, name), source, env_set)
+        out[name] = Resolved(getattr(settings, name), source, env_set, name in unreadable)
     return settings, out
 
 
