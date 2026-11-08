@@ -12,9 +12,9 @@
     <td>{{ "Admin" if admin else "User" }}</td>
     <td>{{ "Active" if u.status == "active" else "Disabled" }}</td>
     <td>
-      <form method="post" action="/users/{{ u.id }}/status" onsubmit="return confirm('{{ 'Disable' if u.status == 'active' else 'Enable' }} this user?')">{{ forms.csrf() }}<input type="hidden" name="status" value="{{ 'disabled' if u.status == 'active' else 'active' }}"><button type="submit">{{ "Disable" if u.status == "active" else "Enable" }} {{ u.username }}</button></form>
-      <form method="post" action="/users/{{ u.id }}/role" onsubmit="return confirm('Make this user {{ 'a regular user' if admin else 'an admin' }}?')">{{ forms.csrf() }}<input type="hidden" name="role" value="{{ 'user' if admin else 'admin' }}"><button type="submit">Make {{ u.username }} {{ "a user" if admin else "an admin" }}</button></form>
-      <form method="post" action="/users/{{ u.id }}/password" onsubmit="return confirm('Reset this password? Their sessions end.')">{{ forms.csrf() }}<label>New password for {{ u.username }} <input name="password" type="password" required autocomplete="new-password"></label> <button type="submit">Reset password</button></form>
+      <form method="post" action="/users/{{ u.id }}/status" hx-boost="true" hx-confirm="{{ 'Disable' if u.status == 'active' else 'Enable' }} this user?">{{ forms.csrf() }}<input type="hidden" name="status" value="{{ 'disabled' if u.status == 'active' else 'active' }}"><button type="submit">{{ "Disable" if u.status == "active" else "Enable" }} {{ u.username }}</button></form>
+      <form method="post" action="/users/{{ u.id }}/role" hx-boost="true" hx-confirm="Make this user {{ 'a regular user' if admin else 'an admin' }}?">{{ forms.csrf() }}<input type="hidden" name="role" value="{{ 'user' if admin else 'admin' }}"><button type="submit">Make {{ u.username }} {{ "a user" if admin else "an admin" }}</button></form>
+      <form method="post" action="/users/{{ u.id }}/password" hx-boost="true" hx-confirm="Reset this password? Their sessions end.">{{ forms.csrf() }}<label>New password for {{ u.username }} <input name="password" type="password" required autocomplete="new-password"></label> <button type="submit">Reset password</button></form>
     </td>
   </tr>
   {% endfor %}

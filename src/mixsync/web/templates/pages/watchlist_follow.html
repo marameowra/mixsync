@@ -42,5 +42,5 @@
 
 <h2>Stop following</h2>
 <p class="consequence">Unfollowing removes this follow and its history. Existing requests and music files are kept.</p>
-<form method="post" action="/watchlist/{{ f.id }}/delete" onsubmit="return confirm('Stop following? The history is removed; requests are kept.')">{{ forms.csrf() }}<button class="danger" type="submit">Unfollow {{ f.name }}</button></form>
+<form method="post" action="/watchlist/{{ f.id }}/delete" hx-boost="true" hx-confirm="Stop following? The history is removed; requests are kept.">{{ forms.csrf() }}<button class="danger" type="submit">Unfollow {{ f.name }}</button></form>
 {% endblock %}

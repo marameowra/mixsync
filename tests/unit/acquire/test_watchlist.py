@@ -689,6 +689,18 @@ def test_pick_skips_a_group_already_requested_by_hand(env: Env, web: TestClient)
     assert page.count('" disabled>') == 3  # owned, requested, and now skipped_requested
 
 
+def test_picker_select_all_checks_one_kind_server_side(env: Env, web: TestClient) -> None:
+    _, _, fid = _catalog_world(env, web)
+    page = web.get(f"/watchlist/{fid}/catalog").text
+    assert f'href="/watchlist/{fid}/catalog?all=album"' in page
+    assert "onclick" not in page
+    ticked = web.get(f"/watchlist/{fid}/catalog?all=album").text
+    boxes = re.findall(r"<input[^>]*name=\"groups\"[^>]*>", ticked)
+    checked = [b for b in boxes if " checked" in b]
+    assert checked and all(" disabled" not in b for b in checked)  # owned/requested stay off
+    assert len(checked) < len(boxes)  # only the one kind
+
+
 def test_picker_is_closed_to_other_users(env: Env, web: TestClient) -> None:
     _, _, fid = _catalog_world(env, web)
     with env.sessions.begin() as s:
