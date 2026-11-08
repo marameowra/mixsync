@@ -10,7 +10,11 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Request**: A wish for one release group, artist, or track, made by a person, the watchlist, or discovery. _Avoid_: Order, job, download
 
-**Candidate**: One peer's folder that might satisfy a request. _Avoid_: Result, hit, match
+**Candidate**: One peer's folder, or one indexer release (a torrent or NZB), that might satisfy a request. _Avoid_: Result, hit, match
+
+**Download source**: A backend that finds and fetches candidates: Soulseek, or an indexer search paired with its download client. _Avoid_: Source (that is who made the request), backend, client
+
+**Source priority**: The admin's ordered list of download sources. A search tries each in turn and stops at the first that yields an acceptable candidate. _Avoid_: Fallback order
 
 **Origin**: The folder and files a request made from files already on disk (migration, drop folder, adopt) started from. Set once; a request found by searching has none. _Avoid_: Source (that is who made the request), first candidate
 
@@ -22,7 +26,9 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Quarantine**: The place mixsync owns (`/data/quarantine`) where rejected and review candidates wait, apart from slskd's `/downloads`. _Avoid_: Failed imports, downloads
 
-**Release (a download)**: The journaled hard delete of a source file from `/downloads` after its library copy is hash-verified; the one allowed hard delete. _Avoid_: Delete, clean up
+**Release (a download)**: The journaled hard delete of a downloaded file (Soulseek or Usenet) after its library copy is hash-verified; the one allowed hard delete. A seeding download is never released. _Avoid_: Delete, clean up
+
+**Seeding download**: A torrent's files while its torrent client still shares them. mixsync only copies from it, never moves, deletes or releases it, and leaves its removal to the client's own ratio rules. _Avoid_: Torrent payload
 
 ### Matching
 
