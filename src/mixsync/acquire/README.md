@@ -13,6 +13,7 @@ The request pipeline and everything that turns files into library tracks: search
 - VERIFY payloads and `request-<id>-decision-<id>` batch ids are built and read only in `verify.py`. Decision evidence JSON is read only through `evidence.py`.
 - Merge, promote and migration act through plans: a draft (dry run) first, then a user confirmation. Every op is validated against the DB and the file journal before it acts, and a failure marks the plan failed instead of guessing ([data safety](../../../docs/design/data-safety.md)).
 - The migration source is only ever opened for reading.
+- A review split (`review.split`) moves no files: the split-off paths become a `source="split"` from-files request, and the parent decision's evidence (`split_to`) keeps every later action on it (refile, repick, re-check, unverified) away from them.
 - The request budget of 5 dropped candidates is in [ADR 0007](../../../docs/decisions/0007-quarantine-owned-by-mixsync.md).
 
 ## May import

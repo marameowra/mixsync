@@ -18,6 +18,7 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.db import decisions
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Request as RequestRow
 from mixsync.db.secretbox import link_secret, user_links
 from mixsync.library import tags
 from mixsync.match.candidates import parse_name
@@ -118,20 +119,38 @@ async def review_detail(
 ) -> HTMLResponse:
     d = decision_for(db, user, decision_id)
     flags = _flags(request, db, user)  # before `resolve`, which ends the transaction
+    split = _split_options(db, d)
     refs = {("release", d.release_mbid)} | {
         ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
     if ru := d.evidence.get("runner_up"):
         refs.add(("release", ru.get("release_id", "")))
+    refs |= {("release", r) for r in (split or {}).get("releases", [])}
     names = await resolve(db, namer, refs, MAX_LOOKUPS)
     ctx = {
         "user": user,
         "d": d,
         "prefill": _prefill(d),
         "names": names,
+        "split": split,
         **flags,
     }
     return templates.TemplateResponse(request, "pages/review_detail.html", ctx)
+
+
+def _split_options(db: Db, d: MatchDecision) -> dict[str, Any] | None:
+    """The Split form's choices: the unassigned files, each with the releases the evidence
+    found holding it, and all those releases. None when the form is not offered."""
+    ev = Evidence.parse(d.evidence)
+    req = db.get(RequestRow, ev.request_id)
+    if d.status != decisions.PENDING or not ev.unassigned or (req and req.provisional):
+        return None
+    held = {o.get("local_path"): o.get("releases", []) for o in d.evidence.get("off_release", [])}
+    files = [{"path": p, "name": Path(p).name, "releases": held.get(p, [])} for p in ev.unassigned]
+    return {
+        "files": files,
+        "releases": list(dict.fromkeys(r for f in files for r in f["releases"])),
+    }
 
 
 def _prefill(d: MatchDecision) -> dict[str, Any]:
@@ -200,6 +219,27 @@ def repick(
     decision_for(db, user, decision_id)
     mbid = parse_release_mbid(release)
     return _done(lambda: review.repick(db, datetime.now(UTC), decision_id, user.id, mbid), db, user)
+
+
+@router.post("/{decision_id}/split")
+def split(
+    decision_id: int,
+    user: User,
+    db: Db,
+    path: Annotated[list[str], Form()] = [],  # noqa: B006
+    release: Annotated[str, Form()] = "",  # one of the offered releases
+    release_url: Annotated[str, Form()] = "",  # a pasted one, which wins
+) -> RedirectResponse:
+    """Split the picked unassigned files off to a new request for one release. The decision
+    stays pending, so the page comes back for the rest."""
+    decision_for(db, user, decision_id)
+    text = release_url.strip() or release.strip()
+    mbid = parse_release_mbid(text) if text else ""
+    try:
+        review.split(db, datetime.now(UTC), decision_id, user.id, path, mbid)
+    except review.Refused as e:
+        raise HTTPException(409, str(e)) from e
+    return RedirectResponse(f"/review/{decision_id}", status_code=303)
 
 
 def _int(text: str, what: str, minimum: int = 1) -> int:

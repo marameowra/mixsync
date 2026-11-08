@@ -112,6 +112,11 @@
   <p>These are not imported by Accept:</p>
   <ul>{% for x in extra %}<li>{{ x }}</li>{% endfor %}</ul>
   {% endif %}
+  {% set gone = d.evidence.get("split_to", {}) %}
+  {% if gone %}
+  <h3>Split off</h3>
+  <ul>{% for x, e in gone.items() %}<li>{{ x }}: request #{{ e.request_id }}</li>{% endfor %}</ul>
+  {% endif %}
   {% set dd = d.evidence.get("duration_deltas", []) %}
   {% if dd %}
   <h3>Duration deltas</h3>
@@ -127,11 +132,28 @@
     <label class="field">Pick another release (MusicBrainz release URL or MBID) <input name="release" type="text" required></label>
     <button class="btn" type="submit">Pick another release</button>
   </form>
+  {% if split %}
+  <form method="post" action="/review/{{ d.id }}/split">
+    {{ forms.csrf() }}
+    <h3>Split off files</h3>
+    <div class="consequence"><p>The ticked files become a new request verified against one release; this review stays open for the rest. Files are not moved now.</p></div>
+    <fieldset><legend>Files not on the release</legend>
+    {% for f in split.files %}<p><label><input type="checkbox" name="path" value="{{ f.path }}"> <span class="path">{{ f.name }}</span></label>{% if f.releases %} <span class="muted">on {% for r in f.releases %}{{ mb.link("release", r) }}{{ ", " if not loop.last }}{% endfor %}</span>{% endif %}</p>{% endfor %}
+    </fieldset>
+    {% if split.releases %}
+    <fieldset><legend>Release holding them</legend>
+    {% for r in split.releases %}<p><label><input type="radio" name="release" value="{{ r }}"> {{ (names or {}).get(r) or "Release " ~ r[:8] }}</label> {{ mb.link("release", r) }}</p>{% endfor %}
+    </fieldset>
+    {% endif %}
+    <label class="field">{{ "Or another release" if split.releases else "Release" }} (MusicBrainz release URL or MBID) <input name="release_url" type="text"></label>
+    <button class="btn" type="submit">Split off</button>
+  </form>
+  {% endif %}
   <form method="post" action="/review/{{ d.id }}/unverified">
     {{ forms.csrf() }}
     <h3>Mark unverified</h3>
     {% if errors %}<ul role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-    <div class="consequence"><p>Imports <strong>{{ files|length }} file{{ "s" if files|length != 1 else "" }}</strong> with the tags below and no MusicBrainz ids. Copies are verified before downloaded sources are released; the read-only import tree stays untouched.</p></div>
+    <div class="consequence"><p>{% set kept = files|rejectattr("local_path", "in", d.evidence.get("split_to", {}))|list|length %}Imports <strong>{{ kept }} file{{ "s" if kept != 1 else "" }}</strong> with the tags below and no MusicBrainz ids. Copies are verified before downloaded sources are released; the read-only import tree stays untouched.</p></div>
     <p>
       <label class="field">Album artist <input name="albumartist" type="text" maxlength="255" required value="{{ prefill.albumartist }}"></label>
       <label class="field">Album <input name="album" type="text" maxlength="255" required value="{{ prefill.album }}"></label>
