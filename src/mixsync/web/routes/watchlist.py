@@ -210,6 +210,7 @@ async def catalog(
     db: Db,
     watch: Watch,
     select_all: Annotated[str, Query(alias="all")] = "",  # a kind whose boxes render checked
+    ticked: Annotated[list[str] | None, Query(alias="groups")] = None,  # boxes already ticked
 ) -> HTMLResponse:
     f, e = _artist_follow(db, user, follow_id)
     follow_ref, mbid = SimpleNamespace(id=f.id, name=f.name), e.mbid
@@ -223,7 +224,7 @@ async def catalog(
             groups.setdefault(key, []).append((h, why.get(h.group_id, "")))
     order = [(k, groups[k]) for k in (*_TYPES, "other") if k in groups]
     ctx: dict[str, object] = {"user": user, "f": follow_ref, "groups": order}
-    ctx |= {"truncated": truncated, "all": select_all}
+    ctx |= {"truncated": truncated, "all": select_all, "ticked": set(ticked or [])}
     return templates.TemplateResponse(request, "pages/watchlist_catalog.html", ctx)
 
 

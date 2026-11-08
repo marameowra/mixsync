@@ -1492,6 +1492,7 @@ def test_recheck_requeues_against_the_release(
     did, rid = _reviewed(sf, "alice", str(downloads / "a.mp3"))
     mig, mrid = _reviewed(sf, "alice", str(downloads / "a.mp3"), migration=True)
     tok = _login(client, "alice")
+    assert 'hx-boost="true" hx-confirm="Re-check 2' in client.get("/review").text
     r = client.post("/review/recheck", data={"csrf_token": tok})
     assert r.status_code == 303
     page = client.get(r.headers["location"]).text

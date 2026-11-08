@@ -152,6 +152,12 @@ def test_user_forms_confirm_with_htmx_and_show_a_rejection(
         headers={"HX-Request": "true", "HX-Boosted": "true"},
     )
     assert r.status_code == 400 and "administrator must remain" in r.text
+    assert r.headers["HX-Push-Url"] == "false"
+    # a polling or Test-button request must not swap an error page in
+    poll = c.get("/users/999/nope", headers={"HX-Request": "true"})
+    assert poll.status_code == 404 and poll.headers["HX-Reswap"] == "none"
+    boosted = c.get("/users/999/nope", headers={"HX-Request": "true", "HX-Boosted": "true"})
+    assert "HX-Reswap" not in boosted.headers
 
 
 def test_last_admin_cannot_be_demoted_or_disabled(

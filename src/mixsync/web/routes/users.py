@@ -34,6 +34,7 @@ def _page(request: Request, admin: AuthUser, s: Session, error: str | None = Non
         "pages/users.html",
         {"user": admin, "rows": rows, "error": error},
         status_code=400 if error else 200,
+        headers={"HX-Push-Url": "false"} if error and "HX-Boosted" in request.headers else None,
     )
 
 

@@ -461,7 +461,9 @@ def test_follow_search_page_and_own_follows_only(env: Env, web: TestClient) -> N
     assert r.headers["location"].endswith("/catalog")
     listing = web.get("/watchlist").text
     assert "Looked Up" in listing and "never" in listing
-    assert "Nothing found yet" in web.get(f"/watchlist/{fid}").text
+    page = web.get(f"/watchlist/{fid}").text
+    assert "Nothing found yet" in page
+    assert 'hx-boost="true" hx-confirm="Stop following?' in page
     assert web.post(f"/watchlist/{fid}/check", data={"csrf_token": tok}).status_code == 303
     bob = login(web, "bob")
     assert web.get(f"/watchlist/{fid}").status_code == 403
@@ -699,6 +701,11 @@ def test_picker_select_all_checks_one_kind_server_side(env: Env, web: TestClient
     checked = [b for b in boxes if " checked" in b]
     assert checked and all(" disabled" not in b for b in checked)  # owned/requested stay off
     assert len(checked) < len(boxes)  # only the one kind
+    # ticks made by hand in another group survive the re-render and combine with the kind
+    gid = re.search(r'name="groups" value="([^"]+)"(?! disabled)', page)
+    assert gid
+    both = web.get(f"/watchlist/{fid}/catalog?all=album&groups={gid.group(1)}").text
+    assert both.count(" checked") >= len(checked)
 
 
 def test_picker_is_closed_to_other_users(env: Env, web: TestClient) -> None:
