@@ -6,6 +6,7 @@
 {% block content %}
 <h1>Discover</h1>
 <p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
+<p><a href="/discover/new">New playlist</a></p>
 {% if not rows %}<p class="empty">No playlists yet. Link your listening services to start discovering music.</p>{% endif %}
 {% if not linked %}<p class="notice"><span aria-hidden="true">i</span> Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
 
@@ -29,6 +30,7 @@
 
 {% for p in rows %}
 <h2>{{ p.name }}</h2>
+<p>Sources: {% for s in p.sources %}{{ s.type }}{% if s.type == "lb_radio" %} ({{ s.prompt }}, {{ s.mode }}){% endif %}{{ ", " if not loop.last }}{% endfor %}. <a href="/discover/{{ p.id }}/edit">Edit</a> · <a href="/discover/{{ p.id }}/delete">Delete</a></p>
 <p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last build: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit"{% if loop.first %} class="primary"{% endif %}>Build now</button></form>
