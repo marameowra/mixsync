@@ -7,7 +7,7 @@
 <p role="status">Re-queued {{ n.requeued }} · skipped {{ n.missing }} (files missing) · {{ n.busy }} already re-checking · {{ n.stale }} no longer in review</p>
 {% endif %}
 {% if items %}
-<form method="post" action="/review/recheck" onsubmit="return confirm('Re-check {{ items|length }} pending reviews with the current scoring?')">{{ forms.csrf() }}
+<form method="post" action="/review/recheck" hx-boost="true" hx-confirm="Re-check {{ items|length }} pending reviews with the current scoring?">{{ forms.csrf() }}
   <button class="btn" type="submit">Re-check pending reviews</button>
 </form>
 <p>Sort by:

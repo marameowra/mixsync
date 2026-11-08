@@ -57,8 +57,13 @@ def create_app(
         ctx = {"status": exc.status_code, "detail": exc.detail, "back": "/review"}
         if request.url.path == "/" or not request.url.path.startswith("/review"):
             ctx["back"] = "/"
+        headers = dict(exc.headers or {})
+        if "HX-Request" in request.headers and "HX-Boosted" not in request.headers:
+            headers["HX-Reswap"] = "none"  # keep polling regions and Test buttons as they are
+        elif request.method != "GET" and "HX-Boosted" in request.headers:
+            headers["HX-Push-Url"] = "false"  # a rejected boosted form is not a new page
         return templates.TemplateResponse(
-            request, "pages/error.html", ctx, status_code=exc.status_code, headers=exc.headers
+            request, "pages/error.html", ctx, status_code=exc.status_code, headers=headers
         )
 
     app.include_router(auth.router)

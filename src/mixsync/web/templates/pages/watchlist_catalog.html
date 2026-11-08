@@ -10,9 +10,10 @@
   {% for kind, items in groups %}
   <fieldset>
     <legend>{{ kind }}</legend>
-    <label><input type="checkbox" onclick="this.closest('fieldset').querySelectorAll('input[name=groups]:not(:disabled)').forEach(c => c.checked = this.checked)"> select all</label>
+    <button type="button" name="all" value="{{ kind }}" hx-get="/watchlist/{{ f.id }}/catalog" hx-include="[name=groups]:checked" hx-target="body" hx-push-url="true">Select all</button>
+    <noscript><a href="/watchlist/{{ f.id }}/catalog?all={{ kind }}">Select all</a></noscript>
     {% for h, why in items %}
-    <div><label><input type="checkbox" name="groups" value="{{ h.group_id }}"{% if why %} disabled{% endif %}>
+    <div><label><input type="checkbox" name="groups" value="{{ h.group_id }}"{% if why %} disabled{% elif all == kind or h.group_id in ticked %} checked{% endif %}>
       {{ artwork(h.title, "/media/artwork/release-group/" ~ h.group_id, "xs") }} {{ h.title }} ({{ h.date or "undated" }}){% if why %} - {{ why }}{% endif %}</label></div>
     {% endfor %}
   </fieldset>

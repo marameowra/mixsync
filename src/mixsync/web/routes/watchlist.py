@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -204,7 +204,13 @@ def _artist_follow(db: Db, user: AuthUser, follow_id: int) -> tuple[Follow, Watc
 
 @router.get("/{follow_id}/catalog")
 async def catalog(
-    request: Request, follow_id: int, user: User, db: Db, watch: Watch
+    request: Request,
+    follow_id: int,
+    user: User,
+    db: Db,
+    watch: Watch,
+    select_all: Annotated[str, Query(alias="all")] = "",  # a kind whose boxes render checked
+    ticked: Annotated[list[str] | None, Query(alias="groups")] = None,  # boxes already ticked
 ) -> HTMLResponse:
     f, e = _artist_follow(db, user, follow_id)
     follow_ref, mbid = SimpleNamespace(id=f.id, name=f.name), e.mbid
@@ -217,7 +223,8 @@ async def catalog(
             key = h.type if h.type in _TYPES else "other"
             groups.setdefault(key, []).append((h, why.get(h.group_id, "")))
     order = [(k, groups[k]) for k in (*_TYPES, "other") if k in groups]
-    ctx = {"user": user, "f": follow_ref, "groups": order, "truncated": truncated}
+    ctx: dict[str, object] = {"user": user, "f": follow_ref, "groups": order}
+    ctx |= {"truncated": truncated, "all": select_all, "ticked": set(ticked or [])}
     return templates.TemplateResponse(request, "pages/watchlist_catalog.html", ctx)
 
 
