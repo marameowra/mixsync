@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -25,6 +25,32 @@ class AppSettings(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
     min_auto_accept_confidence: Mapped[int | None] = mapped_column(Integer)  # percent; None: no cap
+    # App settings (ADR 0021): NULL is not saved; mixsync.db.app_settings resolves them at startup
+    mb_contact: Mapped[str | None] = mapped_column(Text)
+    mb_rate: Mapped[float | None] = mapped_column(Float)
+    mb_base_url: Mapped[str | None] = mapped_column(Text)
+    deezer_suggestions: Mapped[bool | None]
+    discogs_suggestions: Mapped[bool | None]
+    slskd_url: Mapped[str | None] = mapped_column(Text)
+    slskd_max_searches: Mapped[int | None]
+    slskd_search_debounce: Mapped[int | None]
+    max_concurrent_downloads: Mapped[int | None]
+    slow_download_window: Mapped[int | None]
+    slow_download_floor: Mapped[int | None]
+    slow_download_share: Mapped[float | None] = mapped_column(Float)
+    navidrome_url: Mapped[str | None] = mapped_column(Text)
+    navidrome_user: Mapped[str | None] = mapped_column(Text)
+    navidrome_library: Mapped[str | None] = mapped_column(Text)
+    navidrome_discover_library: Mapped[str | None] = mapped_column(Text)
+    adopt_downloads: Mapped[bool | None]
+    adopt_settle_minutes: Mapped[int | None]
+    flac_level: Mapped[int | None]
+    canonical_media: Mapped[list[str] | None] = mapped_column(JSON)
+    canonical_countries: Mapped[list[str] | None] = mapped_column(JSON)
+    trash_days: Mapped[int | None]
+    timezone: Mapped[str | None] = mapped_column(Text)
+    path_template: Mapped[str | None] = mapped_column(Text)
+    log_level: Mapped[str | None] = mapped_column(Text)
 
 
 class User(TimestampMixin, Base):

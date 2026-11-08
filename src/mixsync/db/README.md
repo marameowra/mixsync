@@ -4,7 +4,7 @@
 Persistent state: SQLAlchemy models, Alembic migrations, the job queue, the operation journal, and the encryption box for stored secrets.
 
 ## Owns / does not own
-- **Owns:** `models/`, `migrations/`, engine and session setup (`engine.py`), `queue.py` (enqueue, claim, heartbeat, reap, and the worker liveness row `worker_heartbeats`), `journal.py`, `undo.py`, `secretbox.py`, and the small query modules (`auth.py`, `canonical.py`, `decisions.py`).
+- **Owns:** `models/`, `migrations/`, engine and session setup (`engine.py`), `queue.py` (enqueue, claim, heartbeat, reap, and the worker liveness row `worker_heartbeats`), `journal.py`, `undo.py`, `secretbox.py`, `app_settings.py` (each process's startup snapshot of app settings: saved, else env, else default; [ADR 0021](../../../docs/decisions/0021-app-settings-saved-over-env-loaded-at-startup.md)), and the small query modules (`auth.py`, `canonical.py`, `decisions.py`).
 - **Does not own:** business rules. This package stores and fetches; it does not decide.
 
 ## Rules / invariants

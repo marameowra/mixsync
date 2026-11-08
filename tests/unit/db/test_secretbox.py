@@ -99,10 +99,13 @@ def test_malformed_keys_raise_clear_errors(tmp_path: Path) -> None:
 
 
 def test_startup_paths_refuse_loose_key_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
     from mixsync import __main__ as cli
+    from mixsync.db.migrate import upgrade
     from mixsync.wiring import build_services
+
+    upgrade()  # web reads its saved app settings before building services
 
     f = tmp_path / "secret.key"
     f.write_bytes(Fernet.generate_key())

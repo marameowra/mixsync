@@ -108,6 +108,6 @@ async def test_serve_all_hands_one_services_to_the_worker_and_the_app(
     monkeypatch.setattr(worker, "run_worker", idle)
     monkeypatch.setattr(uvicorn, "Config", Config)
     monkeypatch.setattr(uvicorn, "Server", Server)
-    await worker.serve_all()
+    await worker.serve_all(settings)
     assert isinstance(seen["worker"], Services)
     assert seen["app"] is seen["worker"]
