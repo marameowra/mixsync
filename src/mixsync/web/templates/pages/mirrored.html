@@ -4,6 +4,13 @@
 {% block content %}
 <h1>Mirrored playlists</h1>
 <p>Read-only copies of playlists curated elsewhere, kept in their upstream order and pushed to Navidrome. Each sync replaces the Navidrome playlist, so edits made there are overwritten. A track removed upstream leaves the playlist only; no file is moved or deleted.</p>
+{% if not has_loves %}
+{% if lb_linked %}
+<form method="post" action="/mirrored/loves">{{ forms.csrf() }}<p>Mirror your ListenBrainz loved tracks, newest first, as a "Loves" playlist. Last.fm loves count once imported into ListenBrainz.</p><button type="submit">Mirror my ListenBrainz loves</button></form>
+{% else %}
+<p>To mirror your ListenBrainz loved tracks (including Last.fm loves imported there), <a href="/account">link ListenBrainz on your account page</a>.</p>
+{% endif %}
+{% endif %}
 {% if not rows %}<p class="empty">No mirrored playlists yet.</p>{% endif %}
 
 {% for p in rows %}
@@ -12,6 +19,7 @@
 <p>Last synced {{ p.last_synced_at or "never" }}; next sync {{ p.next_sync_at or "-" }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last sync: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/mirrored/{{ p.id }}/sync">{{ forms.csrf() }}<button type="submit">Sync now</button></form>
+{% if p.auto_request_since %}<p>Newly loved missing tracks are requested automatically.</p>{% elif p.upstream_kind == "listenbrainz_loves" %}<p>After you confirm the first request, newly loved missing tracks are requested automatically.</p>{% endif %}
 {% set want = missing[p.id] %}
 {% if want %}
 <form method="post" action="/mirrored/{{ p.id }}/request">

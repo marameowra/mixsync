@@ -121,3 +121,5 @@ class MirroredPlaylist(TimestampMixin, Base):
     next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    # set on the owner's first confirmation (loves only): later syncs request new tracks unasked
+    auto_request_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

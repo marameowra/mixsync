@@ -1,5 +1,5 @@
 """Mirrored playlists: list, cadence, sync now, confirm the missing-track requests, delete.
-Mirrors are made by upstream adapters (`discovery.mirrored.create`), not from this page."""
+Mirrors are made by upstream adapters (`discovery.mirrored.create`); the Loves one from here."""
 
 from datetime import UTC, datetime
 from typing import Annotated
@@ -7,11 +7,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from mixsync.core.capabilities import Capability
 from mixsync.db.auth import AuthUser
+from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import MirroredPlaylist
-from mixsync.discovery import mirrored
+from mixsync.discovery import loves, mirrored
 from mixsync.web.deps import Db, require
 from mixsync.web.templating import templates
 
@@ -37,8 +39,40 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
     ).all()
     tracks = {p.id: mirrored.track_states(db, p) for p in rows}
     missing = {p.id: [e for e, state in tracks[p.id] if state == mirrored.MISSING] for p in rows}
-    ctx = {"user": user, "rows": rows, "tracks": tracks, "missing": missing}
+    ctx = {
+        "user": user,
+        "rows": rows,
+        "tracks": tracks,
+        "missing": missing,
+        "lb_linked": _lb_linked(db, user),
+        "has_loves": any(p.upstream_kind == mirrored.LOVES for p in rows),
+    }
     return templates.TemplateResponse(request, "pages/mirrored.html", ctx)
+
+
+def _lb_linked(db: Db, user: AuthUser) -> bool:
+    q = select(UserLink.id).where(UserLink.user_id == user.id, UserLink.service == "listenbrainz")
+    return db.scalar(q) is not None
+
+
+@router.post("/loves")
+def create_loves(user: User, db: Db) -> RedirectResponse:
+    """The user's Loves mirror of their ListenBrainz loved tracks; a second click is a no-op."""
+    if not _lb_linked(db, user):
+        raise HTTPException(400, "link ListenBrainz on /account first")
+    try:
+        with db.begin_nested():  # a racing double submit hits the unique upstream key
+            loves.create_loves(db, datetime.now(UTC), user.id)
+    except IntegrityError:
+        taken = db.scalar(
+            select(MirroredPlaylist.id).where(
+                MirroredPlaylist.user_id == user.id,
+                MirroredPlaylist.upstream_kind == mirrored.LOVES,
+            )
+        )
+        if taken is None:
+            raise HTTPException(409, f"you already have a playlist named {loves.NAME!r}") from None
+    return RedirectResponse("/mirrored", status_code=303)
 
 
 @router.post("/{playlist_id}/settings")

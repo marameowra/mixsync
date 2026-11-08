@@ -11,6 +11,9 @@ from mixsync.ratelimit.client import PoliteClient
 # shortcut: the GET metadata endpoint documents no batch cap; 25 mirrors MusicBrainz's inc limit
 BATCH = 25
 _WEEKLY = "Weekly Exploration"
+LOVES_PAGE = 100
+# shortcut: a mirror keeps the newest 1000 loves (10 calls a sync); raise if users need more
+LOVES_CAP = 1000
 
 
 class _Rec(BaseModel):
@@ -94,6 +97,26 @@ class _Lookup(BaseModel):
     release_mbid: str | None = None
     artist_credit_name: str = ""
     recording_name: str = ""
+
+
+class _Mapping(BaseModel):
+    release_mbid: str | None = None
+
+
+class _TrackMeta(BaseModel):
+    artist_name: str | None = None
+    track_name: str | None = None
+    mbid_mapping: _Mapping | None = None
+
+
+class _Love(BaseModel):
+    created: int = 0
+    recording_mbid: str | None = None
+    track_metadata: _TrackMeta | None = None
+
+
+class _Feedback(BaseModel):
+    feedback: list[_Love] = []
 
 
 class _Valid(BaseModel):
@@ -201,6 +224,34 @@ class ListenBrainzClient:
     async def lb_radio(self, prompt: str, mode: str, token: str) -> list[RecordingRef]:
         body = await self._get(_Radio, "/1/explore/lb-radio", token, prompt=prompt, mode=mode)
         return _refs(body.payload.jspf.playlist) if body else []
+
+    async def loves(self, user: str) -> list[RecordingRef]:
+        """The user's loved recordings, newest first, at most LOVES_CAP. Public, so no token and
+        the response cache applies. Loves with no recording MBID (unmapped listens) are left out."""
+        found: list[_Love] = []
+        while len(found) < LOVES_CAP:
+            body = await self._get(
+                _Feedback,
+                f"/1/feedback/user/{quote(user, safe='')}/get-feedback",
+                score=1,
+                count=LOVES_PAGE,
+                offset=len(found),
+                metadata="true",
+            )
+            page = body.feedback if body else []
+            found += page
+            if len(page) < LOVES_PAGE:
+                break
+        found.sort(key=lambda f: f.created, reverse=True)  # the API documents no order
+        out: list[RecordingRef] = []
+        for f in found[:LOVES_CAP]:
+            if f.recording_mbid:
+                m = f.track_metadata or _TrackMeta()
+                rel = m.mbid_mapping.release_mbid if m.mbid_mapping else None
+                out.append(
+                    RecordingRef(f.recording_mbid, rel, m.artist_name or "", m.track_name or "")
+                )
+        return out
 
     async def validate_token(self, token: str) -> str | None:
         try:
