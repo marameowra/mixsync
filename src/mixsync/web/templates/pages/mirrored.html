@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Mirrored playlists - MixSync{% endblock %}
+{% from "macros/ui.html" import status %}
+{% block content %}
+<h1>Mirrored playlists</h1>
+<p>Read-only copies of playlists curated elsewhere, kept in their upstream order and pushed to Navidrome. Each sync replaces the Navidrome playlist, so edits made there are overwritten. A track removed upstream leaves the playlist only; no file is moved or deleted.</p>
+{% if not rows %}<p class="empty">No mirrored playlists yet.</p>{% endif %}
+
+{% for p in rows %}
+<h2>{{ p.name }}</h2>
+<p>From {{ p.upstream_kind }}. <a href="/mirrored/{{ p.id }}/delete">Delete</a></p>
+<p>Last synced {{ p.last_synced_at or "never" }}; next sync {{ p.next_sync_at or "-" }}.</p>
+{% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last sync: {{ p.last_error }}</p>{% endif %}
+<form method="post" action="/mirrored/{{ p.id }}/sync">{{ forms.csrf() }}<button type="submit">Sync now</button></form>
+{% set want = missing[p.id] %}
+{% if want %}
+<form method="post" action="/mirrored/{{ p.id }}/request">
+  {{ forms.csrf() }}
+  {% for rel in want|map(attribute="release_mbid")|unique %}<input type="hidden" name="release" value="{{ rel }}">{% endfor %}
+  <p>{{ want|length }} track{{ "s" if want|length != 1 }} will be requested.</p>
+  <button type="submit" class="primary">Request {{ want|length }} track{{ "s" if want|length != 1 }}</button>
+</form>
+{% endif %}
+{% if tracks[p.id] %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Track</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for e, state in tracks[p.id] %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td>{{ e.artist }} - {{ e.title }}</td>
+    <td>{{ status(state, "Unresolved: not in the playlist; retried each sync" if state == "unresolved" else none) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p>No tracks yet.</p>{% endif %}
+<form method="post" action="/mirrored/{{ p.id }}/settings">
+  {{ forms.csrf() }}
+  <p class="field"><label>Sync every (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ p.cadence_days }}"></label></p>
+  <button type="submit">Save</button>
+</form>
+{% endfor %}
+{% endblock %}
