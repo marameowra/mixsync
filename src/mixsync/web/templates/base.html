@@ -35,6 +35,7 @@
       {%- if can_edit %}{{ link("/library/fragments", "Fragments") }}{% endif %}
       {%- if is_admin %}{{ link("/migration", "Migration") }}{% endif %}
       {%- if is_admin %}{{ link("/users", "Users") }}{% endif %}
+      {%- if is_admin %}{{ link("/settings", "Settings") }}{% endif %}
     </div>
     <div class="group end">{{ link("/account", "Account") }}<form method="post" action="/logout">{{ forms.csrf() }}<button class="btn quiet" type="submit">Log out</button></form></div>
   </nav>

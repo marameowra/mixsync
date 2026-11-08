@@ -4,7 +4,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.core.matching import Profile
 from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
-from mixsync.db.models.auth import AppSettings, MatchingProfile, User
+from mixsync.db.models.auth import MatchingProfile, User
 from mixsync.db.queue import worker_age
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
@@ -168,7 +168,7 @@ def show(request: Request, user: CurrentUser, db: Db, box: Box) -> HTMLResponse:
     return _page(request, user, db, box)
 
 
-def _percent(text: str) -> int | None:
+def percent(text: str) -> int | None:
     try:
         pct = int(text.strip())
     except ValueError:
@@ -223,7 +223,7 @@ def save_matching(
 ) -> Response:
     """The user's auto-accept limit, entered as confidence. review_max is carried over."""
     current, cap = profile_for(db, user.id), auto_accept_cap(db)
-    pct = _percent(auto_accept)
+    pct = percent(auto_accept)
     limit = from_confidence(pct) if pct is not None else None
     if limit is None or limit > current.review_max:
         msg = f"Enter a whole number from {confidence(current.review_max)} to 100."
@@ -269,40 +269,10 @@ async def save_quality(request: Request, user: CurrentUser, db: Db, box: Box) ->
     return RedirectResponse("/account", 303)
 
 
-def _cap_page(request: Request, user: AuthUser, db: Db, error: str | None = None) -> HTMLResponse:
-    cap = auto_accept_cap(db)
-    ctx = {"user": user, "cap": None if cap is None else confidence(cap), "error": error}
-    return templates.TemplateResponse(
-        request, "pages/matching_cap.html", ctx, status_code=400 if error else 200
-    )
-
-
 @router.get("/cap")
-def show_cap(request: Request, admin: Admin, db: Db) -> HTMLResponse:
-    return _cap_page(request, admin, db)
-
-
 @router.post("/cap")
-def save_cap(
-    request: Request, admin: Admin, db: Db, minimum: Annotated[str, Form()] = ""
-) -> Response:
-    """Blank clears the cap; already clamped profiles keep their values."""
-    pct = _percent(minimum) if minimum.strip() else None
-    if minimum.strip() and pct is None:
-        return _cap_page(
-            request, admin, db, "Enter a whole number from 0 to 100, or leave it blank."
-        )
-    settings = db.get(AppSettings, 1) or AppSettings(id=1)
-    settings.min_auto_accept_confidence = pct
-    db.add(settings)
-    if pct is not None:
-        cap = from_confidence(pct)
-        db.execute(
-            update(MatchingProfile)
-            .where(MatchingProfile.auto_accept_max > cap)
-            .values(auto_accept_max=cap)
-        )
-    return RedirectResponse("/account/cap", 303)
+def moved_cap() -> RedirectResponse:
+    return RedirectResponse("/settings", 303)
 
 
 @router.get("/worker")

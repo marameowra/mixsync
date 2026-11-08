@@ -48,6 +48,6 @@ async def test_a_new_limit_does_not_reband_a_waiting_review(env: Env, web: TestC
     with env.sessions.begin() as s:
         create_user(s, "root", "pw", admin=True)
     tok = login(web, "root")
-    web.post("/account/cap", data={"csrf_token": tok, "minimum": "95"})
+    web.post("/settings", data={"csrf_token": tok, "cap": "95"})
     await env.drain()
     assert stage_two(env) == before

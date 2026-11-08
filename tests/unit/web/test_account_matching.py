@@ -52,7 +52,7 @@ def set_limit(c: TestClient, tok: str, value: str) -> int:
 
 
 def set_cap(c: TestClient, tok: str, value: str) -> int:
-    return c.post("/account/cap", data={"csrf_token": tok, "minimum": value}).status_code
+    return c.post("/settings", data={"csrf_token": tok, "cap": value}).status_code
 
 
 def row(sf: sessionmaker[Session], user: str) -> Row:
@@ -113,17 +113,27 @@ def test_a_shared_profile_row_is_copied_not_changed(
 
 def test_only_admins_see_and_set_the_cap(client: TestClient, sf: sessionmaker[Session]) -> None:
     tok = login(client, "alice")
-    assert "/account/cap" not in client.get("/account").text
-    assert client.get("/account/cap").status_code == 403
+    assert 'href="/settings"' not in client.get("/account").text
+    assert client.get("/settings").status_code == 403
     assert set_cap(client, tok, "95") == 403
     assert effective(sf, "alice") == BALANCED  # no cap: today's behavior
     tok = login(client, "root")
-    assert "/account/cap" in client.get("/account").text
-    assert "No minimum is set." in client.get("/account/cap").text
-    r = client.post("/account/cap", data={"csrf_token": tok, "minimum": "x"})
-    assert r.status_code == 400 and "No minimum is set." in r.text
+    assert 'href="/settings"' in client.get("/account").text
+    assert 'id="f-cap" name="cap" type="number" min="0" max="100" step="1" value=""' in (
+        client.get("/settings").text
+    )
+    r = client.post("/settings", data={"csrf_token": tok, "cap": "x"})
+    assert r.status_code == 400 and "Enter a whole number from 0 to 100" in r.text
     assert set_cap(client, tok, "95") == 303
-    assert "Current minimum: 95%." in client.get("/account/cap").text
+    assert 'name="cap" type="number" min="0" max="100" step="1" value="95"' in (
+        client.get("/settings").text
+    )
+
+
+def test_the_old_cap_address_redirects_to_settings(client: TestClient) -> None:
+    tok = login(client, "root")
+    for r in (client.get("/account/cap"), client.post("/account/cap", data={"csrf_token": tok})):
+        assert r.status_code == 303 and r.headers["location"] == "/settings"
 
 
 def test_a_cap_clamps_stored_rows_and_the_preset_fallback(
