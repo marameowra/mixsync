@@ -1,6 +1,6 @@
 # `deploy`
 
-Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile`, `compose.build.yml` (local-build override), `compose.yml` (web, worker, a one-shot `mixsync-migrate` they wait for, slskd, navidrome), `.env.example` (every var, commented). Rationale: [architecture](../docs/architecture.md#deployment).
+Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile`, `compose.build.yml` (local-build override), `compose.postgres.yml` (optional Postgres override), `compose.yml` (web, worker, a one-shot `mixsync-migrate` they wait for, slskd, navidrome), `.env.example` (every var, commented). Rationale: [architecture](../docs/architecture.md#deployment).
 
 - Roles: `mixsync web` (port 8080), `mixsync worker` (scalable once on Postgres), or one `mixsync all` container.
 - `.github/workflows/image.yml` publishes `ghcr.io/marameowra/mixsync:dev` on every push to `dev`; approved releases from `main` publish `:<version>` and `:latest`.
@@ -19,7 +19,7 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 ## Environment variables
 | Var | Purpose |
 |---|---|
-| `MIXSYNC_DATABASE_URL` | default `sqlite:////config/mixsync.db` |
+| `MIXSYNC_DATABASE_URL` | default `sqlite:////config/mixsync.db`; or Postgres, see [Postgres](#postgres) |
 | `MIXSYNC_TIMEZONE` | IANA zone for migration report dates; default `UTC` |
 | `MIXSYNC_SECRET_KEY` | Fernet key for linked-account secrets; else `/config/secret.key`, generated on first start. Env wins ([details](../docs/decisions/0010-secret-key-source.md)) |
 | `MIXSYNC_MB_CONTACT` | contact in the MusicBrainz User-Agent; defaults to the project URL |
@@ -34,7 +34,7 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
 | `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
-| `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`) |
+| `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`); not used on Postgres |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
@@ -48,6 +48,13 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 With `FORWARDED_ALLOW_IPS` set to the proxy, the session cookie gets `Secure` and the login rate limit sees the real client IP.
 1. **First stop publishing 8080**: remove `ports:` from `mixsync-web` or bind `127.0.0.1:8080:8080`. A published port can reach the container from the bridge gateway (inside the compose subnet), letting a client forge `X-Forwarded-For` (a fresh login-limit bucket per request) and `X-Forwarded-Proto`.
 2. Set `FORWARDED_ALLOW_IPS` to the proxy's fixed IP (static `ipv4_address`). A subnet (`docker network inspect`, or pin with `ipam`) is looser; a subnet or `*` is safe only when 8080 is reachable solely through the proxy. IPs or CIDRs only: uvicorn does no DNS lookup. `mixsync all` reads the same variable from `.env`.
+
+## Postgres
+SQLite is the default and fits one home server. Choose Postgres to run several workers or to use your own database tooling.
+1. In `.env` set `POSTGRES_PASSWORD` and `MIXSYNC_DATABASE_URL=postgresql://mixsync:<POSTGRES_PASSWORD>@postgres:5432/mixsync` (URL-encode special characters in the password). `postgresql+psycopg://` also works; other drivers such as `+psycopg2` are rejected at startup.
+2. Create the data dir as your own user so `PUID:PGID` owns it (Docker would make it root-owned and Postgres could not start): `mkdir -p "$CONFIG_DIR/postgres"`.
+3. Start with the override: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml up -d`. Add the same `-f` flags to every later `docker compose` command. Migrations run on the new database; existing SQLite data is not copied over.
+4. Backups are yours: mixsync's nightly backup is SQLite-only. Example: `docker compose -f deploy/compose.yml -f deploy/compose.postgres.yml exec postgres pg_dump -U mixsync mixsync > mixsync.sql`. The data lives in `${CONFIG_DIR}/postgres`.
 
 ## Health and ops
 - `GET /healthz` backs the web healthcheck. The worker records a heartbeat every 10 s while idle (and during long jobs); `mixsync worker-health` exits non-zero when none is newer than 90 s and backs the worker healthcheck. Admins see "worker last seen" under Account → Worker status. It catches a dead or wedged worker loop, not a single job hung on a network call that never returns.

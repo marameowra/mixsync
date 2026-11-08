@@ -1,0 +1,31 @@
+# Optional Postgres: docker compose -f compose.yml -f compose.postgres.yml up -d
+# Before the first `up`, as your own user: mkdir -p "$CONFIG_DIR/postgres". Docker would create it as
+# root, and postgres runs as PUID:PGID, so initdb would fail and the stack would never start.
+# Also set MIXSYNC_DATABASE_URL and POSTGRES_PASSWORD in .env; see "Postgres" in deploy/README.md.
+x-wait-for-db: &wait-for-db
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    user: "${PUID}:${PGID}"
+    environment:
+      POSTGRES_USER: mixsync
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: mixsync
+    volumes:
+      - ${CONFIG_DIR}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      # 127.0.0.1: the entrypoint's init server is socket-only; TCP is up only when really ready.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "mixsync", "-d", "mixsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # depends_on maps merge by key, so these add to the migrate dependency web and worker already have.
+  mixsync-migrate: *wait-for-db
+  mixsync-web: *wait-for-db
+  mixsync-worker: *wait-for-db
