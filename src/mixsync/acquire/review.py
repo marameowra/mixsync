@@ -1,7 +1,9 @@
 """A reviewer's (or the owner's) action on a stage 2 decision: each operation claims the
 decision and moves its request on in the caller's transaction, so there is no second call to
-forget. Every action records who acted and when (ADR 0005)."""
+forget. Every action records who acted and when (ADR 0005). `split` is the exception: it
+leaves the decision pending, so it claims nothing and records no actor."""
 
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -73,6 +75,40 @@ def repick(s: Session, now: datetime, decision_id: int, actor_id: int, release_m
     d, ev, req = _claim(s, decision_id, actor_id, "repick", release_mbid)
     if req:
         verify.again(s, now, req, d.chosen_release_mbid, ev)
+
+
+def split(
+    s: Session, now: datetime, decision_id: int, paths: list[str], release_mbid: str
+) -> Request:
+    """Move some unassigned files of a pending decision to a new from-files request that
+    verifies them against `release_mbid`. The decision stays pending for the rest and is not
+    scored again. No file moves here: the new request's VERIFY and IMPORT handle them."""
+    d = s.get(MatchDecision, decision_id, with_for_update=True)  # two splits of one file
+    if d is None or d.status != decisions.PENDING or d.stage != 2:
+        raise Refused(f"decision {decision_id} is not pending review")
+    ev = Evidence.parse(d.evidence)
+    parent = s.get(Request, ev.request_id)
+    if parent is not None and parent.provisional:
+        raise Refused("discovery reviews cannot be split")
+    if not paths:
+        raise Refused("pick the files to split off")
+    if stray := [p for p in paths if p not in ev.unassigned]:
+        raise Refused(f"not an unassigned file of this review: {Path(stray[0]).name}")
+    try:
+        mbid = str(uuid.UUID(release_mbid))
+    except ValueError:
+        raise Refused("not a MusicBrainz release MBID") from None
+    if gone := [p for p in paths if not Path(p).exists()]:
+        raise Refused(f"file no longer exists: {Path(gone[0]).name}")
+    paths = list(dict.fromkeys(paths))
+    req = Request(
+        user_id=d.user_id, release_mbid=mbid, artist=parent.artist if parent else "", source="split"
+    )
+    s.add(req)
+    s.flush()
+    verify.start(s, now, req, mbid, ev.candidate_of(paths), paths)
+    d.evidence = ev.with_split(paths, req.id).to_json()
+    return req
 
 
 def unverified(

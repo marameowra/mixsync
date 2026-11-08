@@ -33,7 +33,7 @@ async def _artwork_response(
 @router.get("/preview/{decision_id}/{index}")
 def preview(request: Request, decision_id: int, index: int, user: User, db: Db) -> FileResponse:
     d = decision_for(db, user, decision_id)
-    files = Evidence.parse(d.evidence).files
+    files = Evidence.parse(d.evidence).listed  # the page lists split-off files too
     if not 0 <= index < len(files):
         raise HTTPException(404)
     fo = request.app.state.services.fileops

@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire import review, verify
 from mixsync.acquire.evidence import Evidence
-from mixsync.acquire.requests import create_request
+from mixsync.acquire.requests import candidate_dict, create_request
 from mixsync.core.config import Settings
 from mixsync.core.jobs import JobKind
 from mixsync.core.matching import AlbumInfo, Band, Candidate, CandidateFile, MatchResult, Penalty
@@ -229,3 +229,104 @@ def test_cancel_refuses_when_a_review_acts_first(
     monkeypatch.setattr(decisions, "act", raced)
     with pytest.raises(review.Refused, match="a review is acting"):
         review.cancel(s, req.id, uid)
+
+
+def splittable(s: Session, uid: int, tmp: Path, *, provisional: bool = False) -> MatchDecision:
+    """A pending decision of three files: a.mp3 paired, b.mp3 and c.mp3 not on the release."""
+    wanted = ["rec-a"] if provisional else []
+    req = create_request(s, NOW, uid, MBID, provisional=provisional, recordings=wanted)
+    req.status = "review"
+    names = ("a.mp3", "b.mp3", "c.mp3")
+    paths = [tmp / n for n in names]
+    for p in paths:
+        p.write_bytes(b"x")
+    cand = Candidate("peer1", "Music\\Album", tuple(CandidateFile(n, 1, "mp3") for n in names))
+    ev = Evidence.verified(
+        req.id,
+        candidate_dict(cand),
+        cand,
+        paths,
+        AlbumInfo("Artist", "Album", ()),
+        unassigned=[str(paths[1]), str(paths[2])],
+        partial="",
+        acoustid=[],
+        duration_deltas=[0.0],
+        assignment=[{"local_path": str(paths[0]), "track": 0, "acoustid_id": None}],
+    )
+    res = MatchResult(0.3, Band.REVIEW, (), (), 1)
+    return decisions.record(s, res, evidence=ev.to_json(), user_id=uid, stage=2, release_mbid=MBID)
+
+
+def test_split_makes_a_from_files_request_and_leaves_the_decision_open(
+    s: Session, uid: int, tmp_path: Path
+) -> None:
+    d = splittable(s, uid, tmp_path)
+    b = str(tmp_path / "b.mp3")
+    new = review.split(s, NOW, d.id, [b], OTHER)
+    assert (new.source, new.user_id, new.release_mbid) == ("split", uid, OTHER)
+    assert new.from_files and new.origin and new.origin["paths"] == [b]
+    assert [f["path"] for f in new.origin["candidate"]["files"]] == ["b.mp3"]
+    (job,) = jobs(s, JobKind.VERIFY, new)
+    assert (job.payload["release_mbid"], job.payload["paths"]) == (OTHER, [b])
+    assert jobs(s, JobKind.SEARCH, new) == []
+    assert (d.status, d.acted_by, d.distance, d.band) == (decisions.PENDING, None, 0.3, "review")
+    ev = Evidence.parse(d.evidence)
+    assert ev.unassigned == (str(tmp_path / "c.mp3"),)
+    assert ev.split_to == {b: new.id}
+    assert b not in ev.paths and len(ev.listed) == 3  # later actions leave b alone
+    assert [f["path"] for f in ev.candidate["files"]] == ["a.mp3", "c.mp3"]
+
+
+def test_two_splits_of_one_decision_make_two_requests(s: Session, uid: int, tmp_path: Path) -> None:
+    d = splittable(s, uid, tmp_path)
+    one = review.split(s, NOW, d.id, [str(tmp_path / "b.mp3")], OTHER)
+    two = review.split(s, NOW, d.id, [str(tmp_path / "c.mp3")], MBID)
+    assert one.id != two.id and d.status == decisions.PENDING
+    ev = Evidence.parse(d.evidence)
+    assert ev.unassigned == () and set(ev.split_to.values()) == {one.id, two.id}
+
+
+def test_a_repick_after_a_split_verifies_only_the_rest(
+    s: Session, uid: int, tmp_path: Path
+) -> None:
+    d = splittable(s, uid, tmp_path)
+    review.split(s, NOW, d.id, [str(tmp_path / "b.mp3")], OTHER)
+    parent = s.get_one(Request, Evidence.parse(d.evidence).request_id)
+    review.repick(s, NOW, d.id, uid, OTHER)
+    (job,) = jobs(s, JobKind.VERIFY, parent)
+    assert job.payload["paths"] == [str(tmp_path / "a.mp3"), str(tmp_path / "c.mp3")]
+    assert [f["path"] for f in job.payload["candidate"]["files"]] == ["a.mp3", "c.mp3"]
+
+
+def refused(s: Session, d: MatchDecision, paths: list[str], mbid: str = OTHER) -> None:
+    def state() -> tuple[object, ...]:
+        n = s.scalar(select(func.count()).select_from(Request))
+        verifies = s.scalar(select(func.count()).select_from(Job).where(Job.kind == JobKind.VERIFY))
+        return dict(d.evidence), d.status, n, verifies
+
+    before = state()
+    with pytest.raises(review.Refused):
+        review.split(s, NOW, d.id, paths, mbid)
+    assert state() == before
+
+
+def test_split_refusals_change_nothing(s: Session, uid: int, tmp_path: Path) -> None:
+    d = splittable(s, uid, tmp_path)
+    b = str(tmp_path / "b.mp3")
+    refused(s, d, [])  # no files
+    refused(s, d, [str(tmp_path / "a.mp3")])  # paired: repick covers a wrong release
+    refused(s, d, [str(tmp_path / "elsewhere.mp3")])
+    refused(s, d, [b], "")  # no release
+    refused(s, d, [b], "not-an-mbid")
+    (tmp_path / "c.mp3").unlink()
+    refused(s, d, [str(tmp_path / "c.mp3")])  # gone from disk
+    d.stage = 1
+    refused(s, d, [b])
+    d.stage = 2
+    decisions.act(s, d.id, uid, "reject")
+    refused(s, d, [b])  # no longer open for review
+
+
+def test_split_refuses_a_discovery_review(s: Session, uid: int, tmp_path: Path) -> None:
+    d = splittable(s, uid, tmp_path, provisional=True)
+    refused(s, d, [str(tmp_path / "b.mp3")])

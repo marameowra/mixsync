@@ -353,6 +353,41 @@ async def test_accept_never_imports_an_off_release_file_and_keeps_it_in_quaranti
     assert quarantined(env, "review") == [held] and held.read_bytes() == body
 
 
+async def test_a_split_off_file_verifies_on_its_own_and_the_rest_is_reviewed_apart(
+    env: Env, web: TestClient
+) -> None:
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.95, (RECORDINGS["Tune Two"],))
+    ]
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    (held,) = [p for p in quarantined(env, "review") if p.name == "02 Song Two.mp3"]
+
+    tok = login(web, "alice")
+    form = {"csrf_token": tok, "path": str(held), "release": str(OTHER.release_id)}
+    r = web.post(f"/review/{d.id}/split", data=form)
+    assert r.status_code == 303 and r.headers["location"] == f"/review/{d.id}"
+    await env.drain()
+
+    with env.sessions() as s:
+        (split,) = s.scalars(select(Request).where(Request.source == "split"))
+        assert (split.release_mbid, split.status) == (OTHER.release_id, "review")
+        assert s.get_one(MatchDecision, d.id).status == "pending_review"
+    # one of OTHER's two tracks: a partial that never searches for the rest
+    assert [j for j in env.jobs(JobKind.SEARCH) if j.payload["request_id"] == split.id] == []
+    assert status(env, rid) == "review"
+
+    assert web.post(f"/review/{d.id}/reject", data={"csrf_token": tok}).status_code == 303
+    await env.drain(
+        until=lambda: any(j.status is JobState.SUCCEEDED for j in env.jobs(JobKind.REFILE))
+    )
+    # the parent's refile took only its own file; the split-off one is the new request's
+    assert [p.name for p in quarantined(env, "rejected")] == ["01 Song One.mp3"]
+    assert quarantined(env, "review") == [held]
+
+
 async def test_a_contradicted_pair_lands_in_review(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     contradict_second_file(env)
