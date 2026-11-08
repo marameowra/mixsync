@@ -72,45 +72,8 @@ for the development branch).
 
 Bug reports and pull requests are welcome. Open an
 [issue](https://github.com/marameowra/mixsync/issues) first for anything larger than a small
-fix, so we can agree on the approach.
-
-### Development setup
-
-You need Python 3.13 and [uv](https://docs.astral.sh/uv/).
-
-```sh
-uv sync                              # install dependencies
-uv run python -m devtools.preview    # UI preview with fake services at http://127.0.0.1:8090
-```
-
-### Before you open a PR
-
-Run every CI step. `scripts/check.sh` runs them all (and skips them for docs-only changes):
-
-```sh
-uv run ruff check
-uv run ruff format --check
-uv run pyright
-uv run lint-imports
-uv run pytest
-```
-
-- Branch from `dev` and open your PR against `dev`. Never target `main`; releases are cut from
-  it by the maintainer.
-- Tests never touch live services: external APIs replay recorded responses from
-  `tests/cassettes/`. Don't skip, delete, or loosen tests; update them to match new behavior.
-  See [testing](docs/testing.md).
-- Never delete, overwrite, or move user music without a safeguard (dry run, trash, or
-  confirmation). See [data safety](docs/design/data-safety.md).
-- Respect external services: obey rate limits, cache, and send a proper User-Agent. See
-  [services etiquette](docs/design/services-etiquette.md).
-
-### Where to read next
-
-- [Documentation index](docs/README.md): scope, principles, design docs
-- [Architecture](docs/architecture.md): components and pipeline
-- [Glossary](CONTEXT.md): the project's terms (request, candidate, distance, band, ...)
-- [Decisions](docs/decisions/): why things are the way they are
+fix, so we can agree on the approach. Development setup, workflow, tests, and the Claude Code
+setup are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
