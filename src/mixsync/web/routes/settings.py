@@ -169,8 +169,9 @@ async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
     for name, value in values.items():
         setattr(row, name, value)
     for name in SECRETS:
-        if plain := str(form.get(name, "")).strip():
-            setattr(row, f"{name}_encrypted", box.encrypt(plain))
+        raw = str(form.get(name, ""))
+        if raw.strip():  # blank decided on the stripped value; the secret is kept exactly
+            setattr(row, f"{name}_encrypted", box.encrypt(raw))
     row.min_auto_accept_confidence = pct
     db.add(row)
     if pct is not None:

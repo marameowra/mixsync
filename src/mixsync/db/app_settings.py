@@ -61,11 +61,13 @@ def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
             continue
         saved[name] = value
     unreadable: set[str] = set()
+    box = None  # built once, only if a ciphertext exists
     for name in SECRETS:
         token = getattr(row, f"{name}_encrypted") if row else None
         if token is None:
             continue
-        if (plain := load_box(Settings()).decrypt(token)) is None:
+        box = box or load_box(Settings())
+        if (plain := box.decrypt(token)) is None:
             log.error("saved setting %s cannot be decrypted with this key; ignoring it", name)
             unreadable.add(name)
         else:

@@ -64,6 +64,7 @@ def test_non_admins_get_403_on_get_and_post(client: TestClient) -> None:
     assert client.get("/settings").status_code == 403
     assert client.post("/settings", data={"csrf_token": tok, "trash_days": "5"}).status_code == 403
     assert client.post("/settings/reset/trash_days", data={"csrf_token": tok}).status_code == 403
+    assert client.post("/settings/clear/slskd_api_key", data={"csrf_token": tok}).status_code == 403
     assert 'href="/settings"' not in client.get("/account").text
 
 
@@ -163,6 +164,7 @@ def test_a_saved_secret_is_ciphertext_and_never_rendered(
     assert r.status_code == 303
     token = _ciphertext(sf, "slskd_api_key")
     assert token and SECRET not in token
+    assert load_settings().slskd_api_key == SECRET
     with sf() as s:
         assert s.execute(text("SELECT slskd_api_key_encrypted FROM app_settings")).scalar() == token
     page = client.get("/settings?saved=1").text
@@ -270,3 +272,9 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
     assert 'id="reset-trash_days" method="post" action="/settings/reset/trash_days"' in page
     client.post("/settings/reset/trash_days", data={"csrf_token": tok})
     assert saved(sf, "trash_days") is None and saved(sf, "flac_level") == 3
+
+
+def test_a_secret_keeps_its_surrounding_spaces(client: TestClient) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "navidrome_password": " pw "})
+    assert load_settings().navidrome_password == " pw "
