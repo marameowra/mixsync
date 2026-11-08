@@ -26,7 +26,8 @@ from mixsync.core.jobs import DEFAULT_LEASE, JobKind, backoff
 from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.discovery.listenbrainz import ListenBrainzClient
-from mixsync.discovery.mirrored import Mirror
+from mixsync.discovery.loves import Loves
+from mixsync.discovery.mirrored import LOVES, Mirror
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.resolver import TrackResolver
 from mixsync.discovery.retention import Retention
@@ -327,8 +328,12 @@ def _new_queue(
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
     )
-    # upstream adapters (#334 Spotify file, #335 ListenBrainz loves) register here by kind
-    mirror = Mirror(discovery, TrackResolver(services.musicbrainz, listenbrainz).resolve, {})
+    # upstream adapters register here by kind (#334 Spotify file next)
+    mirror = Mirror(
+        discovery,
+        TrackResolver(services.musicbrainz, listenbrainz).resolve,
+        {LOVES: Loves(discovery, listenbrainz)},
+    )
     handlers = (
         HANDLERS
         | pipeline.handlers()

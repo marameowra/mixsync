@@ -36,6 +36,9 @@ UNRESOLVED, OWNED, MISSING = "unresolved", "owned", "missing"
 REQUESTED, NO_RELEASE = "requested", "no known release"
 EMPTY_UPSTREAM = "upstream returned no tracks; kept the last list"
 NONE_FOUND = "Navidrome found none of the owned tracks; skipped push"
+LOVES = "listenbrainz_loves"
+# kinds whose newly listed missing tracks are requested without asking, once the owner confirmed
+AUTO_REQUEST = frozenset({LOVES})
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,8 @@ class UpstreamTrack:
     artist: str
     title: str
     isrc: str | None = None
+    recording_mbid: str | None = None  # upstream named the recording: used as is, not resolved
+    release_mbid: str | None = None  # a release of it, when upstream names one
 
 
 class Upstream(Protocol):
@@ -153,7 +158,10 @@ def track_states(s: Session, pl: MirroredPlaylist) -> list[tuple[dict[str, Any],
 
 def request_missing(s: Session, now: datetime, pl: MirroredPlaylist, releases: set[str]) -> int:
     """The owner confirmed: request the missing tracks on `releases` (those the page showed),
-    one ordinary request per release. Returns how many tracks were requested."""
+    one ordinary request per release. Returns how many tracks were requested. For an
+    AUTO_REQUEST kind this first confirmation also turns on auto-requesting for later syncs."""
+    if pl.upstream_kind in AUTO_REQUEST and pl.auto_request_since is None:
+        pl.auto_request_since = now
     by_release: dict[str, list[str]] = {}
     for e, state in track_states(s, pl):
         if state == MISSING and e["release_mbid"] in releases:
@@ -222,9 +230,20 @@ class Mirror:
         """Entries for `tracks`; a track resolved before is not looked up again, an unresolved
         one is retried."""
         known = {_key(e): e for e in old if e.get("recording_mbid")}
+        by_mbid = {e["recording_mbid"]: e for e in old if e.get("recording_mbid")}
         entries: list[dict[str, Any]] = []
         for t in tracks:
-            e = known.get((t.artist, t.title, t.isrc))
+            if t.recording_mbid:
+                e = by_mbid.get(t.recording_mbid) or {
+                    "recording_mbid": t.recording_mbid,
+                    "release_mbid": None,
+                    "rec_artist": t.artist,
+                    "rec_title": t.title,
+                }
+                if not e["release_mbid"]:
+                    e = {**e, "release_mbid": t.release_mbid}
+            else:
+                e = known.get((t.artist, t.title, t.isrc))
             if e is None:
                 ref = await self.resolve(t.artist, t.title, t.isrc)
                 e = {
@@ -253,7 +272,10 @@ class Mirror:
         upstream = self.upstreams.get(kind)
         if upstream is None:
             return self._stop(pid, job.id, f"no upstream adapter for {kind!r}")
-        tracks = await upstream.tracks(uid, ref)
+        try:
+            tracks = await upstream.tracks(uid, ref)
+        except PermanentError as e:  # no link, unknown user: a retry would not help; say why
+            return self._stop(pid, job.id, str(e))
         if not tracks and old:  # likely an adapter hiccup, not a cleared playlist
             return self._stop(pid, job.id, EMPTY_UPSTREAM)
         entries = await self._resolved(tracks, old)
@@ -269,6 +291,17 @@ class Mirror:
             if pl is None:
                 return
             pl.entries, pl.last_synced_at = entries, self.discovery.clock.now()
+            if pl.auto_request_since is not None:
+                # only tracks new upstream: one whose request failed waits for the owner again
+                seen = {e.get("recording_mbid") for e in old}
+                fresh = {
+                    e["release_mbid"]
+                    for e, state in track_states(s, pl)
+                    if state == MISSING and e["recording_mbid"] not in seen
+                }
+                if fresh:
+                    n = request_missing(s, self.discovery.clock.now(), pl, fresh)
+                    log.info("mirror: playlist %s: auto-requested %d new tracks", pid, n)
             links, why = self.discovery.links(s, uid, frozenset({"navidrome"}))
             pl.last_error = why or None
             name, existing = pl.name, pl.navidrome_playlist_id

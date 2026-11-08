@@ -22,6 +22,13 @@ does the Soulseek networking and [Navidrome](https://www.navidrome.org/) does th
   weekly cap.
 - **Discovery playlists** built from your ListenBrainz listening, with a retention window for
   tracks you don't own yet.
+- **Loves playlist.** Mirror your ListenBrainz loved tracks to a Navidrome playlist, newest
+  first (Mirrored playlists, "Mirror my ListenBrainz loves"). Missing tracks are requested once
+  you confirm the first time, then automatically.
+  **Last.fm loves:** MixSync never calls Last.fm. Import them into ListenBrainz instead: on
+  listenbrainz.org, Settings → Connect services → Last.fm, enter your Last.fm username, then
+  click "Import loved tracks". The import runs only when you click it (re-running makes no
+  duplicates), and loves ListenBrainz can't match to a MusicBrainz recording are skipped.
 - **Unverified imports.** Music missing from MusicBrainz can still be imported, and MixSync
   helps you submit it.
 - **Data safety first.** Nothing is deleted silently: removals go to a trash with a journal and an

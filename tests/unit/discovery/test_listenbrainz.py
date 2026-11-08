@@ -3,11 +3,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.config import Settings
 from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.types import RecordingRef
-from mixsync.discovery.listenbrainz import BATCH, ListenBrainzClient
+from mixsync.db.models.infra import RateBucket
+from mixsync.discovery.listenbrainz import BATCH, LOVES_CAP, LOVES_PAGE, ListenBrainzClient
 from mixsync.ratelimit.client import PoliteClient
+from mixsync.ratelimit.services import user_agent
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
 CASSETTES = Path(__file__).parents[2] / "cassettes" / "listenbrainz"
@@ -282,3 +286,72 @@ async def test_unusable_body_is_permanent(make_client: Make) -> None:
     client = lb(make_client, lambda _r: httpx.Response(200, text="<html>"))
     with pytest.raises(PermanentError):
         await client.lb_radio("p", "easy", TOKEN)
+
+
+async def test_loves_newest_first_with_metadata_and_no_token(
+    make_client: Make, settings: Settings, sessions: sessionmaker[Session]
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return cassette("feedback_loves")
+
+    client = lb(make_client, handler)
+    refs = await client.loves("uncle john")
+
+    assert refs == [  # the love with no recording MBID is left out
+        REF1,
+        RecordingRef(M2, None, "Rival Consoles", "Theme (From MindsEye)"),
+    ]
+    (req,) = seen
+    assert req.url.raw_path.startswith(b"/1/feedback/user/uncle%20john/get-feedback?")
+    assert dict(req.url.params) == {
+        "score": "1",
+        "count": str(LOVES_PAGE),
+        "offset": "0",
+        "metadata": "true",
+    }
+    assert "authorization" not in req.headers  # public, so the response cache applies
+    assert req.headers["user-agent"] == user_agent(settings)
+    with sessions() as s:
+        assert s.get(RateBucket, "listenbrainz") is not None  # went through the bucket
+    assert await client.loves("uncle john") == refs
+    assert len(seen) == 1  # served from the cache
+
+
+async def test_loves_paginate_up_to_the_cap_and_sort_newest_first(make_client: Make) -> None:
+    offsets: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        off = int(request.url.params["offset"])
+        offsets.append(off)
+        # oldest first, to show the client does not rely on the server's order
+        page = [
+            {"created": i, "recording_mbid": f"m{i}"}
+            for i in range(off, min(off + LOVES_PAGE, LOVES_CAP + 50))
+        ]
+        return httpx.Response(200, json={"feedback": page})
+
+    refs = await lb(make_client, handler).loves("u")
+    assert offsets == list(range(0, LOVES_CAP, LOVES_PAGE))  # stops at the cap
+    assert len(refs) == LOVES_CAP
+    assert refs[0].recording_mbid == f"m{LOVES_CAP - 1}"
+
+
+async def test_loves_stop_on_a_short_page(make_client: Make) -> None:
+    offsets: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offsets.append(request.url.params["offset"])
+        n = LOVES_PAGE if len(offsets) == 1 else 1
+        page = [{"created": 1, "recording_mbid": f"m{i}"} for i in range(n)]
+        return httpx.Response(200, json={"feedback": page})
+
+    assert len(await lb(make_client, handler).loves("u")) == LOVES_PAGE + 1
+    assert offsets == ["0", str(LOVES_PAGE)]
+
+
+async def test_loves_failure_raises(make_client: Make) -> None:
+    with pytest.raises(TransientError):
+        await lb(make_client, lambda _r: httpx.Response(503)).loves("u")
