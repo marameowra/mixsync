@@ -1,0 +1,27 @@
+# Optional Postgres: docker compose -f compose.yml -f compose.postgres.yml up -d
+# Also set MIXSYNC_DATABASE_URL and POSTGRES_PASSWORD in .env; see "Postgres" in deploy/README.md.
+x-wait-for-db: &wait-for-db
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    user: "${PUID}:${PGID}"
+    environment:
+      POSTGRES_USER: mixsync
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: mixsync
+    volumes:
+      - ${CONFIG_DIR}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mixsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Only migrate waits here: web and worker already wait for it, and a depends_on
+  # here would replace their migrate dependency instead of adding to it.
+  mixsync-migrate: *wait-for-db

@@ -72,3 +72,23 @@ def test_adopt_downloads_default_env_and_floor(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("MIXSYNC_ADOPT_SETTLE_MINUTES", "0")
     with pytest.raises(ValidationError, match="adopt_settle_minutes"):
         Settings()
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["postgresql://u:p@h/db", "postgres://u:p@h/db", "postgresql+psycopg://u:p@h/db"],
+)
+def test_postgres_url_gets_psycopg_driver(url: str) -> None:
+    assert Settings(database_url=url).database_url == "postgresql+psycopg://u:p@h/db"
+
+
+def test_sqlite_url_unchanged() -> None:
+    assert Settings(database_url="sqlite:///x.db").database_url == "sqlite:///x.db"
+
+
+@pytest.mark.parametrize(
+    "url", ["postgresql+psycopg2://u:p@h/db", "postgresql+asyncpg://u:p@h/db", "mysql://h/db"]
+)
+def test_other_drivers_rejected(url: str) -> None:
+    with pytest.raises(ValidationError, match=r"postgresql\+psycopg://"):
+        Settings(database_url=url)

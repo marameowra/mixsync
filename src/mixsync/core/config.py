@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     navidrome_password: str = ""
     navidrome_library: str = "Music Library"  # the main library's name in Navidrome
     navidrome_discover_library: str = "discover"  # the library over /data/discover
-    backup_dir: Path | None = None  # unset: config_dir/backups; SQLite only
+    backup_dir: Path | None = None  # unset: config_dir/backups; SQLite only (Postgres: pg_dump)
     data_dir: str = "/data"
     downloads_dir: str = "/downloads"
     drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
@@ -66,9 +66,17 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _supported_url(cls, v: str) -> str:
-        if not v.startswith(("sqlite:", "postgresql")):
-            raise ValueError("MIXSYNC_DATABASE_URL must start with sqlite: or postgresql")
-        return v
+        if v.startswith("sqlite:"):
+            return v
+        # Only psycopg 3 is installed; a bare postgresql:// would make SQLAlchemy pick psycopg2.
+        for bare in ("postgresql://", "postgres://"):
+            if v.startswith(bare):
+                return "postgresql+psycopg://" + v[len(bare) :]
+        if v.startswith("postgresql+psycopg://"):
+            return v
+        raise ValueError(
+            "MIXSYNC_DATABASE_URL must start with sqlite:, postgresql:// or postgresql+psycopg://"
+        )
 
     @model_validator(mode="after")
     def _drop_dir_apart(self) -> "Settings":
