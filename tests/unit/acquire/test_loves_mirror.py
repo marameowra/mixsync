@@ -13,8 +13,9 @@ from mixsync.core.types import RecordingRef
 from mixsync.db.auth import create_user
 from mixsync.db.models.discovery import MirroredPlaylist
 from mixsync.db.models.work import Request
-from mixsync.discovery import mirrored
+from mixsync.discovery import loves, mirrored
 from mixsync.discovery.loves import Loves
+from mixsync.discovery.playlists import NO_LINKS
 
 from .conftest import Env, login
 from .test_discovery_playlists import rec
@@ -26,6 +27,7 @@ class FakeLB:
 
     def __init__(self) -> None:
         self.loved: list[int] = []
+        self.releases: dict[int, str] = {}  # the release ListenBrainz maps a love to, if any
         self.users: list[str] = []
         self.fail = False
 
@@ -33,7 +35,9 @@ class FakeLB:
         self.users.append(user)
         if self.fail:
             raise TransientError("ListenBrainz /1/feedback returned 503")
-        return [RecordingRef(rec(n), None, "Artist", f"Loved {n}") for n in self.loved]
+        return [
+            RecordingRef(rec(n), self.releases.get(n), "Artist", f"Loved {n}") for n in self.loved
+        ]
 
 
 class LovesRig(MirrorRig):
@@ -73,6 +77,36 @@ async def test_loves_reach_navidrome_newest_first_without_resolving(
     pl = lr.pl(pid)
     assert (pl.cadence_days, pl.upstream_kind) == (1, mirrored.LOVES)
     assert [e["release_mbid"] for e in pl.entries] == [REL] * 3
+
+
+async def test_a_release_from_listenbrainz_skips_the_metadata_lookup(
+    lr: LovesRig, web: TestClient
+) -> None:
+    pid = lr.create_loves(web)
+    lr.lb.loved, lr.lb.releases = [2, 1], {2: REL_2, 1: REL_2}  # metadata would say REL
+    await lr.sync()
+    assert "meta" not in lr.history.calls
+    assert [e["release_mbid"] for e in lr.pl(pid).entries] == [REL_2, REL_2]
+
+    lr.lb.loved = [3, 2, 1]  # 3 has no release from ListenBrainz: only it is looked up
+    lr.env.clock.advance(timedelta(days=2))
+    await lr.sync()
+    assert lr.history.calls.count("meta") == 1
+    assert [e["release_mbid"] for e in lr.pl(pid).entries] == [REL, REL_2, REL_2]
+
+
+async def test_a_sync_without_a_listenbrainz_link_says_why_on_the_page(
+    lr: LovesRig, web: TestClient
+) -> None:
+    with lr.env.sessions.begin() as s:
+        bob = create_user(s, "bob", "pw").id
+        pid = loves.create_loves(s, lr.env.clock.now(), bob).id
+    await lr.sync()
+    assert lr.pl(pid).last_error == NO_LINKS
+    assert lr.lb.users == []
+    assert [j.status for j in lr.env.jobs(JobKind.MIRROR_SYNC)].count("queued") == 1  # chain on
+    login(web, "bob")
+    assert f"Last sync: {NO_LINKS}" in web.get("/mirrored").text
 
 
 async def test_first_sync_waits_then_new_loves_are_requested_automatically(

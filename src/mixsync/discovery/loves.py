@@ -31,6 +31,8 @@ class Loves:
             raise PermanentError(why)
         user = links["listenbrainz"][0]
         return [
-            UpstreamTrack(r.artist, r.title, recording_mbid=r.recording_mbid)
+            UpstreamTrack(
+                r.artist, r.title, recording_mbid=r.recording_mbid, release_mbid=r.release_mbid
+            )
             for r in await self.client.loves(user)
         ]

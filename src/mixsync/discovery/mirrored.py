@@ -47,6 +47,7 @@ class UpstreamTrack:
     title: str
     isrc: str | None = None
     recording_mbid: str | None = None  # upstream named the recording: used as is, not resolved
+    release_mbid: str | None = None  # a release of it, when upstream names one
 
 
 class Upstream(Protocol):
@@ -239,6 +240,8 @@ class Mirror:
                     "rec_artist": t.artist,
                     "rec_title": t.title,
                 }
+                if not e["release_mbid"]:
+                    e = {**e, "release_mbid": t.release_mbid}
             else:
                 e = known.get((t.artist, t.title, t.isrc))
             if e is None:
@@ -269,7 +272,10 @@ class Mirror:
         upstream = self.upstreams.get(kind)
         if upstream is None:
             return self._stop(pid, job.id, f"no upstream adapter for {kind!r}")
-        tracks = await upstream.tracks(uid, ref)
+        try:
+            tracks = await upstream.tracks(uid, ref)
+        except PermanentError as e:  # no link, unknown user: a retry would not help; say why
+            return self._stop(pid, job.id, str(e))
         if not tracks and old:  # likely an adapter hiccup, not a cleared playlist
             return self._stop(pid, job.id, EMPTY_UPSTREAM)
         entries = await self._resolved(tracks, old)
