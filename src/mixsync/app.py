@@ -1,9 +1,9 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from mixsync.core.config import Settings
 from mixsync.db.engine import user_sessions
 from mixsync.library import tag_undo
+from mixsync.web.csp import CSP
 from mixsync.web.csrf import check_csrf
 from mixsync.web.routes import (
     account,
@@ -49,6 +50,21 @@ def create_app(
     app.state.settings = services.settings
     app.state.session_factory = user_sessions(services.session_factory)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
+
+    @app.middleware("http")
+    async def add_csp(  # pyright: ignore[reportUnusedFunction]  # registered by decorator
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        response.headers.setdefault("Content-Security-Policy", CSP)  # a route may relax it
+        return response
+
+    @app.exception_handler(Exception)
+    def server_error(request: Request, exc: Exception) -> Response:  # pyright: ignore[reportUnusedFunction]  # registered by decorator
+        # ServerErrorMiddleware sits outside the CSP middleware, so this response sets its own
+        return PlainTextResponse(
+            "Internal Server Error", status_code=500, headers={"Content-Security-Policy": CSP}
+        )
 
     @app.exception_handler(StarletteHTTPException)
     def http_error(request: Request, exc: StarletteHTTPException) -> Response:  # pyright: ignore[reportUnusedFunction]  # registered by decorator

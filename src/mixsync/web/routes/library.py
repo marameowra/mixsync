@@ -45,6 +45,7 @@ from mixsync.submit.mb_seed import (
     SeedTrack,
     build_seed,
 )
+from mixsync.web.csp import csp_with_form_target
 from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
 from mixsync.web.names import MAX_LOOKUPS, resolve
 from mixsync.web.routes.requests import delete_row
@@ -238,6 +239,7 @@ def unverified_submit(
         "seed": build_seed(_seed_release(request, items, album, albumartist, year)),
     }
     resp = templates.TemplateResponse(request, "pages/unverified_submit.html", ctx)
+    resp.headers["Content-Security-Policy"] = csp_with_form_target(SEED_URL)  # form posts to MB
     resp.headers["Referrer-Policy"] = "no-referrer"  # Chromium ignores rel=noreferrer on forms
     return resp
 

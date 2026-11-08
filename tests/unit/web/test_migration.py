@@ -227,7 +227,7 @@ def _set(sf: sessionmaker[Session], mid: int, status: str, summary: dict[str, ob
         m.status, m.summary = status, summary
 
 
-TRIGGER = 'hx-trigger="every 5s [!document.hidden]"'
+TRIGGER = 'hx-trigger="every 5s"'
 
 
 def test_preflight_polls_and_shows_progress(
