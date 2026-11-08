@@ -68,11 +68,26 @@ class Evidence:
             ]
 
         raw: dict[str, Any] = {**self.raw}
-        raw["source"] = {**raw.get("source", {}), "files": swap(self.files)}
+        raw["source"] = {**raw.get("source", {}), "files": swap(self.listed)}
         for key in ("assignment", "off_release"):
             if key in raw:
                 raw[key] = swap(raw[key])
         return Evidence(raw)
+
+    def with_split(self, paths: list[str], request_id: int, by: int) -> "Evidence":
+        """`paths` (unassigned files) went to request `request_id`: they leave `unassigned` and
+        every later action on this decision. They stay listed, so the stored record is whole."""
+        entry = {"request_id": request_id, "by": by}
+        split = {**self.split_to, **{p: entry for p in paths}}
+        rest = [u for u in self.unassigned if u not in split]
+        return Evidence({**self.raw, "unassigned": rest, "split_to": split})
+
+    def candidate_of(self, paths: list[str]) -> dict[str, Any]:
+        """The stored Candidate cut down to the files at `paths` (its files align with `listed`)."""
+        c = self.raw["candidate"]
+        keep = set(paths)
+        pairs = zip(c["files"], self.listed, strict=True)
+        return {**c, "files": [f for f, x in pairs if x.get("local_path") in keep]}
 
     def with_switched_from(self, release_id: str) -> "Evidence":
         return Evidence({**self.raw, "canonical_switched_from": release_id})
@@ -83,8 +98,21 @@ class Evidence:
         return self.raw.get("request_id", 0)
 
     @property
-    def files(self) -> list[dict[str, Any]]:
+    def listed(self) -> list[dict[str, Any]]:
+        """Every downloaded file, split-off ones included."""
         return self.raw.get("source", {}).get("files", [])
+
+    @property
+    def files(self) -> list[dict[str, Any]]:
+        """The files still this decision's: listed ones not split off to another request."""
+        split = self.split_to
+        return [f for f in self.listed if f.get("local_path") not in split]
+
+    @property
+    def split_to(self) -> dict[str, dict[str, int]]:
+        """Split-off file path -> {request_id, by}: the request it went to and who split it.
+        Empty on old decisions."""
+        return self.raw.get("split_to", {})
 
     @property
     def peer(self) -> str:
@@ -96,12 +124,13 @@ class Evidence:
 
     @property
     def paths(self) -> list[str]:
-        return [f["local_path"] for f in self.raw["source"]["files"]]
+        return [f["local_path"] for f in self.files]
 
     @property
     def candidate(self) -> dict[str, Any]:
-        """The Candidate as stored; `requests.candidate_from_dict` turns it into one."""
-        return self.raw["candidate"]
+        """The Candidate as stored, less any split-off files; `requests.candidate_from_dict`
+        turns it into one."""
+        return self.candidate_of(self.paths) if self.split_to else self.raw["candidate"]
 
     @property
     def target(self) -> dict[str, Any]:

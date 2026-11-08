@@ -65,7 +65,7 @@
         {% for r in in_progress %}
         <tr>
           <td><span class="who">{% set rname = r.album or (names or {}).get(r.release_mbid) or r.release_mbid %}{{ artwork(rname, "/media/artwork/release/" ~ r.release_mbid ~ ("?group=" ~ r.release_group_mbid if r.release_group_mbid else ""), "xs") }}<span>{{ r.album or mb.link("release", r.release_mbid) }}<span>{{ r.artist or "Unknown artist" }}</span></span></span></td>
-          <td>{{ {"manual": "Manual", "watchlist": "Watchlist", "drop": "Drop folder", "adopt": "Adoption"}.get(r.source, r.source) }}</td>
+          <td>{{ {"manual": "Manual", "watchlist": "Watchlist", "drop": "Drop folder", "adopt": "Adoption", "split": "Split"}.get(r.source, r.source) }}</td>
           <td>{{ status(r.status) }}</td>
         </tr>
         {% endfor %}

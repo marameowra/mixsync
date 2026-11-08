@@ -50,9 +50,11 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Decision**: The logged verdict on one candidate's match: the band it fell in, its evidence, and, once acted on, who acted, how and when. Kept as the audit record after its request is gone. _Avoid_: Match, result
 
-**Review**: A person acting on a decision that fell in the review band, after its files are downloaded. Each action settles the decision and moves its request on in one step. _Avoid_: Approval, moderation
+**Review**: A person acting on a decision that fell in the review band, after its files are downloaded. Each action settles the decision and moves its request on in one step, except a split. _Avoid_: Approval, moderation
 
 **Repick**: A review action naming a different release; the files are verified again against it.
+
+**Split**: A review action that takes files the decision's release has no track for and makes them a new request, made from those files, for a release that holds them. The decision stays pending for the rest of its files. _Avoid_: Partial accept, multi-release match
 
 **Recheck**: A review action that closes a pending decision so the files are verified again with the current scorer.
 

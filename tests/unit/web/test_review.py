@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire import lifecycle, request_delete, review, verify
 from mixsync.acquire.evidence import Evidence
-from mixsync.acquire.requests import create_request
+from mixsync.acquire.requests import candidate_dict, create_request
 from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
@@ -1648,3 +1648,124 @@ def test_review_list_ignores_junk_summary_params(client: TestClient) -> None:
     _login(client, "alice")
     r = client.get("/review?requeued=abc&missing=-1&busy=%E2%82%82")
     assert r.status_code == 200 and "Re-queued 0 · skipped 0" in r.text
+
+
+HOLDER = "44444444-4444-4444-4444-444444444444"  # a release the evidence found holding b.mp3
+
+
+def _splittable(sf: sessionmaker[Session], downloads: Path, provisional: bool = False) -> int:
+    """a.mp3 paired with the release; b.mp3 not on it, held by HOLDER."""
+    (downloads / "b.mp3").write_bytes(AUDIO)
+    a, b = str(downloads / "a.mp3"), str(downloads / "b.mp3")
+    with sf() as s, s.begin():
+        uid = s.query(User).filter_by(username="alice").one().id
+        wanted = ["r1"] if provisional else []
+        req = create_request(
+            s, datetime.now(UTC), uid, MBID, provisional=provisional, recordings=wanted
+        )
+        req.status = "review"
+        files = (CandidateFile("a.mp3", 0, "mp3"), CandidateFile("b.mp3", 0, "mp3"))
+        cand = Candidate("peer1", "Music\\Album", files)
+        ev = Evidence.verified(
+            req.id,
+            candidate_dict(cand),
+            cand,
+            [Path(a), Path(b)],
+            AlbumInfo("Artist", "Album", ()),
+            unassigned=[b],
+            partial="",
+            acoustid=[],
+            duration_deltas=[0.0],
+            assignment=[{"local_path": a, "track": 0, "acoustid_id": None}],
+        ).to_json()
+        ev["off_release"] = [{"local_path": b, "recording_ids": ["r2"], "releases": [HOLDER]}]
+        res = MatchResult(0.3, Band.REVIEW, (), (), 1)
+        return decisions.record(s, res, evidence=ev, user_id=uid, stage=2, release_mbid=MBID).id
+
+
+def test_split_form_offers_the_unassigned_files_and_their_releases(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    i = _splittable(sf, downloads)
+    tok = _login(client, "alice")
+    page = client.get(f"/review/{i}").text
+    assert f'action="/review/{i}/split"' in page
+    assert f'name="path" value="{downloads / "b.mp3"}"' in page
+    assert f'name="path" value="{downloads / "a.mp3"}"' not in page  # paired: not splittable
+    assert f'name="release" value="{HOLDER}"' in page and 'name="release_url"' in page
+
+    form = {"csrf_token": tok, "path": str(downloads / "b.mp3"), "release": HOLDER}
+    r = client.post(f"/review/{i}/split", data=form)
+    assert r.status_code == 303 and r.headers["location"] == f"/review/{i}"
+    with sf() as s:
+        (new,) = s.scalars(select(AlbumRequest).where(AlbumRequest.source == "split"))
+        assert new.release_mbid == HOLDER and new.status == "verifying"
+        d = s.get_one(MatchDecision, i)
+        assert d.status == "pending_review" and d.evidence["unassigned"] == []
+    page = client.get(f"/review/{i}").text
+    assert f'action="/review/{i}/split"' not in page  # nothing left to split
+    assert f"request #{new.id}" in page
+
+
+def test_split_takes_a_pasted_release_over_the_offered_one(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    i = _splittable(sf, downloads)
+    tok = _login(client, "alice")
+    pasted = "55555555-5555-5555-5555-555555555555"
+    url = f"https://musicbrainz.org/release/{pasted}"
+    form = {"csrf_token": tok, "path": str(downloads / "b.mp3"), "release": HOLDER}
+    assert client.post(f"/review/{i}/split", data={**form, "release_url": url}).status_code == 303
+    with sf() as s:
+        (new,) = s.scalars(select(AlbumRequest).where(AlbumRequest.source == "split"))
+        assert new.release_mbid == pasted
+
+
+def test_after_a_split_unverified_and_preview_treat_the_split_off_file_right(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    i = _splittable(sf, downloads)
+    tok = _login(client, "alice")
+    form = {"csrf_token": tok, "path": str(downloads / "b.mp3"), "release": HOLDER}
+    assert client.post(f"/review/{i}/split", data=form).status_code == 303
+    # the page still lists b.mp3 second: its preview serves it by that index
+    (downloads / "b.mp3").write_bytes(b"split-off")
+    assert client.get(f"/media/preview/{i}/1").content == b"split-off"
+    # Mark unverified takes one set of fields: a.mp3's, the only file left
+    edits = {"albumartist": "A", "album": "B", "title": "T", "artist": "", "disc": "1"}
+    r = client.post(f"/review/{i}/unverified", data={"csrf_token": tok, **edits, "track": "1"})
+    assert r.status_code == 303
+    with sf() as s:
+        d = s.get_one(MatchDecision, i)
+        tracks = d.evidence["unverified"]["tracks"]
+        assert [t["local_path"] for t in tracks] == [str(downloads / "a.mp3")]
+
+
+def test_split_refusals_come_back_as_errors(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    i = _splittable(sf, downloads)
+    tok = _login(client, "alice")
+    b = str(downloads / "b.mp3")
+    posts = [
+        ({"path": str(downloads / "a.mp3"), "release": HOLDER}, 409),  # paired
+        ({"path": b}, 409),  # no release
+        ({"path": b, "release_url": "junk"}, 400),
+        ({"release": HOLDER}, 409),  # no files
+    ]
+    for form, code in posts:
+        assert (
+            client.post(f"/review/{i}/split", data={"csrf_token": tok, **form}).status_code == code
+        )
+    with sf() as s:
+        assert s.scalars(select(AlbumRequest).where(AlbumRequest.source == "split")).first() is None
+
+
+def test_split_form_is_not_offered_without_unassigned_files_or_for_discovery(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    plain = _make_decision(sf, "alice", str(downloads / "a.mp3"))
+    discovery = _splittable(sf, downloads, provisional=True)
+    _login(client, "alice")
+    for i in (plain, discovery):
+        assert "/split" not in client.get(f"/review/{i}").text
