@@ -388,6 +388,66 @@ async def test_a_split_off_file_verifies_on_its_own_and_the_rest_is_reviewed_apa
     assert quarantined(env, "review") == [held]
 
 
+async def split_second_file(env: Env, web: TestClient, release: str) -> tuple[int, int, Path]:
+    """Song Two is AcoustID-placed off the release; it is split off to `release`. Returns the
+    parent request and decision ids and the held file."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.acoustid.override["Alpha Album/02 Song Two.mp3"] = [
+        AcoustIdResult("aid-x", 0.95, (RECORDINGS["Tune Two"],))
+    ]
+    rid = request(env)
+    await env.drain()
+    (d,) = decision_rows(env, 2)
+    (held,) = [p for p in quarantined(env, "review") if p.name == "02 Song Two.mp3"]
+    tok = login(web, "alice")
+    form = {"csrf_token": tok, "path": str(held), "release": release}
+    assert web.post(f"/review/{d.id}/split", data=form).status_code == 303
+    return rid, d.id, held
+
+
+async def test_accepting_the_parent_after_a_split_leaves_the_split_off_file_in_review(
+    env: Env, web: TestClient
+) -> None:
+    rid, did, held = await split_second_file(env, web, str(OTHER.release_id))
+    body = held.read_bytes()
+    tok = login(web, "alice")
+    assert web.post(f"/review/{did}/accept", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert status(env, rid) == "imported" and library(env) == [FIRST]
+    assert quarantined(env, "review") == [held] and held.read_bytes() == body
+
+
+async def test_a_split_to_a_release_musicbrainz_lacks_goes_to_review_not_stranded(
+    env: Env, web: TestClient
+) -> None:
+    ghost = "44444444-4444-4444-4444-444444444444"  # e.g. a pasted recording MBID
+
+    async def lookup(mbid: str, *, fresh: bool = False) -> AlbumInfo:
+        if mbid == ghost:
+            raise PermanentError("returned 404")
+        return CATALOG[mbid]
+
+    env.pipeline.metadata.get_release = lookup  # type: ignore[method-assign]
+    _, did, held = await split_second_file(env, web, ghost)
+    await env.drain()
+
+    with env.sessions() as s:
+        (split,) = s.scalars(select(Request).where(Request.source == "split"))
+        assert (split.status, split.last_error) == (
+            "review",
+            f"release {ghost} not found on MusicBrainz",
+        )
+    (own,) = [x for x in decision_rows(env, 2) if Evidence.parse(x.evidence).request_id == split.id]
+    assert own.status == "pending_review" and Evidence.parse(own.evidence).paths == [str(held)]
+    # a person can reject it, which re-files it like any review
+    tok = login(web, "alice")
+    assert web.post(f"/review/{own.id}/reject", data={"csrf_token": tok}).status_code == 303
+    await env.drain()
+    assert [p.name for p in quarantined(env, "rejected")] == ["02 Song Two.mp3"]
+    with env.sessions() as s:
+        assert s.get_one(MatchDecision, did).status == "pending_review"  # the parent is apart
+
+
 async def test_a_contradicted_pair_lands_in_review(env: Env) -> None:
     env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
     contradict_second_file(env)

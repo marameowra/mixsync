@@ -74,10 +74,11 @@ class Evidence:
                 raw[key] = swap(raw[key])
         return Evidence(raw)
 
-    def with_split(self, paths: list[str], request_id: int) -> "Evidence":
+    def with_split(self, paths: list[str], request_id: int, by: int) -> "Evidence":
         """`paths` (unassigned files) went to request `request_id`: they leave `unassigned` and
         every later action on this decision. They stay listed, so the stored record is whole."""
-        split = {**self.split_to, **dict.fromkeys(paths, request_id)}
+        entry = {"request_id": request_id, "by": by}
+        split = {**self.split_to, **{p: entry for p in paths}}
         rest = [u for u in self.unassigned if u not in split]
         return Evidence({**self.raw, "unassigned": rest, "split_to": split})
 
@@ -108,8 +109,9 @@ class Evidence:
         return [f for f in self.listed if f.get("local_path") not in split]
 
     @property
-    def split_to(self) -> dict[str, int]:
-        """Split-off file path -> the request it went to. Empty on old decisions."""
+    def split_to(self) -> dict[str, dict[str, int]]:
+        """Split-off file path -> {request_id, by}: the request it went to and who split it.
+        Empty on old decisions."""
         return self.raw.get("split_to", {})
 
     @property

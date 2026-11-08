@@ -236,7 +236,7 @@ def split(
     text = release_url.strip() or release.strip()
     mbid = parse_release_mbid(text) if text else ""
     try:
-        review.split(db, datetime.now(UTC), decision_id, path, mbid)
+        review.split(db, datetime.now(UTC), decision_id, user.id, path, mbid)
     except review.Refused as e:
         raise HTTPException(409, str(e)) from e
     return RedirectResponse(f"/review/{decision_id}", status_code=303)

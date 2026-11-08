@@ -1711,12 +1711,33 @@ def test_split_takes_a_pasted_release_over_the_offered_one(
 ) -> None:
     i = _splittable(sf, downloads)
     tok = _login(client, "alice")
-    url = f"https://musicbrainz.org/release/{MBID}"
+    pasted = "55555555-5555-5555-5555-555555555555"
+    url = f"https://musicbrainz.org/release/{pasted}"
     form = {"csrf_token": tok, "path": str(downloads / "b.mp3"), "release": HOLDER}
     assert client.post(f"/review/{i}/split", data={**form, "release_url": url}).status_code == 303
     with sf() as s:
         (new,) = s.scalars(select(AlbumRequest).where(AlbumRequest.source == "split"))
-        assert new.release_mbid == MBID
+        assert new.release_mbid == pasted
+
+
+def test_after_a_split_unverified_and_preview_treat_the_split_off_file_right(
+    client: TestClient, sf: sessionmaker[Session], downloads: Path
+) -> None:
+    i = _splittable(sf, downloads)
+    tok = _login(client, "alice")
+    form = {"csrf_token": tok, "path": str(downloads / "b.mp3"), "release": HOLDER}
+    assert client.post(f"/review/{i}/split", data=form).status_code == 303
+    # the page still lists b.mp3 second: its preview serves it by that index
+    (downloads / "b.mp3").write_bytes(b"split-off")
+    assert client.get(f"/media/preview/{i}/1").content == b"split-off"
+    # Mark unverified takes one set of fields: a.mp3's, the only file left
+    edits = {"albumartist": "A", "album": "B", "title": "T", "artist": "", "disc": "1"}
+    r = client.post(f"/review/{i}/unverified", data={"csrf_token": tok, **edits, "track": "1"})
+    assert r.status_code == 303
+    with sf() as s:
+        d = s.get_one(MatchDecision, i)
+        tracks = d.evidence["unverified"]["tracks"]
+        assert [t["local_path"] for t in tracks] == [str(downloads / "a.mp3")]
 
 
 def test_split_refusals_come_back_as_errors(

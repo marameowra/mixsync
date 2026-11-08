@@ -596,7 +596,8 @@ class Pipeline:
         return None
 
     def _reopen(self, s: Session, job: JobRecord, mbid: str) -> None:
-        """Put the review item whose repick named `mbid` back, so the reviewer can choose again."""
+        """Put the review item whose repick named `mbid` back, so the reviewer can choose again;
+        a split request with none gets a review item of its own."""
         req = self._request(s, job)
         for d in s.scalars(
             select(MatchDecision)
@@ -607,7 +608,30 @@ class Pipeline:
                 decisions.reopen(s, d.id)
                 lifecycle.review(req, f"release {mbid} not found on MusicBrainz")
                 return
-        raise PermanentError(f"release {mbid} not found on MusicBrainz")
+        why = f"release {mbid} not found on MusicBrainz"
+        if req.source == "split" and req.origin:
+            # Split-off files sit in quarantine/review/ with no decision yet: give them one, so
+            # a person can repick, mark them unverified or reject them (never stranded).
+            paths = list(req.origin["paths"])
+            ev = Evidence.verified(
+                req.id,
+                req.origin["candidate"],
+                candidate_from_dict(req.origin["candidate"]),
+                [Path(p) for p in paths],
+                AlbumInfo("", "", ()),
+                unassigned=paths,
+                partial="",
+                acoustid=[],
+                duration_deltas=[],
+                assignment=[],
+            )
+            res = MatchResult(1.0, Band.REVIEW, (), (why,), SCORER_VERSION)
+            decisions.record(
+                s, res, evidence=ev.to_json(), user_id=req.user_id, stage=2, release_mbid=""
+            )
+            lifecycle.review(req, why)
+            return
+        raise PermanentError(why)
 
     async def _identify(
         self, files: list[FileTrack], like: Likelies, profile: Profile, folder: str

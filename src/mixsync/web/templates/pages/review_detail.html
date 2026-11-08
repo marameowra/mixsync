@@ -115,7 +115,7 @@
   {% set gone = d.evidence.get("split_to", {}) %}
   {% if gone %}
   <h3>Split off</h3>
-  <ul>{% for x, rid in gone.items() %}<li>{{ x }}: request #{{ rid }}</li>{% endfor %}</ul>
+  <ul>{% for x, e in gone.items() %}<li>{{ x }}: request #{{ e.request_id }}</li>{% endfor %}</ul>
   {% endif %}
   {% set dd = d.evidence.get("duration_deltas", []) %}
   {% if dd %}
