@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0031_mirror_auto_request"
+    assert _version(settings) == "0032_mirror_auto_request"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0031_mirror_auto_request"
+    assert _version(settings) == "0032_mirror_auto_request"
 
 
 def test_models_match_migrations(settings: Settings) -> None:
