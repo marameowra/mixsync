@@ -49,9 +49,9 @@ async def _ping(service: str, v: dict[str, str], http: PoliteClient, request: Re
         await AcoustIdClient(http, settings.model_copy(update={"acoustid_app_key": key})).ping()
 
 
-def _timed_out(e: BaseException) -> bool:
+def _cause(e: BaseException) -> BaseException | None:
     # clients wrap transport errors; Subsonic drops the cause (`from None`) but keeps the context
-    return isinstance(e.__cause__ or e.__context__, httpx.TimeoutException)
+    return e.__cause__ or e.__context__
 
 
 def _problem(service: str, v: dict[str, str]) -> str | None:
@@ -82,7 +82,13 @@ async def _check(service: str, v: dict[str, str], request: Request) -> str | Non
     except AuthError:  # the text is not shown: Subsonic's echoes the server and names env vars
         return "Authentication failed: check the credentials."
     except TransientError as e:
-        return "Timed out." if _timed_out(e) else "Unreachable: nothing answered there."
+        if isinstance(_cause(e), httpx.TimeoutException):
+            return "Timed out."
+        if isinstance(_cause(e), httpx.TransportError):
+            return "Unreachable: nothing answered there."
+        return f"Failed: {e}."  # a 5xx or repeated 429/503; the messages carry no secrets
+    except ValueError:  # e.g. slskd's URL answered 200 with an HTML page
+        return "Failed: the answer was not JSON; is this the right URL?"
     except PermanentError as e:
         return f"Failed: {e}."
     except httpx.InvalidURL:

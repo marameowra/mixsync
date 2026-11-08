@@ -1,6 +1,7 @@
 """Test-connection buttons on /settings (#348): one request per click, through PoliteClient,
 using the form's values, saving nothing. Fakes only, no real network."""
 
+import asyncio
 import re
 from collections.abc import Callable, Iterator
 
@@ -17,6 +18,7 @@ from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import AppSettings
 from mixsync.db.models.infra import RateBucket
+from mixsync.web.routes import connections
 
 Handler = Callable[[httpx.Request], httpx.Response]
 SENT: list[httpx.Request] = []
@@ -197,3 +199,30 @@ def test_settings_page_has_a_test_button_per_service(client: TestClient) -> None
         assert f'hx-post="/settings/test/{service}"' in page
         assert f'id="test-{service}"' in page
     assert "onclick" not in page and "hx-on" not in page
+
+
+def test_a_non_json_answer_is_a_visible_error(client: TestClient) -> None:
+    tok = login(client, "root")
+    fake(client, lambda r: httpx.Response(200, text="<html>"))
+    assert "the answer was not JSON" in press(client, tok, "slskd", **FORMS["slskd"])
+
+
+@pytest.mark.parametrize("service", ["slskd", "navidrome", "musicbrainz"])
+def test_a_server_error_is_not_called_unreachable(client: TestClient, service: str) -> None:
+    tok = login(client, "root")
+    fake(client, lambda r: httpx.Response(500))
+    text = press(client, tok, service, **FORMS[service])
+    assert "Failed:" in text and "returned 500" in text
+    assert "Unreachable" not in text
+
+
+def test_the_whole_click_times_out(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    tok = login(client, "root")
+    monkeypatch.setattr(connections, "TIMEOUT", 0.05)
+
+    async def stall(r: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(5)
+        return httpx.Response(200)
+
+    client.app.state.connection_transport = httpx.MockTransport(stall)  # type: ignore[attr-defined]
+    assert "Timed out." in press(client, tok, "slskd", **FORMS["slskd"])
