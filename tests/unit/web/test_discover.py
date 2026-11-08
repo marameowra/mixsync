@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -285,3 +286,115 @@ def test_keeping_an_expired_hold_is_404(client: TestClient, sf: sessionmaker[Ses
     tok = _login(client, "alice")
     r = client.post(f"/discover/keep/{M['expired']}", data={"csrf_token": tok})
     assert r.status_code == 404
+
+
+def _new(client: TestClient, tok: str, **kw: str) -> Response:
+    form = {
+        "csrf_token": tok,
+        "name": "Radio",
+        "src_lb_radio": "1",
+        "prompt": "artist:(Boards of Canada)",
+        "mode": "hard",
+        "size": "20",
+        "unowned_ratio": "0.3",
+        "cadence_days": "2",
+        "retention_days": "30",
+        "keep_plays": "3",
+    }
+    return client.post("/discover/new", data=form | kw)
+
+
+def test_create_playlist_lists_sources_and_queues_a_build(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    _seed(sf)
+    tok = _login(client, "alice")
+    assert _new(client, tok, src_recommendations="1").status_code == 303
+    with sf() as s:
+        pl = s.scalars(select(DiscoveryPlaylist).where(DiscoveryPlaylist.name == "Radio")).one()
+        assert pl.sources == [
+            {"type": "recommendations"},
+            {"type": "lb_radio", "prompt": "artist:(Boards of Canada)", "mode": "hard"},
+        ]
+        assert (pl.size, pl.cadence_days) == (20, 2)
+        queued = s.scalars(select(Job).where(Job.kind == JobKind.DISCOVERY_BUILD)).all()
+        assert [j.payload["playlist_id"] for j in queued] == [pl.id]
+    page = client.get("/discover").text
+    assert "Radio" in page and "Discovery" in page and "artist:(Boards of Canada)" in page
+
+
+def test_invalid_new_playlist_forms_rerender_with_an_error(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    _seed(sf)
+    tok = _login(client, "alice")
+    bads = {
+        "empty name": {"name": "  "},
+        "no sources": {"src_lb_radio": ""},
+        "empty prompt": {"prompt": " "},
+        "bad mode": {"mode": "extreme"},
+        "duplicate name": {"name": "Discovery"},
+        "bad size": {"size": "0"},
+    }
+    for why, bad in bads.items():
+        r = _new(client, tok, **bad)
+        assert r.status_code == 400, why
+        assert 'role="alert"' in r.text, why
+    with sf() as s:
+        assert len(s.scalars(select(DiscoveryPlaylist)).all()) == 1
+    tok = _login(client, "bob")  # another user may reuse the name
+    assert _new(client, tok, name="Discovery").status_code == 303
+
+
+def test_edit_playlist_and_owner_only(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _seed(sf)
+    tok = _login(client, "alice")
+    assert "Discovery" in client.get(f"/discover/{pid}/edit").text
+    form = {
+        "csrf_token": tok,
+        "name": "Mine",
+        "src_recommendations": "1",
+        "size": "10",
+        "unowned_ratio": "0.5",
+        "cadence_days": "3",
+        "retention_days": "10",
+        "keep_plays": "2",
+    }
+    bad = client.post(f"/discover/{pid}/edit", data=form | {"src_recommendations": "", "size": "9"})
+    assert bad.status_code == 400
+    with sf() as s:
+        pl = s.get_one(DiscoveryPlaylist, pid)
+        assert (pl.name, pl.size) == ("Discovery", 50)
+    assert client.post(f"/discover/{pid}/edit", data=form).status_code == 303
+    with sf() as s:
+        pl = s.get_one(DiscoveryPlaylist, pid)
+        assert (pl.name, pl.sources, pl.size) == ("Mine", [{"type": "recommendations"}], 10)
+    tok = _login(client, "bob")
+    assert client.get(f"/discover/{pid}/edit").status_code == 403
+    assert client.post(f"/discover/{pid}/edit", data=form | {"csrf_token": tok}).status_code == 403
+    assert client.get(f"/discover/{pid}/delete").status_code == 403
+    assert client.post(f"/discover/{pid}/delete", data={"csrf_token": tok}).status_code == 403
+    with sf() as s:
+        assert s.get(DiscoveryPlaylist, pid) is not None
+
+
+def test_delete_confirms_and_keeps_holds_and_files(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _seed(sf)
+    tok = _login(client, "alice")
+    assert _new(client, tok).status_code == 303
+    assert "Delete" in client.get(f"/discover/{pid}/delete").text  # confirm step, no change yet
+    with sf() as s:
+        assert s.get(DiscoveryPlaylist, pid) is not None
+        before = {h.id: h.expires_at for h in s.scalars(select(ProvisionalHold))}
+    assert client.post(f"/discover/{pid}/delete", data={"csrf_token": tok}).status_code == 303
+    with sf() as s:
+        assert s.get(DiscoveryPlaylist, pid) is None
+        holds = s.scalars(select(ProvisionalHold)).all()
+        assert {h.id: h.expires_at for h in holds} == before  # same rows, same clocks
+        assert len({h.playlist_id for h in holds}) == 1 and holds[0].playlist_id != pid
+        assert len(s.scalars(select(ProvisionalTrack)).all()) == 4
+        only = holds[0].playlist_id
+    # the last playlist cannot go while it still holds tracks
+    assert client.post(f"/discover/{only}/delete", data={"csrf_token": tok}).status_code == 409

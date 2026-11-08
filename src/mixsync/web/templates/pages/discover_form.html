@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if pl else "New" }} playlist - MixSync{% endblock %}
+{% block content %}
+<h1>{{ "Edit " ~ pl.name if pl else "New playlist" }}</h1>
+{% if error %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error }}</p>{% endif %}
+<form method="post" action="{{ '/discover/' ~ pl.id ~ '/edit' if pl else '/discover/new' }}">
+  {{ forms.csrf() }}
+  <p class="field"><label>Name <input name="name" type="text" maxlength="255" value="{{ v.name }}"></label></p>
+  <fieldset>
+    <legend>Sources (pick at least one)</legend>
+    <p><label><input type="checkbox" name="src_weekly_exploration" value="1"{% if "weekly_exploration" in v.types %} checked{% endif %}> Weekly exploration</label></p>
+    <p><label><input type="checkbox" name="src_recommendations" value="1"{% if "recommendations" in v.types %} checked{% endif %}> Recommendations</label></p>
+    <p><label><input type="checkbox" name="src_lb_radio" value="1"{% if "lb_radio" in v.types %} checked{% endif %}> LB Radio</label></p>
+    <p class="field"><label>LB Radio prompt <input name="prompt" type="text" value="{{ v.prompt }}"></label></p>
+    <p class="field"><label>LB Radio mode <select name="mode">{% for m in modes %}<option value="{{ m }}"{% if v.mode == m %} selected{% endif %}>{{ m }}</option>{% endfor %}</select></label></p>
+  </fieldset>
+  <p class="field"><label>Size <input name="size" type="text" inputmode="numeric" value="{{ v.size }}"></label></p>
+  <p class="field"><label>Unowned ratio (0 to 1) <input name="unowned_ratio" type="text" value="{{ v.unowned_ratio }}"></label></p>
+  <p class="field"><label>Cadence (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ v.cadence_days }}"></label></p>
+  <p class="field"><label>Retention (days) <input name="retention_days" type="text" inputmode="numeric" value="{{ v.retention_days }}"></label></p>
+  <p class="field"><label>Keep after plays <input name="keep_plays" type="text" inputmode="numeric" value="{{ v.keep_plays }}"></label></p>
+  <button type="submit" class="primary">Save</button> <a href="/discover">Cancel</a>
+</form>
+{% endblock %}

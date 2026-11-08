@@ -3,7 +3,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 from mixsync.acquire.lifecycle import NO_FILE
 from mixsync.core.capabilities import Capability
@@ -197,4 +198,166 @@ def build_now(playlist_id: int, user: User, db: Db) -> RedirectResponse:
     pl = _own(db, user, playlist_id)
     if not playlists.build_now(db, datetime.now(UTC), pl):
         raise HTTPException(409, "built within the last hour")
+    return RedirectResponse("/discover", status_code=303)
+
+
+SOURCE_TYPES = ("weekly_exploration", "recommendations", "lb_radio")
+MODES = ("easy", "medium", "hard")
+FIELDS = ("size", "unowned_ratio", "cadence_days", "retention_days", "keep_plays")
+
+
+def _form_page(
+    request: Request,
+    user: AuthUser,
+    pl: DiscoveryPlaylist | None,
+    values: dict[str, Any],
+    error: str | None,
+) -> HTMLResponse:
+    ctx = {"user": user, "pl": pl, "v": values, "error": error, "modes": MODES}
+    return templates.TemplateResponse(
+        request, "pages/discover_form.html", ctx, status_code=400 if error else 200
+    )
+
+
+def _values(pl: DiscoveryPlaylist | None) -> dict[str, Any]:
+    """The form's fields as strings, from a playlist (or the new-playlist defaults)."""
+    if pl is None:
+        return {
+            "name": "",
+            "types": set(),
+            "prompt": "",
+            "mode": "easy",
+            "size": "50",
+            "unowned_ratio": "0.3",
+            "cadence_days": "7",
+            "retention_days": "30",
+            "keep_plays": "3",
+        }
+    radio = next((s for s in pl.sources if s.get("type") == "lb_radio"), dict[str, Any]())
+    return {
+        "name": pl.name,
+        "types": {s.get("type") for s in pl.sources},
+        "prompt": radio.get("prompt", ""),
+        "mode": radio.get("mode", "easy"),
+        **{f: str(getattr(pl, f)) for f in FIELDS},
+    }
+
+
+async def _read(request: Request) -> dict[str, Any]:
+    f = await request.form()
+    return {
+        "name": str(f.get("name", "")).strip(),
+        "types": {t for t in SOURCE_TYPES if f.get(f"src_{t}")},
+        "prompt": str(f.get("prompt", "")).strip(),
+        "mode": str(f.get("mode", "easy")),
+        **{k: str(f.get(k, "")) for k in FIELDS},
+    }
+
+
+def _apply(db: Db, user: AuthUser, pl: DiscoveryPlaylist, v: dict[str, Any]) -> None:
+    """Validate the form values and set them on pl; HTTPException(400) says what is wrong."""
+    if not v["name"] or len(v["name"]) > 255:
+        raise HTTPException(400, "a name of 1 to 255 characters is required")
+    other = select(DiscoveryPlaylist.id).where(
+        DiscoveryPlaylist.user_id == user.id,
+        DiscoveryPlaylist.name == v["name"],
+        DiscoveryPlaylist.id != (pl.id or 0),
+    )
+    if db.scalar(other.limit(1)) is not None:
+        raise HTTPException(400, "you already have a playlist with that name")
+    if not v["types"]:
+        raise HTTPException(400, "pick at least one source")
+    if "lb_radio" in v["types"]:
+        if not v["prompt"]:
+            raise HTTPException(400, "an LB Radio source needs a prompt")
+        if v["mode"] not in MODES:
+            raise HTTPException(400, "LB Radio mode is easy, medium or hard")
+    try:
+        ratio = float(v["unowned_ratio"])
+    except ValueError:
+        ratio = -1.0
+    if not 0 <= ratio <= 1:  # also rejects nan
+        raise HTTPException(400, "unowned ratio is a number from 0 to 1")
+    pl.size = _whole(v["size"], "size", 500)
+    pl.cadence_days = _whole(v["cadence_days"], "cadence", 365)
+    pl.retention_days = _whole(v["retention_days"], "retention", 365)
+    pl.keep_plays = _whole(v["keep_plays"], "keep plays", 1000)
+    pl.unowned_ratio = ratio
+    pl.name = v["name"]
+    pl.sources = [
+        {"type": t, "prompt": v["prompt"], "mode": v["mode"]} if t == "lb_radio" else {"type": t}
+        for t in SOURCE_TYPES
+        if t in v["types"]
+    ]
+
+
+@router.get("/new")
+def new_form(request: Request, user: User) -> HTMLResponse:
+    return _form_page(request, user, None, _values(None), None)
+
+
+@router.post("/new", response_model=None)
+async def create(request: Request, user: User, db: Db) -> HTMLResponse | RedirectResponse:
+    v = await _read(request)
+    pl = DiscoveryPlaylist(user_id=user.id)
+    try:
+        _apply(db, user, pl, v)
+        with db.begin_nested():  # a racing double submit hits the unique (user, name) key
+            db.add(pl)
+    except HTTPException as e:
+        return _form_page(request, user, None, v, e.detail)
+    except IntegrityError:
+        return _form_page(request, user, None, v, "you already have a playlist with that name")
+    playlists.ensure_build(db, datetime.now(UTC), pl)  # builds on cadence like the default
+    return RedirectResponse("/discover", status_code=303)
+
+
+@router.get("/{playlist_id}/edit")
+def edit_form(playlist_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
+    pl = _own(db, user, playlist_id)
+    return _form_page(request, user, pl, _values(pl), None)
+
+
+@router.post("/{playlist_id}/edit", response_model=None)
+async def edit(
+    playlist_id: int, request: Request, user: User, db: Db
+) -> HTMLResponse | RedirectResponse:
+    pl = _own(db, user, playlist_id)
+    v = await _read(request)
+    try:
+        _apply(db, user, pl, v)
+    except HTTPException as e:
+        db.refresh(pl)  # drop the fields set before the bad one
+        return _form_page(request, user, pl, v, e.detail)
+    return RedirectResponse("/discover", status_code=303)
+
+
+@router.get("/{playlist_id}/delete")
+def delete_confirm(playlist_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
+    pl = _own(db, user, playlist_id)
+    return templates.TemplateResponse(
+        request, "pages/discover_delete.html", {"user": user, "pl": pl}
+    )
+
+
+@router.post("/{playlist_id}/delete")
+def delete(playlist_id: int, user: User, db: Db) -> RedirectResponse:
+    pl = _own(db, user, playlist_id)
+    held = select(ProvisionalHold.id).where(ProvisionalHold.playlist_id == pl.id).limit(1)
+    if db.scalar(held) is not None:
+        # holds point at a playlist (retention reads its keep_plays): hand them to another one
+        heir = db.scalar(
+            select(DiscoveryPlaylist.id)
+            .where(DiscoveryPlaylist.user_id == user.id, DiscoveryPlaylist.id != pl.id)
+            .order_by(DiscoveryPlaylist.id)
+            .limit(1)
+        )
+        if heir is None:
+            raise HTTPException(409, "create another playlist first: this one still holds tracks")
+        db.execute(
+            update(ProvisionalHold)
+            .where(ProvisionalHold.playlist_id == pl.id)
+            .values(playlist_id=heir)
+        )
+    db.delete(pl)
     return RedirectResponse("/discover", status_code=303)
