@@ -4,16 +4,19 @@ import re
 from collections.abc import Iterator
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
 from mixsync.core.config import PATH_FIELDS, Settings
-from mixsync.db.app_settings import EDITABLE
+from mixsync.db.app_settings import EDITABLE, load_settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import AppSettings
+from mixsync.db.secretbox import SecretBox
 from mixsync.library.paths import render
 from mixsync.web.routes.settings import GROUPS
 
@@ -61,6 +64,7 @@ def test_non_admins_get_403_on_get_and_post(client: TestClient) -> None:
     assert client.get("/settings").status_code == 403
     assert client.post("/settings", data={"csrf_token": tok, "trash_days": "5"}).status_code == 403
     assert client.post("/settings/reset/trash_days", data={"csrf_token": tok}).status_code == 403
+    assert client.post("/settings/clear/slskd_api_key", data={"csrf_token": tok}).status_code == 403
     assert 'href="/settings"' not in client.get("/account").text
 
 
@@ -135,12 +139,104 @@ def test_an_invalid_value_is_rejected_and_nothing_is_saved(
     assert saved(sf, "min_auto_accept_confidence") is None
 
 
-def test_read_only_settings_are_shown_and_secrets_are_not(client: TestClient) -> None:
+def test_read_only_settings_are_shown_and_bootstrap_secrets_are_not(client: TestClient) -> None:
     login(client, "root")
     page = client.get("/settings").text
     assert "config_dir" in page and "data_dir" in page
-    for secret in ("slskd_api_key", "navidrome_password", "acoustid", "secret_key", "database_url"):
-        assert secret not in page
+    for name in ("secret_key", "database_url"):
+        assert name not in page
+
+
+SECRET = "s3cr3t-value-xyz"
+
+
+def _ciphertext(sf: sessionmaker[Session], name: str) -> str | None:
+    value = saved(sf, f"{name}_encrypted")
+    assert value is None or isinstance(value, str)
+    return value
+
+
+def test_a_saved_secret_is_ciphertext_and_never_rendered(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    r = client.post("/settings", data={"csrf_token": tok, "slskd_api_key": SECRET})
+    assert r.status_code == 303
+    token = _ciphertext(sf, "slskd_api_key")
+    assert token and SECRET not in token
+    assert load_settings().slskd_api_key == SECRET
+    with sf() as s:
+        assert s.execute(text("SELECT slskd_api_key_encrypted FROM app_settings")).scalar() == token
+    page = client.get("/settings?saved=1").text
+    assert SECRET not in page and token not in page
+    block = field(page, "slskd_api_key")
+    assert (
+        "saved" in block and 'type="password"' in block and 'autocomplete="new-password"' in block
+    )
+    assert 'value=""' in block and "placeholder" not in block
+    assert "not set" in field(page, "navidrome_password")
+
+
+def test_blank_keeps_a_new_value_replaces_and_clear_removes(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "navidrome_password": SECRET})
+    first = _ciphertext(sf, "navidrome_password")
+    client.post("/settings", data={"csrf_token": tok, "navidrome_password": "", "trash_days": "3"})
+    assert _ciphertext(sf, "navidrome_password") == first
+    client.post("/settings", data={"csrf_token": tok, "navidrome_password": "other"})
+    second = _ciphertext(sf, "navidrome_password")
+    assert second and second != first
+    page = client.get("/settings").text
+    assert (
+        'id="clear-navidrome_password" method="post" action="/settings/clear/navidrome_password"'
+        in page
+    )
+    assert client.post("/settings/clear/trash_days", data={"csrf_token": tok}).status_code == 404
+    r = client.post("/settings/clear/navidrome_password", data={"csrf_token": tok})
+    assert r.status_code == 303
+    assert _ciphertext(sf, "navidrome_password") is None
+    assert saved(sf, "trash_days") == 3
+
+
+def test_a_rejected_save_does_not_echo_a_secret(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    r = client.post(
+        "/settings", data={"csrf_token": tok, "acoustid_app_key": SECRET, "trash_days": "abc"}
+    )
+    assert r.status_code == 400 and SECRET not in r.text
+    assert _ciphertext(sf, "acoustid_app_key") is None  # all or nothing
+
+
+def test_secret_status_from_environment_and_override_warning(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_ACOUSTID_USER_KEY", "from-env-key")
+    tok = login(client, "root")
+    page = client.get("/settings").text
+    assert "from environment" in field(page, "acoustid_user_key") and "from-env-key" not in page
+    client.post("/settings", data={"csrf_token": tok, "acoustid_user_key": SECRET})
+    block = field(client.get("/settings").text, "acoustid_user_key")
+    assert "MIXSYNC_ACOUSTID_USER_KEY is set but ignored" in block
+
+
+def test_an_unreadable_secret_is_flagged_and_the_env_value_is_used(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "slskd_api_key": SECRET})
+    with sf() as s, s.begin():
+        row = s.get(AppSettings, 1)
+        assert row
+        row.slskd_api_key_encrypted = SecretBox(Fernet.generate_key()).encrypt(SECRET)  # other key
+    monkeypatch.setenv("MIXSYNC_SLSKD_API_KEY", "env-key")
+    assert load_settings().slskd_api_key == "env-key"
+    page = client.get("/settings").text
+    assert "Saved value unreadable, re-enter." in field(page, "slskd_api_key")
+    assert "from environment" in field(page, "slskd_api_key")
 
 
 def test_every_editable_field_is_in_exactly_one_group() -> None:
@@ -176,3 +272,9 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
     assert 'id="reset-trash_days" method="post" action="/settings/reset/trash_days"' in page
     client.post("/settings/reset/trash_days", data={"csrf_token": tok})
     assert saved(sf, "trash_days") is None and saved(sf, "flac_level") == 3
+
+
+def test_a_secret_keeps_its_surrounding_spaces(client: TestClient) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "navidrome_password": " pw "})
+    assert load_settings().navidrome_password == " pw "

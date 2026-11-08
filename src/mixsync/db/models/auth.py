@@ -51,6 +51,11 @@ class AppSettings(TimestampMixin, Base):
     timezone: Mapped[str | None] = mapped_column(Text)
     path_template: Mapped[str | None] = mapped_column(Text)
     log_level: Mapped[str | None] = mapped_column(Text)
+    # Fernet ciphertext of the secret settings; NULL is not saved
+    slskd_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    navidrome_password_encrypted: Mapped[str | None] = mapped_column(Text)
+    acoustid_app_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    acoustid_user_key_encrypted: Mapped[str | None] = mapped_column(Text)
 
 
 class User(TimestampMixin, Base):
