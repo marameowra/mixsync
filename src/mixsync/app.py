@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -31,6 +31,12 @@ from mixsync.web.routes import settings as settings_routes
 from mixsync.web.templating import templates
 from mixsync.wiring import Services, build_services
 
+# object-src stays 'self': covers render as <object data="/media/..."> (same-origin)
+CSP = (
+    "default-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
 
 def create_app(
     session_factory: sessionmaker[Session] | None = None,
@@ -49,6 +55,14 @@ def create_app(
     app.state.settings = services.settings
     app.state.session_factory = user_sessions(services.session_factory)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
+
+    @app.middleware("http")
+    async def add_csp(  # pyright: ignore[reportUnusedFunction]  # registered by decorator
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = CSP
+        return response
 
     @app.exception_handler(StarletteHTTPException)
     def http_error(request: Request, exc: StarletteHTTPException) -> Response:  # pyright: ignore[reportUnusedFunction]  # registered by decorator

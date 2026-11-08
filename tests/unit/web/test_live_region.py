@@ -52,7 +52,7 @@ def test_in_progress_region_polls_and_settled_does_not(client: TestClient) -> No
     login(client)
     busy = client.get("/t/live", headers=HX).text
     assert 'hx-get="/t/live"' in busy
-    assert 'hx-trigger="every 5s [!document.hidden]"' in busy
+    assert 'hx-trigger="every 5s"' in busy
     assert 'hx-swap="outerHTML"' in busy
     settled = client.get("/t/live?busy=false", headers=HX).text
     assert "state=x" in settled

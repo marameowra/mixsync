@@ -35,3 +35,17 @@ def test_base_loads_htmx_once_and_swaps_error_responses() -> None:
     rules = json.loads(m.group(1))["responseHandling"]
     assert {"code": "4..", "swap": True, "error": True} in rules
     assert not any(r["swap"] and r["code"].startswith("5") for r in rules)  # 5xx keeps polling
+    assert json.loads(m.group(1))["allowEval"] is False  # CSP has no 'unsafe-eval' (#330)
+    assert json.loads(m.group(1))["includeIndicatorStyles"] is False  # no injected <style>
+
+
+def test_no_template_has_inline_style_or_trigger_filter() -> None:
+    bad: list[str] = []
+    for f in TEMPLATES.rglob("*.html"):
+        text = f.read_text()
+        name = str(f.relative_to(TEMPLATES))
+        if re.search(r"<style|\sstyle\s*=", text, re.IGNORECASE):  # CSP has no 'unsafe-inline'
+            bad.append(f"{name}: inline style")
+        if re.search(r"""hx-trigger\s*=\s*["'][^"']*\[""", text):  # filters need eval
+            bad.append(f"{name}: hx-trigger filter")
+    assert not bad

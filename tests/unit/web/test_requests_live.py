@@ -17,7 +17,7 @@ from mixsync.db.models.work import Request as AlbumRequest
 
 HX = {"HX-Request": "true"}
 MBIDS = [f"11111111-1111-1111-1111-11111111111{i}" for i in range(1, 5)]
-TRIGGER = 'hx-trigger="every 5s [!document.hidden]"'
+TRIGGER = 'hx-trigger="every 5s"'
 
 
 @pytest.fixture
