@@ -138,6 +138,28 @@ def test_change_role(admin: tuple[TestClient, str], sf: sessionmaker[Session]) -
     assert not is_admin(sf(), i)
 
 
+def test_user_forms_confirm_with_htmx_and_show_a_rejection(
+    admin: tuple[TestClient, str], sf: sessionmaker[Session]
+) -> None:
+    c, tok = admin
+    page = c.get("/users").text
+    assert page.count('hx-boost="true" hx-confirm="') == 3 * 2  # three forms for each of two users
+    assert "onsubmit" not in page
+    # a boosted form that is rejected returns a 400 page that carries the error
+    r = c.post(
+        f"/users/{uid(sf, 'root')}/status",
+        data={"csrf_token": tok, "status": "disabled"},
+        headers={"HX-Request": "true", "HX-Boosted": "true"},
+    )
+    assert r.status_code == 400 and "administrator must remain" in r.text
+    assert r.headers["HX-Push-Url"] == "false"
+    # a polling or Test-button request must not swap an error page in
+    poll = c.get("/users/999/nope", headers={"HX-Request": "true"})
+    assert poll.status_code == 404 and poll.headers["HX-Reswap"] == "none"
+    boosted = c.get("/users/999/nope", headers={"HX-Request": "true", "HX-Boosted": "true"})
+    assert "HX-Reswap" not in boosted.headers
+
+
 def test_last_admin_cannot_be_demoted_or_disabled(
     admin: tuple[TestClient, str], sf: sessionmaker[Session]
 ) -> None:
