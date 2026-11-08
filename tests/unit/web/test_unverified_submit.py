@@ -172,6 +172,14 @@ def test_seed_page_sets_no_referrer(client: TestClient) -> None:
     assert 'rel="noreferrer"' in r.text and r.headers["referrer-policy"] == "no-referrer"
 
 
+def test_only_the_seed_page_may_post_to_musicbrainz(client: TestClient) -> None:
+    _login(client, "root")
+    seed = client.get(SUBMIT, params=Q).headers["content-security-policy"]
+    assert "form-action 'self' https://musicbrainz.org;" in seed
+    other = client.get("/library/unverified").headers["content-security-policy"]
+    assert "form-action 'self';" in other
+
+
 def test_unknown_album_404(client: TestClient) -> None:
     _login(client, "root")
     assert client.get("/library/unverified/submit?album=Nope").status_code == 404
