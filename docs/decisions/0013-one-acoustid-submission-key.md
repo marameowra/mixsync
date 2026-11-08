@@ -19,3 +19,5 @@ After a promote plan, MixSync submits fingerprints to AcoustID, which needs a us
 
 ## Consequences
 - Lookups use a separate app key; see [services etiquette](../design/services-etiquette.md).
+
+> Amended by [ADR 0021](0021-app-settings-saved-over-env-loaded-at-startup.md): the key can also be saved in the settings page; a saved key overrides the env var.

@@ -87,3 +87,9 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 **Smart playlist**: A playlist built from rules over the owned library only; it never makes requests. _Avoid_: Dynamic, auto playlist
 
 **Unresolved track**: A playlist entry that could not be matched confidently to a recording; listed on the playlist, never guessed. _Avoid_: Missing track (that is a resolved recording not yet owned)
+
+### Administration
+
+**App setting**: A deployment-wide value an admin edits in the UI; once saved it overrides the environment and holds across restarts. Distinct from a user's Profile. _Avoid_: Config, preference, option
+
+**Setting source**: Where an app setting's effective value comes from: saved (by an admin), environment (`MIXSYNC_*`), or default. _Avoid_: Origin, override
