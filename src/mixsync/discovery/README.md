@@ -14,13 +14,13 @@ Per-user playlists built from listening history, including tracks not yet owned,
 - Stars and play counts are fetched once per user per run. A user without a working Navidrome link is skipped, with a note on their playlists.
 - `DISCOVERY_RETAIN` runs daily per user (jittered, self-rescheduling, started in `start_chains`). A run that promoted or expired anything queues a rescan and a `DISCOVERY_PUSH` per affected playlist.
 - Defaults (retention, keep threshold, refresh, size, unowned share) live in the [discovery design](../../../docs/design/discovery-retention.md).
+- A mirrored sync replaces the Navidrome playlist with the owned, resolved tracks in upstream order. A track leaving upstream leaves the playlist only. Unresolved tracks are listed, never pushed, and resolved again each sync; resolved ones are remembered. An empty upstream list never wipes a mirror that has tracks.
 
 ## May import
 - `listenbrainz`: `core`, `ratelimit`.
 - `resolver`: `core`, `match`, `metadata`, `listenbrainz`.
-- `playlists`, `retention`, `mirrored`: `core`, `db`, `match`, `library`.
-
-- A mirrored sync replaces the Navidrome playlist with the owned, resolved tracks in upstream order. A track leaving upstream leaves the playlist only. Unresolved tracks are listed, never pushed, and resolved again each sync; resolved ones are remembered.
+- `playlists`, `retention`: `core`, `db`, `match`, `library`.
+- `mirrored`: `core`, `db`, `acquire.lifecycle`, `acquire.requests`, `discovery.playlists` (the resolver and adapters are injected).
 
 ## Design doc
 [Discovery and retention](../../../docs/design/discovery-retention.md)

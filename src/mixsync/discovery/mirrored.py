@@ -17,6 +17,7 @@ from typing import Any, Protocol, cast
 from sqlalchemy import CursorResult, Select, select, update
 from sqlalchemy.orm import Session
 
+from mixsync.acquire.lifecycle import DONE
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import aware
 from mixsync.core.errors import PermanentError
@@ -33,6 +34,8 @@ log = logging.getLogger(__name__)
 SOURCE = "playlist"  # Request.source of a confirmed missing track
 UNRESOLVED, OWNED, MISSING = "unresolved", "owned", "missing"
 REQUESTED, NO_RELEASE = "requested", "no known release"
+EMPTY_UPSTREAM = "upstream returned no tracks; kept the last list"
+NONE_FOUND = "Navidrome found none of the owned tracks; skipped push"
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,7 @@ class UpstreamTrack:
 
 class Upstream(Protocol):
     """An upstream adapter: the playlist `ref` of user `user_id`, in upstream order. Raise on
-    failure; an empty list empties the mirror."""
+    failure. An empty list is not applied to a mirror that has tracks (it keeps its last list)."""
 
     async def tracks(self, user_id: int, ref: str) -> list[UpstreamTrack]: ...
 
@@ -118,15 +121,18 @@ def sync_now(s: Session, now: datetime, pl: MirroredPlaylist) -> bool:
 
 
 def track_states(s: Session, pl: MirroredPlaylist) -> list[tuple[dict[str, Any], str]]:
-    """Each entry with where it stands. A release anyone has requested (any status) is not asked
-    for again; a failed one is retried from /requests."""
+    """Each entry with where it stands. A release with any user's request still in flight is
+    not asked for again; once that request ends (failed, or imported without the track) the
+    track is missing again."""
     mbids = [e["recording_mbid"] for e in pl.entries if e.get("recording_mbid")]
     releases = [e["release_mbid"] for e in pl.entries if e.get("release_mbid")]
     owned = set(s.scalars(select(Track.recording_mbid).where(Track.recording_mbid.in_(mbids))))
     asked = set(
         s.scalars(
             select(Request.release_mbid).where(
-                Request.release_mbid.in_(releases), Request.provisional.is_(False)
+                Request.release_mbid.in_(releases),
+                Request.provisional.is_(False),
+                Request.status.not_in(DONE),
             )
         )
     )
@@ -247,7 +253,10 @@ class Mirror:
         upstream = self.upstreams.get(kind)
         if upstream is None:
             return self._stop(pid, job.id, f"no upstream adapter for {kind!r}")
-        entries = await self._resolved(await upstream.tracks(uid, ref), old)
+        tracks = await upstream.tracks(uid, ref)
+        if not tracks and old:  # likely an adapter hiccup, not a cleared playlist
+            return self._stop(pid, job.id, EMPTY_UPSTREAM)
+        entries = await self._resolved(tracks, old)
         before, after = {_key(e) for e in old}, {_key(e) for e in entries}
         log.info(
             "mirror: playlist %s: %d added, %d removed upstream",
@@ -302,12 +311,12 @@ class Mirror:
                 song = await lib.resolve(m, e["rec_title"], e["rec_artist"], folder)
                 if song is not None and song not in ids:
                     ids.append(song)
-            # an emptied upstream empties the playlist mixsync made; nothing to make one with
-            new_id = (
-                await lib.push_playlist(f"MixSync: {name}", ids, existing)
-                if ids or existing
-                else None
-            )
+            if main and not ids:  # Navidrome not scanned yet, or its search is off: keep it
+                note, new_id = NONE_FOUND, None
+            elif ids or existing:  # no owned tracks empties the playlist mixsync made
+                new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing)
+            else:
+                new_id = None
         except PermanentError as e:  # AuthError, not authorized: retrying would not help
             note, new_id = f"Navidrome: {e}", None
         with d.sessions.begin() as s:

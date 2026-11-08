@@ -17,7 +17,7 @@ from mixsync.discovery import mirrored
 from mixsync.discovery.mirrored import Mirror, UpstreamTrack
 
 from .conftest import Env, login
-from .test_discovery_playlists import Rig, own, rec
+from .test_discovery_playlists import FakeLib, Rig, own, rec
 
 REL = "11111111-0000-0000-0000-000000000001"
 REL_2 = "11111111-0000-0000-0000-000000000002"
@@ -52,10 +52,21 @@ class FakeResolver:
         return RecordingRef(rec(n), release, artist, f"Title {n}")
 
 
+class CountingLib(FakeLib):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pushes = 0
+
+    async def push_playlist(self, name: str, song_ids: list[str], existing_id: str | None) -> str:
+        self.pushes += 1
+        return await super().push_playlist(name, song_ids, existing_id)
+
+
 class MirrorRig:
     def __init__(self, env: Env) -> None:
         self.base = Rig(env)
-        self.env, self.lib, self.history = env, self.base.lib, self.base.history
+        self.base.lib = self.lib = CountingLib()
+        self.env, self.history = env, self.base.history
         self.upstream, self.resolver = FakeUpstream(), FakeResolver()
         self.mirror = Mirror(self.base.disc, self.resolver, {"fake": self.upstream})
         self.base.link(env.user_id, ("navidrome",))
@@ -265,3 +276,56 @@ async def test_delete_removes_the_mirror_only(mr: MirrorRig, web: TestClient) ->
         assert s.get(MirroredPlaylist, pid) is None
         assert s.scalars(select(Track)).first() is not None
     assert mr.songs() == ["s1"]  # the Navidrome playlist is left as it is
+
+
+async def test_an_empty_upstream_keeps_the_last_list(mr: MirrorRig) -> None:
+    own_in_navidrome(mr, 1, 2)
+    pid = mr.create()
+    mr.upstream.lists["a"] = [up(1), up(2)]
+    await mr.sync()
+    before = mr.pl(pid).entries
+    mr.upstream.lists["a"] = []
+    mr.env.clock.advance(timedelta(days=2))
+    await mr.sync()
+    pl = mr.pl(pid)
+    assert pl.entries == before
+    assert pl.last_error == mirrored.EMPTY_UPSTREAM
+    assert mr.lib.pushes == 1 and mr.songs() == ["s1", "s2"]
+    assert [j.status for j in mr.env.jobs(JobKind.MIRROR_SYNC)].count("queued") == 1
+
+
+async def test_an_empty_upstream_on_a_new_mirror_is_fine(mr: MirrorRig) -> None:
+    pid = mr.create()
+    mr.upstream.lists["a"] = []
+    await mr.sync()
+    pl = mr.pl(pid)
+    assert pl.entries == [] and pl.last_error is None and pl.last_synced_at is not None
+
+
+async def test_an_ended_request_does_not_block_asking_again(mr: MirrorRig, web: TestClient) -> None:
+    pid = mr.create()
+    mr.upstream.lists["a"] = [up(2), up(10)]
+    await mr.sync()
+    with mr.env.sessions.begin() as s:
+        s.add(Request(user_id=mr.env.user_id, release_mbid=REL, status="failed"))
+        # imported, yet the track never landed in the library
+        s.add(Request(user_id=mr.env.user_id, release_mbid=REL_2, status="imported"))
+    tok = login(web, "alice")
+    assert "2 tracks will be requested" in web.get("/mirrored").text
+    r = web.post(f"/mirrored/{pid}/request", data={"csrf_token": tok, "release": [REL, REL_2]})
+    assert r.status_code == 303
+    new = [(q.release_mbid, q.source) for q in mr.requests()[2:]]
+    assert new == [(REL, "playlist"), (REL_2, "playlist")]
+    assert "will be requested" not in web.get("/mirrored").text  # in flight now
+
+
+async def test_a_push_is_skipped_when_navidrome_finds_none_of_the_owned_tracks(
+    mr: MirrorRig,
+) -> None:
+    own(mr.env, 1, 2)  # in the library, but Navidrome has not scanned them
+    pid = mr.create()
+    mr.upstream.lists["a"] = [up(1), up(2)]
+    await mr.sync()
+    pl = mr.pl(pid)
+    assert mr.lib.pushes == 0 and pl.navidrome_playlist_id is None
+    assert pl.last_error == mirrored.NONE_FOUND
