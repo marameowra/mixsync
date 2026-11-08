@@ -6,12 +6,13 @@ rendered back, blank keeps the saved one, Clear removes it. Saved values are pre
 effective value of an unsaved one is shown as a placeholder, so Save never saves it by accident.
 The auto-accept cap is the exception: it is its own value, and blank clears it."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import update
+from sqlalchemy import inspect, update
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import auto_accept_cap
@@ -142,6 +143,14 @@ def _page(
     )
 
 
+def _stamp(row: AppSettings) -> None:
+    """Bump the settings version only when an app setting changed: the cap is read live."""
+    attrs = inspect(row).attrs
+    names = (*EDITABLE, *(f"{n}_encrypted" for n in SECRETS))
+    if any(attrs[n].history.has_changes() for n in names):
+        row.settings_saved_at = datetime.now(UTC)
+
+
 @router.get("")
 def show(request: Request, admin: Admin, db: Db, saved: int = 0) -> HTMLResponse:
     return _page(request, admin, db, saved=bool(saved))
@@ -174,6 +183,7 @@ async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
         raw = str(form.get(name, ""))
         if raw.strip():  # blank decided on the stripped value; the secret is kept exactly
             setattr(row, f"{name}_encrypted", box.encrypt(raw))
+    _stamp(row)
     row.min_auto_accept_confidence = pct
     db.add(row)
     if pct is not None:
@@ -193,6 +203,7 @@ def reset(name: str, admin: Admin, db: Db) -> Response:
     row = db.get(AppSettings, 1)
     if row:
         setattr(row, name, None)
+        _stamp(row)
     return RedirectResponse("/settings?saved=1", 303)
 
 
@@ -203,4 +214,5 @@ def clear(name: str, admin: Admin, db: Db) -> Response:
     row = db.get(AppSettings, 1)
     if row:
         setattr(row, f"{name}_encrypted", None)
+        _stamp(row)
     return RedirectResponse("/settings?saved=1", 303)

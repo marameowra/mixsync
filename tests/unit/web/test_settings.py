@@ -3,6 +3,7 @@
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from cryptography.fernet import Fernet
@@ -10,8 +11,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.__main__ import main
 from mixsync.app import create_app
-from mixsync.core.clock import SystemClock
+from mixsync.core.clock import SystemClock, aware
 from mixsync.core.config import PATH_FIELDS, Settings
 from mixsync.db.app_settings import EDITABLE, load_settings
 from mixsync.db.auth import create_user
@@ -302,8 +304,38 @@ def test_restart_pending_names_the_processes_behind_the_saved_settings(
         assert "Restart pending: web<" in c.get("/settings").text
     app = create_app(services=build_services(Settings(), sf, load_settings()[1]))
     with TestClient(app, follow_redirects=False) as c:
-        login(c, "root")
+        tok = login(c, "root")
         assert "Restart pending" not in c.get("/settings").text  # both loaded the saved change
+        c.post("/settings", data={"csrf_token": tok, "cap": "90"})  # read live, no restart
+        c.post("/settings", data={"csrf_token": tok, "trash_days": "7"})  # unchanged value
+        assert "Restart pending" not in c.get("/settings").text
+        c.post("/settings/reset/trash_days", data={"csrf_token": tok})
+        assert "Restart pending: web, worker<" in c.get("/settings").text
+
+
+def test_saving_only_the_cap_on_a_fresh_install_needs_no_restart(client: TestClient) -> None:
+    tok = login(client, "root")
+    assert client.post("/settings", data={"csrf_token": tok, "cap": "90"}).status_code == 303
+    assert "Restart pending" not in client.get("/settings").text
+
+
+def test_no_worker_heartbeat_at_all_is_unknown(client: TestClient) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "trash_days": "7"})
+    page = client.get("/settings").text
+    assert "Restart pending: web, worker (unknown: no recent heartbeat)" in page
+
+
+def test_web_startup_hands_the_loaded_version_to_its_services(
+    sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    version = datetime(2026, 11, 8, 12, tzinfo=UTC)
+    with sf() as s, s.begin():
+        s.add(AppSettings(id=1, trash_days=7, settings_saved_at=version))
+    started: list[Any] = []
+    monkeypatch.setattr("uvicorn.run", lambda app, **_: started.append(app))
+    assert main(["web"]) == 0
+    assert aware(started[0].state.services.settings_version) == version
 
 
 def test_a_worker_without_a_recent_heartbeat_is_unknown_not_current(

@@ -89,12 +89,13 @@ def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
 
 def load_settings() -> tuple[Settings, datetime | None]:
     """The startup snapshot for web, worker and `all`, and its settings version: the saved
-    row's `updated_at` (None if nothing was ever saved). An invalid environment fails here."""
+    row's `settings_saved_at` (None if no app setting was ever saved). An invalid environment
+    fails here."""
     engine = make_engine(Settings())
     try:
         with Session(engine) as s:
             row = s.get(AppSettings, 1)
-            return resolve(s)[0], row.updated_at if row else None
+            return resolve(s)[0], row.settings_saved_at if row else None
     except (OperationalError, ProgrammingError) as e:  # usually app_settings table/column missing
         raise RuntimeError(
             "could not read app settings: the database is not migrated (or not reachable);"
@@ -108,9 +109,9 @@ def restart_pending(s: Session, web_version: datetime | None, now: datetime) -> 
     """The processes still running settings older than the saved ones: "web", "worker", or the
     worker as unknown when no worker heartbeat is recent. Empty while nothing was ever saved."""
     row = s.get(AppSettings, 1)
-    if row is None:
+    if row is None or row.settings_saved_at is None:
         return []
-    saved = aware(row.updated_at)
+    saved = aware(row.settings_saved_at)
 
     def behind(version: datetime | None) -> bool:
         return version is None or aware(version) < saved
