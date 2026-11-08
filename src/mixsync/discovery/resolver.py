@@ -1,3 +1,5 @@
+import re
+
 from mixsync.core.matching import Band, FileTrack, TrackInfo
 from mixsync.core.types import RecordingRef
 from mixsync.discovery.listenbrainz import ListenBrainzClient
@@ -5,9 +7,13 @@ from mixsync.match.profiles import BALANCED, band
 from mixsync.match.scorer import track_distance
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 
+_ISRC = re.compile(r"[A-Z]{2}[A-Z0-9]{3}\d{7}")
+
 
 def _confident(artist: str, title: str, ref: RecordingRef) -> float | None:
     """The match distance, or None when it is below the auto-accept gate."""
+    if not ref.artist:  # track_distance skips the artist check against an empty credit
+        return None
     dist = track_distance(
         FileTrack(title=title, artist=artist), TrackInfo(ref.title, ref.artist), incl_artist=True
     ).distance
@@ -24,11 +30,14 @@ class TrackResolver:
     async def resolve(
         self, artist: str, title: str, isrc: str | None = None
     ) -> RecordingRef | None:
-        if isrc:
+        code = (isrc or "").replace("-", "").strip().upper()
+        if _ISRC.fullmatch(code):
+            # The ISRC names the recording, so only the artist is checked (against a wrongly
+            # assigned ISRC); upstream titles carry suffixes like "- Remastered 2008".
             scored = [
                 (d, r)
-                for r in await self._mb.isrc_recordings(isrc)
-                if (d := _confident(artist, title, r)) is not None
+                for r in await self._mb.isrc_recordings(code)
+                if (d := _confident(artist, r.title, r)) is not None
             ]
             if scored:
                 return min(scored, key=lambda t: t[0])[1]

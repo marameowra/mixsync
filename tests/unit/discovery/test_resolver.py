@@ -76,3 +76,23 @@ async def test_isrc_recordings_below_the_gate_fall_through(make_client: Make) ->
 
     assert await r.resolve("Dauwd", "Lydia", "GBAYE0601498") == LYDIA
     assert len(seen) == 2
+
+
+async def test_isrc_hit_ignores_upstream_version_suffixes(make_client: Make) -> None:
+    r, _ = resolver(make_client)
+
+    assert await r.resolve("Coldplay", "Clocks - Remastered 2008", "gbaye-06-01498") == CLOCKS
+
+
+async def test_malformed_isrc_skips_musicbrainz(make_client: Make) -> None:
+    r, seen = resolver(make_client)
+
+    assert await r.resolve("Dauwd", "Lydia", "not/an?isrc") == LYDIA
+    assert [q.url.path for q in seen] == ["/1/metadata/lookup/"]
+
+
+async def test_lookup_miss_is_unresolved(make_client: Make) -> None:
+    lb = ListenBrainzClient(make_client("listenbrainz", lambda _: httpx.Response(200, json={})))
+    mb = MusicBrainzProvider(make_client("musicbrainz", lambda _: httpx.Response(404)))
+
+    assert await TrackResolver(mb, lb).resolve("Nobody", "Nothing", "GBAYE0601498") is None
