@@ -27,6 +27,7 @@ WATCH_LIMIT = 100  # rows per page of a watch search
 # shortcut: a watch search reads at most 10 pages (1000 rows); raise it if a label outgrows that.
 WATCH_MAX_PAGES = 10
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
+_PING_AREA = "8a754a16-0027-3a29-b6d7-2b40ea0481ed"  # United Kingdom: small and stable
 _INC = "recordings artist-credits media labels release-groups genres"  # httpx sends spaces as +
 
 
@@ -128,6 +129,11 @@ class MusicBrainzProvider:
         self._client = client
         self._names = names
         self._base = base_url.rstrip("/") + "/ws/2"
+
+    async def ping(self) -> None:
+        """One small uncached lookup (the settings page's Test button). Raises on failure."""
+        url = f"{self._base}/area/{_PING_AREA}"
+        await get_json(self._client, url, {"fmt": "json"}, **_fresh(True))
 
     async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         data = await get_json(

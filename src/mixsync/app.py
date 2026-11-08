@@ -15,6 +15,7 @@ from mixsync.web.csrf import check_csrf
 from mixsync.web.routes import (
     account,
     auth,
+    connections,
     discover,
     home,
     library,
@@ -70,6 +71,7 @@ def create_app(
     app.include_router(migration.router)
     app.include_router(users.router)
     app.include_router(settings_routes.router)
+    app.include_router(connections.router)
     app.include_router(watchlist.router)
     app.include_router(discover.router)
     app.include_router(mirrored.router)

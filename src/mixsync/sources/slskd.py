@@ -151,6 +151,10 @@ class SlskdSource:
             raise PermanentError(f"slskd {path} returned {code}")
         return response.json() if response.content else None
 
+    async def ping(self) -> None:
+        """One authenticated status call (the settings page's Test button); never a search."""
+        await self._call("GET", "/application")
+
     async def search(self, query: str) -> list[Candidate]:
         """Candidates for `query`. The same query (trimmed, case-folded) in flight or finished
         within the debounce window shares that result: slskd is asked once."""

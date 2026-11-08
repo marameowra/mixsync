@@ -273,8 +273,9 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
     page = client.get("/settings").text
     main = re.search(r'<form method="post" action="/settings">.*?</form>', page, re.S)
     assert main
-    # a button with form="..." belongs to another form, so Enter never picks it
-    first = re.search(r"<button(?![^>]*\sform=)[^>]*>([^<]*)", main.group(0))
+    # Enter picks the first submit button: one with form="..." belongs to another form, and a
+    # type="button" (the Test buttons) never submits
+    first = re.search(r'<button(?![^>]*\sform=)(?![^>]*type="button")[^>]*>([^<]*)', main.group(0))
     assert first and first.group(1) == "Save settings"
     assert 'id="reset-trash_days" method="post" action="/settings/reset/trash_days"' in page
     client.post("/settings/reset/trash_days", data={"csrf_token": tok})
