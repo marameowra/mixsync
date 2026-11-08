@@ -1,4 +1,4 @@
-# ADR 0020: Seeding downloads are copied, never released
+# ADR 0022: Seeding downloads are copied, never released
 
 - **Status:** Accepted
 - **Date:** 2026-11-06
