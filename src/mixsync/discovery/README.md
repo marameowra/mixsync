@@ -4,7 +4,7 @@
 Per-user playlists built from listening history, including tracks not yet owned, plus the retention rules that decide whether those provisional tracks stay.
 
 ## Owns / does not own
-- **Owns:** the ListenBrainz adapter (`listenbrainz.py`, a `HistorySource`), playlist building (`playlists.py`; unowned tracks become `Request(provisional=True, source=discovery)`), keep/expire decisions (`retention.py`), and the shared playlist track resolver (`resolver.py`: ISRC via MusicBrainz, else ListenBrainz lookup, accepted only at the matcher's balanced auto-accept band; otherwise unresolved, never guessed).
+- **Owns:** the ListenBrainz adapter (`listenbrainz.py`, a `HistorySource`), playlist building (`playlists.py`; unowned tracks become `Request(provisional=True, source=discovery)`), keep/expire decisions (`retention.py`), and the shared playlist track resolver (`resolver.py`: ISRC via MusicBrainz, else ListenBrainz lookup, accepted only at the matcher's balanced auto-accept band; otherwise unresolved, never guessed), and mirrored playlists (`mirrored.py`: per-user copies of upstream playlists; adapters implement `Upstream` and call `create`; missing tracks become `Request(source=playlist)` only on the owner's confirmation).
 - **Does not own:** downloading (the normal request pipeline), file moves (`library.fileops`), or Navidrome calls (the injected `LibraryTarget`).
 
 ## Rules / invariants
@@ -14,11 +14,13 @@ Per-user playlists built from listening history, including tracks not yet owned,
 - Stars and play counts are fetched once per user per run. A user without a working Navidrome link is skipped, with a note on their playlists.
 - `DISCOVERY_RETAIN` runs daily per user (jittered, self-rescheduling, started in `start_chains`). A run that promoted or expired anything queues a rescan and a `DISCOVERY_PUSH` per affected playlist.
 - Defaults (retention, keep threshold, refresh, size, unowned share) live in the [discovery design](../../../docs/design/discovery-retention.md).
+- A mirrored sync replaces the Navidrome playlist with the owned, resolved tracks in upstream order. A track leaving upstream leaves the playlist only. Unresolved tracks are listed, never pushed, and resolved again each sync; resolved ones are remembered. An empty upstream list never wipes a mirror that has tracks.
 
 ## May import
 - `listenbrainz`: `core`, `ratelimit`.
 - `resolver`: `core`, `match`, `metadata`, `listenbrainz`.
 - `playlists`, `retention`: `core`, `db`, `match`, `library`.
+- `mirrored`: `core`, `db`, `acquire.lifecycle`, `acquire.requests`, `discovery.playlists` (the resolver and adapters are injected).
 
 ## Design doc
 [Discovery and retention](../../../docs/design/discovery-retention.md)

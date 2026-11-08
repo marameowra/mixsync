@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0029_app_settings_columns"
+    assert _version(settings) == "0030_mirrored_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0029_app_settings_columns"
+    assert _version(settings) == "0030_mirrored_playlists"
 
 
 def test_models_match_migrations(settings: Settings) -> None:

@@ -92,3 +92,32 @@ class ProvisionalHold(TimestampMixin, Base):
     kept_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     keep_reason: Mapped[str | None] = mapped_column(String(16))
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MirroredPlaylist(TimestampMixin, Base):
+    """A user's read-only copy of a playlist curated elsewhere (CONTEXT.md: Mirrored playlist).
+    Each sync replaces `entries` with the upstream list, in upstream order."""
+
+    __tablename__ = "mirrored_playlists"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name"),
+        # one mirror per upstream playlist, so an adapter's create is idempotent
+        UniqueConstraint(
+            "user_id", "upstream_kind", "upstream_ref", name="uq_mirrored_playlists_upstream"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    upstream_kind: Mapped[str] = mapped_column(String(32))  # the adapter: "spotify_file", ...
+    upstream_ref: Mapped[str] = mapped_column(String(255))  # the playlist, as the adapter names it
+    cadence_days: Mapped[int] = mapped_column(Integer, default=1)
+    # the last sync's upstream list, in upstream order:
+    # [{"artist", "title", "isrc", "recording_mbid", "release_mbid"}]; no recording_mbid is an
+    # unresolved track
+    entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    navidrome_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)

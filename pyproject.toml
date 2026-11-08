@@ -230,7 +230,11 @@ allow_indirect_imports = true  # ratelimit itself reaches db
 [[tool.importlinter.contracts]]
 name = "discovery.playlists and retention get their services injected"
 type = "forbidden"
-source_modules = ["mixsync.discovery.playlists", "mixsync.discovery.retention"]
+source_modules = [
+    "mixsync.discovery.playlists",
+    "mixsync.discovery.retention",
+    "mixsync.discovery.mirrored",
+]
 forbidden_modules = [
     "mixsync.ratelimit",
     "mixsync.metadata",
