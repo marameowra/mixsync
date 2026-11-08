@@ -360,19 +360,19 @@ def _new_queue(
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
 
-async def serve_worker() -> None:
-    queue, worker, handlers, startup = _new_queue(build_services(Settings()))
+async def serve_worker(settings: Settings) -> None:
+    queue, worker, handlers, startup = _new_queue(build_services(settings))
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
     await run_worker(queue, worker, stop, handlers, startup=startup)
 
 
-async def serve_all() -> None:
+async def serve_all(settings: Settings) -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    services = build_services(Settings())
+    services = build_services(settings)
     queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     server = uvicorn.Server(

@@ -1,16 +1,21 @@
 import argparse
 import logging
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mixsync.core.config import Settings
 
 COMMANDS = ("web", "worker", "all", "migrate", "backup", "user-add", "worker-health")
 
 
-def configure_logging() -> str:
-    """Root logging for the long-running processes, at MIXSYNC_LOG_LEVEL. Returns the level.
-    uvicorn's loggers keep their own handlers and don't propagate, so nothing prints twice."""
-    from mixsync.core.config import Settings
+def configure_logging(settings: "Settings | None" = None) -> str:
+    """Root logging for the long-running processes, at the log level (MIXSYNC_LOG_LEVEL unless
+    `settings` is given). Returns the level. uvicorn's loggers keep their own handlers and don't
+    propagate, so nothing prints twice."""
+    from mixsync.core import config
 
-    level = Settings().log_level  # an invalid level fails here, before anything starts
+    level = (settings or config.Settings()).log_level  # an invalid level fails before startup
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -18,6 +23,17 @@ def configure_logging() -> str:
         force=True,
     )
     return level
+
+
+def startup_settings() -> "Settings":
+    """The snapshot web, worker and `all` build services from (ADR 0021), logged at its level.
+    Logging starts at the env level so an invalid saved setting is reported while resolving."""
+    from mixsync.db.app_settings import load_settings
+
+    configure_logging()
+    settings = load_settings()
+    configure_logging(settings)
+    return settings
 
 
 def worker_health() -> int:
@@ -51,8 +67,13 @@ def main(argv: list[str] | None = None) -> int:
         from mixsync.app import create_app
 
         # built here, not by uvicorn: a bad key file must stop startup (build_services loads it)
-        level = configure_logging()
-        uvicorn.run(create_app(), host="0.0.0.0", port=8080, log_level=level.lower())
+        settings = startup_settings()
+        uvicorn.run(
+            create_app(settings=settings),
+            host="0.0.0.0",
+            port=8080,
+            log_level=settings.log_level.lower(),
+        )
     elif cmd == "migrate":
         from mixsync.db.migrate import upgrade
 
@@ -95,9 +116,8 @@ def main(argv: list[str] | None = None) -> int:
 
         from mixsync.worker import serve_all, serve_worker
 
-        configure_logging()
-
-        asyncio.run(serve_worker() if cmd == "worker" else serve_all())
+        settings = startup_settings()
+        asyncio.run(serve_worker(settings) if cmd == "worker" else serve_all(settings))
     elif cmd == "worker-health":
         return worker_health()
     else:
