@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Settings</h1>
 <p>A saved value beats the environment, which beats the default. Changes apply when mixsync-web and mixsync-worker restart. A blank field is left as it is; use Reset to clear a saved value.</p>
+{% if restart %}<p class="notice caution" role="status"><span aria-hidden="true">▲</span> Restart pending: {{ restart|join(", ") }}</p>{% endif %}
 {% if saved %}<p class="notice ok" role="status"><span aria-hidden="true">●</span> Saved. Restart mixsync-web and mixsync-worker to apply.</p>{% endif %}
 {% if has_errors %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> Nothing was saved. Fix the fields below.</p>{% endif %}
 <form method="post" action="/settings">

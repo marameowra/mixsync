@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
-from mixsync.db.app_settings import EDITABLE, SECRETS, resolve
+from mixsync.db.app_settings import EDITABLE, SECRETS, resolve, restart_pending
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
 from mixsync.match.profiles import confidence, from_confidence
@@ -100,6 +100,7 @@ def _page(
 ) -> HTMLResponse:
     settings, resolved = resolve(db)
     cap = auto_accept_cap(db)
+    services = request.app.state.services
     errors, submitted = errors or {}, submitted or {}
     fields: dict[str, dict[str, Any]] = {}
     for name in EDITABLE:
@@ -134,6 +135,7 @@ def _page(
         "cap_error": errors.get("cap"),
         "saved": saved,
         "has_errors": bool(errors),
+        "restart": restart_pending(db, services.settings_version, services.clock.now()),
     }
     return templates.TemplateResponse(
         request, "pages/settings.html", ctx, status_code=400 if errors else 200
