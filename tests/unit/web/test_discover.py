@@ -396,5 +396,33 @@ def test_delete_confirms_and_keeps_holds_and_files(
         assert len({h.playlist_id for h in holds}) == 1 and holds[0].playlist_id != pid
         assert len(s.scalars(select(ProvisionalTrack)).all()) == 4
         only = holds[0].playlist_id
-    # the last playlist cannot go while it still holds tracks
+    assert client.get(f"/discover/{only}/delete").status_code == 409  # the last one stays
     assert client.post(f"/discover/{only}/delete", data={"csrf_token": tok}).status_code == 409
+
+
+def test_last_playlist_without_holds_cannot_be_deleted(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _seed(sf)
+    with sf() as s, s.begin():
+        for h in s.scalars(select(ProvisionalHold)):
+            s.delete(h)
+    tok = _login(client, "alice")
+    r = client.post(f"/discover/{pid}/delete", data={"csrf_token": tok})
+    assert r.status_code == 409 and "at least one" in r.text
+    with sf() as s:
+        assert s.get(DiscoveryPlaylist, pid) is not None
+
+
+def test_rename_to_a_taken_name_rerenders_with_an_error(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    pid = _seed(sf)
+    tok = _login(client, "alice")
+    assert _new(client, tok).status_code == 303
+    form = {"csrf_token": tok, "name": "Radio", "src_recommendations": "1", "size": "10"}
+    form |= {"unowned_ratio": "0.3", "cadence_days": "3", "retention_days": "9", "keep_plays": "2"}
+    r = client.post(f"/discover/{pid}/edit", data=form)
+    assert r.status_code == 400 and "already have a playlist" in r.text
+    with sf() as s:
+        assert s.get_one(DiscoveryPlaylist, pid).name == "Discovery"

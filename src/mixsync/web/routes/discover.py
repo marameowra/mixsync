@@ -203,6 +203,8 @@ def build_now(playlist_id: int, user: User, db: Db) -> RedirectResponse:
 
 SOURCE_TYPES = ("weekly_exploration", "recommendations", "lb_radio")
 MODES = ("easy", "medium", "hard")
+NAME_TAKEN = "you already have a playlist with that name"
+LAST_ONE = "You need at least one discovery playlist. Create another one first, or edit this one."
 FIELDS = ("size", "unowned_ratio", "cadence_days", "retention_days", "keep_plays")
 
 
@@ -264,7 +266,7 @@ def _apply(db: Db, user: AuthUser, pl: DiscoveryPlaylist, v: dict[str, Any]) -> 
         DiscoveryPlaylist.id != (pl.id or 0),
     )
     if db.scalar(other.limit(1)) is not None:
-        raise HTTPException(400, "you already have a playlist with that name")
+        raise HTTPException(400, NAME_TAKEN)
     if not v["types"]:
         raise HTTPException(400, "pick at least one source")
     if "lb_radio" in v["types"]:
@@ -307,7 +309,7 @@ async def create(request: Request, user: User, db: Db) -> HTMLResponse | Redirec
     except HTTPException as e:
         return _form_page(request, user, None, v, e.detail)
     except IntegrityError:
-        return _form_page(request, user, None, v, "you already have a playlist with that name")
+        return _form_page(request, user, None, v, NAME_TAKEN)
     playlists.ensure_build(db, datetime.now(UTC), pl)  # builds on cadence like the default
     return RedirectResponse("/discover", status_code=303)
 
@@ -325,39 +327,46 @@ async def edit(
     pl = _own(db, user, playlist_id)
     v = await _read(request)
     try:
-        _apply(db, user, pl, v)
-    except HTTPException as e:
+        with db.begin_nested():  # a racing rename hits the unique (user, name) key
+            _apply(db, user, pl, v)
+    except (HTTPException, IntegrityError) as e:
         db.refresh(pl)  # drop the fields set before the bad one
-        return _form_page(request, user, pl, v, e.detail)
+        why = e.detail if isinstance(e, HTTPException) else NAME_TAKEN
+        return _form_page(request, user, pl, v, why)
     return RedirectResponse("/discover", status_code=303)
 
 
 @router.get("/{playlist_id}/delete")
 def delete_confirm(playlist_id: int, request: Request, user: User, db: Db) -> HTMLResponse:
     pl = _own(db, user, playlist_id)
+    _heir(db, user, pl)
     return templates.TemplateResponse(
         request, "pages/discover_delete.html", {"user": user, "pl": pl}
     )
 
 
+def _heir(db: Db, user: AuthUser, pl: DiscoveryPlaylist) -> int:
+    """The user's oldest other playlist; none means pl is the last one, which stays (startup
+    would recreate the default)."""
+    heir = db.scalar(
+        select(DiscoveryPlaylist.id)
+        .where(DiscoveryPlaylist.user_id == user.id, DiscoveryPlaylist.id != pl.id)
+        .order_by(DiscoveryPlaylist.id)
+        .limit(1)
+    )
+    if heir is None:
+        raise HTTPException(409, LAST_ONE)
+    return heir
+
+
 @router.post("/{playlist_id}/delete")
 def delete(playlist_id: int, user: User, db: Db) -> RedirectResponse:
     pl = _own(db, user, playlist_id)
-    held = select(ProvisionalHold.id).where(ProvisionalHold.playlist_id == pl.id).limit(1)
-    if db.scalar(held) is not None:
-        # holds point at a playlist (retention reads its keep_plays): hand them to another one
-        heir = db.scalar(
-            select(DiscoveryPlaylist.id)
-            .where(DiscoveryPlaylist.user_id == user.id, DiscoveryPlaylist.id != pl.id)
-            .order_by(DiscoveryPlaylist.id)
-            .limit(1)
-        )
-        if heir is None:
-            raise HTTPException(409, "create another playlist first: this one still holds tracks")
-        db.execute(
-            update(ProvisionalHold)
-            .where(ProvisionalHold.playlist_id == pl.id)
-            .values(playlist_id=heir)
-        )
+    # holds point at a playlist (retention reads its keep_plays): hand them to another one
+    db.execute(
+        update(ProvisionalHold)
+        .where(ProvisionalHold.playlist_id == pl.id)
+        .values(playlist_id=_heir(db, user, pl))
+    )
     db.delete(pl)
     return RedirectResponse("/discover", status_code=303)
