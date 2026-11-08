@@ -5,7 +5,7 @@ import signal
 import socket
 import time
 from collections.abc import Awaitable, Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy.exc import OperationalError
@@ -255,7 +255,7 @@ def _new_queue(
         services.fileops,
     )
     _recover(fileops, sessions)
-    queue = JobQueue(services.engine, clock, fail_request_of_job)
+    queue = JobQueue(services.engine, clock, fail_request_of_job, services.settings_version)
     merger = services.merger
     acoustid = AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings)
     pipeline = _pipeline(services, acoustid)  # the submitter reuses this one client
@@ -372,19 +372,20 @@ def _new_queue(
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
 
-async def serve_worker(settings: Settings) -> None:
-    queue, worker, handlers, startup = _new_queue(build_services(settings))
+async def serve_worker(settings: Settings, settings_version: datetime | None = None) -> None:
+    services = build_services(settings, settings_version=settings_version)
+    queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
     await run_worker(queue, worker, stop, handlers, startup=startup)
 
 
-async def serve_all(settings: Settings) -> None:
+async def serve_all(settings: Settings, settings_version: datetime | None = None) -> None:
     """Web and worker in one process. uvicorn owns SIGTERM/SIGINT; the worker follows it."""
     import uvicorn
 
-    services = build_services(settings)
+    services = build_services(settings, settings_version=settings_version)
     queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     server = uvicorn.Server(

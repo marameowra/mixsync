@@ -4,15 +4,20 @@ environment over default. The environment is read here and never written to the 
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
+from mixsync.core.clock import aware
 from mixsync.core.config import Settings
+from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.db.engine import make_engine
 from mixsync.db.models.auth import AppSettings
+from mixsync.db.models.infra import WorkerHeartbeat
 from mixsync.db.secretbox import load_box
 
 log = logging.getLogger(__name__)
@@ -82,12 +87,15 @@ def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
     return settings, out
 
 
-def load_settings() -> Settings:
-    """The startup snapshot for web, worker and `all`. An invalid environment fails here."""
+def load_settings() -> tuple[Settings, datetime | None]:
+    """The startup snapshot for web, worker and `all`, and its settings version: the saved
+    row's `settings_saved_at` (None if no app setting was ever saved). An invalid environment
+    fails here."""
     engine = make_engine(Settings())
     try:
         with Session(engine) as s:
-            return resolve(s)[0]
+            row = s.get(AppSettings, 1)
+            return resolve(s)[0], row.settings_saved_at if row else None
     except (OperationalError, ProgrammingError) as e:  # usually app_settings table/column missing
         raise RuntimeError(
             "could not read app settings: the database is not migrated (or not reachable);"
@@ -95,3 +103,24 @@ def load_settings() -> Settings:
         ) from e
     finally:
         engine.dispose()
+
+
+def restart_pending(s: Session, web_version: datetime | None, now: datetime) -> list[str]:
+    """The processes still running settings older than the saved ones: "web", "worker", or the
+    worker as unknown when no worker heartbeat is recent. Empty while nothing was ever saved."""
+    row = s.get(AppSettings, 1)
+    if row is None or row.settings_saved_at is None:
+        return []
+    saved = aware(row.settings_saved_at)
+
+    def behind(version: datetime | None) -> bool:
+        return version is None or aware(version) < saved
+
+    out = ["web"] if behind(web_version) else []
+    # the newest heartbeat, as worker_age reads it: a just-restarted worker beats its old row
+    beat = s.scalars(select(WorkerHeartbeat).order_by(WorkerHeartbeat.seen_at.desc())).first()
+    if beat is None or now - aware(beat.seen_at) > WORKER_STALE_AFTER:
+        out.append("worker (unknown: no recent heartbeat)")
+    elif behind(beat.settings_version):
+        out.append("worker")
+    return out

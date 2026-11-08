@@ -43,16 +43,16 @@ def test_nothing_saved_and_no_env_gives_the_defaults(
 ) -> None:
     monkeypatch.delenv("MIXSYNC_TRASH_DAYS", raising=False)
     upgrade()
-    assert load_settings() == Settings()
+    assert load_settings()[0] == Settings()
     _save(settings, min_auto_accept_confidence=90)  # a row with nothing saved changes nothing
-    assert load_settings() == Settings()
+    assert load_settings()[0] == Settings()
     assert _resolved(settings)["trash_days"] == Resolved(30, "default", False)
 
 
 def test_env_only_gives_the_env_value(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_TRASH_DAYS", "7")
     upgrade()
-    assert load_settings().trash_days == 7
+    assert load_settings()[0].trash_days == 7
     assert _resolved(settings)["trash_days"] == Resolved(7, "environment", True)
 
 
@@ -64,7 +64,7 @@ def test_a_saved_value_beats_env_across_restarts(
     upgrade()
     _save(settings, trash_days=14, canonical_media=["Vinyl", "CD"], deezer_suggestions=True)
     for _ in range(2):  # each load is a fresh engine, as after a restart
-        got = load_settings()
+        got = load_settings()[0]
         assert (got.trash_days, got.canonical_media, got.deezer_suggestions) == (
             14,
             ["Vinyl", "CD"],
@@ -120,7 +120,7 @@ def test_bootstrap_mount_and_secret_settings_stay_env_only(
     with make_engine(settings).connect() as c:
         columns = {col["name"] for col in inspect(c).get_columns("app_settings")}
     assert not columns & ENV_ONLY  # nothing to save them in
-    got = load_settings()
+    got = load_settings()[0]
     assert (got.data_dir, got.database_url) == ("/music", settings.database_url)
 
 
@@ -132,7 +132,7 @@ def test_an_invalid_saved_value_logs_and_falls_back(
     upgrade()
     _save(settings, mb_rate=2.0, timezone="Mars/Olympus", trash_days=9)
     with caplog.at_level(logging.ERROR):
-        got = load_settings()
+        got = load_settings()[0]
     assert (got.mb_rate, got.timezone, got.trash_days) == (0.5, "UTC", 9)
     assert "saved setting mb_rate is invalid" in caplog.text
     assert "saved setting timezone is invalid" in caplog.text
@@ -147,7 +147,7 @@ def test_startup_logs_at_the_saved_level(
     monkeypatch.setenv("MIXSYNC_LOG_LEVEL", "WARNING")
     upgrade()
     _save(settings, log_level="debug")  # the validator upper-cases it, as it does for env
-    assert startup_settings().log_level == "DEBUG"
+    assert startup_settings()[0].log_level == "DEBUG"
     assert logging.getLogger().level == logging.DEBUG
 
 

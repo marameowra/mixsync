@@ -2,6 +2,8 @@
 
 import re
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from cryptography.fernet import Fernet
@@ -9,16 +11,21 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.__main__ import main
 from mixsync.app import create_app
+from mixsync.core.clock import SystemClock, aware
 from mixsync.core.config import PATH_FIELDS, Settings
 from mixsync.db.app_settings import EDITABLE, load_settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import AppSettings
+from mixsync.db.models.infra import WorkerHeartbeat
+from mixsync.db.queue import JobQueue
 from mixsync.db.secretbox import SecretBox
 from mixsync.library.paths import render
 from mixsync.web.routes.settings import GROUPS
+from mixsync.wiring import build_services
 
 RESTART = "Saved. Restart mixsync-web and mixsync-worker to apply."
 
@@ -164,7 +171,7 @@ def test_a_saved_secret_is_ciphertext_and_never_rendered(
     assert r.status_code == 303
     token = _ciphertext(sf, "slskd_api_key")
     assert token and SECRET not in token
-    assert load_settings().slskd_api_key == SECRET
+    assert load_settings()[0].slskd_api_key == SECRET
     with sf() as s:
         assert s.execute(text("SELECT slskd_api_key_encrypted FROM app_settings")).scalar() == token
     page = client.get("/settings?saved=1").text
@@ -233,7 +240,7 @@ def test_an_unreadable_secret_is_flagged_and_the_env_value_is_used(
         assert row
         row.slskd_api_key_encrypted = SecretBox(Fernet.generate_key()).encrypt(SECRET)  # other key
     monkeypatch.setenv("MIXSYNC_SLSKD_API_KEY", "env-key")
-    assert load_settings().slskd_api_key == "env-key"
+    assert load_settings()[0].slskd_api_key == "env-key"
     page = client.get("/settings").text
     assert "Saved value unreadable, re-enter." in field(page, "slskd_api_key")
     assert "from environment" in field(page, "slskd_api_key")
@@ -277,4 +284,67 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
 def test_a_secret_keeps_its_surrounding_spaces(client: TestClient) -> None:
     tok = login(client, "root")
     client.post("/settings", data={"csrf_token": tok, "navidrome_password": " pw "})
-    assert load_settings().navidrome_password == " pw "
+    assert load_settings()[0].navidrome_password == " pw "
+
+
+def test_restart_pending_names_the_processes_behind_the_saved_settings(
+    sf: sessionmaker[Session],
+) -> None:
+    def worker_starts(name: str) -> None:  # a worker process loads its snapshot, then beats
+        JobQueue(sf.kw["bind"], SystemClock(), lambda *_: None, load_settings()[1]).alive(name)
+
+    worker_starts("w1")
+    app = create_app(services=build_services(Settings(), sf, load_settings()[1]))
+    with TestClient(app, follow_redirects=False) as c:
+        tok = login(c, "root")
+        assert "Restart pending" not in c.get("/settings").text  # nothing saved yet
+        c.post("/settings", data={"csrf_token": tok, "trash_days": "7"})
+        assert "Restart pending: web, worker<" in c.get("/settings").text
+        worker_starts("w2")
+        assert "Restart pending: web<" in c.get("/settings").text
+    app = create_app(services=build_services(Settings(), sf, load_settings()[1]))
+    with TestClient(app, follow_redirects=False) as c:
+        tok = login(c, "root")
+        assert "Restart pending" not in c.get("/settings").text  # both loaded the saved change
+        c.post("/settings", data={"csrf_token": tok, "cap": "90"})  # read live, no restart
+        c.post("/settings", data={"csrf_token": tok, "trash_days": "7"})  # unchanged value
+        assert "Restart pending" not in c.get("/settings").text
+        c.post("/settings/reset/trash_days", data={"csrf_token": tok})
+        assert "Restart pending: web, worker<" in c.get("/settings").text
+
+
+def test_saving_only_the_cap_on_a_fresh_install_needs_no_restart(client: TestClient) -> None:
+    tok = login(client, "root")
+    assert client.post("/settings", data={"csrf_token": tok, "cap": "90"}).status_code == 303
+    assert "Restart pending" not in client.get("/settings").text
+
+
+def test_no_worker_heartbeat_at_all_is_unknown(client: TestClient) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "trash_days": "7"})
+    page = client.get("/settings").text
+    assert "Restart pending: web, worker (unknown: no recent heartbeat)" in page
+
+
+def test_web_startup_hands_the_loaded_version_to_its_services(
+    sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    version = datetime(2026, 11, 8, 12, tzinfo=UTC)
+    with sf() as s, s.begin():
+        s.add(AppSettings(id=1, trash_days=7, settings_saved_at=version))
+    started: list[Any] = []
+    monkeypatch.setattr("uvicorn.run", lambda app, **_: started.append(app))
+    assert main(["web"]) == 0
+    assert aware(started[0].state.services.settings_version) == version
+
+
+def test_a_worker_without_a_recent_heartbeat_is_unknown_not_current(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "trash_days": "7"})
+    with sf() as s, s.begin():
+        stale = datetime.now(UTC) - timedelta(minutes=10)
+        s.add(WorkerHeartbeat(name="w", seen_at=stale, settings_version=load_settings()[1]))
+    page = client.get("/settings").text
+    assert "Restart pending: web, worker (unknown: no recent heartbeat)" in page

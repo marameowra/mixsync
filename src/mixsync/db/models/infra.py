@@ -42,9 +42,11 @@ class MbName(Base):
 
 
 class WorkerHeartbeat(Base):
-    """When each worker's polling loop last went round; the healthcheck reads the newest."""
+    """When each worker's polling loop last went round; the healthcheck reads the newest.
+    `settings_version` is the app settings version the worker loaded at startup (ADR 0021)."""
 
     __tablename__ = "worker_heartbeats"
 
     name: Mapped[str] = mapped_column(String(128), primary_key=True)
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    settings_version: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
