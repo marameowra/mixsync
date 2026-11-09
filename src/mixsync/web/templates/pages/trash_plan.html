@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Purge trash - MixSync{% endblock %}
+{% block content %}
+<h1>Purge trash now</h1>
+<section class="consequence" aria-label="Purge consequences">
+  <h2>What this purge deletes</h2>
+  <dl><div><dt>Folders</dt><dd class="trash">{{ chosen | length }}</dd></div><div><dt>Files</dt><dd class="trash">{{ files }}</dd></div><div><dt>Size</dt><dd>{{ size | filesize }}</dd></div></dl>
+  <ul>{% for f in chosen %}<li>{{ f.day }}: {{ f.files }} {{ "file" if f.files == 1 else "files" }}, {{ f.size | filesize }}</li>{% endfor %}</ul>
+  <p>These files are deleted for good and cannot be restored. A folder that becomes protected before you confirm is skipped.</p>
+</section>
+<div class="actionbar" role="region" aria-label="Purge decision">
+  <form class="confirm" method="post" action="/trash/purge">{{ forms.csrf() }}
+    {% for f in chosen %}<input type="hidden" name="day" value="{{ f.day }}">{% endfor %}
+    <label class="field">Type {{ files }} to confirm <input class="input num" name="count" type="text" inputmode="numeric" required autocomplete="off"></label>
+    <button class="btn danger filled" type="submit">Purge {{ files }} {{ "file" if files == 1 else "files" }}</button>
+  </form>
+  <a class="btn" href="/trash">Cancel</a>
+</div>
+{% endblock %}

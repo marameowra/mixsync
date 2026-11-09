@@ -2,8 +2,9 @@
 
 import asyncio
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import timedelta
+from typing import NamedTuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -25,6 +26,13 @@ MONITOR_BATCH = 10_000
 INTERVAL = timedelta(days=1)
 MONITOR_KEEP = timedelta(days=7)  # finished download-monitor rows; nothing reads them again
 Rng = Callable[[float, float], float]
+
+
+class TrashFolder(NamedTuple):
+    day: str
+    files: int
+    size: int
+    protected: bool  # holds trash an undo or a half-done op needs; never purged early
 
 
 class TrashPurger:
@@ -89,6 +97,22 @@ class TrashPurger:
                         )
             keep.update(op.dst for op in tag_undo.unfinished(self.sessions, self.fileops))
             return keep
+
+    def folders(self) -> list[TrashFolder]:
+        """Each trash day folder, newest first, with its usage and whether it is protected."""
+        held = {p.split("/", 1)[0] for p in self.protected()}
+        usage = self.fileops.trash_usage()
+        return [TrashFolder(d, *usage[d], d in held) for d in sorted(usage, reverse=True)]
+
+    def purge_early(self, days: Collection[str]) -> tuple[int, list[str]]:
+        """Purge the chosen day folders now, whatever their age, journaled like the daily purge.
+        Protection is checked here, at execution: a folder holding any protected path is
+        skipped whole. Returns (files deleted, skipped folders)."""
+        keep = self.protected()
+        skipped = sorted(set(days) & {p.split("/", 1)[0] for p in keep})
+        chosen = set(days) - set(skipped)
+        batch = f"purge-early-{self.clock.now().isoformat()}"
+        return self.fileops.purge_trash(0, batch, keep, only=chosen), skipped
 
     def _purge_monitor_rows(self) -> None:
         """One row per 30 s per transfer; only their dedup key names them. In batches, each in

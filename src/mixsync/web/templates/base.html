@@ -35,6 +35,7 @@
       {{ link("/library/albums", "Browse") }}
       {%- if can_edit %}{{ link("/library/fragments", "Fragments") }}{% endif %}
       {%- if is_admin %}{{ link("/migration", "Migration") }}{% endif %}
+      {%- if is_admin %}{{ link("/trash", "Trash") }}{% endif %}
       {%- if is_admin %}{{ link("/users", "Users") }}{% endif %}
       {%- if is_admin %}{{ link("/settings", "Settings") }}{% endif %}
     </div>
