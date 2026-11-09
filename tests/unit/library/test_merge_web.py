@@ -108,7 +108,7 @@ def test_confirm_after_the_merge_ran_is_a_no_op(world: World) -> None:  # noqa: 
     """The plan page does not poll: a second click on Confirm once the job ran is not a 409."""
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         confirm = f"/library/plans/{pid}/confirm"
         assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
         _drain(world)
@@ -123,7 +123,7 @@ def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None: 
     off-canonical import does."""
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         assert "keep" in [op["op"] for op in world.plan_ops(pid)]
         assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
         _drain(world)
