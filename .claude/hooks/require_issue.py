@@ -51,6 +51,8 @@ def main() -> None:
                 tok == "gh"
                 and rest[:2] == ["pr", "create"]
                 and not ISSUE_REF.search(body_text(rest[2:]))
+                # shlex can't parse a "$(cat <<EOF ...)" body with quotes inside; read it raw
+                and not ("$(" in command and ISSUE_REF.search(command))
             ):
                 deny(REASON)
 

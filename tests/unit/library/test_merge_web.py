@@ -22,7 +22,8 @@ from mixsync.db.queue import JobQueue
 from mixsync.library import fragmentation
 from mixsync.worker import run_job
 
-from .test_merge import CANON, GROUP, World, _rows, world  # noqa: F401  # world is a fixture
+from .conftest import MakeSrc
+from .test_merge import CANON, GROUP, OLD, World, _rows, world  # noqa: F401  # world is a fixture
 
 
 def _login(c: TestClient) -> str:
@@ -101,6 +102,37 @@ def test_build_confirm_run_undo(world: World) -> None:  # noqa: F811
         assert world.lib() == lib0
         assert [fragmentation.row_dict(t) for t in _rows(world)] == rows0
         assert world.canonical() is None
+
+
+def test_confirm_after_the_merge_ran_is_a_no_op(world: World) -> None:  # noqa: F811
+    """The plan page does not poll: a second click on Confirm once the job ran is not a 409."""
+    with _client(world) as c:
+        tok = _login(c)
+        pid = _preview(c, tok)
+        confirm = f"/library/plans/{pid}/confirm"
+        assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
+        _drain(world)
+        assert world.plan(pid).status == "done", world.plan(pid).error
+        assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
+        assert [j.kind for j in _jobs(world)] == [JobKind.MERGE]
+        assert c.post(f"/library/plans/{pid}/discard", data={"csrf_token": tok}).status_code == 409
+
+
+def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None:  # noqa: F811
+    """The bonus track the merge kept on the old release does not list the group again; a new
+    off-canonical import does."""
+    with _client(world) as c:
+        tok = _login(c)
+        pid = _preview(c, tok)
+        assert "keep" in [op["op"] for op in world.plan_ops(pid)]
+        assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
+        _drain(world)
+        assert world.plan(pid).status == "done", world.plan(pid).error
+        with world.sessions() as s:
+            assert fragmentation.find(s) == []
+        world.imp(make_src("flac", "again"), OLD, "r1", batch="later")
+        with world.sessions() as s:
+            assert [f.group_mbid for f in fragmentation.find(s)] == [GROUP]
 
 
 def test_confirmed_draft_survives_new_preview(world: World) -> None:  # noqa: F811

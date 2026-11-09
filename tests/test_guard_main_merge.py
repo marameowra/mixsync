@@ -50,6 +50,11 @@ def denied(out: str) -> bool:
         ("git push && gh pr merge 12 --auto --merge", "main", True),
         ("gh pr merge --merge", "main", True),
         ("gh pr merge 12", "fail", True),
+        # create then merge in one command: the PR doesn't exist yet when the hook runs
+        ("gh pr create --base dev --title x && gh pr merge --auto --merge", "fail", False),
+        ("gh pr create --base dev --title x; gh pr merge --auto", "main", True),
+        ("gh pr merge --auto && gh pr create --base dev --title x", "fail", True),
+        ("gh pr create --base dev --title x && gh pr merge 12 --auto", "fail", True),
         ("gh api repos/x/y/pulls/3/merge -X PUT", "dev", True),
         ("gh api graphql -f query='mutation{mergePullRequest(input:{})}'", "dev", True),
         ("gh pr merge 'unterminated", "dev", True),

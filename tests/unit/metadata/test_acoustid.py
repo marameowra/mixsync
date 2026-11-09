@@ -168,6 +168,19 @@ async def test_lookup(make_client: Make, settings: Settings) -> None:
         "216",
         FP.fingerprint,
     )
+    assert str(seen[0].url).startswith("https://api.acoustid.org/v2/lookup?")
+
+
+async def test_lookup_goes_to_a_given_base_url(make_client: Make, settings: Settings) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"status": "ok", "results": []})
+
+    client = AcoustIdClient(make_client("acoustid", handler), keyed(settings), "http://fakes:5030/")
+    assert await client.lookup(FP) == []
+    assert str(seen[0].url).startswith("http://fakes:5030/v2/lookup?")
 
 
 async def test_lookup_503_is_transient(make_client: Make, settings: Settings) -> None:

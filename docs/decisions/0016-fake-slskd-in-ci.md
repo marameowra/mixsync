@@ -1,6 +1,6 @@
 # ADR 0016: Integration tests use a fake slskd
 
-- **Status:** Accepted, planned in #300 (no integration tests or fake slskd exist; see [testing](../testing.md))
+- **Status:** Accepted, implemented in #300 (`tests/integration/fakes/server.py`; the edge-case catalog behaviours are not built yet; see [testing](../testing.md#integration-tests-compose))
 - **Date:** 2026-10-20
 
 ## Context

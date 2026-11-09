@@ -6,11 +6,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mixsync.core.matching import AlbumInfo, TrackInfo
-from mixsync.db.models.library import CanonicalRelease, Track
+from mixsync.db.models.library import CanonicalRelease, Plan, Track
 from mixsync.library import canonical, paths, tags
 from mixsync.library.importer import render_path, tagset_for
 
@@ -23,24 +23,35 @@ class Fragment:
 
 
 def find(s: Session) -> list[Fragment]:
-    """Groups whose verified tracks span several releases or sit off the stored canonical one."""
+    """Groups whose verified tracks span several releases or sit off the stored canonical one.
+    A track that a done merge onto the current canonical kept (its recording is not on that
+    release) is settled: it alone does not list the group again."""
     rows = s.execute(
-        select(Track.release_group_mbid, Track.release_mbid, func.count())
-        .where(
+        select(Track.id, Track.release_group_mbid, Track.release_mbid).where(
             Track.status == "verified",
             Track.release_group_mbid.is_not(None),
             Track.release_mbid.is_not(None),
         )
-        .group_by(Track.release_group_mbid, Track.release_mbid)
     ).all()
-    groups: dict[str, dict[str, int]] = defaultdict(dict)
-    for group, release, n in rows:
-        groups[str(group)][str(release)] = n
     stored = {c.release_group_mbid: c.release_mbid for c in s.scalars(select(CanonicalRelease))}
+    kept = {
+        op["track_id"]
+        for p in s.scalars(select(Plan).where(Plan.kind == "merge", Plan.status == "done"))
+        if stored.get(p.release_group_mbid) == p.canonical_release_mbid
+        for op in p.ops
+        if op["op"] == "keep"
+    }
+    groups: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    unsettled: set[str] = set()
+    for tid, group, release in rows:
+        g, r = str(group), str(release)
+        groups[g][r] += 1
+        if r != stored.get(g) and tid not in kept:
+            unsettled.add(g)
     return [
-        Fragment(g, stored.get(g), rels)
+        Fragment(g, stored.get(g), dict(rels))
         for g, rels in sorted(groups.items())
-        if len(rels) > 1 or (g in stored and stored[g] not in rels)
+        if g in unsettled and (len(rels) > 1 or g in stored)
     ]
 
 

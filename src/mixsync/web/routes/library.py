@@ -374,6 +374,8 @@ def _act(
         plan.status = "discarded"
         db.commit()  # the refusal below would roll the discard back
         raise HTTPException(409, "this delete preview is over a week old; make a new one")
+    if action == "confirm" and plan.status in ("running", "done"):  # a second click: it took
+        return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
     if action not in _allowed(db, plan, _days(request)):
         raise HTTPException(409, f"plan is {plan.status}")
     _check_count(plan, count)

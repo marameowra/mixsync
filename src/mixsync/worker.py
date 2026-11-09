@@ -259,7 +259,9 @@ def _new_queue(
     _recover(fileops, sessions)
     queue = JobQueue(services.engine, clock, fail_request_of_job, services.settings_version)
     merger = services.merger
-    acoustid = AcoustIdClient(PoliteClient("acoustid", settings, sessions), settings)
+    acoustid = AcoustIdClient(
+        PoliteClient("acoustid", settings, sessions), settings, services.fake_services_url
+    )
     pipeline = _pipeline(services, acoustid)  # the submitter reuses this one client
     rechecker = Rechecker(
         sessions,
