@@ -1,6 +1,8 @@
 """Composition root for the services the worker and the web app share. Only constructs: no
 recovery and no startup chains (the worker runs those). A bad key file fails here."""
 
+import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +24,11 @@ from mixsync.metadata.discogs import DiscogsClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
 
+log = logging.getLogger(__name__)
+# Test-only (tests/integration): AcoustID and Cover Art Archive calls go to this fake server.
+# Deliberately not a Settings field, so it is never on the settings page or in .env.example.
+FAKE_SERVICES_ENV = "MIXSYNC_TEST_ONLY_FAKE_SERVICES_URL"
+
 
 @dataclass(frozen=True)
 class Services:
@@ -39,6 +46,7 @@ class Services:
     listenbrainz_http: PoliteClient
     secret_box: SecretBox
     settings_version: datetime | None  # app_settings.updated_at when `settings` was loaded
+    fake_services_url: str = ""  # FAKE_SERVICES_ENV; "" is the real services
 
 
 def build_services(
@@ -47,6 +55,13 @@ def build_services(
     settings_version: datetime | None = None,
 ) -> Services:
     """`session_factory` lets a caller that already has a database (tests) keep using it."""
+    if fake := os.environ.get(FAKE_SERVICES_ENV, "").strip():
+        log.warning(
+            "%s is set: AcoustID and cover art go to %s. It is for the integration tests "
+            "only; unset it in a real deployment.",
+            FAKE_SERVICES_ENV,
+            fake,
+        )
     if session_factory is None:
         session_factory = make_session_factory(make_engine(settings))
     engine = session_factory.kw["bind"]
@@ -81,11 +96,12 @@ def build_services(
         fileops=fileops,
         musicbrainz=musicbrainz,
         merger=merger,
-        coverart=CoverArtClient(PoliteClient("coverart", settings, session_factory)),
+        coverart=CoverArtClient(PoliteClient("coverart", settings, session_factory), fake),
         deezer=DeezerClient(PoliteClient("deezer", settings, session_factory)),
         discogs=DiscogsClient(PoliteClient("discogs", settings, session_factory)),
         navidrome_http=PoliteClient("navidrome", settings, session_factory),
         listenbrainz_http=PoliteClient("listenbrainz", settings, session_factory),
         secret_box=load_box(settings),
         settings_version=settings_version,
+        fake_services_url=fake,
     )

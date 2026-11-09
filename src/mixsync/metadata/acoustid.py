@@ -19,9 +19,7 @@ from mixsync.metadata._http import get_json
 from mixsync.metadata.models import AcoustIdResponse, AcoustIdSubmitResponse
 from mixsync.ratelimit.client import PoliteClient
 
-_URL = "https://api.acoustid.org/v2/lookup"
-_SUBMIT_URL = "https://api.acoustid.org/v2/submit"
-_STATUS_URL = "https://api.acoustid.org/v2/submission_status"
+_BASE = "https://api.acoustid.org"
 _PING_TRACK = "9ff43b6a-4f16-427c-93c2-92307ca505e0"  # the track id in AcoustID's docs
 _INVALID_KEY = 4  # AcoustID error code: invalid API key
 
@@ -115,17 +113,21 @@ async def fingerprint(path: Path) -> Fingerprint:
 
 
 class AcoustIdClient:
-    def __init__(self, client: PoliteClient, settings: Settings) -> None:
+    def __init__(self, client: PoliteClient, settings: Settings, base_url: str = "") -> None:
         self._client = client
         self._key = settings.acoustid_app_key
         self._user = settings.acoustid_user_key
+        base = (base_url or _BASE).rstrip("/")
+        self._url = f"{base}/v2/lookup"
+        self._submit_url = f"{base}/v2/submit"
+        self._status_url = f"{base}/v2/submission_status"
 
     async def lookup(self, fp: Fingerprint) -> list[AcoustIdResult]:
         if not self._key:
             raise RuntimeError("MIXSYNC_ACOUSTID_APP_KEY is not set; AcoustID lookups need it")
         data = await get_json(
             self._client,
-            _URL,
+            self._url,
             {
                 "client": self._key,
                 "meta": "recordings",
@@ -153,7 +155,7 @@ class AcoustIdClient:
         params = {"client": self._key, "trackid": _PING_TRACK, "format": "json"}
         try:
             response = await self._client.get(
-                _URL, params=params, headers={"Cache-Control": "no-cache"}
+                self._url, params=params, headers={"Cache-Control": "no-cache"}
             )
         except httpx.TransportError as e:  # the URL carries the key: name the type only
             raise TransientError(f"AcoustID unreachable ({type(e).__name__})") from e
@@ -181,7 +183,7 @@ class AcoustIdClient:
             }
         data = await get_json(
             self._client,
-            _SUBMIT_URL,
+            self._submit_url,
             {},
             method="POST",
             content=gzip.compress(urlencode(form).encode()),
@@ -198,7 +200,7 @@ class AcoustIdClient:
     async def submission_status(self, ids: list[int]) -> dict[int, str]:
         data = await get_json(
             self._client,
-            _STATUS_URL,
+            self._status_url,
             {"client": self._key, "id": ids, "format": "json"},
             headers={"Cache-Control": "no-cache"},  # never answered from the cache
         )
