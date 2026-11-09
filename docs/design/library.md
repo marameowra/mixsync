@@ -25,4 +25,6 @@ The same album exists as many MB releases (country, format, remaster); tracks fe
 Lists release groups whose owned tracks span more than one release (including pre-canonicalization imports): current releases, suggested canonical release, files that would be retagged or moved. **Merge** = dry-run preview → confirm → journaled retag and move, undoable within the [trash window](data-safety.md#1-no-hard-deletes-in-the-normal-flow).
 
 ## Cover art
-Cover Art Archive for the canonical release, falling back to the release group. Saved as `cover.jpg` in the album folder, optionally embedded (per-library setting).
+Cover Art Archive for the canonical release, falling back to the release group. Saved as `cover.jpg` in the album folder, optionally embedded.
+
+`MIXSYNC_EMBED_COVER` (default off): the same front cover is also embedded in each newly imported FLAC (picture type 3), MP3 (ID3 `APIC` type 3) and M4A (`covr`) file. The image is fetched once per release for both uses. The embed runs after the tag snapshot, so a tag restore removes the picture. Files that already carry art are left alone, an image over 1 MB (no thumbnail, so the original) is not embedded (no resizing), and any fetch or embed failure is logged without failing the import. Existing library files are not backfilled.

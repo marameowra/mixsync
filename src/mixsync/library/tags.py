@@ -2,7 +2,8 @@
 
 A snapshot is `{"format": ..., "tags": {native key: [str, ...]}}`. `write` only touches the
 managed keys, so `restore` only has to put those back; unmanaged frames (cover art...) are
-never modified. The snapshot lists binary frames/atoms as absent.
+never modified. The snapshot lists binary frames/atoms as absent, and records whether a FLAC,
+MP3 or M4A file had cover art (`"cover"`), so a restore can remove art `embed_cover` added.
 """
 
 from collections.abc import Sequence
@@ -13,10 +14,10 @@ from typing import Any, cast
 import mutagen
 import mutagen.id3
 from mutagen.aiff import AIFF
-from mutagen.flac import FLAC
-from mutagen.id3 import TXXX, UFID
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import APIC, TXXX, UFID
 from mutagen.mp3 import MP3
-from mutagen.mp4 import MP4, MP4FreeForm
+from mutagen.mp4 import MP4, MP4Cover, MP4FreeForm
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
@@ -167,7 +168,49 @@ def read_all(path: Path) -> Snapshot:
             vals = [t for v in values if (t := _text(v)) is not None]
             if vals:
                 tags[key.lower() if fmt != "m4a" else key] = vals
-    return {"format": fmt, "tags": tags}
+    snap: Snapshot = {"format": fmt, "tags": tags}
+    if fmt in ("flac", "mp3", "m4a"):
+        snap["cover"] = _has_cover(fmt, f)
+    return snap
+
+
+def _has_cover(fmt: str, f: Any) -> bool:
+    if fmt == "flac":
+        return bool(f.pictures)
+    return bool(f.tags.getall("APIC") if fmt == "mp3" else f.tags.get("covr"))
+
+
+def _drop_cover(fmt: str, f: Any) -> None:
+    if fmt == "flac":
+        f.clear_pictures()
+    elif fmt == "mp3":
+        f.tags.delall("APIC")
+    else:
+        _del(fmt, f, "covr")
+
+
+def embed_cover(path: Path, image: bytes) -> bool:
+    """Embed `image` (JPEG or PNG) as the front cover of a FLAC, MP3 or M4A file that has no art
+    yet. Returns whether it wrote."""
+    fmt, f = _open(path)
+    if fmt not in ("flac", "mp3", "m4a") or _has_cover(fmt, f):
+        return False
+    png = image.startswith(b"\x89PNG")
+    mime = "image/png" if png else "image/jpeg"
+    if fmt == "flac":
+        f.add_picture(_picture(image, mime))
+    elif fmt == "mp3":
+        f.tags.add(APIC(encoding=3, mime=mime, type=3, desc="Front", data=image))
+    else:
+        f.tags["covr"] = [MP4Cover(image, MP4Cover.FORMAT_PNG if png else MP4Cover.FORMAT_JPEG)]
+    f.save()
+    return True
+
+
+def _picture(image: bytes, mime: str) -> Picture:
+    pic = Picture()
+    pic.type, pic.mime, pic.desc, pic.data = 3, mime, "Front", image
+    return pic
 
 
 def read_fields(path: Path) -> dict[str, str]:
@@ -261,6 +304,8 @@ def restore(path: Path, snapshot: Snapshot) -> None:
             _set(fmt, f, native, old[native])
         else:
             _del(fmt, f, native)
+    if snapshot.get("cover") is False:  # no art then: drop what an import embedded since
+        _drop_cover(fmt, f)
     f.save()
 
 

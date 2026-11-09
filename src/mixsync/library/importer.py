@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,8 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
 from mixsync.library import paths, tags
 from mixsync.library.fileops import FileOps, WriteTags
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -83,9 +86,21 @@ def snapshotting(
 
 
 def snapshotting_writer(
-    sessions: sessionmaker[Session], clock: Clock, rel: str, tagset: tags.TagSet
+    sessions: sessionmaker[Session],
+    clock: Clock,
+    rel: str,
+    tagset: tags.TagSet,
+    cover: bytes | None = None,
 ) -> WriteTags:
-    return snapshotting(sessions, clock, rel, lambda staging: tags.write(staging, tagset))
+    def change(staging: Path) -> None:
+        tags.write(staging, tagset)
+        if cover:
+            try:  # art is optional: the snapshot is already committed, the import goes on
+                tags.embed_cover(staging, cover)
+            except Exception:
+                log.warning("embedding cover art in %s skipped", rel, exc_info=True)
+
+    return snapshotting(sessions, clock, rel, change)
 
 
 class Importer:
@@ -105,11 +120,12 @@ class Importer:
         batch_id: str,
         encoded: dict[Path, Path] | None = None,  # source -> the file to copy in its place
         root: str = "library",  # "discover": no `tracks` rows, the caller records its own
+        cover: bytes | None = None,  # front cover to embed in files that have none
     ) -> list[ImportResult]:
         """Each file is its own journaled op: one failure leaves the others imported. The
         sources are not released here."""
         enc = encoded or {}
-        return [self._one(f, album, status, batch_id, enc.get(f[0]), root) for f in files]
+        return [self._one(f, album, status, batch_id, enc.get(f[0]), root, cover) for f in files]
 
     def _one(
         self,
@@ -119,6 +135,7 @@ class Importer:
         batch_id: str,
         encoded: Path | None,
         root: str,
+        cover: bytes | None,
     ) -> ImportResult:
         src, track, acoustid_id = file
         tagset = tagset_for(track, album, acoustid_id, status)
@@ -132,7 +149,7 @@ class Importer:
                 render_path(self._template, tagset, (encoded or src).suffix),
                 lambda r: self._taken(root, r, batch_id),
             )
-            write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset)
+            write_tags = snapshotting_writer(self._sessions, self._clock, rel, tagset, cover)
             self.fileops.import_file(encoded or src, rel, write_tags, batch_id, src, root)
             if main:
                 self._ensure_row(rel, tagset, acoustid_id, status, batch_id)
