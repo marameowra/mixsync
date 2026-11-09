@@ -59,6 +59,8 @@ class AppSettings(TimestampMixin, Base):
     navidrome_password_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_app_key_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_user_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    # [[download source, enabled], ...] in priority order, read at each search; NULL: never saved
+    source_priority: Mapped[list[list[Any]] | None] = mapped_column(JSON(none_as_null=True))
 
 
 class User(TimestampMixin, Base):

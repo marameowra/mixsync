@@ -48,6 +48,23 @@ def candidate_dict(c: Candidate) -> dict[str, Any]:
     return asdict(c)
 
 
+def tried_key(source: str, peer: str, folder: str) -> list[str]:
+    """A Tried list entry: the (download source, id) of a dropped candidate. Soulseek's is the
+    bare [peer, folder], the shape every row had before there was a choice of source."""
+    return [peer, folder] if source == "slskd" else [peer, folder, source]
+
+
+def source_rows(s: Session, known: Sequence[str]) -> list[tuple[str, bool]]:
+    """The source priority: each of `known` in the admin's order with its enabled flag. Never
+    saved: all enabled, in `known`'s order (Soulseek first); one added since is last and off."""
+    row = s.get(AppSettings, 1)
+    saved = row.source_priority if row else None
+    if saved is None:
+        return [(n, True) for n in known]
+    rows = [(n, bool(on)) for n, on in saved if n in known]
+    return rows + [(n, False) for n in known if n not in dict(rows)]
+
+
 def auto_accept_cap(s: Session) -> float | None:
     """The admin's minimum auto-accept confidence as a distance; None when there is no cap."""
     row = s.get(AppSettings, 1)
@@ -135,15 +152,16 @@ def _has_tracks(s: Session, req: Request) -> bool:
 
 
 def _failed_candidate(s: Session, payload: dict[str, Any]) -> list[str] | None:
-    """[peer, folder] of a DOWNLOAD / VERIFY job's candidate, or of an IMPORT job's decision."""
+    """[peer, folder, source] of a DOWNLOAD / VERIFY job's candidate, or of an IMPORT job's
+    decision."""
     if "candidate" in payload:
         c = payload["candidate"]
-        return [c["username"], c["folder"]]
+        return [c["username"], c["folder"], c.get("source", "slskd")]
     d = s.get(MatchDecision, payload["decision_id"]) if "decision_id" in payload else None
     if d is None:
         return None
     ev = Evidence.parse(d.evidence)
-    return [ev.peer, ev.folder]
+    return [ev.peer, ev.folder, ev.download_source]
 
 
 def fail_request_of_job(
@@ -165,8 +183,8 @@ def fail_request_of_job(
             lifecycle.job_failed(req, _has_tracks(s, req), error)
             req.updated_at = now  # the queue's clock, as the job rows use
             if req.status == "partial":  # a partial request always has a repeat search queued
-                peer, folder = _failed_candidate(s, payload) or ("", "")
-                drop_candidate(s, now, req, peer, folder, error, job_failed=True)
+                peer, folder, src = _failed_candidate(s, payload) or ("", "", "slskd")
+                drop_candidate(s, now, req, peer, folder, error, job_failed=True, source=src)
             s.flush()
 
 
@@ -182,19 +200,19 @@ def drop_candidate(
     notes: Sequence[str] = (),
     job_failed: bool = False,  # the queue gave up on a job; lifecycle already set
     spent: bool = False,  # its first bytes landed: uses one unit of the request budget
+    source: str = "slskd",  # the candidate's download source
 ) -> None:
     """The one way a candidate is dropped: it joins the request's tried list (verify has already
     moved its files into quarantine, never deleted) and the request searches again, or fails
     when it has nothing to search for. The next search is fresh and skips every tried
-    [peer, folder]."""
+    (download source, id). One budget covers every download source."""
     if req.from_files:  # nothing to search for: a person must look at the files
         if not partial and not job_failed:
             lifecycle.download_failed(req, False, why)
         return
-    if (
-        peer and [peer, folder] not in req.tried
-    ):  # no candidate known, or else the search re-picks it, hourly, forever
-        req.tried = [*req.tried, [peer, folder]]
+    key = tried_key(source, peer, folder)
+    if peer and key not in req.tried:  # no candidate known, or the search re-picks it forever
+        req.tried = [*req.tried, key]
     if spent:  # a job_failed job is the queue's fault, not the candidate's: never spends
         req.dropped += 1
         if req.dropped >= REQUEST_BUDGET:

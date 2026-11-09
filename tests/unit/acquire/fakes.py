@@ -276,7 +276,7 @@ def make_pipeline(
     return Pipeline(
         sessions=sessions,
         clock=clock,
-        source=source,
+        sources={"slskd": source},
         queries=queries,
         metadata=metadata,
         fingerprint=fake_fingerprint,

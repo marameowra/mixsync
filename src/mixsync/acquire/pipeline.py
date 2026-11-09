@@ -34,6 +34,8 @@ from mixsync.acquire.requests import (
     no_results_delay,
     profile_for,
     search_priority,
+    source_rows,
+    tried_key,
 )
 from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError, TransientError
@@ -102,7 +104,7 @@ ACOUSTID_ID_SCORE = 0.9  # an AcoustID id is written to the tags only above this
 class Pipeline:
     sessions: sessionmaker[Session]
     clock: Clock
-    source: DownloadSource
+    sources: dict[str, DownloadSource]  # by name; this order is the default source priority
     queries: Callable[[str, str], list[str]]  # sources.query.queries; injected (adapter module)
     metadata: MetadataProvider
     fingerprint: Fingerprinter
@@ -160,6 +162,7 @@ class Pipeline:
                 )
                 return
             mbid, tried, profile = req.release_mbid, req.tried, profile_for(s, req.user_id)
+            order = [n for n, on in source_rows(s, list(self.sources)) if on]
             wanted = set(req.recording_mbids) if req.provisional else None
 
         album = await self.metadata.get_release(mbid)
@@ -200,25 +203,32 @@ class Pipeline:
                     lifecycle.owned(req)
                 return
         ranked: list[tuple[Candidate, Any]] = []
-        skipped: dict[tuple[str, str], str] = {}  # folder -> why the quality preference skipped it
-        for q in self.queries(album.artist, album.album):
-            found = [c for c in await self.source.search(q) if [c.username, c.folder] not in tried]
-            scored = rank(found, album, profile)
-            skipped |= {
-                (c.username, c.folder): r.vetoes[0]
-                for c, r in scored
-                if r.band is Band.REJECT and r.vetoes and r.vetoes[0].startswith(QUALITY_SKIP)
-            }
-            ranked = [
-                cr
-                for cr in scored
-                if cr[1].band is not Band.REJECT
-                # a folder with nothing new would only download and import nothing
-                and (
-                    not owned
-                    or any(t.recording_id not in owned for t in present_tracks(cr[0], album))
-                )
-            ]
+        skipped: dict[tuple[str, str, str], str] = {}  # candidate -> quality preference veto
+        for name in order:  # stop at the first source with an acceptable candidate
+            for q in self.queries(album.artist, album.album):
+                found = [
+                    c
+                    for c in (replace(c, source=name) for c in await self.sources[name].search(q))
+                    if tried_key(name, c.username, c.folder) not in tried
+                ]
+                scored = rank(found, album, profile)
+                skipped |= {
+                    (name, c.username, c.folder): r.vetoes[0]
+                    for c, r in scored
+                    if r.band is Band.REJECT and r.vetoes and r.vetoes[0].startswith(QUALITY_SKIP)
+                }
+                ranked = [
+                    cr
+                    for cr in scored
+                    if cr[1].band is not Band.REJECT
+                    # a folder with nothing new would only download and import nothing
+                    and (
+                        not owned
+                        or any(t.recording_id not in owned for t in present_tracks(cr[0], album))
+                    )
+                ]
+                if ranked:
+                    break
             if ranked:
                 break
 
@@ -227,7 +237,7 @@ class Pipeline:
             req = self._request(s, job)
             req.artist, req.album = album.artist[:255], album.album[:255]
             req.release_group_mbid = req.release_group_mbid or album.release_group_id
-            if not ranked:
+            if not ranked:  # every enabled source came up empty
                 req.no_results_attempts += 1
                 delay = no_results_delay(req.no_results_attempts)
                 first = next(iter(skipped.values()), "")
@@ -284,8 +294,9 @@ class Pipeline:
         the next as a fresh job, so a slow transfer never uses up the retry budget (SK-P05)."""
         p = job.payload
         cand = candidate_from_dict(p["candidate"])
+        source = self.sources[cand.source]
         now = self.clock.now()
-        if "bytes" not in p and self.gate.full(now, await self.source.active_downloads()):
+        if "bytes" not in p and self.gate.full(now, await source.active_downloads()):
             with self.sessions.begin() as s:  # a fresh job, like a busy search: no attempt burnt
                 enqueue_in(
                     s,
@@ -298,16 +309,16 @@ class Pipeline:
             return
         try:
             if "bytes" not in p:
-                await self.source.enqueue(cand)
+                await source.enqueue(cand)
                 self._monitor(job, now, 0, now)
                 return
-            info = await self.source.status(cand)
+            info = await source.status(cand)
             if info.retry:  # a flaky file: queue it again, on the monitor's own cadence
                 tries = dict(p.get("retries", {}))
                 if all(tries.get(f.path, 0) < FILE_RETRIES for f in info.retry):
                     for f in info.retry:
                         tries[f.path] = tries.get(f.path, 0) + 1
-                    await self.source.enqueue(replace(cand, files=info.retry))
+                    await source.enqueue(replace(cand, files=info.retry))
                     self._monitor(job, now, info.bytes, now, retries=tries)
                     return
         except AuthError:
@@ -995,10 +1006,10 @@ class Pipeline:
         """drop_candidate, after cancelling what the candidate still has moving in slskd so a
         dropped album stops downloading. Finished files stay; a failed cancel never blocks."""
         try:
-            await self.source.clear(cand)
+            await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
-        drop_candidate(s, now, req, cand.username, cand.folder, why, **kw)
+        drop_candidate(s, now, req, cand.username, cand.folder, why, source=cand.source, **kw)
 
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
@@ -1009,7 +1020,7 @@ class Pipeline:
             for src in srcs:
                 await asyncio.to_thread(self.importer.fileops.release, src, batch, root)
             if cand.username:  # a dropped album never came from a peer
-                await self.source.clear(cand)
+                await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)
 

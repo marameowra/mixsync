@@ -74,7 +74,7 @@ class Request(TimestampMixin, Base):
     album: Mapped[str] = mapped_column(String(255), default="")
     # searching/downloading/verifying/importing/review/imported/partial/owned/failed/no_results
     status: Mapped[Status] = mapped_column(String(16), default="searching")
-    tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # [peer, folder] pairs
+    tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # see requests.tried_key
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)
     dropped: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0"

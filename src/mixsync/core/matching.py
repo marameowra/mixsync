@@ -149,6 +149,7 @@ class Candidate:
     queue_length: int = 0
     upload_speed: int = 0  # bytes per second
     has_cue: bool = False  # a .cue sheet was in the folder (the files list drops it)
+    source: str = "slskd"  # the download source it came from; the pipeline sets it per search
 
 
 class TransferStatus(StrEnum):
