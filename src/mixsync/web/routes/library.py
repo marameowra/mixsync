@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import recheck
+from mixsync.acquire import missing_scan, recheck
 from mixsync.acquire.merge import (
     DeleteRefused,
     Merger,
@@ -71,7 +71,7 @@ def _plan(db: Db, plan_id: int, user: AuthUser) -> Plan:
     )
     if not (mine or Capability.library_edit in user.capabilities):
         raise HTTPException(403, f"missing capability: {Capability.library_edit.value}")
-    if plan is None:
+    if plan is None or plan.kind == missing_scan.KIND:  # confirmed on the settings page
         raise HTTPException(404, "no such plan")
     return plan
 
@@ -101,9 +101,10 @@ def _check_count(plan: Plan, count: str) -> None:
 @router.get("/fragments")
 async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
+    ours = select(Plan).where(Plan.kind != missing_scan.KIND)  # a scan draft moves no file
     plans = [
-        *db.scalars(select(Plan).where(stuck).order_by(Plan.id.desc())),
-        *db.scalars(select(Plan).where(~stuck).order_by(Plan.id.desc()).limit(20)),
+        *db.scalars(ours.where(stuck).order_by(Plan.id.desc())),
+        *db.scalars(ours.where(~stuck).order_by(Plan.id.desc()).limit(20)),
     ]
     plans.sort(key=lambda p: -p.id)
     items = fragmentation.find(db)

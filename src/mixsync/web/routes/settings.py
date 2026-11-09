@@ -15,16 +15,19 @@ from pydantic import ValidationError
 from sqlalchemy import inspect, update
 from sqlalchemy.orm import Session
 
+from mixsync.acquire import missing_scan
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
+from mixsync.core.jobs import LIVE
 from mixsync.db.app_settings import EDITABLE, SECRETS, resolve, restart_pending
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
+from mixsync.db.models.library import Plan
 from mixsync.match.profiles import confidence, from_confidence
 from mixsync.web.deps import Box, Db, require
 from mixsync.web.routes.account import percent
-from mixsync.web.templating import templates
+from mixsync.web.templating import render, templates
 
 router = APIRouter(prefix="/settings")
 Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
@@ -195,6 +198,41 @@ async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
             .values(auto_accept_max=cap)
         )
     return RedirectResponse("/settings?saved=1", 303)
+
+
+@router.post("/missing-tracks/scan")
+def missing_tracks_scan(admin: Admin, db: Db) -> Response:
+    missing_scan.enqueue_scan(db, datetime.now(UTC))
+    return RedirectResponse("/settings/missing-tracks", 303)
+
+
+@router.get("/missing-tracks")
+def missing_tracks(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    """A live region (ADR 0017): scanning, then the preview, or why the scan failed."""
+    job, plan = missing_scan.latest(db)
+    ctx = {"user": admin, "job": job, "plan": plan, "scanning": bool(job and job.status in LIVE)}
+    return render(request, "pages/missing_tracks.html", "pages/missing_tracks_live.html", ctx)
+
+
+def _scan_draft(db: Session, plan_id: int) -> Plan:
+    plan = db.get(Plan, plan_id, with_for_update=True)  # a double confirm reopens once
+    if plan is None or plan.kind != missing_scan.KIND:
+        raise HTTPException(404, "no such scan")
+    if plan.status != "draft":
+        raise HTTPException(409, f"scan is {plan.status}")
+    return plan
+
+
+@router.post("/missing-tracks/{plan_id}/confirm")
+def missing_tracks_confirm(plan_id: int, admin: Admin, db: Db) -> Response:
+    missing_scan.confirm(db, datetime.now(UTC), _scan_draft(db, plan_id))
+    return RedirectResponse("/settings/missing-tracks", 303)
+
+
+@router.post("/missing-tracks/{plan_id}/discard")
+def missing_tracks_discard(plan_id: int, admin: Admin, db: Db) -> Response:
+    _scan_draft(db, plan_id).status = "discarded"
+    return RedirectResponse("/settings/missing-tracks", 303)
 
 
 @router.post("/reset/{name}")

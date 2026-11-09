@@ -29,6 +29,7 @@ class JobKind(StrEnum):
     MIRROR_SYNC = "mirror_sync"
     DB_BACKUP = "db_backup"
     NAME_BACKFILL = "name_backfill"
+    MISSING_SCAN = "missing_scan"  # builds a draft; changes no request
 
 
 class JobState(StrEnum):

@@ -43,7 +43,8 @@ class Plan(TimestampMixin, Base):
     __tablename__ = "plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))  # merge | promote | delete | reorganize
+    # merge | promote | delete | reorganize | missing_tracks (a request scan: no file op)
+    kind: Mapped[str] = mapped_column(String(16))
     release_group_mbid: Mapped[str] = mapped_column(String(36))
     # for a promote plan: the matched release; the canonical choice is never touched
     canonical_release_mbid: Mapped[str] = mapped_column(String(36))
