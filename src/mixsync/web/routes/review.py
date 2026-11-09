@@ -73,17 +73,23 @@ def review_list(
     request: Request,
     user: User,
     db: Db,
+    tab: str = "open",
     sort: str = "date",
-    order: str = "asc",
+    order: str | None = None,
     requeued: str | None = None,
     missing: str = "",
     busy: str = "",
     stale: str = "",
 ) -> HTMLResponse:
-    items = decisions.pending_for(db, _owner(user))
+    tab = tab if tab in ("open", "closed", "all") else "open"
+    order = order or ("asc" if tab == "open" else "desc")  # history reads newest first
+    owner = _owner(user)
+    items = [] if tab == "closed" else decisions.pending_for(db, owner)
+    if tab != "open":
+        items += decisions.closed_for(db, owner)
     key = _SORTS.get(sort, _SORTS["date"])
     items.sort(key=key, reverse=order == "desc")
-    ctx: dict[str, Any] = {"user": user, "items": items, "sort": sort, "order": order}
+    ctx: dict[str, Any] = {"user": user, "items": items, "tab": tab, "sort": sort, "order": order}
     if requeued is not None:  # the summary of a re-check, carried in the redirect
         n = {
             k: _count(v)

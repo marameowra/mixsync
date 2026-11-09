@@ -290,3 +290,9 @@ td .release-heading { gap: var(--space-3); }
 }
 
 main:has(> .head + .home-grid) { padding-top: var(--space-6); }
+
+/* Page tabs (e.g. Review: Open / Closed / All). */
+.tabs { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
+.tabs a { color: var(--ink); text-decoration: none; padding: var(--space-1) var(--space-2); border-bottom: 2px solid transparent; }
+.tabs a:hover { text-decoration: underline; }
+.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
