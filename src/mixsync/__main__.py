@@ -1,14 +1,28 @@
 import argparse
+import json
 import logging
+import os
 import sys
 from typing import TYPE_CHECKING
+
+from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from mixsync.core.config import Settings
 
-COMMANDS = ("web", "worker", "all", "migrate", "backup", "user-add", "worker-health")
+COMMANDS = (
+    "web",
+    "worker",
+    "all",
+    "migrate",
+    "backup",
+    "user-add",
+    "worker-health",
+    "export-settings",
+    "import-settings",
+)
 
 
 def configure_logging(settings: "Settings | None" = None) -> str:
@@ -60,8 +74,17 @@ def worker_health() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mixsync")
     parser.add_argument("command", choices=COMMANDS)
-    parser.add_argument("username", nargs="?", help="user-add only")
+    parser.add_argument("username", nargs="?", help="user-add name or import-settings JSON file")
     parser.add_argument("--admin", action="store_true", help="user-add only")
+    parser.add_argument(
+        "--include-secrets",
+        action="store_true",
+        help="include password hashes on settings export/import",
+    )
+    parser.add_argument("--output", help="new file for export-settings (created with mode 0600)")
+    parser.add_argument(
+        "--apply", action="store_true", help="apply import-settings after its dry-run preview"
+    )
     args = parser.parse_args(argv)
     cmd: str = args.command
     if cmd == "web":
@@ -115,6 +138,58 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         with make_session_factory(make_engine())() as s, s.begin():
             create_user(s, args.username, password, admin=args.admin)
+    elif cmd == "export-settings":
+        from mixsync.db.engine import make_engine, make_session_factory
+        from mixsync.db.settings_transfer import export_settings
+
+        if args.username or args.apply or args.admin:
+            parser.error("export-settings accepts --output and --include-secrets only")
+        try:
+            with make_session_factory(make_engine())() as s:
+                document = export_settings(s, include_secrets=args.include_secrets)
+            rendered = json.dumps(document, indent=2, sort_keys=True) + "\n"
+            if args.include_secrets:
+                print(
+                    "warning: export contains password hashes; protect this file", file=sys.stderr
+                )
+            if args.output:
+                fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(rendered)
+            else:
+                sys.stdout.write(rendered)
+        except Exception as e:
+            print(f"export-settings failed: {e}", file=sys.stderr)
+            return 1
+    elif cmd == "import-settings":
+        from mixsync.db.engine import make_engine, make_session_factory
+        from mixsync.db.settings_transfer import TransferError, import_settings
+
+        if not args.username:
+            parser.error("import-settings requires a JSON file path")
+        if args.output or args.admin:
+            parser.error("import-settings accepts FILE, --apply and --include-secrets only")
+        try:
+            with open(args.username, encoding="utf-8") as f:
+                document = json.load(f)
+            with make_session_factory(make_engine())() as s:
+                if args.apply:
+                    with s.begin():
+                        report = import_settings(
+                            s, document, apply=True, include_secrets=args.include_secrets
+                        )
+                else:
+                    report = import_settings(s, document, include_secrets=args.include_secrets)
+            print(json.dumps(report, indent=2, sort_keys=True))
+        except (OSError, UnicodeError, json.JSONDecodeError, TransferError) as e:
+            print(f"import-settings failed: {e}", file=sys.stderr)
+            return 1
+        except SQLAlchemyError:
+            print(
+                "import-settings failed: database operation failed; no changes were applied",
+                file=sys.stderr,
+            )
+            return 1
     elif cmd in ("worker", "all"):
         import asyncio
 
