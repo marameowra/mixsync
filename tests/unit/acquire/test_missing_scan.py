@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.acquire.missing_scan import KIND, MissingScan
-from mixsync.core.errors import TransientError
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.matching import AlbumInfo
 from mixsync.db.auth import create_user
@@ -29,12 +29,15 @@ class Metadata:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.fail = 0  # this many calls raise TransientError first
+        self.gone: set[str] = set()  # releases MusicBrainz answers 404 for
 
     async def get_release(self, mbid: str, *, fresh: bool = False) -> AlbumInfo:
         self.calls.append(mbid)
         if self.fail:
             self.fail -= 1
             raise TransientError("musicbrainz 503")
+        if mbid in self.gone:
+            raise PermanentError("returned 404")
         return ALBUMS[mbid]
 
 
@@ -169,6 +172,8 @@ async def test_preview_lists_requests_with_gaps_and_changes_nothing(
     assert "Duo Album" in page and "owned" in page and "1 of 2 tracks present" in page
     assert "Right" in page and "Solo Album" not in page
     assert "Confirm" in page and "Discard" in page and "Scanning" not in page
+    poll = web.get(SCAN, headers={"HX-Request": "true"})  # the live region's own fetch
+    assert poll.status_code == 200 and "Confirm" in poll.text and "Tres" in poll.text
 
 
 async def test_a_recording_deleted_on_purpose_is_not_missing_unless_undone(
@@ -263,3 +268,13 @@ async def test_library_plan_pages_ignore_the_scan(env: Env, web: TestClient) -> 
     with env.sessions() as s:
         assert s.scalars(select(Job).where(Job.kind == JobKind.MERGE)).all() == []
     assert _draft(env).status == "draft"  # type: ignore[union-attr]
+
+
+async def test_a_release_musicbrainz_lacks_is_skipped(env: Env, web: TestClient) -> None:
+    meta = _setup(env)
+    meta.gone.add("tri-release")
+    _request(env, TRI, "imported")
+    duo = _request(env, DUO, "imported")
+    await _scan(env, web, login(web, "root"))
+    assert env.jobs(JobKind.MISSING_SCAN)[0].status == JobState.SUCCEEDED
+    assert _listed(env) == [duo]

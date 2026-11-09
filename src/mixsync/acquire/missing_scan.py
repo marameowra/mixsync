@@ -16,6 +16,7 @@ from mixsync.acquire import lifecycle
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import search_priority
 from mixsync.core.clock import Clock
+from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.protocols import MetadataProvider
 from mixsync.db import canonical as canonical_db
@@ -97,7 +98,11 @@ class MissingScan:
             gone = _deleted(s)
         ops: list[dict[str, Any]] = []
         for rid, mbid, status in todo:  # one release at a time: the provider is rate-limited
-            album = await self.metadata.get_release(mbid)  # a TransientError retries the job
+            try:
+                album = await self.metadata.get_release(mbid)  # a TransientError retries the job
+            except PermanentError as e:  # e.g. a release MusicBrainz removed: not checkable
+                log.warning("missing-track scan: request %d not checked: %s", rid, e)
+                continue
             group = album.release_group_id
             if not album.tracks or not group:
                 continue
