@@ -136,7 +136,8 @@ def merge_build(s: Session, group: str) -> tuple[Job | None, int | None]:
     job = next((j for j in jobs if j.payload.get("group") == group), None)
     if job is None:
         return None, None
-    made = select(func.min(Plan.id)).where(
+    # max: a double click can queue two builds; the later one discards the earlier draft
+    made = select(func.max(Plan.id)).where(
         Plan.kind == "merge", Plan.release_group_mbid == group, Plan.id > job.payload["after"]
     )
     return job, s.scalar(made)

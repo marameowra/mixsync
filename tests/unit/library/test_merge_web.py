@@ -7,13 +7,14 @@ from dataclasses import replace
 from datetime import timedelta
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
-from mixsync.core.errors import PermanentError
+from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.models.work import Job
@@ -147,9 +148,16 @@ def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> N
         assert world.plan(pid).status == "draft" and "Confirm merge" in html
 
 
-def test_transient_musicbrainz_error_retries(world: World) -> None:  # noqa: F811
+@pytest.mark.parametrize(
+    ("error", "stored"),  # the real client raises TransientError; the job wraps a bare httpx error
+    [
+        (TransientError("musicbrainz 503"), "musicbrainz 503"),
+        (httpx.ConnectTimeout("slow"), "MusicBrainz is unavailable"),
+    ],
+)
+def test_transient_musicbrainz_error_retries(world: World, error: Exception, stored: str) -> None:  # noqa: F811
     async def down(mbid: str) -> object:
-        raise httpx.ConnectTimeout("slow")
+        raise error
 
     world.metadata.get_release = down  # type: ignore[method-assign]
     with _client(world) as c:
@@ -157,7 +165,7 @@ def test_transient_musicbrainz_error_retries(world: World) -> None:  # noqa: F81
         _post(c, tok)
         _drain(world)
         (job,) = _builds(world)
-        assert job.status == JobState.RETRY_WAIT and "MusicBrainz is unavailable" in job.last_error
+        assert job.status == JobState.RETRY_WAIT and stored in job.last_error
         page = c.get(BUILD)
         assert page.status_code == 200 and "trying again shortly" in page.text
 
@@ -180,3 +188,18 @@ def test_permanent_error_shows_message_and_retry(world: World) -> None:  # noqa:
         world.metadata.get_release = real  # type: ignore[method-assign]
         pid = _preview(c, tok, world)  # the retry button posts the same form
         assert len(_builds(world)) == 2 and world.plan(pid).status == "draft"
+
+
+def test_group_without_verified_tracks_fails_with_message_and_retry(world: World) -> None:  # noqa: F811
+    other = "00000000-0000-4000-8000-000000000000"
+    url = f"/library/fragments/plan?group={other}"
+    with _client(world) as c:
+        tok = _login(c)
+        r = c.post("/library/fragments/plan", data={"csrf_token": tok, "group": other})
+        assert (r.status_code, r.headers["location"]) == (303, url)
+        _drain(world)
+        with world.sessions() as s:
+            (job,) = s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN))
+            assert job.status == JobState.FAILED  # a LookupError is not retried
+        page = c.get(url).text
+        assert f"no verified tracks in release group {other}" in page and "Try again" in page
