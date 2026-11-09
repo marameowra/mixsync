@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Download sources - MixSync{% endblock %}
+{% block content %}
+<h1>Download sources</h1>
+<p>A search tries each enabled source in this order and stops at the first with an acceptable candidate. Changes apply to the next search. Connection settings come from the environment.</p>
+<form method="post" action="/account/sources">
+  {{ forms.csrf() }}
+  <table>
+    <thead><tr><th scope="col">Source</th><th scope="col">Enabled</th><th scope="col">Order</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.label }}{% if not r.configured %} <span class="tag neutral">not configured</span>{% endif %}</td>
+        <td><input type="checkbox" name="enabled" value="{{ r.name }}" aria-label="Enable {{ r.label }}"{% if r.on %} checked{% endif %}{% if not r.configured %} disabled{% endif %}></td>
+        <td>
+          <button class="btn quiet" type="submit" name="up" value="{{ r.name }}" aria-label="Move {{ r.label }} up"{% if loop.first %} disabled{% endif %}>↑</button>
+          <button class="btn quiet" type="submit" name="down" value="{{ r.name }}" aria-label="Move {{ r.label }} down"{% if loop.last %} disabled{% endif %}>↓</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

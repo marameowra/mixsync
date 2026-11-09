@@ -8,14 +8,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mixsync.acquire.requests import auto_accept_cap, profile_for
+from mixsync.acquire.requests import auto_accept_cap, profile_for, source_rows
 from mixsync.core.capabilities import Capability
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.core.matching import Profile
 from mixsync.db.auth import AuthUser, set_password, verify_password
 from mixsync.db.models.accounts import UserLink
-from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.queue import worker_age
 from mixsync.db.secretbox import SecretBox, set_secret, user_links
 from mixsync.discovery import playlists
@@ -24,6 +24,7 @@ from mixsync.match.candidates import QUALITY_TIERS
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT, confidence, from_confidence
 from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
+from mixsync.sources import DOWNLOAD_SOURCES
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
     SESSION_COOKIE,
@@ -284,6 +285,40 @@ def show_worker(request: Request, admin: Admin, db: Db) -> HTMLResponse:
         "stale": age is None or age > WORKER_STALE_AFTER,
     }
     return templates.TemplateResponse(request, "pages/worker.html", ctx)
+
+
+def _configured(request: Request) -> set[str]:
+    settings = request.app.state.services.settings
+    return {
+        n for n, (_, needs) in DOWNLOAD_SOURCES.items() if all(getattr(settings, k) for k in needs)
+    }
+
+
+@router.get("/sources")
+def show_sources(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    ok = _configured(request)
+    rows = [
+        {"name": n, "label": DOWNLOAD_SOURCES[n][0], "on": on and n in ok, "configured": n in ok}
+        for n, on in source_rows(db, list(DOWNLOAD_SOURCES))
+    ]
+    return templates.TemplateResponse(request, "pages/sources.html", {"user": admin, "rows": rows})
+
+
+@router.post("/sources")
+async def save_sources(request: Request, admin: Admin, db: Db) -> RedirectResponse:
+    """One form: the enabled boxes, plus the ↑ or ↓ button pressed, if any."""
+    form = await request.form()
+    names = [n for n, _ in source_rows(db, list(DOWNLOAD_SOURCES))]
+    for button, step in (("up", -1), ("down", 1)):
+        if (n := str(form.get(button, ""))) in names:
+            i = names.index(n)
+            if 0 <= i + step < len(names):
+                names[i], names[i + step] = names[i + step], names[i]
+    on = {str(n) for n in form.getlist("enabled")} & _configured(request)
+    row = db.get(AppSettings, 1) or AppSettings(id=1)
+    row.source_priority = [[n, n in on] for n in names]  # not stamped: read at each search
+    db.add(row)
+    return RedirectResponse("/account/sources", 303)
 
 
 @router.post("/password")

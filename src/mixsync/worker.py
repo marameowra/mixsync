@@ -187,14 +187,18 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
     return Pipeline(
         sessions=sessions,
         clock=clock,
-        source=SlskdSource(
-            PoliteClient("slskd", settings, sessions),
-            settings.slskd_url,
-            settings.slskd_api_key,
-            downloads_dir=Path(settings.downloads_dir),
-            slots=Slots("slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE),
-            debounce=timedelta(seconds=settings.slskd_search_debounce),
-        ),
+        sources={
+            "slskd": SlskdSource(
+                PoliteClient("slskd", settings, sessions),
+                settings.slskd_url,
+                settings.slskd_api_key,
+                downloads_dir=Path(settings.downloads_dir),
+                slots=Slots(
+                    "slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE
+                ),
+                debounce=timedelta(seconds=settings.slskd_search_debounce),
+            ),
+        },
         max_searches=settings.slskd_max_searches,
         gate=DownloadGate(
             settings.max_concurrent_downloads,
