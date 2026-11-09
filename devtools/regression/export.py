@@ -119,7 +119,7 @@ async def stage2(s: Session, row: dict[str, Any]) -> dict[str, Any] | None:
             info = mutagen.File(p)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
             # shortcut: mutagen's length, not fpcalc's; within a frame for intact files
             length = float(info.info.length) if info else 0.0  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-            results = (AcoustIdResult("", a["score"], tuple(a["recording_ids"])),) if a else ()
+            results = (AcoustIdResult.from_json(a),) if a else ()
             ft = pipeline.file_track(
                 p,
                 length,

@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from mixsync.core.matching import FileTrack, TrackInfo
 from mixsync.core.types import AcoustIdResult
+from mixsync.match.features import normalize
 
 MAX_DURATION_DELTA = 15.0  # seconds
 ACOUSTID_VETO_SCORE = 0.9
@@ -17,23 +18,36 @@ def confident(file: FileTrack) -> AcoustIdResult | None:
     return best if best and best.score >= ACOUSTID_VETO_SCORE and best.recording_ids else None
 
 
+def names_recording(best: AcoustIdResult, track: TrackInfo) -> bool:
+    """The result names the track's recording: by id, or (MusicBrainz holds duplicate
+    recordings of a song) by one with the same normalized title within MAX_DURATION_DELTA."""
+    return track.recording_id in best.recording_ids or any(
+        r.title is not None
+        and r.duration is not None
+        and track.length is not None
+        and normalize(r.title) == normalize(track.title)
+        and abs(r.duration - track.length) <= MAX_DURATION_DELTA
+        for r in best.recordings
+    )
+
+
 def acoustid_confirms(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID's confident best result names the track's recording."""
     best = confident(file)
-    return bool(best and track.recording_id in best.recording_ids)
+    return bool(best and names_recording(best, track))
 
 
 def acoustid_contradicts(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID is confident the file is a different recording than the track's."""
     best = confident(file)
-    return bool(best and track.recording_id and track.recording_id not in best.recording_ids)
+    return bool(best and track.recording_id and not names_recording(best, track))
 
 
 def off_release(file: FileTrack, tracks: Sequence[TrackInfo]) -> bool:
     """AcoustID is confident the file is a recording the release (with recording ids) lacks."""
     best = confident(file)
-    ids = {t.recording_id for t in tracks if t.recording_id}
-    return bool(best and ids and ids.isdisjoint(best.recording_ids))
+    held = [t for t in tracks if t.recording_id]
+    return bool(best and held and not any(names_recording(best, t) for t in held))
 
 
 def _clock(seconds: float) -> str:

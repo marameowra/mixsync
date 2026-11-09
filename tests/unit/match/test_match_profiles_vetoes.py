@@ -1,9 +1,10 @@
 import pytest
 
 from mixsync.core.matching import Band, FileTrack, Profile, TrackInfo
-from mixsync.core.types import AcoustIdResult
+from mixsync.core.types import AcoustIdResult, NamedRecording
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT, band
-from mixsync.match.vetoes import all_confident, find_vetoes
+from mixsync.match.scorer import assign_tracks
+from mixsync.match.vetoes import MAX_DURATION_DELTA, all_confident, find_vetoes
 
 
 @pytest.mark.parametrize(
@@ -75,3 +76,48 @@ def test_padded_preview_veto_names_where_the_silence_starts() -> None:
     fade = FileTrack("Song", "a", length=240.0, trailing_silence=3.0)
     assert find_vetoes([(fade, t)]) == ()
     assert find_vetoes([(FileTrack("Song", "a", length=240.0), t)]) == ()
+
+
+def _dup(*recs: NamedRecording, score: float = 0.97) -> tuple[AcoustIdResult, ...]:
+    return (AcoustIdResult("x", score, tuple(r.id for r in recs), recs),)
+
+
+ROSES = TrackInfo(title="Roses (Imanbek remix)", length=176.0, recording_id="240c")
+
+
+def test_duplicate_recording_with_same_title_and_length_is_the_tracks_recording() -> None:
+    # review 2484: AcoustID names two unmerged duplicates, not the release track's id
+    acoustid = _dup(
+        NamedRecording("8854", "Roses (Imanbek remix)", 176.0),
+        NamedRecording("ae8d", "Roses (Imanbek remix)", 176.133),
+        NamedRecording("018e", "Roses", 173.0),
+    )
+    f = FileTrack("Roses (Imanbek Remix)", "SAINt JHN", length=176.0, acoustid=acoustid)
+    pairs, extra, missing = assign_tracks([f], [ROSES])
+    assert pairs == [(f, ROSES)] and not extra and not missing
+    assert find_vetoes(pairs, extra, [ROSES]) == ()
+    assert all_confident(pairs)
+
+
+@pytest.mark.parametrize(
+    ("title", "duration"),
+    [("Heck", 176.0), ("Roses (Imanbek remix)", 176.0 + MAX_DURATION_DELTA + 1)],
+)
+def test_duplicate_recording_with_other_title_or_length_still_vetoes(
+    title: str, duration: float
+) -> None:
+    f = FileTrack("x", "a", length=176.0, acoustid=_dup(NamedRecording("8854", title, duration)))
+    assert not all_confident([(f, ROSES)])
+    (v,) = find_vetoes([(f, ROSES)])
+    assert "different recording" in v
+    (w,) = find_vetoes([], [f], [ROSES])
+    assert "does not contain" in w
+    assert assign_tracks([f], [ROSES])[0] == []
+
+
+def test_acoustid_without_title_or_duration_matches_by_id_only() -> None:
+    f = FileTrack("Roses (Imanbek remix)", "a", length=176.0, acoustid=_dup(NamedRecording("8854")))
+    assert not all_confident([(f, ROSES)])
+    assert find_vetoes([(f, ROSES)])
+    old = FileTrack("t", "a", length=176.0, acoustid=(AcoustIdResult("x", 0.97, ("8854",)),))
+    assert find_vetoes([(old, ROSES)])

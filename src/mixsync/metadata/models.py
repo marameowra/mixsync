@@ -110,6 +110,8 @@ class MbEntitySearch(_Raw):
 
 class AcoustIdRecording(_Raw):
     id: str
+    title: str | None = None
+    duration: float | None = None
 
 
 class AcoustIdHit(_Raw):

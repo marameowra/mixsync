@@ -189,3 +189,30 @@ async def test_lookup_requires_key(make_client: Make, settings: Settings) -> Non
     client = AcoustIdClient(make_client("acoustid", lambda _r: httpx.Response(200)), settings)
     with pytest.raises(RuntimeError, match="ACOUSTID_APP_KEY"):
         await client.lookup(FP)
+
+
+async def test_lookup_keeps_recording_title_and_duration(
+    make_client: Make, settings: Settings
+) -> None:
+    body = {
+        "status": "ok",
+        "results": [
+            {
+                "id": "d003",
+                "score": 0.98,
+                "recordings": [
+                    {"id": "d4a0", "title": "Thank You", "duration": 249.373},
+                    {"id": "bare"},
+                ],
+            }
+        ],
+    }
+    client = AcoustIdClient(
+        make_client("acoustid", lambda r: httpx.Response(200, json=body)), keyed(settings)
+    )
+    (r,) = await client.lookup(FP)
+    assert r.recording_ids == ("d4a0", "bare")
+    assert [(x.id, x.title, x.duration) for x in r.recordings] == [
+        ("d4a0", "Thank You", 249.373),
+        ("bare", None, None),
+    ]
