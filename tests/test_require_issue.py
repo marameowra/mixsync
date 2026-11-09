@@ -26,6 +26,12 @@ def denied(command: str) -> bool:
         ('gh pr create --base dev -b "summary\n\ncloses #3"', False),
         ('gh pr create --base dev --body="Refs #7"', False),
         ('gh pr create --base dev --body "$(cat <<EOF\nx\n\nResolved: #9\nEOF\n)"', False),
+        (  # quotes inside the heredoc body confuse shlex; the raw text is checked
+            'gh pr create --base dev --body "$(cat <<\'EOF\'\nA "Try again" button.\n\n'
+            'Fixes #295\nEOF\n)"',
+            False,
+        ),
+        ('gh pr create --base dev --body "$(cat <<\'EOF\'\nA "quoted" word.\nEOF\n)"', True),
         ("gh pr create --base dev --fill", True),
         ('gh pr create --base dev --body "no issue here, see #4"', True),
         ('gh pr create --base dev --title "Fixes #12"', True),

@@ -67,7 +67,9 @@ def merge_target(args: list[str]) -> tuple[str | None, str | None]:
     return selector, repo
 
 
-def base_is_main(selector: str | None, repo: str | None) -> bool:
+def base_is_main(selector: str | None, repo: str | None, created: bool = False) -> bool:
+    """created: an earlier segment ran `gh pr create` with a non-main base, so a selector-less
+    merge whose PR is not found yet targets that new PR (it exists by the time merge runs)."""
     cmd = ["gh", "pr", "view", *([selector] if selector else [])]
     cmd += ["--repo", repo] if repo else []
     cmd += ["--json", "baseRefName", "-q", ".baseRefName"]
@@ -75,7 +77,9 @@ def base_is_main(selector: str | None, repo: str | None) -> bool:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         return True  # fail closed
-    return res.returncode != 0 or res.stdout.strip() == "main"
+    if res.returncode != 0:
+        return not (created and selector is None)  # an existing PR into main still denies
+    return res.stdout.strip() == "main"
 
 
 def pr_create_base(args: list[str]) -> str | None:
@@ -117,6 +121,7 @@ def main() -> None:
     except (ValueError, KeyError, TypeError):
         deny()  # bad input or unparseable gh/git command: fail closed
         return
+    created = False  # a PR into a non-main base was created earlier in this command
     for seg in segs:
         for i, tok in enumerate(seg):
             rest = seg[i + 1 :]
@@ -127,10 +132,12 @@ def main() -> None:
                     deny(RELEASE_REASON)
             if tok != "gh":
                 continue
-            if rest[:2] == ["pr", "merge"] and base_is_main(*merge_target(rest[2:])):
+            if rest[:2] == ["pr", "merge"] and base_is_main(*merge_target(rest[2:]), created):
                 deny()
-            if rest[:2] == ["pr", "create"] and pr_create_base(rest[2:]) in (None, "main"):
-                deny(PR_BASE_REASON)
+            if rest[:2] == ["pr", "create"]:
+                if pr_create_base(rest[2:]) in (None, "main"):
+                    deny(PR_BASE_REASON)
+                created = True
             if rest[:1] == ["release"] and rest[1:2] and rest[1] in RELEASE_VERBS:
                 deny(RELEASE_REASON)
             if rest[:1] == ["api"] and any(API_MERGE.search(t) for t in rest):
