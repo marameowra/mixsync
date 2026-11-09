@@ -35,6 +35,9 @@ class TrashFolder(NamedTuple):
     protected: bool  # holds trash an undo or a half-done op needs; never purged early
 
 
+RECENT = timedelta(days=1)  # today and yesterday: an in-flight move may trash into them unjournaled
+
+
 class TrashPurger:
     def __init__(
         self,
@@ -100,7 +103,7 @@ class TrashPurger:
 
     def folders(self) -> list[TrashFolder]:
         """Each trash day folder, newest first, with its usage and whether it is protected."""
-        held = {p.split("/", 1)[0] for p in self.protected()}
+        held = self._held(self.protected())
         usage = self.fileops.trash_usage()
         return [TrashFolder(d, *usage[d], d in held) for d in sorted(usage, reverse=True)]
 
@@ -109,10 +112,17 @@ class TrashPurger:
         Protection is checked here, at execution: a folder holding any protected path is
         skipped whole. Returns (files deleted, skipped folders)."""
         keep = self.protected()
-        skipped = sorted(set(days) & {p.split("/", 1)[0] for p in keep})
+        skipped = sorted(set(days) & self._held(keep))
         chosen = set(days) - set(skipped)
         batch = f"purge-early-{self.clock.now().isoformat()}"
         return self.fileops.purge_trash(0, batch, keep, only=chosen), skipped
+
+    def _held(self, keep: set[str]) -> set[str]:
+        """Day folders an early purge must skip: those holding protected paths, plus any day
+        from yesterday on, which a running merge or tag restore may be trashing into right now."""
+        floor = (self.clock.now().date() - RECENT).isoformat()  # ISO dates sort as strings
+        days = self.fileops.trash_usage()
+        return {p.split("/", 1)[0] for p in keep} | {d for d in days if d >= floor}
 
     def _purge_monitor_rows(self) -> None:
         """One row per 30 s per transfer; only their dedup key names them. In batches, each in

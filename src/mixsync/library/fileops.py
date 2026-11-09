@@ -21,6 +21,7 @@ import hashlib
 import logging
 import os
 import shutil
+import stat
 import sys
 import unicodedata
 from collections.abc import Callable, Collection
@@ -495,8 +496,12 @@ class FileOps:
             for dirpath, _, filenames in os.walk(day_dir, followlinks=False):
                 for name in filenames:
                     f = Path(dirpath, name)
-                    if not f.is_symlink() and f.is_file():
-                        files, size = files + 1, size + f.stat().st_size
+                    try:
+                        st = f.lstat()
+                    except FileNotFoundError:  # purged or restored while we walked
+                        continue
+                    if stat.S_ISREG(st.st_mode):
+                        files, size = files + 1, size + st.st_size
             usage[day_dir.name] = (files, size)
         return usage
 

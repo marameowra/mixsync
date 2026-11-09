@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
@@ -53,12 +53,17 @@ def put(c: TestClient, rel: str, data: bytes = b"xx") -> Path:
 
 
 def protect(c: TestClient, sf: sessionmaker[Session]) -> tuple[str, Path]:
-    """Today's folder, holding the trash of a done plan that can still be undone."""
+    """An old folder, past the recent-folder guard, holding the trash of a done plan that can
+    still be undone. Moved out of today's folder so only the journal protects it."""
     src = fo(c).library / "A/b.mp3"
     src.parent.mkdir(parents=True)
     src.write_bytes(b"orig")
     rel = fo(c).trash("A/b.mp3", "merge-1")
+    day, rest = rel.split("/", 1)
+    moved = f"{MID}/{rest}"
+    (fo(c).trash_dir / day).rename(fo(c).trash_dir / MID)  # the whole folder: nothing left behind
     with sf.begin() as s:
+        s.execute(update(FileOp).where(FileOp.dst == rel).values(dst=moved))
         s.add(
             Plan(
                 kind="merge",
@@ -68,7 +73,7 @@ def protect(c: TestClient, sf: sessionmaker[Session]) -> tuple[str, Path]:
                 status="done",
             )
         )
-    return datetime.now(UTC).date().isoformat(), fo(c).trash_dir / rel
+    return MID, fo(c).trash_dir / moved
 
 
 def login(c: TestClient, user: str = "root") -> str:
@@ -151,6 +156,21 @@ def test_crafted_post_for_a_protected_folder_is_skipped_and_reported(
     assert kept.read_bytes() == b"orig" and not a.exists()
     assert purge_ops(sf) == [f"{OLD}/a.mp3"]
     assert f"Skipped, now protected: {today}." in client.get(r.headers["location"]).text
+
+
+def test_recent_folders_are_never_purged_early(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    """A running merge may trash into today's folder before any journal row protects it."""
+    today = datetime.now(UTC).date().isoformat()
+    unjournaled = put(client, f"{today}/A/c.mp3")
+    put(client, f"{OLD}/a.mp3")
+    tok = login(client)
+    r = client.get("/trash")
+    assert f'value="{today}"' not in r.text and f'value="{OLD}"' in r.text
+    r = client.post("/trash/purge", data={"csrf_token": tok, "day": [OLD, today], "count": "2"})
+    assert r.headers["location"] == f"/trash?purged=1&skipped={today}"
+    assert unjournaled.exists() and purge_ops(sf) == [f"{OLD}/a.mp3"]
 
 
 def test_unknown_folder_is_refused(client: TestClient, sf: sessionmaker[Session]) -> None:
