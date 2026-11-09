@@ -7,9 +7,9 @@ _BASE = "https://coverartarchive.org"
 
 
 class CoverArtClient:
-    def __init__(self, client: PoliteClient, base_url: str = _BASE) -> None:
+    def __init__(self, client: PoliteClient, base_url: str = "") -> None:
         self._client = client
-        self._base = base_url.rstrip("/")
+        self._base = (base_url or _BASE).rstrip("/")
 
     async def front(self, release_mbid: str | None, release_group_mbid: str | None) -> bytes | None:
         """Front cover: the release's 1200 px thumbnail, else its original image, then the same

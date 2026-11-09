@@ -111,3 +111,17 @@ async def test_serve_all_hands_one_services_to_the_worker_and_the_app(
     await worker.serve_all(settings)
     assert isinstance(seen["worker"], Services)
     assert seen["app"] is seen["worker"]
+
+
+def test_fake_services_are_off_unless_the_test_only_env_var_is_set(
+    settings: Settings, sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(wiring.FAKE_SERVICES_ENV, raising=False)
+    assert build_services(settings, sessions).fake_services_url == ""
+    monkeypatch.setenv(wiring.FAKE_SERVICES_ENV, "http://fakes:5030")
+    services = build_services(settings, sessions)
+    _, _, handlers, _ = worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]
+    assert services.fake_services_url == "http://fakes:5030"
+    assert services.coverart._base == "http://fakes:5030"  # pyright: ignore[reportPrivateUsage]
+    acoustid = _owner(handlers, JobKind.SEARCH).acoustid
+    assert acoustid._url == "http://fakes:5030/v2/lookup"  # pyright: ignore[reportPrivateUsage]
