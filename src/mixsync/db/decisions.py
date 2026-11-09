@@ -68,6 +68,22 @@ def pending_for(s: Session, user_id: int | None) -> list[MatchDecision]:
     return list(s.scalars(q))
 
 
+def closed_for(s: Session, user_id: int | None) -> list[MatchDecision]:
+    """Stage-2 reviews already acted on (accepted, rejected, repicked, cancelled, ...)."""
+    q = (
+        select(MatchDecision)
+        .where(
+            MatchDecision.band == Band.REVIEW.value,
+            MatchDecision.status != PENDING,
+            MatchDecision.stage == 2,
+        )
+        .order_by(MatchDecision.id)
+    )
+    if user_id is not None:
+        q = q.where(MatchDecision.user_id == user_id)
+    return list(s.scalars(q))
+
+
 def reopen(s: Session, decision_id: int) -> None:
     """Undo a repick whose release turned out not to exist: the reviewer chooses again."""
     s.execute(

@@ -56,6 +56,16 @@ def test_pending_for(s: Session) -> None:
     assert [d.id for d in decisions.pending_for(s, None)] == [a, b]
 
 
+def test_closed_for_lists_acted_on_reviews_only(s: Session) -> None:
+    done, _open = _rec(s, Band.REVIEW, 1), _rec(s, Band.REVIEW, 1)
+    other = _rec(s, Band.REVIEW, 2)
+    _rec(s, Band.AUTO_ACCEPT, 1)  # never needed review
+    decisions.act(s, done, 1, "accept")
+    decisions.act(s, other, 1, "reject")
+    assert [d.id for d in decisions.closed_for(s, 1)] == [done]
+    assert [d.id for d in decisions.closed_for(s, None)] == [done, other]
+
+
 def test_act_once_only(s: Session) -> None:
     i = _rec(s, Band.REVIEW)
     decisions.act(s, i, 2, "repick", MBID)

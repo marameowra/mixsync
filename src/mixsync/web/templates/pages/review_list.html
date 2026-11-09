@@ -3,21 +3,28 @@
 {% block content %}
 {% from "macros/ui.html" import status %}
 <h1>Review</h1>
+<nav class="tabs" aria-label="Reviews">
+  {% for key, label in [("open", "Open"), ("closed", "Closed"), ("all", "All")] %}
+  <a href="/review?tab={{ key }}"{% if tab == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
 {% if n is defined %}
 <p role="status">Re-queued {{ n.requeued }} · skipped {{ n.missing }} (files missing) · {{ n.busy }} already re-checking · {{ n.stale }} no longer in review</p>
 {% endif %}
 {% if items %}
+{% if tab == "open" %}
 <form method="post" action="/review/recheck" hx-boost="true" hx-confirm="Re-check {{ items|length }} pending reviews with the current scoring?">{{ forms.csrf() }}
   <button class="btn" type="submit">Re-check pending reviews</button>
 </form>
+{% endif %}
 <p>Sort by:
   {% for key, label in [("date", "date"), ("score", "score"), ("artist", "artist"), ("album", "album"), ("match", "match")] %}
-  <a href="/review?sort={{ key }}&amp;order={{ 'desc' if sort == key and order == 'asc' else 'asc' }}"{% if sort == key %} aria-current="true"{% endif %}>{{ label }}{% if sort == key %} ({{ order }}){% endif %}</a>{{ " " }}
+  <a href="/review?tab={{ tab }}&amp;sort={{ key }}&amp;order={{ 'desc' if sort == key and order == 'asc' else 'asc' }}"{% if sort == key %} aria-current="true"{% endif %}>{{ label }}{% if sort == key %} ({{ order }}){% endif %}</a>{{ " " }}
   {% endfor %}
 </p>
 <div class="table-wrap scroll">
 <table>
-  <thead><tr><th>#</th><th>Date</th><th>Source</th><th>Release</th><th>Match</th><th>Band</th><th>Distance</th></tr></thead>
+  <thead><tr><th>#</th><th>Date</th><th>Source</th><th>Release</th><th>Match</th><th>Band</th><th>Distance</th>{% if tab != "open" %}<th>Status</th><th>Closed</th>{% endif %}</tr></thead>
   <tbody>
   {% for d in items %}
   <tr>
@@ -28,12 +35,18 @@
     <td>{{ "Partial match" if d.release_mbid else "No match" }}</td>
     <td>{{ status(d.band) }}</td>
     <td class="n">{{ "%.3f"|format(d.distance) }}</td>
+    {% if tab != "open" %}
+    <td>{{ status(d.status) }}</td>
+    <td>{{ d.acted_at.strftime("%Y-%m-%d %H:%M") if d.acted_at else "" }}</td>
+    {% endif %}
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
-{% else %}
+{% elif tab == "open" %}
 <p>Nothing to review.</p>
+{% else %}
+<p>No reviews yet.</p>
 {% endif %}
 {% endblock %}

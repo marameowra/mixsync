@@ -1185,6 +1185,28 @@ def test_repick_accepts_a_musicbrainz_url(client: TestClient, sf: sessionmaker[S
         assert d and d.chosen_release_mbid == other
 
 
+def test_list_tabs_split_open_and_closed(client: TestClient, sf: sessionmaker[Session]) -> None:
+    open_, closed = _make_decision(sf, "alice", "/x"), _make_decision(sf, "alice", "/y")
+    with sf() as s, s.begin():
+        row = s.get(MatchDecision, closed)
+        assert row
+        decisions.act(s, closed, row.user_id, "reject")
+    _login(client, "alice")
+    default = client.get("/review").text
+    assert f'href="/review/{open_}"' in default and f'href="/review/{closed}"' not in default
+    assert 'href="/review?tab=open" aria-current="page"' in default
+    html = client.get("/review?tab=closed").text
+    assert f'href="/review/{closed}"' in html and f'href="/review/{open_}"' not in html
+    assert "Rejected" in html and "Re-check" not in html
+    html = client.get("/review?tab=all").text
+    assert html.index(f"/review/{closed}") < html.index(f"/review/{open_}")  # newest first
+    assert f'href="/review/{open_}"' in client.get("/review?tab=bogus").text
+    _login(client, "bob")
+    assert f'href="/review/{closed}"' not in client.get("/review?tab=all").text
+    _login(client, "root")
+    assert f'href="/review/{closed}"' in client.get("/review?tab=closed").text
+
+
 def test_list_sorts_and_shows_match_status(client: TestClient, sf: sessionmaker[Session]) -> None:
     a = _extra_decision(sf, "alice", target={"artist": "Zed", "title": "A"})
     b = _extra_decision(sf, "alice", target={"artist": "Abe", "title": "B"})
