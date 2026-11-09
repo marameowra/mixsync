@@ -55,7 +55,7 @@ def build_services(
     settings_version: datetime | None = None,
 ) -> Services:
     """`session_factory` lets a caller that already has a database (tests) keep using it."""
-    if fake := os.environ.get(FAKE_SERVICES_ENV, ""):
+    if fake := os.environ.get(FAKE_SERVICES_ENV, "").strip():
         log.warning(
             "%s is set: AcoustID and cover art go to %s. It is for the integration tests "
             "only; unset it in a real deployment.",

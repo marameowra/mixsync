@@ -118,6 +118,8 @@ def test_fake_services_are_off_unless_the_test_only_env_var_is_set(
 ) -> None:
     monkeypatch.delenv(wiring.FAKE_SERVICES_ENV, raising=False)
     assert build_services(settings, sessions).fake_services_url == ""
+    monkeypatch.setenv(wiring.FAKE_SERVICES_ENV, "  ")  # blank counts as unset
+    assert build_services(settings, sessions).fake_services_url == ""
     monkeypatch.setenv(wiring.FAKE_SERVICES_ENV, "http://fakes:5030")
     services = build_services(settings, sessions)
     _, _, handlers, _ = worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]

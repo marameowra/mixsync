@@ -8,7 +8,7 @@ x-mixsync: &mixsync
   build:
     context: ../..
     dockerfile: deploy/Dockerfile
-  image: mixsync:it
+  image: mixsync:it-${IT_TAG:-local}
   networks: [sealed]
   environment:
     MIXSYNC_SECRET_KEY: "5cdn1297qyoYXdRm42ClFLpWl5dO-zdCYxebJ8O3av8="  # throwaway, like the preview's
@@ -96,7 +96,7 @@ services:
     build:
       context: ../..
       dockerfile: tests/integration/Dockerfile
-    image: mixsync-it-runner
+    image: mixsync-it-runner:${IT_TAG:-local}
     networks: [sealed]
     volumes:
       - ../..:/repo:ro

@@ -56,3 +56,17 @@ async def test_server_error_raises(make_client: Make) -> None:
     art = CoverArtClient(make_client("coverart", lambda _r: httpx.Response(500)))
     with pytest.raises(TransientError):
         await art.front("R", "G")
+
+
+@pytest.mark.parametrize(
+    ("base", "host"), [("", "coverartarchive.org"), ("http://fakes:5030", "fakes")]
+)
+async def test_requests_go_to_the_given_base_url(make_client: Make, base: str, host: str) -> None:
+    hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(404)
+
+    assert await CoverArtClient(make_client("coverart", handler), base).front("R", None) is None
+    assert set(hosts) == {host}
