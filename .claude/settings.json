@@ -12,6 +12,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/require_issue.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
         "matcher": "Bash|Edit|MultiEdit|Write",
         "hooks": [
           {
