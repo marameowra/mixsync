@@ -13,7 +13,8 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome (Plex/Jellyfin
   reviewers run only the tests relevant to the change, plus `scripts/check.sh --fast` (no
   pytest), which the implementer's Stop hook runs.
 - Don't weaken tests (anything under `tests/`): no deleting or emptying files and no new
-  `skip`/`skipif`/`xfail`/`.only` markers (`.claude/hooks/guard_tests.py` blocks these). When
+  `skip`/`skipif`/`xfail`/`.only` markers (`.claude/hooks/guard_tests.py` blocks these).
+  Relocating is fine: `mv`, or copy first, then `rm` the old file once its tests exist elsewhere. When
   behavior changes, rewrite assertions to the new behavior instead of deleting them. If
   one of these is truly needed, ask first and say why. Test public behavior, not internals.
 - Epics (`epic` label) need a `/grill-with-docs` session before any work on them or their

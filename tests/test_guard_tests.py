@@ -132,3 +132,38 @@ def test_deny_reason(repo: Path) -> None:
     assert reason == (
         "Tests may not be deleted, emptied, or skipped without asking the user first (AGENTS.md)."
     )
+
+
+def test_rm_after_relocation_allowed(repo: Path) -> None:
+    old = repo / "tests" / "test_old.py"
+    old.write_text("import x\n\ndef test_a(): ...\n\nasync def test_b(): ...\n")
+    (repo / "tests" / "unit").mkdir()
+    new = repo / "tests" / "unit" / "test_new.py"
+    new.write_text("import y\n\ndef test_a(): pass\n")
+    assert decide(repo, "Bash", {"command": "rm tests/test_old.py"}) is True  # test_b missing
+    new.write_text("def test_a(): pass\n\nasync def test_b(): pass\n")
+    assert decide(repo, "Bash", {"command": "rm -f tests/test_old.py"}) is False
+    assert decide(repo, "Bash", {"command": "git rm tests/test_old.py"}) is False
+    # Both copies removed: nothing survives.
+    both = "rm tests/test_old.py tests/unit/test_new.py"
+    assert decide(repo, "Bash", {"command": both}) is True
+    assert decide(repo, "Bash", {"command": "truncate -s 0 tests/test_old.py"}) is True
+    assert decide(repo, "Bash", {"command": "echo > tests/test_old.py"}) is True
+
+
+def test_rm_non_test_file_needs_identical_copy(repo: Path) -> None:
+    old = repo / "tests" / "fixture.json"
+    old.write_text('{"a": 1}\n')
+    (repo / "tests" / "fixtures").mkdir()
+    new = repo / "tests" / "fixtures" / "fixture.json"
+    new.write_text('{"a": 2}\n')
+    assert decide(repo, "Bash", {"command": "rm tests/fixture.json"}) is True
+    new.write_text('{"a": 1}\n')
+    assert decide(repo, "Bash", {"command": "rm tests/fixture.json"}) is False
+
+
+def test_rm_directory_denied_even_if_copied(repo: Path) -> None:
+    (repo / "tests" / "old").mkdir()
+    (repo / "tests" / "old" / "test_a.py").write_text("def test_a(): ...\n")
+    (repo / "tests" / "test_a.py").write_text("def test_a(): ...\n")
+    assert decide(repo, "Bash", {"command": "rm -r tests/old"}) is True
