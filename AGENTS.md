@@ -21,6 +21,10 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome (Plex/Jellyfin
   the comment is missing, stop and ask the user to run `/grill-with-docs` on the epic.
   The grilling session swaps the epic's `needs-triage` for `ready-to-implement`. Starting its
   first sub-issue swaps that for `in-progress`.
+- Issues. Every change is tracked in a GitHub issue. Find or open one (`gh issue create`)
+  before branching, and name the branch `<type>/<issue#>-<slug>`. The PR body needs
+  `Fixes #<n>`, or `Refs #<n>` for partial work; `.claude/hooks/require_issue.py` blocks
+  `gh pr create` without one.
 - Shipping: branch from `origin/dev`, then `/ship`. It runs the checks, opens the PR with
   `--base dev` and `Fixes #n` lines, and queues `gh pr merge --auto --merge` only if checks
   passed; otherwise it leaves the PR for the user. The `dev` ruleset requires the `check`
