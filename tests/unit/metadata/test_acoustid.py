@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,7 @@ import pytest
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
-from mixsync.core.types import Fingerprint
+from mixsync.core.types import AcoustIdResult, Fingerprint, NamedRecording
 from mixsync.metadata import acoustid
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.ratelimit.client import PoliteClient
@@ -216,3 +217,16 @@ async def test_lookup_keeps_recording_title_and_duration(
         ("d4a0", "Thank You", 249.373),
         ("bare", None, None),
     ]
+
+
+def test_result_reads_back_from_evidence_old_and_new() -> None:
+    new = AcoustIdResult("d003", 0.98, ("d4a0",), (NamedRecording("d4a0", "Thank You", 249.373),))
+    stored = {
+        "id": new.id,
+        "score": new.score,
+        "recording_ids": list(new.recording_ids),
+        "recordings": [asdict(r) for r in new.recordings],
+    }
+    assert AcoustIdResult.from_json(stored) == new
+    old = AcoustIdResult.from_json({"score": 0.9, "recording_ids": ["r"]})
+    assert (old.recording_ids, old.recordings) == (("r",), ())
