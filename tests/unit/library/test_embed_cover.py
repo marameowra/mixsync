@@ -77,3 +77,15 @@ def test_existing_art_is_left_alone(
     assert front(out) == b"mine"
     tag_undo.restore_tags(ops, sessions, SystemClock(), 1, out.name, old)
     assert front(out) == b"mine"  # the snapshot had art, so a restore keeps it
+
+
+@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a"])
+def test_snapshot_from_before_cover_tracking_never_strips_art(
+    fmt: str, ops: FileOps, sessions: sessionmaker[Session], make_src: MakeSrc
+) -> None:
+    src = make_src(fmt)
+    old = tags.read_all(src)
+    del old["cover"]  # snapshots stored before this feature have no cover key
+    out = do_import(ops, sessions, src, IMG)
+    tag_undo.restore_tags(ops, sessions, SystemClock(), 1, out.name, old)
+    assert front(out) == IMG
