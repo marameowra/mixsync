@@ -1,6 +1,6 @@
 # ADR 0020: htmx is the only JavaScript, used for UX on any page
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0023](0023-svelte-spa-with-json-api.md), screen by screen: it applies to htmx pages until they move to the SPA
 - **Date:** 2026-11-06
 - **Extends:** [ADR 0017](0017-live-updates-by-htmx-polling.md), which used htmx only for live regions. The rest of 0017 stands, including its rule that every page works with JavaScript off. [ADR 0003](0003-htmx-server-rendered-ui.md)'s island clause stands.
 
