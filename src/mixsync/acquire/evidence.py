@@ -123,6 +123,10 @@ class Evidence:
         return self.raw["source"]["folder"]
 
     @property
+    def download_source(self) -> str:
+        return self.raw.get("candidate", {}).get("source", "slskd")
+
+    @property
     def paths(self) -> list[str]:
         return [f["local_path"] for f in self.files]
 

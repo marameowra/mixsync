@@ -19,11 +19,24 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0034_app_settings_embed_cover"
+    assert _version(settings) == "0035_app_settings_sources"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0034_app_settings_embed_cover"
+    assert _version(settings) == "0035_app_settings_sources"
+
+
+def test_revision_ids_fit_alembic_version() -> None:
+    """Postgres stores version_num as varchar(32); SQLite doesn't enforce it, so check here."""
+    from pathlib import Path
+
+    from alembic.script import ScriptDirectory
+
+    import mixsync.db.migrate
+
+    scripts = ScriptDirectory(str(Path(mixsync.db.migrate.__file__).parent / "migrations"))
+    too_long = [r.revision for r in scripts.walk_revisions() if len(r.revision) > 32]
+    assert too_long == []
 
 
 def test_models_match_migrations(settings: Settings) -> None:

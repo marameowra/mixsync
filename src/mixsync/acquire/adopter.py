@@ -40,7 +40,8 @@ def owned_dirs(s: Session, downloads: Path) -> set[Path]:
         out |= {download_dir(downloads, f["path"]) for f in files}
     out |= {Path(src).parent for src in s.scalars(select(FileOp.src).where(FileOp.kind == "copy"))}
     for tried in s.scalars(select(Request.tried)):
-        out |= {download_dir(downloads, f"{folder}\\") for _, folder in tried}
+        # only Soulseek's [peer, folder] entries name a folder in the downloads dir
+        out |= {download_dir(downloads, f"{e[1]}\\") for e in tried if len(e) == 2}
     return out
 
 

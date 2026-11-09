@@ -35,7 +35,8 @@
   <button type="submit">Save auto-accept limit</button>
 </form>
 {% if "admin" in user.capabilities %}<p><a href="/settings">App-wide minimum confidence</a></p>
-<p><a href="/account/worker">Worker status</a></p>{% endif %}
+<p><a href="/account/worker">Worker status</a></p>
+<p><a href="/account/sources">Download sources</a></p>{% endif %}
 <h3>Quality</h3>
 <p>Number the qualities you accept, 1 for the best; leave a quality blank to refuse it. With none numbered, lossless is preferred. Lossy files below the minimum bitrate are skipped.</p>
 <form method="post" action="/account/matching/quality">
