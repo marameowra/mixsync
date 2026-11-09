@@ -1185,7 +1185,6 @@ def test_repick_accepts_a_musicbrainz_url(client: TestClient, sf: sessionmaker[S
         assert d and d.chosen_release_mbid == other
 
 
-
 def test_list_tabs_split_open_and_closed(client: TestClient, sf: sessionmaker[Session]) -> None:
     open_, closed = _make_decision(sf, "alice", "/x"), _make_decision(sf, "alice", "/y")
     with sf() as s, s.begin():
@@ -1202,6 +1201,11 @@ def test_list_tabs_split_open_and_closed(client: TestClient, sf: sessionmaker[Se
     html = client.get("/review?tab=all").text
     assert html.index(f"/review/{closed}") < html.index(f"/review/{open_}")  # newest first
     assert f'href="/review/{open_}"' in client.get("/review?tab=bogus").text
+    _login(client, "bob")
+    assert f'href="/review/{closed}"' not in client.get("/review?tab=all").text
+    _login(client, "root")
+    assert f'href="/review/{closed}"' in client.get("/review?tab=closed").text
+
 
 def test_list_sorts_and_shows_match_status(client: TestClient, sf: sessionmaker[Session]) -> None:
     a = _extra_decision(sf, "alice", target={"artist": "Zed", "title": "A"})
