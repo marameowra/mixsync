@@ -167,7 +167,7 @@ def test_fifty_needs_no_count(client: TestClient, sf: sessionmaker[Session]) -> 
 
 @pytest.mark.parametrize(
     ("action", "status"),
-    [("confirm", "done"), ("confirm", "running"), ("undo", "draft"), ("undo", "undone")],
+    [("confirm", "undone"), ("confirm", "discarded"), ("undo", "draft"), ("undo", "undone")],
 )
 def test_wrong_state_409(
     client: TestClient, sf: sessionmaker[Session], action: str, status: str
@@ -176,6 +176,18 @@ def test_wrong_state_409(
     tok = _login(client, "root")
     r = client.post(f"/library/plans/{pid}/{action}", data={"csrf_token": tok})
     assert r.status_code == 409
+    assert _jobs(sf) == []
+
+
+@pytest.mark.parametrize("status", ["running", "done"])
+def test_confirm_again_after_it_ran(
+    client: TestClient, sf: sessionmaker[Session], status: str
+) -> None:
+    """A second Confirm from a page loaded before the job started: back to the plan, no new job."""
+    pid = _plan(sf, status, [_op("move", 0)])
+    tok = _login(client, "root")
+    r = client.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok})
+    assert (r.status_code, r.headers["location"]) == (303, f"/library/plans/{pid}")
     assert _jobs(sf) == []
 
 
