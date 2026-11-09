@@ -9,10 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from mixsync.acquire.merge import PlanInProgress
 from mixsync.app import create_app
 from mixsync.core.config import Settings
-from mixsync.core.errors import TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
@@ -26,17 +24,10 @@ R2 = "11111111-1111-1111-1111-111111111113"
 
 
 class FakeMerger:
-    def __init__(self, sf: sessionmaker[Session]) -> None:
-        self.sf = sf
+    """A plan build runs in the worker: the web request must never call it (or MusicBrainz)."""
 
     async def build(self, group: str) -> int:
-        if group == "busy":
-            raise PlanInProgress("plan 1 is running")
-        if group == "mb":
-            raise TransientError("musicbrainz still refusing")
-        if group == "missing":
-            raise LookupError("no verified tracks")
-        return _plan(self.sf, "draft", [_op("move", 0)])
+        raise AssertionError("the request built the plan")
 
 
 def _op(kind: str, i: int) -> dict[str, Any]:
@@ -96,7 +87,7 @@ def client(sf: sessionmaker[Session]) -> Iterator[TestClient]:
                 )
             )
     app = create_app(sf, Settings())
-    app.state.services = replace(app.state.services, merger=FakeMerger(sf))
+    app.state.services = replace(app.state.services, merger=FakeMerger())
     app.state.services = replace(app.state.services, musicbrainz=NoNames())
     with TestClient(app, follow_redirects=False) as c:
         yield c
@@ -126,16 +117,24 @@ def test_list_page(client: TestClient, sf: sessionmaker[Session]) -> None:
     assert 'id="plan-actions" class="actionbar"' in plan_html
 
 
-def test_build_and_preview(client: TestClient) -> None:
+def test_build_and_preview(client: TestClient, sf: sessionmaker[Session]) -> None:
     tok = _login(client, "root")
     r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": G})
     assert r.status_code == 303
-    html = client.get(r.headers["location"]).text
+    assert "Building the merge plan" in client.get(r.headers["location"]).text
+    with sf() as s, s.begin():  # the worker's part: the job succeeds having stored a draft
+        job = s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN)).one()
+        job.status = JobState.SUCCEEDED
+    pid = _plan(sf, "draft", [_op("move", 0)])
+    done = client.get(r.headers["location"])
+    assert done.status_code == 303 and done.headers["location"] == f"/library/plans/{pid}"
+    html = client.get(done.headers["location"]).text
     assert "a/0.flac" in html and "b/0.flac" in html
     assert "<dt>Move</dt><dd>1</dd>" in html and "1 file to move and retag" in html
     assert "Confirm merge" in html
+    # a group with nothing to merge now fails in the worker (test_merge_web), not with a 404
     missing = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": "missing"})
-    assert missing.status_code == 404
+    assert missing.status_code == 303
 
 
 def test_preview_ops_and_error(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -244,11 +243,14 @@ def test_a_reorganize_of_over_50_moves_needs_the_count_typed(
     assert [j.kind for j in _jobs(sf)] == [JobKind.MERGE]
 
 
-def test_build_errors(client: TestClient) -> None:
+def test_build_errors(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _plan(sf, "running", [_op("move", 0)])
     tok = _login(client, "root")
-    for group, code in [("busy", 409), ("mb", 503)]:
-        r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": group})
-        assert r.status_code == code
+    r = client.post("/library/fragments/plan", data={"csrf_token": tok, "group": G})
+    assert r.status_code == 409 and f"plan {pid}" in r.text  # PlanInProgress, before any job
+    with sf() as s:
+        assert s.scalar(select(Job.id).where(Job.kind == JobKind.MERGE_PLAN)) is None
+    # MusicBrainz down is no longer a 503: the job retries (test_merge_web)
 
 
 def _live_job(sf: sessionmaker[Session], kind: JobKind, pid: int, state: JobState) -> None:

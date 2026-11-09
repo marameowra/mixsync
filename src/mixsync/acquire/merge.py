@@ -1,10 +1,11 @@
 """Merging a fragmented release group onto its canonical release, and undoing it.
 
-`build` makes a draft plan (the dry run; no side effects). `execute` and `undo_plan` run as the
-MERGE and UNDO_MERGE jobs. Both are resumable: every op is validated against the DB and the
-file journal before it acts, a file leaves its path only through FileOps (so the original of a
-move or trash lands in `.trash`), and an op's Track-row change commits together with its `done`
-flag. A validation failure marks the plan failed and stops: nothing is guessed.
+`build` makes a draft plan (the dry run; no side effects) as the MERGE_PLAN job. `execute` and
+`undo_plan` run as the MERGE and UNDO_MERGE jobs. Both are resumable: every op is validated
+against the DB and the file journal before it acts, a file leaves its path only through FileOps
+(so the original of a move or trash lands in `.trash`), and an op's Track-row change commits
+together with its `done` flag. A validation failure marks the plan failed and stops: nothing is
+guessed.
 """
 
 import asyncio
@@ -14,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -23,7 +25,7 @@ from mixsync.acquire.request_delete import NotDeletable, delete_request
 from mixsync.acquire.requests import enqueue_recheck, enqueue_rescan, read_unverified
 from mixsync.acquire.requests import group as by_album
 from mixsync.core.clock import Clock, aware
-from mixsync.core.errors import SafetyError
+from mixsync.core.errors import SafetyError, TransientError
 from mixsync.core.jobs import LIVE, JobKind
 from mixsync.core.protocols import MetadataProvider
 from mixsync.db import canonical as canonical_db
@@ -116,6 +118,30 @@ def enqueue_reorganize(s: Session, now: datetime) -> None:
         enqueue_in(s, now, JobKind.REORGANIZE_PLAN, {"after": after}, max_attempts=1)
 
 
+def enqueue_merge_plan(s: Session, now: datetime, group: str) -> None:
+    """Queue the job that builds a merge draft for the group, unless one is queued or running.
+    Raises PlanInProgress at once (a DB read) if the group cannot get a new plan."""
+    if busy := _open_plan(s, group):
+        raise PlanInProgress(busy)
+    job = merge_build(s, group)[0]
+    if job is None or job.status not in LIVE:  # a second click points at the queued build
+        after = s.scalar(select(func.max(Plan.id))) or 0
+        enqueue_in(s, now, JobKind.MERGE_PLAN, {"group": group, "after": after})
+
+
+def merge_build(s: Session, group: str) -> tuple[Job | None, int | None]:
+    """The group's newest merge build job and the draft it made, if it has made one."""
+    # shortcut: the group is matched in Python, as in live_job; filter in SQL if jobs pile up
+    jobs = s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN).order_by(Job.id.desc()))
+    job = next((j for j in jobs if j.payload.get("group") == group), None)
+    if job is None:
+        return None, None
+    made = select(func.min(Plan.id)).where(
+        Plan.kind == "merge", Plan.release_group_mbid == group, Plan.id > job.payload["after"]
+    )
+    return job, s.scalar(made)
+
+
 def reorganize_build(s: Session) -> tuple[Job | None, int | None]:
     """The newest reorganize build job and the draft it made, if it has made one."""
     job = s.scalars(
@@ -166,7 +192,14 @@ class Merger:
             JobKind.MERGE: self.merge,
             JobKind.UNDO_MERGE: self.undo,
             JobKind.REORGANIZE_PLAN: self.plan_reorganize,
+            JobKind.MERGE_PLAN: self.plan_merge,
         }
+
+    async def plan_merge(self, job: JobRecord) -> None:
+        try:
+            await self.build(job.payload["group"])
+        except httpx.HTTPError as e:  # MusicBrainz slow or down: the queue retries with backoff
+            raise TransientError(f"MusicBrainz is unavailable ({type(e).__name__})") from e
 
     async def plan_reorganize(self, job: JobRecord) -> None:
         await asyncio.to_thread(self.build_reorganize)

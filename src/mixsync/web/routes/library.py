@@ -5,10 +5,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
-import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -18,15 +18,16 @@ from mixsync.acquire.merge import (
     Merger,
     PlanInProgress,
     enqueue_merge,
+    enqueue_merge_plan,
     enqueue_reorganize,
     enqueue_undo,
     live_job,
+    merge_build,
     reorganize_build,
     stale_delete_draft,
 )
 from mixsync.acquire.requests import enqueue_recheck
 from mixsync.core.capabilities import Capability
-from mixsync.core.errors import TransientError
 from mixsync.core.jobs import LIVE
 from mixsync.db import progress
 from mixsync.db.auth import AuthUser
@@ -246,19 +247,32 @@ def unverified_submit(
 
 
 @router.post("/fragments/plan")
-async def build_plan(
-    user: User, db: Db, merger: Merge, group: Annotated[str, Form()]
-) -> RedirectResponse:
-    db.commit()  # the login's last_seen write must not hold the SQLite lock while build() writes
+def build_plan(user: User, db: Db, group: Annotated[str, Form()]) -> RedirectResponse:
+    """Queue the build: it may wait on MusicBrainz, too slow for a request."""
     try:
-        plan_id = await merger.build(group)
-    except PlanInProgress as e:  # a ValueError, not a LookupError
+        enqueue_merge_plan(db, datetime.now(UTC), group)
+    except PlanInProgress as e:
         raise HTTPException(409, str(e)) from None
-    except LookupError as e:
-        raise HTTPException(404, str(e)) from None
-    except (TransientError, httpx.HTTPError):
-        raise HTTPException(503, "MusicBrainz is unavailable; try again later") from None
-    return RedirectResponse(f"/library/plans/{plan_id}", status_code=303)
+    return RedirectResponse(f"/library/fragments/plan?{urlencode({'group': group})}", 303)
+
+
+@router.get("/fragments/plan", response_model=None)
+def build_status(request: Request, user: User, db: Db, group: str) -> Response:
+    """A live region (ADR 0017): building, then the draft's plan page, or why it failed."""
+    job, plan_id = merge_build(db, group)
+    if plan_id is not None and job is not None and job.status not in LIVE:
+        url = f"/library/plans/{plan_id}"
+        if request.headers.get("HX-Request") == "true":  # leave the polling page for the plan
+            return Response(headers={"HX-Redirect": url})
+        return RedirectResponse(url, status_code=303)
+    ctx = {
+        "user": user,
+        "group": group,
+        "url": f"/library/fragments/plan?{urlencode({'group': group})}",
+        "job": job,
+        "building": job is not None and job.status in LIVE,
+    }
+    return render(request, "pages/merge_build.html", "pages/merge_build_live.html", ctx)
 
 
 @router.post("/reorganize/plan")

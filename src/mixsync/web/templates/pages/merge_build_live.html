@@ -1,0 +1,9 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/live.html" as live %}
+{% call live.region(url, building) %}
+{% if building %}<p role="status">Building the merge plan for release group {{ group }}&hellip; looking up its releases on MusicBrainz. Nothing moves.{% if job.status == "retry_wait" %} MusicBrainz did not answer ({{ job.last_error }}); trying again shortly.{% endif %}</p>
+<p><a href="{{ url }}">Refresh</a></p>
+{% elif job %}<p class="notice danger" role="alert">✕ No plan was built: {{ job.last_error or job.status }}</p>
+<form method="post" action="/library/fragments/plan">{{ forms.csrf() }}<input type="hidden" name="group" value="{{ group }}"><button class="btn" type="submit">Try again</button></form>
+{% else %}<p>No merge plan has been requested for release group {{ group }}.</p>{% endif %}
+{% endcall %}

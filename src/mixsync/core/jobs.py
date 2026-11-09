@@ -13,6 +13,7 @@ class JobKind(StrEnum):
     MERGE = "merge"
     UNDO_MERGE = "undo_merge"
     REORGANIZE_PLAN = "reorganize_plan"  # builds a draft; never moves a file
+    MERGE_PLAN = "merge_plan"  # builds a merge draft; never moves a file
     RECHECK = "recheck"
     ACOUSTID_SUBMIT = "acoustid_submit"
     ACOUSTID_STATUS = "acoustid_status"
