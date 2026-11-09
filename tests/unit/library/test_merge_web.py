@@ -6,13 +6,16 @@ import re
 from dataclasses import replace
 from datetime import timedelta
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
-from mixsync.core.jobs import JobKind
+from mixsync.core.errors import PermanentError, TransientError
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobQueue
@@ -55,8 +58,24 @@ def _jobs(w: World) -> list[Job]:
         return list(s.scalars(select(Job).where(Job.kind.in_([JobKind.MERGE, JobKind.UNDO_MERGE]))))
 
 
-def _preview(c: TestClient, tok: str) -> int:
+BUILD = f"/library/fragments/plan?group={GROUP}"
+
+
+def _builds(w: World) -> list[Job]:
+    with w.sessions() as s:
+        return list(s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN).order_by(Job.id)))
+
+
+def _post(c: TestClient, tok: str) -> None:
     r = c.post("/library/fragments/plan", data={"csrf_token": tok, "group": GROUP})
+    assert (r.status_code, r.headers["location"]) == (303, BUILD), r.text
+
+
+def _preview(c: TestClient, tok: str, w: World) -> int:
+    """Queue the build, let the worker run it once, then follow the progress page to the plan."""
+    _post(c, tok)
+    _drain(w)
+    r = c.get(BUILD)
     assert r.status_code == 303, r.text
     return int(r.headers["location"].rsplit("/", 1)[1])
 
@@ -65,7 +84,7 @@ def test_build_confirm_run_undo(world: World) -> None:  # noqa: F811
     lib0, rows0 = world.lib(), [fragmentation.row_dict(t) for t in _rows(world)]
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         confirm = f"/library/plans/{pid}/confirm"
         assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
         assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
@@ -89,7 +108,7 @@ def test_confirm_after_the_merge_ran_is_a_no_op(world: World) -> None:  # noqa: 
     """The plan page does not poll: a second click on Confirm once the job ran is not a 409."""
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         confirm = f"/library/plans/{pid}/confirm"
         assert c.post(confirm, data={"csrf_token": tok}).status_code == 303
         _drain(world)
@@ -104,7 +123,7 @@ def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None: 
     off-canonical import does."""
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         assert "keep" in [op["op"] for op in world.plan_ops(pid)]
         assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
         _drain(world)
@@ -119,9 +138,100 @@ def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None: 
 def test_confirmed_draft_survives_new_preview(world: World) -> None:  # noqa: F811
     with _client(world) as c:
         tok = _login(c)
-        pid = _preview(c, tok)
+        pid = _preview(c, tok, world)
         assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
         r = c.post("/library/fragments/plan", data={"csrf_token": tok, "group": GROUP})
         assert r.status_code == 409
         _drain(world)
         assert world.plan(pid).status == "done", world.plan(pid).error
+
+
+class NoMusicBrainz:
+    """Fails the test if anything calls MusicBrainz."""
+
+    def __getattr__(self, name: str) -> object:
+        raise AssertionError(f"MusicBrainz called during the request: {name}")
+
+
+def test_post_queues_one_build_without_musicbrainz(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        c.app.state.services = replace(  # type: ignore[attr-defined]
+            c.app.state.services,  # type: ignore[attr-defined]
+            merger=replace(world.merger, metadata=NoMusicBrainz()),
+        )
+        _post(c, tok)
+        _post(c, tok)  # a second click points at the queued build
+        assert len(_builds(world)) == 1
+        page = c.get(BUILD)
+        assert page.status_code == 200 and "Building the merge plan" in page.text
+        assert 'hx-trigger="every 5s"' in page.text
+
+
+def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        _post(c, tok)
+        _drain(world)  # one worker pass; the fake provider answers at once, like a cache hit
+        r = c.get(BUILD, headers={"HX-Request": "true"})
+        pid = world.plan(int(r.headers["HX-Redirect"].rsplit("/", 1)[1])).id
+        assert c.get(BUILD).headers["location"] == f"/library/plans/{pid}"
+        html = c.get(f"/library/plans/{pid}").text
+        assert world.plan(pid).status == "draft" and "Confirm merge" in html
+
+
+@pytest.mark.parametrize(
+    ("error", "stored"),  # the real client raises TransientError; the job wraps a bare httpx error
+    [
+        (TransientError("musicbrainz 503"), "musicbrainz 503"),
+        (httpx.ConnectTimeout("slow"), "MusicBrainz is unavailable"),
+    ],
+)
+def test_transient_musicbrainz_error_retries(world: World, error: Exception, stored: str) -> None:  # noqa: F811
+    async def down(mbid: str) -> object:
+        raise error
+
+    world.metadata.get_release = down  # type: ignore[method-assign]
+    with _client(world) as c:
+        tok = _login(c)
+        _post(c, tok)
+        _drain(world)
+        (job,) = _builds(world)
+        assert job.status == JobState.RETRY_WAIT and stored in job.last_error
+        page = c.get(BUILD)
+        assert page.status_code == 200 and "trying again shortly" in page.text
+
+
+def test_permanent_error_shows_message_and_retry(world: World) -> None:  # noqa: F811
+    real = world.metadata.get_release
+
+    async def gone(mbid: str) -> object:
+        raise PermanentError(f"release {mbid} returned 404")
+
+    world.metadata.get_release = gone  # type: ignore[method-assign]
+    with _client(world) as c:
+        tok = _login(c)
+        _post(c, tok)
+        _drain(world)
+        assert [j.status for j in _builds(world)] == [JobState.FAILED]
+        page = c.get(BUILD).text
+        assert f"release {CANON} returned 404" in page and "Try again" in page
+        assert 'name="csrf_token"' in page and "hx-trigger" not in page
+        world.metadata.get_release = real  # type: ignore[method-assign]
+        pid = _preview(c, tok, world)  # the retry button posts the same form
+        assert len(_builds(world)) == 2 and world.plan(pid).status == "draft"
+
+
+def test_group_without_verified_tracks_fails_with_message_and_retry(world: World) -> None:  # noqa: F811
+    other = "00000000-0000-4000-8000-000000000000"
+    url = f"/library/fragments/plan?group={other}"
+    with _client(world) as c:
+        tok = _login(c)
+        r = c.post("/library/fragments/plan", data={"csrf_token": tok, "group": other})
+        assert (r.status_code, r.headers["location"]) == (303, url)
+        _drain(world)
+        with world.sessions() as s:
+            (job,) = s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN))
+            assert job.status == JobState.FAILED  # a LookupError is not retried
+        page = c.get(url).text
+        assert f"no verified tracks in release group {other}" in page and "Try again" in page
