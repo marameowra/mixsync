@@ -88,8 +88,9 @@ def test_up_and_down_reorder_and_the_boxes_enable(
     form = {"csrf_token": tok, "enabled": ["slskd"], "down": "slskd"}  # slskd is last: stays
     client.post("/account/sources", data=form)
     assert saved(sf) == [["other", False], ["slskd", True]]
-    client.post("/account/sources", data={"csrf_token": tok, "down": "other"})
-    assert saved(sf) == [["slskd", False], ["other", False]]
+    r = client.post("/account/sources", data={"csrf_token": tok, "down": "other"})  # none on
+    assert r.status_code == 400 and "Enable at least one download source." in r.text
+    assert saved(sf) == [["other", False], ["slskd", True]]  # refused: nothing written
 
 
 def test_a_source_without_its_settings_is_not_configured_and_stays_off(

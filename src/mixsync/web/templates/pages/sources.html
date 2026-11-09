@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Download sources</h1>
 <p>A search tries each enabled source in this order and stops at the first with an acceptable candidate. Changes apply to the next search. Connection settings come from the environment.</p>
+{% if error %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error }}</p>{% endif %}
 <form method="post" action="/account/sources">
   {{ forms.csrf() }}
   <table>

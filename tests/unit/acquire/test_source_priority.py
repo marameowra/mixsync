@@ -3,6 +3,7 @@ an empty one, shares one request budget, and backs off only when all came up emp
 
 from dataclasses import replace
 
+from mixsync.acquire.requests import candidate_from_dict
 from mixsync.core.matching import TransferStatus
 from mixsync.db.models.auth import AppSettings
 from mixsync.db.models.work import Request
@@ -109,3 +110,9 @@ async def test_a_tried_soulseek_folder_does_not_hide_the_same_id_on_another_sour
     await env.drain()
     assert tried(env, rid) == [["peer1", FOLDER]]
     assert other.enqueued == ["peer1"] and status(env, rid) == "imported"
+
+
+def test_a_candidate_stored_before_sources_existed_loads_as_soulseek() -> None:
+    file = {"path": "a.flac", "size": 1, "extension": "flac"}
+    old = {"username": "peer1", "folder": FOLDER, "files": [file]}  # no "source" key
+    assert candidate_from_dict(old).source == "slskd"

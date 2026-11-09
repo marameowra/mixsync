@@ -296,16 +296,23 @@ def _configured(request: Request) -> set[str]:
 
 @router.get("/sources")
 def show_sources(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    return _sources_page(request, admin, db)
+
+
+def _sources_page(
+    request: Request, admin: AuthUser, db: Session, error: str | None = None, status: int = 200
+) -> HTMLResponse:
     ok = _configured(request)
     rows = [
         {"name": n, "label": DOWNLOAD_SOURCES[n][0], "on": on and n in ok, "configured": n in ok}
         for n, on in source_rows(db, list(DOWNLOAD_SOURCES))
     ]
-    return templates.TemplateResponse(request, "pages/sources.html", {"user": admin, "rows": rows})
+    ctx = {"user": admin, "rows": rows, "error": error}
+    return templates.TemplateResponse(request, "pages/sources.html", ctx, status_code=status)
 
 
-@router.post("/sources")
-async def save_sources(request: Request, admin: Admin, db: Db) -> RedirectResponse:
+@router.post("/sources", response_model=None)
+async def save_sources(request: Request, admin: Admin, db: Db) -> Response:
     """One form: the enabled boxes, plus the ↑ or ↓ button pressed, if any."""
     form = await request.form()
     names = [n for n, _ in source_rows(db, list(DOWNLOAD_SOURCES))]
@@ -315,6 +322,8 @@ async def save_sources(request: Request, admin: Admin, db: Db) -> RedirectRespon
             if 0 <= i + step < len(names):
                 names[i], names[i + step] = names[i + step], names[i]
     on = {str(n) for n in form.getlist("enabled")} & _configured(request)
+    if not on and _configured(request):  # with none enabled every search finds nothing
+        return _sources_page(request, admin, db, "Enable at least one download source.", 400)
     row = db.get(AppSettings, 1) or AppSettings(id=1)
     row.source_priority = [[n, n in on] for n in names]  # not stamped: read at each search
     db.add(row)
