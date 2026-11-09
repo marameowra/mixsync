@@ -1,0 +1,121 @@
+# The integration suite's stack. Run it with tests/integration/run.sh, not by hand.
+# Every service sits on one `internal` network: no container can reach the internet, so the
+# suite cannot call Soulseek, MusicBrainz, AcoustID or the Cover Art Archive even by mistake.
+# Image pulls and builds happen before that and are not affected.
+name: mixsync-it
+
+x-mixsync: &mixsync
+  build:
+    context: ../..
+    dockerfile: deploy/Dockerfile
+  image: mixsync:it
+  networks: [sealed]
+  environment:
+    MIXSYNC_SECRET_KEY: "5cdn1297qyoYXdRm42ClFLpWl5dO-zdCYxebJ8O3av8="  # throwaway, like the preview's
+    MIXSYNC_SLSKD_URL: http://fakes:5030
+    MIXSYNC_SLSKD_API_KEY: fake
+    MIXSYNC_MB_BASE_URL: http://fakes:5030
+    MIXSYNC_ACOUSTID_APP_KEY: fake
+    # TEST ONLY: AcoustID and the Cover Art Archive go to the fake (docs/testing.md)
+    MIXSYNC_TEST_ONLY_FAKE_SERVICES_URL: http://fakes:5030
+    MIXSYNC_NAVIDROME_URL: http://navidrome:4533
+    MIXSYNC_NAVIDROME_USER: admin
+    MIXSYNC_NAVIDROME_PASSWORD: integration
+    MIXSYNC_SLSKD_SEARCH_DEBOUNCE: "0"
+  volumes:
+    - config:/config
+    - downloads:/downloads
+    - data:/data
+
+services:
+  mixsync-migrate:
+    <<: *mixsync
+    command: ["migrate"]
+
+  mixsync-user:
+    <<: *mixsync
+    # Navidrome's music folder must exist before it starts; user-add reads the password from stdin
+    entrypoint:
+      - sh
+      - -c
+      - "mkdir -p /data/library && printf 'integration\\nintegration\\n' | mixsync user-add admin --admin"
+    depends_on:
+      mixsync-migrate:
+        condition: service_completed_successfully
+
+  mixsync-web:
+    <<: *mixsync
+    command: ["web"]
+    depends_on:
+      mixsync-user:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8080/healthz', timeout=3)"]
+      interval: 2s
+      retries: 30
+
+  mixsync-worker:
+    <<: *mixsync
+    command: ["worker"]
+    depends_on:
+      mixsync-user:
+        condition: service_completed_successfully
+
+  fakes:
+    <<: *mixsync
+    entrypoint: ["python", "/it/fakes/server.py"]
+    volumes:
+      - downloads:/downloads
+      - ./fakes:/it/fakes:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5030/api/v0/application', timeout=3)"]
+      interval: 2s
+      retries: 30
+
+  navidrome:
+    image: deluan/navidrome:0.64.2  # same pin as deploy/compose.yml
+    networks: [sealed]
+    environment:
+      ND_MUSICFOLDER: /data/library
+      ND_DATAFOLDER: /nd-data
+      # no scheduled scan and no folder watcher: only mixsync's startScan finds the album
+      ND_SCANSCHEDULE: "0"
+      ND_SCANNER_WATCHERWAIT: "0"
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+      ND_ENABLEEXTERNALSERVICES: "false"
+      ND_LASTFM_ENABLED: "false"
+      ND_LISTENBRAINZ_ENABLED: "false"
+    volumes:
+      - data:/data:ro
+    tmpfs: /nd-data
+    depends_on:
+      mixsync-user:  # it creates /data/library
+        condition: service_completed_successfully
+
+  runner:
+    build:
+      context: ../..
+      dockerfile: tests/integration/Dockerfile
+    image: mixsync-it-runner
+    networks: [sealed]
+    volumes:
+      - ../..:/repo:ro
+      - data:/data:ro
+    depends_on:
+      mixsync-web:
+        condition: service_healthy
+      mixsync-worker:
+        condition: service_started
+      fakes:
+        condition: service_healthy
+      navidrome:
+        condition: service_started
+
+networks:
+  sealed:
+    internal: true
+
+volumes:
+  config:
+  downloads:
+  data:

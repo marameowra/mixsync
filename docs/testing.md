@@ -12,7 +12,6 @@ Required checks: [AGENTS.md](../AGENTS.md); source of truth `.github/workflows/c
 ## Crash-safety tests
 `-m crash` (off by default, see `addopts`): SIGKILL the worker at each import step (after copy, fsync, tag write, before rename). Assert no partial file in `/data/library`, source intact, journal consistent, job resumes and completes. Same for trash moves and canonical-release merges.
 
-Planned (#300): compose integration tests, UI smoke tests.
 
 ## Matcher regression suite
 `tests/regression/` replays real logged decisions through the matcher offline and fails when any
@@ -47,7 +46,22 @@ runs with the normal suite; on its own: `uv run pytest tests/regression`.
   were purged cannot be exported.
 
 ## Integration tests (compose)
-Planned (#300).
+`tests/integration/run.sh` brings up mixsync (web and worker, built from `deploy/Dockerfile`),
+Navidrome and a fake slskd ([ADR 0016](decisions/0016-fake-slskd-in-ci.md)), then requests albums
+through the web UI: the happy path must land in `/data/library` and be listed by Navidrome after the
+rescan; a review-band album must land in review, not the library. Details and the fake:
+[tests/integration](../tests/integration/README.md).
+
+- `-m integration`: off by default (`addopts`), so neither the unit run nor `scripts/check.sh`
+  runs it. CI's `integration` workflow runs it on PRs touching `src/mixsync/sources/`,
+  `src/mixsync/acquire/`, `deploy/` or `tests/integration/`, and on demand; it is not required.
+- No live services: the stack's network is `internal`. The one fake for slskd, MusicBrainz,
+  AcoustID and the Cover Art Archive is reached through `MIXSYNC_SLSKD_URL`,
+  `MIXSYNC_MB_BASE_URL` and `MIXSYNC_TEST_ONLY_FAKE_SERVICES_URL`. **The last is test-only**:
+  it sends AcoustID and cover art calls to the fake; never set it in a deployment (startup logs
+  a warning when it is set).
+- Not built: the fake's edge-case catalog behaviours, contract tests against a real slskd.
 
 ## UI tests
-Planned (#300); the `TestClient` tests above are what exist.
+The `TestClient` tests above, plus the compose suite's smoke checks against the running web
+container: login, a request, the review list and detail pages.

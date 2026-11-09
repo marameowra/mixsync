@@ -1,0 +1,22 @@
+name: integration
+# The compose suite (tests/integration): mixsync web and worker, a fake slskd/MusicBrainz/AcoustID
+# and Navidrome on an internal network, so no live service is ever called. Not a required check.
+on:
+  pull_request:
+    paths:
+      - src/mixsync/sources/**
+      - src/mixsync/acquire/**
+      - deploy/**
+      - tests/integration/**
+      - .github/workflows/integration.yml
+  workflow_dispatch:
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: tests/integration/run.sh
