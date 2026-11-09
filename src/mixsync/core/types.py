@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -8,10 +9,26 @@ class Fingerprint:
 
 
 @dataclass(frozen=True)
+class NamedRecording:
+    """A recording AcoustID names; title and length are absent from old evidence."""
+
+    id: str
+    title: str | None = None
+    duration: float | None = None  # seconds
+
+
+@dataclass(frozen=True)
 class AcoustIdResult:
     id: str
     score: float
     recording_ids: tuple[str, ...]
+    recordings: tuple[NamedRecording, ...] = ()  # the same recordings with title and length
+
+    @staticmethod
+    def from_json(d: Any) -> "AcoustIdResult":
+        """From the evidence dict `_best` writes (old evidence has no `recordings` key)."""
+        recs = tuple(NamedRecording(**r) for r in d.get("recordings", []))
+        return AcoustIdResult(d.get("id", ""), d["score"], tuple(d["recording_ids"]), recs)
 
 
 @dataclass(frozen=True)

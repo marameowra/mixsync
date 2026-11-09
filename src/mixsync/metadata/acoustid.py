@@ -14,7 +14,7 @@ from mutagen.flac import FLAC
 
 from mixsync.core.config import Settings
 from mixsync.core.errors import AuthError, PermanentError, TransientError
-from mixsync.core.types import AcoustIdResult, Fingerprint
+from mixsync.core.types import AcoustIdResult, Fingerprint, NamedRecording
 from mixsync.metadata._http import get_json
 from mixsync.metadata.models import AcoustIdResponse, AcoustIdSubmitResponse
 from mixsync.ratelimit.client import PoliteClient
@@ -138,7 +138,13 @@ class AcoustIdClient:
         if resp.status != "ok":
             raise PermanentError(f"AcoustID returned status {resp.status}")
         return [
-            AcoustIdResult(h.id, h.score, tuple(r.id for r in h.recordings)) for h in resp.results
+            AcoustIdResult(
+                h.id,
+                h.score,
+                tuple(r.id for r in h.recordings),
+                tuple(NamedRecording(r.id, r.title, r.duration) for r in h.recordings),
+            )
+            for h in resp.results
         ]
 
     async def ping(self) -> None:

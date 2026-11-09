@@ -45,9 +45,7 @@ def album(d: dict[str, Any]) -> AlbumInfo:
 
 
 def file_track(d: dict[str, Any]) -> FileTrack:
-    found = tuple(
-        AcoustIdResult(a["id"], a["score"], tuple(a["recording_ids"])) for a in d["acoustid"]
-    )
+    found = tuple(AcoustIdResult.from_json(a) for a in d["acoustid"])
     return replace(FileTrack(**d), acoustid=found)
 
 

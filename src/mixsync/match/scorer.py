@@ -48,11 +48,12 @@ from mixsync.match.vetoes import (
     acoustid_confirms,
     acoustid_contradicts,
     all_confident,
+    confident,
     find_vetoes,
     off_release,
 )
 
-SCORER_VERSION = 7  # 7: AcoustID beats track numbers; a recording off the release is unpaired
+SCORER_VERSION = 8  # 8: a same-title, same-length AcoustID duplicate does not contradict
 
 # Artist values that mean "various artists".
 VA_ARTISTS = ("", "various artists", "various", "va", "unknown")
@@ -317,12 +318,21 @@ def assign_tracks(
     if not idx or not tracks:
         return [], list(files), list(tracks)
     big = len(idx) + 1  # one AcoustID contradiction outweighs all other costs together
+    ids = {t.recording_id for t in tracks if t.recording_id}
+    # a file whose recording the release holds by id pairs only with that track; the
+    # same-title duplicate rule is for files whose recording it lacks (two "Interlude"s)
+    by_id = [bool((b := confident(files[i])) and ids & set(b.recording_ids)) for i in idx]
     costs = [
         [
-            track_distance(files[i], t, weights).distance + big * acoustid_contradicts(files[i], t)
+            track_distance(files[i], t, weights).distance
+            + big
+            * (
+                acoustid_contradicts(files[i], t)
+                or (by_id[k] and not acoustid_confirms(files[i], t))
+            )
             for t in tracks
         ]
-        for i in idx
+        for k, i in enumerate(idx)
     ]
     if len(idx) <= len(tracks):
         pairs = [(idx[fi], ti) for fi, ti in enumerate(_hungarian(costs))]

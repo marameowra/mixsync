@@ -2,8 +2,10 @@ from collections.abc import Sequence
 
 from mixsync.core.matching import FileTrack, TrackInfo
 from mixsync.core.types import AcoustIdResult
+from mixsync.match.features import normalize
 
 MAX_DURATION_DELTA = 15.0  # seconds
+DUPLICATE_LENGTH_DELTA = 2.0  # seconds; duplicates seen in prod differ by ~0.1 s
 ACOUSTID_VETO_SCORE = 0.9
 # Share of a lossless file's power above 16 kHz. A lossy source low-passed near 16 kHz leaves
 # about 1e-6..1e-5; real masters rarely go below 1e-4. Set low: prefer missing a transcode.
@@ -17,6 +19,23 @@ def confident(file: FileTrack) -> AcoustIdResult | None:
     return best if best and best.score >= ACOUSTID_VETO_SCORE and best.recording_ids else None
 
 
+def duplicate_of(best: AcoustIdResult, track: TrackInfo) -> bool:
+    """The result names the track's recording by id, or names what is likely an unmerged
+    MusicBrainz duplicate of it: same normalized title, length within DUPLICATE_LENGTH_DELTA.
+    Only lifts AcoustID's contradiction; a title match never confirms (live versions and
+    re-recordings share titles)."""
+    want = normalize(track.title)
+    return track.recording_id in best.recording_ids or any(
+        r.title is not None
+        and r.duration is not None
+        and track.length is not None
+        and want != ""
+        and normalize(r.title) == want
+        and abs(r.duration - track.length) <= DUPLICATE_LENGTH_DELTA
+        for r in best.recordings
+    )
+
+
 def acoustid_confirms(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID's confident best result names the track's recording."""
     best = confident(file)
@@ -26,14 +45,14 @@ def acoustid_confirms(file: FileTrack, track: TrackInfo) -> bool:
 def acoustid_contradicts(file: FileTrack, track: TrackInfo) -> bool:
     """AcoustID is confident the file is a different recording than the track's."""
     best = confident(file)
-    return bool(best and track.recording_id and track.recording_id not in best.recording_ids)
+    return bool(best and track.recording_id and not duplicate_of(best, track))
 
 
 def off_release(file: FileTrack, tracks: Sequence[TrackInfo]) -> bool:
     """AcoustID is confident the file is a recording the release (with recording ids) lacks."""
     best = confident(file)
-    ids = {t.recording_id for t in tracks if t.recording_id}
-    return bool(best and ids and ids.isdisjoint(best.recording_ids))
+    held = [t for t in tracks if t.recording_id]
+    return bool(best and held and not any(duplicate_of(best, t) for t in held))
 
 
 def _clock(seconds: float) -> str:

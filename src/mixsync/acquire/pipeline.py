@@ -1120,7 +1120,13 @@ def likelies(paths: list[Path]) -> Likelies:
 
 def _best(f: FileTrack) -> dict[str, Any]:
     best = max(f.acoustid, key=lambda r: r.score, default=None)
-    return {"score": best.score, "recording_ids": list(best.recording_ids)} if best else {}
+    if not best:
+        return {}
+    return {
+        "score": best.score,
+        "recording_ids": list(best.recording_ids),
+        "recordings": [asdict(r) for r in best.recordings],
+    }
 
 
 def acoustid_id(f: FileTrack) -> str | None:
