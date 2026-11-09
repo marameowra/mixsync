@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Trash - MixSync{% endblock %}
+{% block content %}
+<h1>Trash</h1>
+<p>Trash is purged automatically once its day folder is older than {{ trash_days }} days. Protected folders hold files an undo or an unfinished operation still needs; they cannot be purged early.</p>
+{% if purged is not none %}<p class="notice" role="status">Purged {{ purged }} {{ "file" if purged == 1 else "files" }}.{% if skipped %} Skipped, now protected: {{ skipped | join(", ") }}.{% endif %}</p>{% endif %}
+{% if folders %}
+<form method="get" action="/trash/plan">
+<table>
+  <thead><tr><th>Folder</th><th>Files</th><th>Size</th><th>Protected</th><th>Purge now</th></tr></thead>
+  <tbody>
+  {% for f in folders %}
+  <tr>
+    <td>{{ f.day }}</td>
+    <td>{{ f.files }}</td>
+    <td>{{ f.size | filesize }}</td>
+    <td>{{ "Yes" if f.protected else "No" }}</td>
+    <td>{% if not f.protected %}<label><input type="checkbox" name="day" value="{{ f.day }}"> Purge {{ f.day }}</label>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if folders | rejectattr("protected") | list %}<button class="btn danger" type="submit">Plan purge</button>{% endif %}
+</form>
+{% else %}
+<p>The trash is empty.</p>
+{% endif %}
+{% endblock %}

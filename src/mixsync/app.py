@@ -25,6 +25,7 @@ from mixsync.web.routes import (
     mirrored,
     requests,
     review,
+    trash,
     users,
     watchlist,
 )
@@ -91,6 +92,7 @@ def create_app(
     app.include_router(media.router)
     app.include_router(migration.router)
     app.include_router(users.router)
+    app.include_router(trash.router)
     app.include_router(settings_routes.router)
     app.include_router(connections.router)
     app.include_router(watchlist.router)

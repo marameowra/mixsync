@@ -21,6 +21,7 @@ import hashlib
 import logging
 import os
 import shutil
+import stat
 import sys
 import unicodedata
 from collections.abc import Callable, Collection
@@ -416,9 +417,16 @@ class FileOps:
         return deleted
 
     def _purge_days(
-        self, top: Path, base: Path, older_than_days: int, batch_id: str, kept: set[str]
+        self,
+        top: Path,
+        base: Path,
+        older_than_days: int,
+        batch_id: str,
+        kept: set[str],
+        only: Collection[str] | None = None,
     ) -> int:
-        """Purge the day folders of `top` (inside `base`) strictly older than the window."""
+        """Purge the day folders of `top` (inside `base`) strictly older than the window, or
+        just the `only` folders whatever their age."""
         cutoff = self._clock.now().date() - timedelta(days=older_than_days)
         if base.is_symlink() or top.is_symlink():
             log.warning("purge: %s is a symlink; refusing to purge through it", top)
@@ -431,8 +439,10 @@ class FileOps:
             if day is None:
                 log.warning("purge: skipping entry %s: not a date folder", day_dir.name)
                 continue
-            if day >= cutoff or day_dir.is_symlink() or not day_dir.is_dir():
+            if day_dir.is_symlink() or not day_dir.is_dir():
                 continue
+            if day_dir.name not in only if only is not None else day >= cutoff:
+                continue  # not chosen (early purge) or still inside the window
             for dirpath, dirnames, filenames in os.walk(day_dir, followlinks=False):
                 for name in filenames:
                     f = Path(dirpath, name)
@@ -457,15 +467,43 @@ class FileOps:
         return count
 
     def purge_trash(
-        self, older_than_days: int, batch_id: str, keep: Collection[str] = frozenset()
+        self,
+        older_than_days: int,
+        batch_id: str,
+        keep: Collection[str] = frozenset(),
+        only: Collection[str] | None = None,
     ) -> int:
         """Delete trash from day folders strictly older than `older_than_days` (a folder exactly
         that old is kept). Age is the folder's date, not mtime. Each file is journaled as a
         `purge` op (root `discover` under `.discover/`, else `library`). `keep` holds
-        trash-relative paths that must survive (an undoable plan still restores them). Symlinks
-        and odd entries are skipped, never followed. Returns the number of files deleted."""
+        trash-relative paths that must survive (an undoable plan still restores them). `only`
+        names the day folders of an early purge instead (age then ignored). Symlinks and odd
+        entries are skipped, never followed. Returns the number of files deleted."""
         kept = {_norm(k) for k in keep}
-        return self._purge_days(self.trash_dir, self.trash_dir, older_than_days, batch_id, kept)
+        return self._purge_days(
+            self.trash_dir, self.trash_dir, older_than_days, batch_id, kept, only
+        )
+
+    def trash_usage(self) -> dict[str, tuple[int, int]]:
+        """Day folder -> (plain files, bytes) in the trash; symlinks are not counted or followed."""
+        if self.trash_dir.is_symlink() or not self.trash_dir.is_dir():
+            return {}
+        usage: dict[str, tuple[int, int]] = {}
+        for day_dir in sorted(self.trash_dir.iterdir()):
+            if _day(day_dir.name) is None or day_dir.is_symlink() or not day_dir.is_dir():
+                continue
+            files = size = 0
+            for dirpath, _, filenames in os.walk(day_dir, followlinks=False):
+                for name in filenames:
+                    f = Path(dirpath, name)
+                    try:
+                        st = f.lstat()
+                    except FileNotFoundError:  # purged or restored while we walked
+                        continue
+                    if stat.S_ISREG(st.st_mode):
+                        files, size = files + 1, size + st.st_size
+            usage[day_dir.name] = (files, size)
+        return usage
 
     def purge_quarantine(self, older_than_days: int, batch_id: str) -> int:
         """Purge rejected candidates the way purge_trash does (`quarantine/rejected/<day>`,
