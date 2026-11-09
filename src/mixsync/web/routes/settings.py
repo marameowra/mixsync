@@ -54,6 +54,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "Library and organize": (
         "flac_level",
+        "embed_cover",
         "canonical_media",
         "canonical_countries",
         "trash_days",

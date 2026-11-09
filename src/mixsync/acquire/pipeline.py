@@ -94,6 +94,7 @@ DOWNLOAD_BUSY_DELAY = timedelta(seconds=30)  # each look at a full cap is also a
 MONITOR_EVERY = timedelta(seconds=30)
 FILE_RETRIES = 3  # re-enqueues of one TimedOut/Errored file before the candidate is dropped
 DOWNLOAD_STALL = timedelta(hours=2)  # no new bytes for this long -> the peer has failed us
+MAX_EMBED_BYTES = 1024 * 1024  # larger covers are not embedded (no resizing)
 ACOUSTID_ID_SCORE = 0.9  # an AcoustID id is written to the tags only above this
 
 
@@ -113,6 +114,7 @@ class Pipeline:
     canonical_countries: tuple[str, ...] = ("XW",)
     reencode: bool = False  # lossless files go into the library as FLAC (see library/encode.py)
     flac_level: int = 8
+    embed_cover: bool = False  # also put the front cover in each imported file's tags
     gate: DownloadGate = field(default_factory=DownloadGate)
     max_searches: int = 2  # a fuller cap defers the job; the source holds the strict one
 
@@ -774,8 +776,12 @@ class Pipeline:
                 else:
                     lifecycle.owned(req)
             return
-        results = await self._import_files(files, target, "verified", batch)
-        await self._cover(target, results, batch)
+        art = await self._fetch_cover(target) if self.embed_cover else None
+        embed = art if art and len(art) <= MAX_EMBED_BYTES else None
+        if art and not embed:
+            log.info("cover for %s is %d bytes: not embedding", target.release_id, len(art))
+        results = await self._import_files(files, target, "verified", batch, cover=embed)
+        await self._cover(target, results, batch, art, self.embed_cover)
         await self._finish(
             job, cand, results, batch, unassigned=evidence.unassigned, partial=evidence.partial
         )
@@ -879,12 +885,13 @@ class Pipeline:
         status: str,
         batch: str,
         root: str = "library",
+        cover: bytes | None = None,
     ) -> list[ImportResult]:
         """Lossless files are re-encoded to FLAC in a work dir first (the downloads are never
         touched); the encodes run as subprocesses so the job's heartbeat keeps going."""
         if not self.reencode:
             return await asyncio.to_thread(
-                self.importer.import_release, files, album, status, batch, None, root
+                self.importer.import_release, files, album, status, batch, None, root, cover
             )
         batch_dir = self.importer.fileops.work / batch
         batch_dir.mkdir(parents=True, exist_ok=True)
@@ -903,7 +910,7 @@ class Pipeline:
                 if out != src:
                     encoded[src] = out
             return await asyncio.to_thread(
-                self.importer.import_release, files, album, status, batch, encoded, root
+                self.importer.import_release, files, album, status, batch, encoded, root, cover
             )
         finally:
             await asyncio.to_thread(self.importer.fileops.clear_work, f"{batch}/{work.name}")
@@ -1006,7 +1013,23 @@ class Pipeline:
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)
 
-    async def _cover(self, album: AlbumInfo, results: list[ImportResult], batch: str) -> None:
+    async def _fetch_cover(self, album: AlbumInfo) -> bytes | None:
+        if album.release_id is None:
+            return None
+        try:
+            return await self.coverart.front(album.release_id, album.release_group_id)
+        except Exception:
+            log.warning("cover art for %s skipped", album.release_id, exc_info=True)
+            return None
+
+    async def _cover(
+        self,
+        album: AlbumInfo,
+        results: list[ImportResult],
+        batch: str,
+        art: bytes | None = None,
+        fetched: bool = False,  # `art` is the fetch's result (maybe None): don't ask again
+    ) -> None:
         """cover.jpg in the album folder, never replacing one. Art is optional: any failure is
         logged and the import still counts."""
         rel = next((r.rel for r in results if r.rel), None)
@@ -1016,7 +1039,10 @@ class Pipeline:
         try:
             if self.importer.fileops.has(cover):
                 return
-            if data := await self.coverart.front(album.release_id, album.release_group_id):
+            data = art
+            if not fetched:
+                data = await self.coverart.front(album.release_id, album.release_group_id)
+            if data:
                 await asyncio.to_thread(self.importer.fileops.write_new, cover, data, batch)
         except Exception:
             log.warning("cover art for %s skipped", album.release_id, exc_info=True)

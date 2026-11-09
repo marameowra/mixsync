@@ -47,6 +47,7 @@ class AppSettings(TimestampMixin, Base):
     adopt_downloads: Mapped[bool | None]
     adopt_settle_minutes: Mapped[int | None]
     flac_level: Mapped[int | None]
+    embed_cover: Mapped[bool | None]
     canonical_media: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
     canonical_countries: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
     trash_days: Mapped[int | None]

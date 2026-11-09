@@ -208,6 +208,7 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
         importer=Importer(services.fileops, sessions, clock, settings.path_template),
         reencode=True,
         flac_level=settings.flac_level,
+        embed_cover=settings.embed_cover,
         canonical_media=tuple(settings.canonical_media),
         canonical_countries=tuple(settings.canonical_countries),
         coverart=services.coverart,
