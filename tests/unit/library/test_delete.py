@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from mixsync.acquire.merge import Merger
+from mixsync.acquire.missing_scan import KIND
 from mixsync.acquire.requests import create_request
 from mixsync.core.jobs import JobKind
 from mixsync.db.auth import create_user
@@ -377,6 +378,27 @@ def test_refused_while_another_plan_blocks_the_group(world: World) -> None:  # n
         assert len(_plan_ids(world)) == 3  # the three merge previews, and no delete plan
         assert _preview(c, tok, f"/library/tracks/{tid}/delete")  # no plan blocks now
         assert not world.trashed()
+
+
+def test_a_missing_track_scan_blocks_no_delete(world: World) -> None:  # noqa: F811
+    """A scan's draft and a confirmed scan list requests of the group but move no file."""
+    c = _setup(world)
+    op = {"op": "reopen", "request_id": 1, "status": "imported", "note": "1 of 2 tracks present"}
+    with world.sessions.begin() as s:
+        for status in ("draft", "done"):
+            s.add(
+                Plan(
+                    kind=KIND,
+                    release_group_mbid=GROUP,
+                    canonical_release_mbid="",
+                    status=status,
+                    ops=[{**op, "artist": "A", "album": "B", "missing": ["T"]}],
+                )
+            )
+    (tid,) = _ids(world, Track.release_mbid != OLD)
+    (path,) = _paths(world, Track.id == tid)
+    with c:
+        _roundtrip(world, c, _login(c, "root"), f"/library/tracks/{tid}/delete", [path])
 
 
 def test_running_delete_blocks_a_merge_and_a_second_delete(world: World) -> None:  # noqa: F811

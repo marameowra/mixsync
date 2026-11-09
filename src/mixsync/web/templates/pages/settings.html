@@ -69,6 +69,9 @@
 {% for f in secrets if f.source == "saved" or f.unreadable %}
 <form id="clear-{{ f.name }}" method="post" action="/settings/clear/{{ f.name }}">{{ forms.csrf() }}</form>
 {% endfor %}
+<h2>Requests missing tracks</h2>
+<p>Finds imported and owned requests whose release still lacks tracks in the library (tracks you deleted on purpose do not count). The scan changes nothing: you review the list, then confirm to reopen them as partial and search for the rest. <a href="/settings/missing-tracks">Latest scan</a></p>
+<form method="post" action="/settings/missing-tracks/scan">{{ forms.csrf() }}<button type="submit">Scan requests for missing tracks</button></form>
 <h2>Set in the environment only</h2>
 <dl>
   {% for name, value in read_only.items() %}<dt>{{ name }}</dt><dd><code>{{ value }}</code></dd>{% endfor %}

@@ -16,6 +16,7 @@ from mixsync.acquire.adopter import adopter
 from mixsync.acquire.dropfolder import DropFolder
 from mixsync.acquire.gate import DownloadGate
 from mixsync.acquire.migration import Migrator
+from mixsync.acquire.missing_scan import MissingScan
 from mixsync.acquire.pipeline import Pipeline
 from mixsync.acquire.recheck import Rechecker
 from mixsync.acquire.requests import fail_request_of_job
@@ -302,6 +303,7 @@ def _new_queue(
         countries=tuple(settings.canonical_countries),
     )
     backfill = NameBackfill(sessions, clock, fileops)
+    scanner = MissingScan(sessions, clock, pipeline.metadata)
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
     nightly = NightlyBackup(
         sessions,
@@ -347,6 +349,7 @@ def _new_queue(
         | watcher.handlers()
         | purger.handlers()
         | backfill.handlers()
+        | scanner.handlers()
         | nightly.handlers()
         | discovery.handlers()
         | retention.handlers()

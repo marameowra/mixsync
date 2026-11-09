@@ -1,0 +1,25 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/live.html" as live %}
+{% call live.region("/settings/missing-tracks", scanning) %}
+{% if scanning %}<p role="status">Scanning imported and owned requests for tracks missing from the library&hellip; Nothing changes until you confirm.</p>
+{% elif plan and plan.status == "draft" %}
+{% set n = plan.ops | length %}
+<p role="status">{{ n }} {{ "requests are" if n != 1 else "request is" }} missing tracks. Confirm reopens {{ "each" if n != 1 else "it" }} as partial and searches for the rest; a request that changed since the scan is left alone.</p>
+<table>
+  <thead><tr><th scope="col">Artist</th><th scope="col">Album</th><th scope="col">Status</th><th scope="col">Present</th><th scope="col">Missing</th></tr></thead>
+  <tbody>
+  {% for op in plan.ops %}
+    <tr><td>{{ op.artist }}</td><td>{{ op.album }}</td><td>{{ op.status }}</td><td>{{ op.note }}</td><td>{{ op.missing | join(", ") }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="actions">
+  <form method="post" action="/settings/missing-tracks/{{ plan.id }}/confirm">{{ forms.csrf() }}<button type="submit">Confirm: reopen {{ n }}</button></form>
+  <form method="post" action="/settings/missing-tracks/{{ plan.id }}/discard">{{ forms.csrf() }}<button class="btn danger" type="submit">Discard</button></form>
+</div>
+{% elif plan and plan.status == "done" %}<p role="status">Confirmed: the listed requests that had not changed are reopened and searching.</p>
+{% elif plan %}<p role="status">The preview was discarded. Nothing changed.</p>
+{% elif job and job.status == "succeeded" %}<p role="status">No imported or owned request is missing tracks.</p>
+{% elif job %}<p class="notice danger" role="alert">✕ The scan failed: {{ job.last_error or job.status }}</p>
+{% else %}<p>No scan has been run.</p>{% endif %}
+{% endcall %}
