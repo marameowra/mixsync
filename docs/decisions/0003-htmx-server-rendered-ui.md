@@ -1,6 +1,6 @@
 # ADR 0003: Server-rendered UI with HTMX
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0023](0023-svelte-spa-with-json-api.md), screen by screen: it applies to htmx pages until they move to the SPA
 - **Date:** 2026-10-09
 
 ## Context

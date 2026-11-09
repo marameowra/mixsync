@@ -58,6 +58,8 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Recheck**: A review action that closes a pending decision so the files are verified again with the current scorer.
 
+**Review queue**: The pending decisions a person can review, in the order they chose on the review list: their own, or everyone's for an approver. Working through it settles them one by one; a decision settled by someone else drops out. _Avoid_: Inbox, backlog
+
 **Cancelled (decision)**: A pending decision closed because its request was deleted, not because anyone judged the candidate. _Avoid_: Rejected
 
 ### Library and safety

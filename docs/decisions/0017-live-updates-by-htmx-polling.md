@@ -1,6 +1,6 @@
 # ADR 0017: Live updates by HTMX polling, not SSE
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0023](0023-svelte-spa-with-json-api.md): SPA screens poll with `fetch` on the same terms
 - **Date:** 2026-10-20
 - **Supersedes:** the SSE consequence of [ADR 0003](0003-htmx-server-rendered-ui.md). The rest of 0003 stands.
 - **Extended by:** [ADR 0020](0020-htmx-is-the-only-js.md): htmx is also used for UX on any page, not only for live regions.
