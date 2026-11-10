@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.app import create_app
+from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
-from mixsync.db.auth import authenticate, create_user, is_admin
+from mixsync.db.auth import authenticate, capabilities, create_user, is_admin
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import Session as SessionRow
@@ -294,3 +295,47 @@ def test_change_password_is_rate_limited(
     assert post("pw") == 429  # even the right password is refused once locked
     with sf() as s:
         assert authenticate(s, "alice", "pw") is not None
+
+
+def caps(sf: sessionmaker[Session], name: str) -> frozenset[Capability]:
+    with sf() as s:
+        return capabilities(s, s.get_one(User, uid(sf, name)))
+
+
+def test_toggle_automatic_downloads_for_a_user(
+    admin: tuple[TestClient, str], sf: sessionmaker[Session]
+) -> None:
+    c, tok = admin
+    i = uid(sf, "alice")
+    assert f"/users/{i}/download-auto" in c.get("/users").text
+    off = {"csrf_token": tok, "enabled": "false"}
+    assert c.post(f"/users/{i}/download-auto", data=off).status_code == 303
+    assert Capability.download_auto not in caps(sf, "alice")
+    assert Capability.request in caps(sf, "alice")
+    on = {**off, "enabled": "true"}
+    assert c.post(f"/users/{i}/download-auto", data=on).status_code == 303
+    assert Capability.download_auto in caps(sf, "alice")
+
+
+def test_automatic_downloads_cannot_be_taken_from_an_admin(
+    admin: tuple[TestClient, str], sf: sessionmaker[Session]
+) -> None:
+    c, tok = admin
+    i = uid(sf, "root")
+    assert f"/users/{i}/download-auto" not in c.get("/users").text
+    r = c.post(f"/users/{i}/download-auto", data={"csrf_token": tok, "enabled": "false"})
+    assert r.status_code == 400
+    with sf() as s:
+        assert s.get_one(User, i).download_auto is True
+    assert caps(sf, "root") == frozenset(Capability)
+
+
+def test_non_admin_cannot_toggle_automatic_downloads(
+    app_client: Callable[[], TestClient], sf: sessionmaker[Session]
+) -> None:
+    c = app_client()
+    tok = login(c, "alice")
+    i = uid(sf, "alice")
+    r = c.post(f"/users/{i}/download-auto", data={"csrf_token": tok, "enabled": "false"})
+    assert r.status_code == 403
+    assert Capability.download_auto in caps(sf, "alice")

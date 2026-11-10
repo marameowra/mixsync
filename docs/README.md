@@ -12,7 +12,7 @@ Released: v1.0.1 (`version` in `pyproject.toml`). GitHub issues are the roadmap.
 - Discovery playlists with retention for not-yet-owned tracks
 - Per-user matching profiles; `admin` and `user` roles only
 
-**After v1:** approval queue and role editor; Prowlarr/qBittorrent/SABnzbd/yt-dlp sources; Jellyfin/Plex/Music Assistant targets; stats page; Last.fm ([why not](design/services-etiquette.md#lastfm)). **Out of scope:** a Soulseek client, chat or rooms (slskd covers them); a streaming server or player; anything outside request → acquire → verify → organize → stream → discover.
+**After v1:** role editor; Prowlarr/qBittorrent/SABnzbd/yt-dlp sources; Jellyfin/Plex/Music Assistant targets; stats page; Last.fm ([why not](design/services-etiquette.md#lastfm)). **Out of scope:** a Soulseek client, chat or rooms (slskd covers them); a streaming server or player; anything outside request → acquire → verify → organize → stream → discover.
 
 ## Index
 - [Architecture](architecture.md): components, pipeline, tech stack

@@ -4,14 +4,16 @@
 <h1>Users</h1>
 {% if error %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error }}</p>{% endif %}
 <table>
-  <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Automatic downloads</th><th>Actions</th></tr></thead>
   <tbody>
   {% for u, admin in rows %}
   <tr>
     <td>{{ u.username }}</td>
     <td>{{ "Admin" if admin else "User" }}</td>
     <td>{{ "Active" if u.status == "active" else "Disabled" }}</td>
+    <td>{% if admin %}Always (admin){% else %}{{ "On" if u.download_auto else "Off: requests wait for approval" }}{% endif %}</td>
     <td>
+      {% if not admin %}<form method="post" action="/users/{{ u.id }}/download-auto" hx-boost="true">{{ forms.csrf() }}<input type="hidden" name="enabled" value="{{ 'false' if u.download_auto else 'true' }}"><button type="submit">Turn automatic downloads {{ "off" if u.download_auto else "on" }} for {{ u.username }}</button></form>{% endif %}
       <form method="post" action="/users/{{ u.id }}/status" hx-boost="true" hx-confirm="{{ 'Disable' if u.status == 'active' else 'Enable' }} this user?">{{ forms.csrf() }}<input type="hidden" name="status" value="{{ 'disabled' if u.status == 'active' else 'active' }}"><button type="submit">{{ "Disable" if u.status == "active" else "Enable" }} {{ u.username }}</button></form>
       <form method="post" action="/users/{{ u.id }}/role" hx-boost="true" hx-confirm="Make this user {{ 'a regular user' if admin else 'an admin' }}?">{{ forms.csrf() }}<input type="hidden" name="role" value="{{ 'user' if admin else 'admin' }}"><button type="submit">Make {{ u.username }} {{ "a user" if admin else "an admin" }}</button></form>
       <form method="post" action="/users/{{ u.id }}/password" hx-boost="true" hx-confirm="Reset this password? Their sessions end.">{{ forms.csrf() }}<label>New password for {{ u.username }} <input name="password" type="password" required autocomplete="new-password"></label> <button type="submit">Reset password</button></form>

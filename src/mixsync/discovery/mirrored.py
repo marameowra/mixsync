@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol, cast
 
-from sqlalchemy import CursorResult, Select, select, update
+from sqlalchemy import CursorResult, Select, or_, select, update
 from sqlalchemy.orm import Session
 
 from mixsync.acquire.lifecycle import DONE
@@ -138,6 +138,8 @@ def track_states(s: Session, pl: MirroredPlaylist) -> list[tuple[dict[str, Any],
                 Request.release_mbid.in_(releases),
                 Request.provisional.is_(False),
                 Request.status.not_in(DONE),
+                # another user's request waiting for approval may never bring the track
+                or_(Request.status != "pending_approval", Request.user_id == pl.user_id),
             )
         )
     )

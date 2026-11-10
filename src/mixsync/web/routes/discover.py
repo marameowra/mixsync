@@ -43,6 +43,8 @@ def _status(h: ProvisionalHold | None, owned: bool, request_status: str | None) 
         return "expired"
     if h.provisional_track_id:
         return "in discover"
+    if request_status == "denied":
+        return "denied"
     # a request that ended without a file (lifecycle.NO_FILE) found nothing
     return "not found" if request_status in NO_FILE else "waiting for download"
 
