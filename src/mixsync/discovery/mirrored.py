@@ -60,7 +60,8 @@ class Upstream(Protocol):
     async def tracks(self, user_id: int, ref: str) -> list[UpstreamTrack]: ...
 
 
-Resolve = Callable[[str, str, str | None], Awaitable[RecordingRef | None]]  # TrackResolver.resolve
+# TrackResolver.resolve: (artist, title, isrc, listenbrainz token)
+Resolve = Callable[[str, str, str | None, str | None], Awaitable[RecordingRef | None]]
 
 
 def waiting(playlist_id: int) -> Select[Any]:
@@ -233,7 +234,7 @@ class Mirror:
             raise
 
     async def _resolved(
-        self, tracks: list[UpstreamTrack], old: list[dict[str, Any]]
+        self, tracks: list[UpstreamTrack], old: list[dict[str, Any]], lb_token: str | None
     ) -> list[dict[str, Any]]:
         """Entries for `tracks`; a track resolved before is not looked up again, an unresolved
         one is retried."""
@@ -253,7 +254,7 @@ class Mirror:
             else:
                 e = known.get((t.artist, t.title, t.isrc))
             if e is None:
-                ref = await self.resolve(t.artist, t.title, t.isrc)
+                ref = await self.resolve(t.artist, t.title, t.isrc, lb_token)
                 e = {
                     "recording_mbid": ref and ref.recording_mbid,
                     "release_mbid": ref and ref.release_mbid,
@@ -277,6 +278,8 @@ class Mirror:
             if pl is None:
                 return
             kind, ref, uid, old = pl.upstream_kind, pl.upstream_ref, pl.user_id, list(pl.entries)
+            found, _ = self.discovery.links(s, uid, frozenset())
+            lb_token = found["listenbrainz"][1] if found and "listenbrainz" in found else None
         upstream = self.upstreams.get(kind)
         if upstream is None:
             return self._stop(pid, job.id, f"no upstream adapter for {kind!r}")
@@ -286,7 +289,10 @@ class Mirror:
             return self._stop(pid, job.id, str(e))
         if not tracks and old:  # likely an adapter hiccup, not a cleared playlist
             return self._stop(pid, job.id, EMPTY_UPSTREAM)
-        entries = await self._resolved(tracks, old)
+        try:
+            entries = await self._resolved(tracks, old, lb_token)
+        except PermanentError as e:  # AuthError too: say why instead of failing the job silently
+            return self._stop(pid, job.id, str(e))
         before, after = {key(e) for e in old}, {key(e) for e in entries}
         log.info(
             "mirror: playlist %s: %d added, %d removed upstream",

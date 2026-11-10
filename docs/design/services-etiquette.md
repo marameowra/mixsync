@@ -51,7 +51,7 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 
 ## ListenBrainz
 - Max 1 call/s. On `X-RateLimit-Remaining` 0, set `blocked_until` = now + `X-RateLimit-Reset-In`; 429 backs off the same way.
-- Per-user token (`Authorization: Token ...`) from `user_links`.
+- Per-user token (`Authorization: Token ...`) from `user_links`. `/1/metadata/lookup/` requires it (anonymous gets 401), so it is not cacheable across users.
 
 [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/index.html)
 

@@ -155,7 +155,11 @@ class ListenBrainzClient:
             raise TransientError(f"ListenBrainz {path} unreachable ({type(e).__name__})") from None
         code = response.status_code
         if code == 401:
-            raise AuthError("ListenBrainz rejected the user token; check it in the user's links")
+            raise AuthError(
+                "ListenBrainz rejected the user token; check it in the user's links"
+                if token
+                else f"ListenBrainz {path} required a token and none was sent"
+            )
         if code == 204:
             return None
         if 300 <= code < 400:
@@ -187,10 +191,10 @@ class ListenBrainzClient:
                 )
         return out
 
-    async def lookup(self, artist: str, title: str) -> RecordingRef | None:
-        """The recording ListenBrainz matches to artist+title, or None (no token, so cacheable)."""
+    async def lookup(self, artist: str, title: str, token: str) -> RecordingRef | None:
+        """The recording ListenBrainz matches to artist+title, or None. Needs a user token."""
         body = await self._get(
-            _Lookup, "/1/metadata/lookup/", artist_name=artist, recording_name=title
+            _Lookup, "/1/metadata/lookup/", token, artist_name=artist, recording_name=title
         )
         if not body or not body.recording_mbid:
             return None

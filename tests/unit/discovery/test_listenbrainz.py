@@ -355,3 +355,24 @@ async def test_loves_stop_on_a_short_page(make_client: Make) -> None:
 async def test_loves_failure_raises(make_client: Make) -> None:
     with pytest.raises(TransientError):
         await lb(make_client, lambda _r: httpx.Response(503)).loves("u")
+
+
+async def test_lookup_sends_the_token(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        return cassette("lookup")
+
+    assert await lb(make_client, respond).lookup("Dauwd", "Lydia", TOKEN) == REF1
+    assert seen[0].headers["authorization"] == f"Token {TOKEN}"
+
+
+async def test_a_401_without_a_token_says_one_was_required(make_client: Make) -> None:
+    client = lb(make_client, lambda _r: httpx.Response(401))
+
+    with pytest.raises(AuthError, match="required a token"):
+        await client.loves("someone")
+    with pytest.raises(AuthError, match="rejected the user token") as info:
+        await client.lookup("a", "b", TOKEN)
+    assert TOKEN not in str(info.value)
