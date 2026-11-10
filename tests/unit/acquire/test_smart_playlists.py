@@ -106,6 +106,10 @@ class SmartRig:
         with self.env.sessions.begin() as s:
             for pl in s.scalars(select(SmartPlaylist)):
                 s.delete(pl)
+            # the last build re-queued itself; on Postgres ids aren't reused, so that job
+            # would point at the deleted playlist and build() would run it instead
+            for j in s.scalars(select(Job).where(Job.kind == JobKind.SMART_BUILD)):
+                s.delete(j)
         self.create(rules, **kw)
         await self.build()
         return self.songs() if self.lib.playlists else []
