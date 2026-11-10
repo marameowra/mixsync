@@ -31,10 +31,15 @@ _DISC_DIR = re.compile(r"^(?:cd|dis[ck])[\s._-]*\d+$", re.IGNORECASE)
 _SUBJECT_NAME = re.compile(r'"([^"]+)"')
 
 
+MAX_BENCODE_DEPTH = 64
+
+
 def bdecode(data: bytes) -> Any:
     """Decode bencode (BEP 3); raises ValueError on malformed input."""
 
-    def parse(i: int) -> tuple[Any, int]:
+    def parse(i: int, depth: int = 0) -> tuple[Any, int]:
+        if depth > MAX_BENCODE_DEPTH:  # a hostile .torrent must not hit RecursionError
+            raise ValueError("bencode nested too deep")
         c = data[i : i + 1]
         if c == b"i":
             end = data.index(b"e", i)
@@ -45,7 +50,7 @@ def bdecode(data: bytes) -> Any:
             while data[i : i + 1] != b"e":
                 if i >= len(data):
                     raise ValueError("unterminated bencode list")
-                value, i = parse(i)
+                value, i = parse(i, depth + 1)
                 items.append(value)
             return (items if c == b"l" else dict(zip(items[::2], items[1::2], strict=True))), i + 1
         if c.isdigit():
@@ -64,11 +69,15 @@ def torrent_files(data: bytes) -> list[tuple[list[str], int]]:
     info = bdecode(data)[b"info"]
     name = info[b"name"].decode(errors="replace")
     if b"files" not in info:
-        return [([name], info[b"length"])]
-    return [
-        ([name, *(p.decode(errors="replace") for p in f[b"path"])], f[b"length"])
-        for f in info[b"files"]
-    ]
+        files = [([name], info[b"length"])]
+    else:
+        files = [
+            ([name, *(p.decode(errors="replace") for p in f[b"path"])], f[b"length"])
+            for f in info[b"files"]
+        ]
+    if not all(isinstance(size, int) for _, size in files):
+        raise ValueError("a .torrent file length is not an integer")
+    return files
 
 
 def nzb_files(data: bytes, title: str) -> list[tuple[list[str], int]]:
@@ -162,11 +171,16 @@ class ProwlarrSource:
         return out
 
     async def _files(self, release: dict[str, Any]) -> list[tuple[list[str], int]]:
-        url = release["downloadUrl"]
+        url: str = release["downloadUrl"]
         if urlsplit(url)[:2] != urlsplit(self._base)[:2]:  # the API key goes to Prowlarr only
-            log.warning("prowlarr: %r links off Prowlarr (%s); skipped", release["title"], url)
+            host = urlsplit(url).netloc  # never the full URL: its query carries the API key
+            log.warning("prowlarr: %r links off Prowlarr (%s); skipped", release["title"], host)
             return []
-        response = await self._get(url)
+        try:
+            response = await self._get(url)
+        except TransientError as e:  # one bad file fetch skips that release, not the search
+            log.info("prowlarr: %r download failed: %s", release["title"], e)
+            return []
         if response.status_code != 200:  # a 3xx here is a redirect to a magnet link
             log.info("prowlarr: %r download gave %d", release["title"], response.status_code)
             return []

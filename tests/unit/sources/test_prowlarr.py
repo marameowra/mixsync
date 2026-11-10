@@ -48,6 +48,35 @@ def torrent(name: str, paths: list[list[str]]) -> bytes:
     return bencode({"info": {"name": name, "piece length": 1, "pieces": b"", "files": files}})
 
 
+class FakeClock:
+    def __init__(self) -> None:
+        self.t = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        return self.t
+
+    async def sleep(self, seconds: float) -> None:
+        self.t += timedelta(seconds=seconds)
+
+
+@pytest.fixture
+def make_client(settings: Settings, sessions: sessionmaker[Session]) -> Make:
+    """The shared fixture with a fake clock, so the 1 request / 2 s bucket costs no real time."""
+
+    def make(service: str, handler: Callable[[httpx.Request], httpx.Response]) -> PoliteClient:
+        clock = FakeClock()
+        return PoliteClient(
+            service,
+            settings,
+            sessions,
+            clock=clock,
+            transport=httpx.MockTransport(handler),
+            sleep=clock.sleep,
+        )
+
+    return make
+
+
 def search_results() -> list[dict[str, Any]]:
     return json.loads((CASSETTES / "search.json").read_text())
 
@@ -154,6 +183,25 @@ async def test_a_link_off_the_prowlarr_host_is_not_fetched(make_client: Make) ->
     assert await src.search(QUERY) == [] and len(seen) == 1  # the API key never left Prowlarr
 
 
+async def test_the_api_key_in_an_off_host_link_is_never_logged(
+    make_client: Make, caplog: pytest.LogCaptureFixture
+) -> None:
+    row = {**search_results()[0], "downloadUrl": "http://elsewhere.test/1/download?apikey=SECRET"}
+    src = ProwlarrSource(make_client("prowlarr", serve([], [row])), BASE, "SECRET")
+    await src.search(QUERY)
+    assert "elsewhere.test" in caplog.text and "SECRET" not in caplog.text
+
+
+async def test_a_failed_file_fetch_skips_only_that_release(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    handler = serve(seen, bodies={"mp3": httpx.Response(503)})
+    found = await ProwlarrSource(make_client("prowlarr", handler), BASE, "k").search(QUERY)
+    assert [c.folder for c in found] == [
+        "Test Artist - Test Album (2020) [FLAC]",
+        "Test.Artist-Test.Album-WEB-2020-GRP",
+    ]
+
+
 async def test_a_rejected_api_key_is_an_auth_error(make_client: Make) -> None:
     src = ProwlarrSource(make_client("prowlarr", lambda _r: httpx.Response(401)), BASE, "bad")
     with pytest.raises(AuthError, match="MIXSYNC_PROWLARR_API_KEY"):
@@ -166,17 +214,6 @@ async def test_downloading_is_refused_until_a_download_client_exists(make_client
     with pytest.raises(PermanentError):
         await src.enqueue(cand)
     assert await src.active_downloads() == {}
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.t = datetime(2026, 1, 1, tzinfo=UTC)
-
-    def now(self) -> datetime:
-        return self.t
-
-    async def sleep(self, seconds: float) -> None:
-        self.t += timedelta(seconds=seconds)
 
 
 async def test_searches_and_fetches_share_the_prowlarr_bucket(
@@ -202,9 +239,11 @@ def test_the_torrent_fixture_decodes() -> None:
     data = (CASSETTES / "album.torrent").read_bytes()
     assert bdecode(data)[b"announce"] == b"http://tracker.example/announce"
     assert len(torrent_files(data)) == 5
-    for bad in (b"", b"d3:abc", b"l", b"5:ab", b"x"):
+    for bad in (b"", b"d3:abc", b"l", b"5:ab", b"x", b"l" * 5000, b"d" * 5000):
         with pytest.raises(ValueError):
             bdecode(bad)
+    with pytest.raises(ValueError):
+        torrent_files(bencode({"info": {"name": "x", "length": "big"}}))
 
 
 ALBUM = AlbumInfo(
