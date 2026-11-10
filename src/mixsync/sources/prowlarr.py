@@ -1,16 +1,17 @@
-"""Torrent and Usenet candidates from Prowlarr's indexers; torrents download through qBittorrent
-(see the README).
+"""Torrent and Usenet candidates from Prowlarr's indexers; torrents download through qBittorrent,
+NZBs through SABnzbd (see the README).
 
 Fields of `GET /api/v1/search` (Prowlarr's OpenAPI `ReleaseResource`) this module reads:
 `title` release name, `size` bytes, `indexer` indexer name, `protocol` "torrent" / "usenet",
-`downloadUrl` Prowlarr's proxy link to the .torrent / .nzb (null for magnet-only results; it can
-also redirect to a magnet), `magnetUrl` magnet link, `seeders` torrent seeders (null for Usenet).
+`downloadUrl` Prowlarr's proxy link to the .torrent / .nzb (omitted when unset; it may redirect
+once to the indexer, or to a magnet), `seeders` torrent seeders. Null fields are omitted.
 """
 
 import hashlib
 import logging
 import re
 import xml.etree.ElementTree as ET
+from importlib.metadata import version
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -22,6 +23,7 @@ from mixsync.core.errors import AuthError, PermanentError, TransientError
 from mixsync.core.matching import Candidate, CandidateFile, TransferInfo
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.qbittorrent import Qbittorrent
+from mixsync.sources.sabnzbd import Sabnzbd
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +87,12 @@ def info_hash(data: bytes) -> str:
     raise ValueError("a .torrent has no info dict")
 
 
+def nzb_hash(files: list[tuple[list[str], int]]) -> str:
+    """An NZB's identity: the SHA-1 of its file list, which survives an indexer re-serving the
+    same release with other headers or comments."""
+    return hashlib.sha1(repr(files).encode(), usedforsecurity=False).hexdigest()
+
+
 def without_key(url: str) -> str:
     """The link minus its `apikey` query param: candidates are stored, the key never is."""
     parts = urlsplit(url)
@@ -124,7 +132,7 @@ def nzb_files(data: bytes, title: str) -> list[tuple[list[str], int]]:
 
 
 def to_candidate(
-    release: dict[str, Any], files: list[tuple[list[str], int]], infohash: str = ""
+    release: dict[str, Any], files: list[tuple[list[str], int]], infohash: str = "", nzb: str = ""
 ) -> Candidate | None:
     """The release's audio files as one Candidate, or None when they span more than one album
     folder (a discography or pack; picking files from one is #328)."""
@@ -153,13 +161,14 @@ def to_candidate(
         source="prowlarr",
         url=without_key(release.get("downloadUrl") or ""),
         infohash=infohash,
+        nzb_hash=nzb,
     )
 
 
 class ProwlarrSource:
-    """Search, and torrents downloaded through qBittorrent. Without `torrents` it is search only
-    (enqueue/status raise) and the worker does not register it. Usenet waits for SABnzbd (#327).
-    """
+    """Search, with torrents downloaded through qBittorrent and NZBs through SABnzbd. A release
+    with no client to download it raises at enqueue/status; the worker passes `protocols` for the
+    configured clients only, so search never offers one."""
 
     max_queries = 2  # the pipeline tries only the first 2 query variants here
 
@@ -170,12 +179,14 @@ class ProwlarrSource:
         api_key: str,
         torrents: Qbittorrent | None = None,
         protocols: frozenset[str] = frozenset({"torrent", "usenet"}),
+        usenet: Sabnzbd | None = None,
     ) -> None:
         self._client = client
         self._base = base_url.rstrip("/")
         self._key = api_key
         self._headers = {"X-Api-Key": api_key}
         self._torrents = torrents
+        self._usenet = usenet
         self._protocols = protocols  # others are skipped before any fetch: nothing downloads them
 
     async def _get(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -216,9 +227,31 @@ class ProwlarrSource:
         out: list[Candidate] = []
         for release in usable[:MAX_FETCHES]:
             files, infohash = await self._files(release)
-            if files and (cand := to_candidate(release, files, infohash)):
+            nzb = nzb_hash(files) if release.get("protocol") == "usenet" else ""
+            if files and (cand := to_candidate(release, files, infohash, nzb)):
                 out.append(cand)
         return out
+
+    async def _download(self, url: str) -> httpx.Response:
+        """The .torrent / .nzb behind a Prowlarr link. Prowlarr answers a Usenet link (and a
+        torrent one when the indexer's Redirect is on) with a 301 to the indexer's own URL: one
+        http(s) hop is followed, without Prowlarr's key header. That URL carries the indexer's
+        key, so it is never stored or logged. A magnet, or a second redirect, comes back as is."""
+        response = await self._get(url)
+        if not response.is_redirect:
+            return response
+        target = response.url.join(response.headers.get("location", ""))
+        if target.scheme not in ("http", "https"):
+            return response
+        try:
+            # a plain User-Agent: MIXSYNC_MB_CONTACT is not for third-party indexers
+            agent = {"User-Agent": f"MixSync/{version('mixsync')}"}
+            response = await self._client.get(str(target), headers=agent)
+        except httpx.TransportError as e:  # never the URL: it has the indexer's key
+            raise TransientError(f"indexer unreachable ({type(e).__name__})") from e
+        if response.status_code == 429 or response.status_code >= 500:
+            raise TransientError(f"the indexer returned {response.status_code}")
+        return response
 
     def _ours(self, url: str) -> bool:
         return urlsplit(url)[:2] == urlsplit(self._base)[:2]  # the API key goes to Prowlarr only
@@ -231,11 +264,11 @@ class ProwlarrSource:
             log.warning("prowlarr: %r links off Prowlarr (%s); skipped", release["title"], host)
             return [], ""
         try:
-            response = await self._get(url)
+            response = await self._download(url)
         except TransientError as e:  # one bad file fetch skips that release, not the search
             log.info("prowlarr: %r download failed: %s", release["title"], e)
             return [], ""
-        if response.status_code != 200:  # a 3xx here is a redirect to a magnet link
+        if response.status_code != 200:  # a 3xx here is a magnet or a second redirect
             log.info("prowlarr: %r download gave %d", release["title"], response.status_code)
             return [], ""
         try:
@@ -246,36 +279,49 @@ class ProwlarrSource:
             log.info("prowlarr: %r has an unreadable file list: %r", release["title"], e)
             return [], ""
 
-    def _client_for(self, candidate: Candidate) -> Qbittorrent:
-        if self._torrents is None or not candidate.infohash:  # an NZB, until SABnzbd (#327)
-            raise PermanentError("no download client is configured for this release")
-        return self._torrents
+    def _client_for(self, candidate: Candidate) -> Qbittorrent | Sabnzbd:
+        """The client for the candidate's protocol: an info hash is a torrent, an NZB hash an
+        NZB."""
+        if self._torrents is not None and candidate.infohash:
+            return self._torrents
+        if self._usenet is not None and candidate.nzb_hash:
+            return self._usenet
+        raise PermanentError("no download client is configured for this release")
 
     async def enqueue(self, candidate: Candidate) -> None:
-        """Fetch the .torrent again (the API key is added back here, never stored) and hand it
-        to qBittorrent."""
-        torrents = self._client_for(candidate)
+        """Fetch the .torrent / .nzb again (the API key is added back here, never stored) and
+        hand its bytes to qBittorrent or SABnzbd, so no key lands in either client."""
+        client = self._client_for(candidate)
         if not self._ours(candidate.url):
             raise PermanentError("the release's link is not on Prowlarr")
         sep = "&" if urlsplit(candidate.url).query else "?"  # httpx `params=` would drop `link`
-        response = await self._get(f"{candidate.url}{sep}{urlencode({'apikey': self._key})}")
+        response = await self._download(f"{candidate.url}{sep}{urlencode({'apikey': self._key})}")
         if response.status_code != 200:
             raise PermanentError(f"prowlarr download returned {response.status_code}")
         try:
-            got = info_hash(response.content)
-        except ValueError as e:
-            raise PermanentError(f"unreadable .torrent: {e}") from e
-        if got != candidate.infohash:  # never download what was not scored
-            raise PermanentError("the .torrent changed since the search")
-        await torrents.add(response.content, candidate.infohash)
+            if isinstance(client, Sabnzbd):
+                got = nzb_hash(nzb_files(response.content, candidate.folder))
+            else:
+                got = info_hash(response.content)
+        except (ValueError, ET.ParseError) as e:
+            raise PermanentError(f"unreadable download file: {e}") from e
+        if got != (candidate.nzb_hash or candidate.infohash):  # never download what was not scored
+            raise PermanentError("the release file changed since the search")
+        if isinstance(client, Sabnzbd):
+            await client.add(response.content, candidate.nzb_hash)
+        else:
+            await client.add(response.content, candidate.infohash)
 
     async def status(self, candidate: Candidate) -> TransferInfo:
         return await self._client_for(candidate).status(candidate)
 
     async def active_downloads(self) -> dict[str, int]:
-        return {}  # qBittorrent queues its own torrents; the Soulseek cap is not theirs
+        return {}  # the clients queue their own jobs; the Soulseek cap is not theirs
 
     async def clear(self, candidate: Candidate) -> None:
-        """Remove an unfinished torrent with its partial files; a finished one seeds on."""
+        """Remove an unfinished torrent with its partial files (a finished one seeds on), or
+        MixSync's SABnzbd job (with its files only if it never completed)."""
         if self._torrents is not None and candidate.infohash:
             await self._torrents.remove_unfinished(candidate.infohash)
+        elif self._usenet is not None and candidate.nzb_hash:
+            await self._usenet.remove(candidate.nzb_hash)

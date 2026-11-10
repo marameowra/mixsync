@@ -79,6 +79,36 @@ def test_a_relative_qbittorrent_dir_is_refused(monkeypatch: pytest.MonkeyPatch) 
         Settings()
 
 
+@pytest.mark.parametrize(
+    ("nzb", "env"),
+    [
+        ("/downloads/usenet", {}),
+        ("/data/usenet", {}),
+        ("/drop/u", {"MIXSYNC_DROP_DIR": "/drop"}),
+        ("/torrents/u", {"MIXSYNC_QBITTORRENT_DIR": "/torrents"}),
+        ("/media", {"MIXSYNC_QBITTORRENT_DIR": "/media/torrents"}),
+        ("/import-source/u", {}),
+    ],
+)
+def test_the_sabnzbd_dir_stays_apart_from_every_other_dir(
+    monkeypatch: pytest.MonkeyPatch, nzb: str, env: dict[str, str]
+) -> None:
+    """Released downloads live there: adopt, the drop folder and the seeding dir never read it."""
+    monkeypatch.setenv("MIXSYNC_SABNZBD_DIR", nzb)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    with pytest.raises(ValidationError, match="MIXSYNC_.*_DIR must not overlap"):
+        Settings()
+    monkeypatch.setenv("MIXSYNC_SABNZBD_DIR", "/usenet")
+    assert str(Settings().sabnzbd_dir) == "/usenet"
+
+
+def test_a_relative_sabnzbd_dir_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MIXSYNC_SABNZBD_DIR", "usenet")
+    with pytest.raises(ValidationError, match="MIXSYNC_SABNZBD_DIR must be an absolute path"):
+        Settings()
+
+
 def test_a_separate_drop_dir_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_DROP_DIR", "/drop")
     assert str(Settings().drop_dir) == "/drop"

@@ -24,7 +24,7 @@ from mixsync.match.candidates import QUALITY_TIERS
 from mixsync.match.profiles import BALANCED, LOOSE, STRICT, confidence, from_confidence
 from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
-from mixsync.sources import DOWNLOAD_SOURCES
+from mixsync.sources import DOWNLOAD_SOURCES, prowlarr_protocols
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import (
     SESSION_COOKIE,
@@ -290,7 +290,10 @@ def show_worker(request: Request, admin: Admin, db: Db) -> HTMLResponse:
 def _configured(request: Request) -> set[str]:
     settings = request.app.state.services.settings
     return {
-        n for n, (_, needs) in DOWNLOAD_SOURCES.items() if all(getattr(settings, k) for k in needs)
+        n
+        for n, (_, needs) in DOWNLOAD_SOURCES.items()
+        if all(getattr(settings, k) for k in needs)
+        and (n != "prowlarr" or prowlarr_protocols(settings))  # and a download client
     }
 
 

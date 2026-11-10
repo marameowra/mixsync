@@ -2,6 +2,8 @@
 to that schema, not recorded from a live instance."""
 
 import json
+import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -27,9 +29,11 @@ from mixsync.sources.prowlarr import (
     without_key,
 )
 from mixsync.sources.qbittorrent import Qbittorrent
+from mixsync.sources.sabnzbd import Sabnzbd
 
 CASSETTES = Path(__file__).parents[2] / "cassettes" / "prowlarr"
 BASE = "http://prowlarr:9696"
+INDEXER = "https://exampleusenet.example/getnzb/4.nzb?i=7&r=INDEXER-KEY"  # Prowlarr's 301 target
 QUERY = "Test Artist Test Album"
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
@@ -94,7 +98,12 @@ def serve(
         seen.append(request)
         if request.url.path == "/api/v1/search":
             return httpx.Response(200, json=search_results() if results is None else results)
+        if request.url.host == "exampleusenet.example":  # the indexer: never Prowlarr's key
+            assert "X-Api-Key" not in request.headers
+            return httpx.Response(200, content=(CASSETTES / "album.nzb").read_bytes())
         link = request.url.params["link"]
+        if link == "nzb" and not (bodies and link in bodies):  # Usenet always redirects
+            return httpx.Response(301, headers={"Location": INDEXER})
         if bodies and link in bodies:
             return bodies[link]
         name = "album.nzb" if link == "nzb" else "album.torrent"
@@ -234,9 +243,9 @@ async def test_searches_and_fetches_share_the_prowlarr_bucket(
     )
     async with client:
         await ProwlarrSource(client, BASE, "k").search(QUERY)
-    assert len(seen) == 4 and clock.now() - datetime(2026, 1, 1, tzinfo=UTC) == timedelta(
-        seconds=6
-    )  # 1 search + 3 fetches at 1 request / 2 s; the first is free
+    assert len(seen) == 5 and clock.now() - datetime(2026, 1, 1, tzinfo=UTC) == timedelta(
+        seconds=8
+    )  # 1 search + 3 fetches (the NZB's through a redirect) at 1 request / 2 s; the first free
 
 
 def test_the_torrent_fixture_decodes() -> None:
@@ -370,3 +379,108 @@ async def test_clear_removes_only_an_unfinished_torrent(make_client: Make) -> No
     src = ProwlarrSource(make_client("prowlarr", serve([])), BASE, "k", torrents)
     await src.clear(Candidate("ExampleTracker", "x", (), source="prowlarr", infohash=ALBUM_HASH))
     assert deleted == [f"hashes={ALBUM_HASH}&deleteFiles=true"]
+
+
+def ours(caplog: pytest.LogCaptureFixture) -> str:
+    """MixSync's log lines; httpx's request log is held at WARNING in production."""
+    return "\n".join(r.getMessage() for r in caplog.records if r.name != "httpx")
+
+
+def via_tracker(
+    base: Callable[[httpx.Request], httpx.Response], reply: httpx.Response
+) -> tuple[Callable[[httpx.Request], httpx.Response], list[httpx.Request]]:
+    """`base`, plus a tracker host that answers every request with `reply`."""
+    hits: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host != "tracker.example":
+            return base(request)
+        hits.append(request)
+        assert "X-Api-Key" not in request.headers  # Prowlarr's key stays with Prowlarr
+        return reply
+
+    return handler, hits
+
+
+async def test_a_torrent_redirected_to_the_indexer_is_fetched_there_and_hash_checked(
+    make_client: Make, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Prowlarr 301s a torrent link when the indexer's Redirect is on; the indexer's URL (with
+    its passkey) is followed once and never stored or logged."""
+    caplog.set_level(logging.DEBUG)
+    album = (CASSETTES / "album.torrent").read_bytes()
+    redirect = httpx.Response(301, headers={"Location": "https://tracker.example/1?passkey=PASS"})
+    tracker = httpx.Response(200, content=album)
+    handler, hits = via_tracker(serve([], bodies={"flac": redirect}), tracker)
+    added: list[bytes] = []
+    torrents = with_torrents(make_client, added, [])
+    src = ProwlarrSource(make_client("prowlarr", handler), BASE, "k", torrents)
+    flac = next(c for c in await src.search(QUERY) if c.folder.endswith("[FLAC]"))
+    assert flac.infohash == ALBUM_HASH and "PASS" not in json.dumps(candidate_dict(flac))
+    await src.enqueue(flac)
+    assert len(hits) == 2 and album in added[0] and "PASS" not in ours(caplog)
+    # the indexer gets a plain User-Agent, never MIXSYNC_MB_CONTACT
+    assert all(re.fullmatch(r"MixSync/\S+", r.headers["User-Agent"]) for r in hits)
+
+
+async def test_a_second_redirect_is_never_followed(make_client: Make) -> None:
+    redirect = httpx.Response(301, headers={"Location": "https://tracker.example/1"})
+    again = httpx.Response(302, headers={"Location": "https://tracker.example/2"})
+    handler, hits = via_tracker(serve([], bodies={"flac": redirect}), again)
+    torrents = with_torrents(make_client, [], [])
+    src = ProwlarrSource(make_client("prowlarr", handler), BASE, "k", torrents)
+    found = await src.search(QUERY)
+    assert not [c for c in found if c.folder.endswith("[FLAC]")]
+    assert [r.url.path for r in hits] == ["/1"]
+    link = f"{BASE}/1/download?link=flac"
+    cand = Candidate("ExampleTracker", "x", (), source="prowlarr", url=link, infohash=ALBUM_HASH)
+    with pytest.raises(PermanentError, match="302"):
+        await src.enqueue(cand)
+
+
+async def test_an_nzb_redirected_to_the_indexer_goes_to_sabnzbd_as_bytes(
+    make_client: Make, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Usenet results omit their null fields (no seeders); Prowlarr always 301s an NZB link to
+    the indexer. SABnzbd gets the NZB's bytes, so neither API key is stored, logged or handed
+    to SABnzbd."""
+    caplog.set_level(logging.DEBUG)
+    calls: list[httpx.Request] = []
+
+    def sab(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if b"addfile" in request.content:
+            return httpx.Response(200, json={"status": True, "nzo_ids": ["SABnzbd_nzo_1"]})
+        return httpx.Response(200, json={"queue": {"slots": []}, "history": {"slots": []}})
+
+    usenet = Sabnzbd(make_client("sabnzbd", sab), "http://sab:8080", "s", Path("/u"))
+    only = frozenset({"usenet"})
+    src = ProwlarrSource(make_client("prowlarr", serve([])), BASE, "pkey", None, only, usenet)
+    (nzb,) = await src.search(QUERY)
+    assert nzb.username == "ExampleUsenet" and nzb.seeders == 0 and nzb.nzb_hash
+    assert nzb.url == f"{BASE}/2/download?link=nzb&file=4" and not nzb.infohash
+    assert "INDEXER-KEY" not in json.dumps(candidate_dict(nzb))
+    await src.enqueue(nzb)
+    (add,) = [r for r in calls if b"addfile" in r.content]
+    assert (CASSETTES / "album.nzb").read_bytes() in add.content
+    assert b"INDEXER-KEY" not in add.content and b"pkey" not in add.content
+    assert "INDEXER-KEY" not in ours(caplog)
+    assert (await src.status(nzb)).state is TransferStatus.FAILED  # gone from SABnzbd
+
+
+async def test_an_nzb_that_changed_since_the_search_is_never_downloaded(
+    make_client: Make,
+) -> None:
+    calls: list[httpx.Request] = []
+
+    def sab(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(500)
+
+    usenet = Sabnzbd(make_client("sabnzbd", sab), "http://sab:8080", "s", Path("/u"))
+    src = ProwlarrSource(make_client("prowlarr", serve([])), BASE, "k", usenet=usenet)
+    link = f"{BASE}/2/download?link=nzb"
+    cand = Candidate("ExampleUsenet", "x", (), source="prowlarr", url=link, nzb_hash="0" * 40)
+    with pytest.raises(PermanentError, match="changed since the search"):
+        await src.enqueue(cand)
+    assert calls == []
