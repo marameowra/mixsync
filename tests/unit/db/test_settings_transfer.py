@@ -60,6 +60,8 @@ def _source(s: Session) -> None:
             source_priority=[["Soulseek", True], ["Usenet", False]],
             navidrome_password_encrypted="ciphertext",
             slskd_api_key_encrypted="also-secret",
+            prowlarr_url="http://prowlarr:9696",
+            prowlarr_api_key_encrypted="prowlarr-secret",
         )
     )
     entity = WatchedEntity(kind="artist", mbid="mbid-1")
@@ -127,6 +129,7 @@ def test_export_import_round_trip_is_portable_and_preserves_per_user_profiles(
 
     rendered = json.dumps(document)
     assert "ciphertext" not in rendered
+    assert "prowlarr-secret" not in rendered
     assert "link-ciphertext" not in rendered
     assert "discogs-ciphertext" not in rendered
     assert "password_hash" not in rendered
@@ -151,6 +154,8 @@ def test_export_import_round_trip_is_portable_and_preserves_per_user_profiles(
         assert links["discogs"].external_username == "dj-discogs"
         assert target.get(AppSettings, 1).navidrome_password_encrypted is None
         assert target.get(AppSettings, 1).mb_rate == 0.7
+        assert target.get(AppSettings, 1).prowlarr_url == "http://prowlarr:9696"
+        assert target.get(AppSettings, 1).prowlarr_api_key_encrypted is None
         assert target.get(AppSettings, 1).source_priority == [
             ["Soulseek", True],
             ["Usenet", False],

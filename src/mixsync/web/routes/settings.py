@@ -41,6 +41,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "discogs_suggestions",
     ),
     "slskd": ("slskd_url", "slskd_max_searches", "slskd_search_debounce"),
+    "Torrent and Usenet": (
+        "prowlarr_url",
+        "qbittorrent_url",
+        "qbittorrent_username",
+        "sabnzbd_url",
+    ),
     "Downloads": (
         "max_concurrent_downloads",
         "slow_download_window",
@@ -75,6 +81,8 @@ READ_ONLY = (
     "drop_dir",
     "import_source_dir",
     "backup_dir",
+    "qbittorrent_dir",
+    "sabnzbd_dir",
 )
 
 CAP_ERROR = "Enter a whole number from 0 to 100, or leave it blank."

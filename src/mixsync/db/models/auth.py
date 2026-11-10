@@ -54,11 +54,18 @@ class AppSettings(TimestampMixin, Base):
     timezone: Mapped[str | None] = mapped_column(Text)
     path_template: Mapped[str | None] = mapped_column(Text)
     log_level: Mapped[str | None] = mapped_column(Text)
+    prowlarr_url: Mapped[str | None] = mapped_column(Text)
+    qbittorrent_url: Mapped[str | None] = mapped_column(Text)
+    qbittorrent_username: Mapped[str | None] = mapped_column(Text)
+    sabnzbd_url: Mapped[str | None] = mapped_column(Text)
     # Fernet ciphertext of the secret settings; NULL is not saved
     slskd_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
     navidrome_password_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_app_key_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_user_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    prowlarr_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    qbittorrent_password_encrypted: Mapped[str | None] = mapped_column(Text)
+    sabnzbd_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
     # [[download source, enabled], ...] in priority order, read at each search; NULL: never saved
     source_priority: Mapped[list[list[Any]] | None] = mapped_column(JSON(none_as_null=True))
 

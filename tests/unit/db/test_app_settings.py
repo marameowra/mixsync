@@ -14,6 +14,8 @@ from mixsync.db.app_settings import ENV_ONLY, Resolved, load_settings, resolve
 from mixsync.db.engine import make_engine
 from mixsync.db.migrate import downgrade, upgrade
 from mixsync.db.models.auth import AppSettings
+from mixsync.db.secretbox import load_box
+from mixsync.sources import prowlarr_protocols
 
 
 @pytest.fixture(autouse=True)
@@ -169,3 +171,42 @@ def test_migration_adds_unsaved_columns_and_downgrade_keeps_the_cap(settings: Se
         cols = {col["name"] for col in inspect(c).get_columns("app_settings")}
         assert c.execute(text("SELECT min_auto_accept_confidence FROM app_settings")).scalar() == 80
     assert "trash_days" not in cols
+
+
+def test_a_page_saved_download_source_counts_as_configured_after_restart(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_PROWLARR_URL", "http://env:9696")
+    monkeypatch.setenv("MIXSYNC_SABNZBD_DIR", "/usenet")
+    upgrade()
+    _save(settings, prowlarr_url="http://saved:9696", sabnzbd_url="http://sab:8080")
+    with Session(make_engine(settings)) as s, s.begin():
+        row = s.get(AppSettings, 1)
+        assert row
+        box = load_box(Settings())
+        row.prowlarr_api_key_encrypted = box.encrypt("p-key")
+        row.sabnzbd_api_key_encrypted = box.encrypt("s-key")
+    got = load_settings()[0]
+    assert (got.prowlarr_url, got.prowlarr_api_key, got.sabnzbd_api_key) == (
+        "http://saved:9696",
+        "p-key",
+        "s-key",
+    )
+    assert prowlarr_protocols(got) == {"usenet"}
+    assert _resolved(settings)["prowlarr_url"] == Resolved("http://saved:9696", "saved", True)
+    _save(settings, prowlarr_url=None)
+    assert _resolved(settings)["prowlarr_url"] == Resolved("http://env:9696", "environment", True)
+
+
+def test_migration_0038_adds_the_torrent_and_usenet_columns(settings: Settings) -> None:
+    def columns() -> set[str]:
+        with make_engine(settings).connect() as c:
+            return {col["name"] for col in inspect(c).get_columns("app_settings")}
+
+    new = {"prowlarr_url", "qbittorrent_username", "sabnzbd_api_key_encrypted"}
+    upgrade("0037_smart_playlists")
+    assert not columns() & new
+    upgrade()
+    assert new <= columns()
+    downgrade("0037_smart_playlists")
+    assert not columns() & new
