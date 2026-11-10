@@ -1,10 +1,12 @@
 """Mirrored playlists: list, cadence, sync now, confirm the missing-track requests, delete.
-Mirrors are made by upstream adapters (`discovery.mirrored.create`); the Loves one from here."""
+Mirrors are made by upstream adapters (`discovery.mirrored.create`); the Loves one and the
+Spotify-file upload from here."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +15,7 @@ from mixsync.core.capabilities import Capability
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import MirroredPlaylist
-from mixsync.discovery import loves, mirrored
+from mixsync.discovery import loves, mirrored, spotify_file
 from mixsync.web.deps import Db, require
 from mixsync.web.templating import templates
 
@@ -72,6 +74,38 @@ def create_loves(user: User, db: Db) -> RedirectResponse:
         )
         if taken is None:
             raise HTTPException(409, f"you already have a playlist named {loves.NAME!r}") from None
+    return RedirectResponse("/mirrored", status_code=303)
+
+
+@router.post("/spotify")
+async def upload_spotify(
+    request: Request,
+    user: User,
+    db: Db,
+    file: Annotated[UploadFile, File()],
+    name: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    """Create or update a mirror from an uploaded Spotify playlist file. The whole file is
+    checked before anything is written; a data export with several playlists needs `name`."""
+    try:
+        found = spotify_file.parse(await file.read(spotify_file.MAX_BYTES + 1), file.filename or "")
+        pick = name.strip() or (next(iter(found)) if len(found) == 1 else "")
+        if pick not in found:
+            raise spotify_file.BadFile(
+                f"playlist {pick!r} is not in the file"
+                if pick
+                else f"the file has several playlists; enter the name of one of: {', '.join(found)}"
+            )
+        if not found[pick]:
+            raise spotify_file.BadFile(f"playlist {pick!r} has no tracks")
+    except spotify_file.BadFile as e:
+        raise HTTPException(400, str(e)) from None
+    root = Path(request.app.state.settings.config_dir) / "spotify"
+    try:
+        with db.begin_nested():
+            spotify_file.SpotifyFile(root).upload(db, datetime.now(UTC), user.id, pick, found[pick])
+    except IntegrityError:
+        raise HTTPException(409, f"you already have a playlist named {pick!r}") from None
     return RedirectResponse("/mirrored", status_code=303)
 
 

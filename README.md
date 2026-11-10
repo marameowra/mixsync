@@ -29,6 +29,9 @@ does the Soulseek networking and [Navidrome](https://www.navidrome.org/) does th
   listenbrainz.org, Settings → Connect services → Last.fm, enter your Last.fm username, then
   click "Import loved tracks". The import runs only when you click it (re-running makes no
   duplicates), and loves ListenBrainz can't match to a MusicBrainz recording are skipped.
+- **Spotify playlists from a file.** Mirrored playlists, "Upload playlist file": a playlist JSON
+  from Spotify's "Download your data" export or an Exportify CSV (ISRC used when present). No
+  Spotify account link or API call. Upload a newer file for the same playlist to update it.
 - **Unverified imports.** Music missing from MusicBrainz can still be imported, and MixSync
   helps you submit it.
 - **Data safety first.** Nothing is deleted silently: removals go to a trash with a journal and an

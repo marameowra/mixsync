@@ -103,9 +103,9 @@ def create(
     return pl
 
 
-def sync_now(s: Session, now: datetime, pl: MirroredPlaylist) -> bool:
-    """Bring the queued sync forward to now. False if synced within the gap."""
-    if pl.last_synced_at and now - aware(pl.last_synced_at) < BUILD_NOW_GAP:
+def sync_now(s: Session, now: datetime, pl: MirroredPlaylist, force: bool = False) -> bool:
+    """Bring the queued sync forward to now. False if synced within the gap (unless `force`)."""
+    if not force and pl.last_synced_at and now - aware(pl.last_synced_at) < BUILD_NOW_GAP:
         return False
     pl.next_sync_at = now
     moved = cast(
