@@ -17,6 +17,7 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 | AcoustID | 3 req/s | 3 req/s | core |
 | ListenBrainz | 1 req/s + `X-RateLimit-*` | 1 req/s + headers | core |
 | Last.fm | unspecified | 1 req/s | deferred |
+| Spotify | unpublished quotas | 1 req/s (planned) | ToS check failed, maintainer decision pending ([Spotify](#spotify)) |
 | Discogs | 60/min authed, 25/min not | 50/min | release search and tracklist, on demand, per-user token ([Mark unverified](unverified-and-mb-submit.md)) |
 | Deezer | none published | 1 req/s | album search and tracklist, on demand ([Mark unverified](unverified-and-mb-submit.md)) |
 | Soulseek | 5 clients per IP | 1 slskd client | core |
@@ -54,6 +55,22 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 
 ## Last.fm
 **Deferred, not in v1; this section is the home for the deferral.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms (cl. 5.1.8, 4.7) exclude use alongside unauthorised sharing. If reconsidered: self-imposed 1 req/s, honor cache headers, cache only in the HTTP cache with a 100 MB cap, show "via Last.fm" with a link. [ToS](https://www.last.fm/api/tos)
+
+## Spotify
+**ToS check for #337 (checked 2026-11-09 against the Developer Policy and Developer Terms v10, both effective 15 May 2025). Verdict: does not hold up as designed.** Mirrored playlists would turn Spotify playlist data into Soulseek/torrent/Usenet download requests. The maintainer decides whether to close #337 as `wontfix`.
+
+Against:
+- Terms IV.2.3: "Do not use the Spotify Platform, Spotify Service or Spotify Content for any illegal or unauthorized purpose". Policy I.3: "Don't break the law or encourage or enable others to do so." Most P2P downloads of commercial music are unauthorised copies, so feeding Spotify playlists into them is the use this clause excludes. This is the same reason [Last.fm](#lastfm) is deferred.
+- Terms IV.2.8.1 rules out promoting, with Spotify materials, an app that "facilitates, or condones" "the illegal or unauthorized use or sharing of audio and/or audiovisual content".
+- Terms II.8 counts "metadata, playlists, and user data" as Spotify Content. Terms IV.2.5: "do not transfer Spotify Content to third parties", which sending track names to download sources does.
+- Policy III.5: "Do not create any product or service which is integrated with streams or content from another service."
+- Terms IV.3.1: no "databases of Spotify Content" beyond what is "strictly necessary", and "Do not store Spotify Content indefinitely". A mirrored playlist kept in the DB needs a refresh-or-delete rule.
+
+For:
+- Policy III.9 allows transferring "the metadata of the user's playlists to another service" at the user's request. That covers a one-shot, user-triggered import of a playlist's track list. It does not obviously cover a live sync that queues downloads.
+- Terms III.1.1 licenses apps "for private personal use", which a single-household, bring-your-own-client-ID install is.
+
+If reconsidered: restrict scope to a manual one-shot import under Policy III.9 (user presses "Import", no live sync). Request only `playlist-read-private` (Policy I.1.1). Delete a user's Spotify data when they disconnect (Terms V.8; within 5 days per Appendix A 5.c). Self-imposed 1 req/s and honor `Retry-After`. Even then, the downloads it leads to still raise the IV.2.3 problem. [Developer Policy](https://developer.spotify.com/policy), [Developer Terms](https://developer.spotify.com/terms)
 
 ## Discogs and Deezer (fallbacks, off by default)
 - Discogs (`MIXSYNC_DISCOGS_SUGGESTIONS`, default off): 60 req/min authenticated, 25 unauthenticated, per IP over 60 s; service `discogs`, bucket at 50/min; `X-Discogs-Ratelimit-Remaining: 0` blocks the bucket for 60 s (a moving window, no reset header); unique UA; each reviewer links their own personal token on the account page (no shared token, no unauthenticated access). Requests carry `Authorization`, so they are never cached. Only a reviewer pressing "Suggest" on Mark unverified causes requests (a search, then a release); never on page load, in VERIFY or in a job. Numbers come from an OpenAPI copy (the official page blocks fetching): re-check by hand before enabling.
