@@ -9,6 +9,7 @@ from mixsync.core.types import (
     AcoustIdResult,
     EntityRef,
     Fingerprint,
+    LibrarySong,
     RecordingRef,
     ReleaseGroupHit,
     ReleaseRef,
@@ -116,6 +117,7 @@ class UserLibrary(Protocol):
         self, song_ids: list[str]
     ) -> dict[str, int]: ...
     async def music_folders(self) -> dict[str, str]: ...  # library name -> id
+    async def library_songs(self, music_folder_id: str | None = None) -> list[LibrarySong]: ...
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
     ) -> str | None: ...

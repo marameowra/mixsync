@@ -12,7 +12,7 @@ from mixsync.acquire.requests import hold_imports
 from mixsync.core.clock import aware
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.types import RecordingRef
+from mixsync.core.types import LibrarySong, RecordingRef
 from mixsync.db.auth import create_user
 from mixsync.db.engine import user_sessions
 from mixsync.db.models.accounts import UserLink
@@ -83,6 +83,8 @@ class FakeLib:
         self.playlists: dict[str, list[str]] = {}
         self.names: dict[str, str] = {}
         self.credentials: list[tuple[str, str]] = []
+        self.songs: list[LibrarySong] = []  # what library_songs lists
+        self.listed: list[str | None] = []  # the music folder of each library_songs call
 
     async def push_playlist(self, name: str, song_ids: list[str], existing_id: str | None) -> str:
         pid = existing_id if existing_id in self.playlists else f"pl{len(self.playlists) + 1}"
@@ -97,6 +99,12 @@ class FakeLib:
 
     async def music_folders(self) -> dict[str, str]:
         return self.folders
+
+    async def library_songs(self, music_folder_id: str | None = None) -> list[LibrarySong]:
+        if self.error:
+            raise self.error
+        self.listed.append(music_folder_id)
+        return self.songs
 
     async def resolve(
         self, recording_mbid: str, title: str, artist: str, music_folder_id: str | None = None
