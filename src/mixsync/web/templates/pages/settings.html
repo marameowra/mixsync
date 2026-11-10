@@ -28,14 +28,15 @@
     {% for f in fields %}
     <div class="field{% if f.error %} invalid{% endif %}">
       <label for="f-{{ f.name }}">{{ f.name }}</label>
+      <span class="help" id="d-{{ f.name }}">{{ f.help }}</span>
       {% if f.kind == "bool" %}
-      <select id="f-{{ f.name }}" name="{{ f.name }}">
+      <select id="f-{{ f.name }}" name="{{ f.name }}" aria-describedby="d-{{ f.name }}">
         <option value="">Not saved</option>
         <option value="true"{% if f.value|lower == "true" %} selected{% endif %}>true</option>
         <option value="false"{% if f.value|lower == "false" %} selected{% endif %}>false</option>
       </select>
       {% else %}
-      <input id="f-{{ f.name }}" name="{{ f.name }}" type="text" value="{{ f.value }}" placeholder="{{ f.effective }}"{% if f.error %} aria-invalid="true"{% endif %}>
+      <input id="f-{{ f.name }}" name="{{ f.name }}" type="text" value="{{ f.value }}" placeholder="{{ f.effective }}" aria-describedby="d-{{ f.name }}"{% if f.error %} aria-invalid="true"{% endif %}>
       {% endif %}
       {% if f.name in connection_tests %}{{ test_button(connection_tests[f.name]) }}{% endif %}
       <span class="help"><span class="tag neutral">source: {{ f.source }}</span> Effective value: {{ f.effective }}
@@ -52,7 +53,8 @@
     {% for f in secrets %}
     <div class="field">
       <label for="f-{{ f.name }}">{{ f.name }}</label>
-      <input id="f-{{ f.name }}" name="{{ f.name }}" type="password" autocomplete="new-password" value="">
+      <span class="help" id="d-{{ f.name }}">{{ f.help }}</span>
+      <input id="f-{{ f.name }}" name="{{ f.name }}" type="password" autocomplete="new-password" value="" aria-describedby="d-{{ f.name }}">
       {% if f.name in connection_tests %}{{ test_button(connection_tests[f.name]) }}{% endif %}
       <span class="help"><span class="tag neutral">{% if f.source == "saved" %}saved{% elif f.source == "environment" %}from environment{% else %}not set{% endif %}</span>
         {% if f.source == "saved" or f.unreadable %}<button class="btn quiet" type="submit" form="clear-{{ f.name }}">Clear {{ f.name }}</button>{% endif %}</span>
@@ -74,6 +76,6 @@
 <form method="post" action="/settings/missing-tracks/scan">{{ forms.csrf() }}<button type="submit">Scan requests for missing tracks</button></form>
 <h2>Set in the environment only</h2>
 <dl>
-  {% for name, value in read_only.items() %}<dt>{{ name }}</dt><dd><code>{{ value }}</code></dd>{% endfor %}
+  {% for name, (value, help) in read_only.items() %}<dt>{{ name }}</dt><dd><code aria-describedby="d-{{ name }}">{{ value }}</code> <span class="help" id="d-{{ name }}">{{ help }}</span></dd>{% endfor %}
 </dl>
 {% endblock %}

@@ -85,6 +85,11 @@ READ_ONLY = (
     "sabnzbd_dir",
 )
 
+
+def _help(name: str) -> str:
+    return Settings.model_fields[name].description or ""
+
+
 CAP_ERROR = "Enter a whole number from 0 to 100, or leave it blank."
 
 
@@ -121,6 +126,7 @@ def _page(
         mine = r.source == "saved"
         fields[name] = {
             "name": name,
+            "help": _help(name),
             "env": f"MIXSYNC_{name.upper()}",
             "kind": "bool" if isinstance(r.value, bool) else "text",
             "source": r.source,
@@ -132,6 +138,7 @@ def _page(
     secrets = [
         {
             "name": n,
+            "help": _help(n),
             "env": f"MIXSYNC_{n.upper()}",
             "source": resolved[n].source,
             "unreadable": resolved[n].unreadable,
@@ -143,7 +150,7 @@ def _page(
         "user": user,
         "secrets": secrets,
         "groups": {title: [fields[n] for n in names] for title, names in GROUPS.items()},
-        "read_only": {n: _text(getattr(settings, n)) or "not set" for n in READ_ONLY},
+        "read_only": {n: (_text(getattr(settings, n)) or "not set", _help(n)) for n in READ_ONLY},
         "cap": submitted["cap"] if "cap" in submitted else "" if cap is None else confidence(cap),
         "cap_error": errors.get("cap"),
         "saved": saved,

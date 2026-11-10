@@ -143,7 +143,7 @@ td .who { display: flex; gap: var(--space-3); align-items: center; }
 /* Form fields: label above, help below. Bare labels and inputs get the same look. */
 .field { display: grid; gap: var(--space-1); max-width: 24rem; }
 .field label, label { font: 600 13px/18px var(--font-sans); }
-.field .help { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.field .help, dd .help { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .input, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="submit"]), select, textarea { font: 400 15px/22px var(--font-sans); padding: var(--space-2) var(--space-3); min-height: 36px; width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
 input[type="number"] { font-family: var(--font-mono); }
 .input.num { width: 6rem; font-family: var(--font-mono); }
