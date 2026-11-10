@@ -59,8 +59,8 @@ profiles and quality preferences, app settings, follows, discovery playlist defi
 and linked-account identities. The JSON uses natural keys and a versioned format.
 Mirrored and smart playlist definitions are exported too, plus the stored track list of
 Spotify-file mirrors (written on import only if absent, so the mirror syncs without a
-re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt on
-the next sync or build.
+re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt after the worker
+restarts (or on Sync now / Rebuild now).
 It excludes library files, requests, operation journals, match decisions, and worker run
 state. This seeds or recovers settings; it does not replace a database backup or migrate
 a whole install between SQLite and Postgres.

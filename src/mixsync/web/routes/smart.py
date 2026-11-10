@@ -18,7 +18,6 @@ from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/smart")
 User = Annotated[AuthUser, Depends(require(Capability.request))]
-INTS = ("year_from", "year_to", "added_days", "unplayed_days")
 
 
 def _own(db: Db, user: AuthUser, playlist_id: int) -> SmartPlaylist:
@@ -48,13 +47,15 @@ async def _fields(request: Request) -> dict[str, Any]:
     rules: dict[str, Any] = {}
     if genre := form.get("genre", "").strip()[:100]:
         rules["genre"] = genre
-    for key in INTS:
+    for key in smart.INTS:
         if (n := _int(form, key, 0, 9999 if key.startswith("year") else 36500)) is not None:
             rules[key] = n
-    if rules.get("year_from", 0) > rules.get("year_to", 9999):
-        raise HTTPException(400, "the year range must run from the earlier year to the later")
     if form.get("starred"):
         rules["starred"] = True
+    try:
+        smart.validate_rules(rules)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
     sort = form.get("sort", "random")
     if sort not in smart.SORTS:
         raise HTTPException(400, "unknown sort")

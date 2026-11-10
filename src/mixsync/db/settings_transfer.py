@@ -19,8 +19,8 @@ from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
 from mixsync.db.models.discovery import DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
-from mixsync.discovery.mirrored import UpstreamTrack
-from mixsync.discovery.smart import SORTS
+from mixsync.discovery.mirrored import LOVES, UpstreamTrack
+from mixsync.discovery.smart import INTS, SORTS, validate_rules
 from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
 from mixsync.discovery.spotify_file import SpotifyFile
 from mixsync.watchlist.follows import RELEASE_TYPES
@@ -70,7 +70,6 @@ _MIRROR_FIELDS = frozenset(
 )
 _MIRROR_REQUIRED = _MIRROR_FIELDS - {"tracks"}
 _SMART_FIELDS = frozenset({"username", "name", "rules", "size", "sort", "cadence_days"})
-_SMART_INTS = ("year_from", "year_to", "added_days", "unplayed_days")  # as the smart web form
 _SPOTIFY_REF = re.compile(r"[0-9a-f]{32}")  # ref_for(); keeps the file path inside its root
 # older exports predate these keys (#401)
 _OPTIONAL_KEYS = ("mirrored_playlists", "smart_playlists")
@@ -196,7 +195,7 @@ def export_settings(
         }
         if m.upstream_kind == SPOTIFY_FILE and spotify_root is not None:
             try:
-                path = spotify_root / str(m.user_id) / f"{m.upstream_ref}.json"
+                path = SpotifyFile(spotify_root).path(m.user_id, m.upstream_ref)
                 item["tracks"] = json.loads(path.read_text("utf-8"))
             except (OSError, ValueError):
                 warn(
@@ -364,27 +363,18 @@ def _when(value: str | None) -> datetime | None:
 
 def _track(value: Any, path: str) -> dict[str, Any]:
     d = _object(value, path, frozenset({"artist", "title", "isrc"}), frozenset({"artist", "title"}))
-    _string(d["artist"], f"{path}.artist", allow_empty=True, max_length=500)
-    _string(d["title"], f"{path}.title", allow_empty=True, max_length=500)
-    _string(d.get("isrc"), f"{path}.isrc", nullable=True, max_length=32)
+    _string(d["artist"], f"{path}.artist", allow_empty=True)  # uploads cap none of these
+    _string(d["title"], f"{path}.title", allow_empty=True)
+    _string(d.get("isrc"), f"{path}.isrc", nullable=True, allow_empty=True)
     return d
 
 
 def _smart_rules(value: Any, path: str) -> dict[str, Any]:
-    """The same rules the smart playlist form accepts."""
-    rules = _object(value, path, frozenset({"genre", "starred", *_SMART_INTS}))
-    if "genre" in rules:
-        _string(rules["genre"], f"{path}.genre", max_length=100)
-    if "starred" in rules and rules["starred"] is not True:
-        raise TransferError(f"{path}.starred: expected true")
-    for k in _SMART_INTS:
-        if k in rules:
-            n = _int(rules[k], f"{path}.{k}")
-            assert n is not None
-            if not 0 <= n <= (9999 if k.startswith("year") else 36500):
-                raise TransferError(f"{path}.{k}: integer is outside the supported range")
-    if rules.get("year_from", 0) > rules.get("year_to", 9999):
-        raise TransferError(f"{path}: year_from must not exceed year_to")
+    rules = _object(value, path, frozenset({"genre", "starred", *INTS}))
+    try:
+        validate_rules(rules)
+    except ValueError as e:
+        raise TransferError(f"{path}: {e}") from None
     return rules
 
 
@@ -652,9 +642,13 @@ def _validate_document(
                     raise TransferError(
                         f"{path}.auto_request_since: expected an ISO 8601 date-time"
                     ) from None
+                if kind not in (LOVES, SPOTIFY_FILE):
+                    raise TransferError(f"{path}.upstream_kind: unknown mirror kind")
+                assert ref is not None
+                if kind == SPOTIFY_FILE and not _SPOTIFY_REF.fullmatch(ref):
+                    raise TransferError(f"{path}.upstream_ref: not a Spotify file reference")
                 if "tracks" in d:
-                    assert ref is not None
-                    if kind != SPOTIFY_FILE or not _SPOTIFY_REF.fullmatch(ref):
+                    if kind != SPOTIFY_FILE:
                         raise TransferError(f"{path}.tracks: only for a spotify_file mirror")
                     for j, t in enumerate(_list(d["tracks"], f"{path}.tracks")):
                         _track(t, f"{path}.tracks[{j}]")
@@ -687,6 +681,14 @@ def _validate_document(
     return root
 
 
+def _file_writer(store: SpotifyFile, uid: int, item: dict[str, Any]) -> Callable[[], None]:
+    def write() -> None:
+        if not store.path(uid, item["upstream_ref"]).exists():  # never overwrite
+            store.save(uid, item["upstream_ref"], [UpstreamTrack(**t) for t in item["tracks"]])
+
+    return write
+
+
 def import_settings(
     s: Session,
     document: Any,
@@ -694,9 +696,12 @@ def import_settings(
     apply: bool = False,
     include_secrets: bool = False,
     spotify_root: Path | None = None,
+    file_writes: list[Callable[[], None]] | None = None,
 ) -> dict[str, Any]:
-    """Validate, classify and optionally insert rows. Caller owns the transaction. On apply,
-    exported Spotify track lists are written under `spotify_root` unless a file is already there."""
+    """Validate, classify and optionally insert rows. Caller owns the transaction. Exported
+    Spotify track lists under `spotify_root` are not written here: on apply each pending write
+    (a no-op if the file exists by then) is appended to `file_writes` for the caller to run after
+    the commit. The report's `track_files` rows say what would be written."""
     role_names = set(s.scalars(select(Role.name)).all())
     doc = _validate_document(document, include_secrets=include_secrets, known_roles=role_names)
     existing_users = {u.username: u for u in s.scalars(select(User)).all()}
@@ -746,9 +751,11 @@ def import_settings(
             "discovery_playlists",
             "mirrored_playlists",
             "smart_playlists",
+            "track_files",
             "linked_accounts",
         )
     }
+    track_plans: list[tuple[dict[str, Any], bool]] = []  # (mirror item, file absent)
     for user in doc["users"]:
         add = user["username"] not in existing_users
         rows["users"].append({"key": user["username"], "action": "add" if add else "skip"})
@@ -782,6 +789,20 @@ def import_settings(
         rows["mirrored_playlists"].append(
             {"key": f"{item['username']}:{item['name']}", "action": "skip" if taken else "add"}
         )
+        same = (item["username"], item["upstream_kind"], item["upstream_ref"]) in mirror_upstreams
+        if "tracks" in item and spotify_root is not None and (not taken or same):
+            user = existing_users.get(item["username"])
+            absent = (
+                user is None
+                or not SpotifyFile(spotify_root).path(user.id, item["upstream_ref"]).exists()
+            )
+            track_plans.append((item, absent))
+            rows["track_files"].append(
+                {
+                    "key": f"{item['username']}:{item['name']}",
+                    "action": "add" if absent else "skip",
+                }
+            )
     for item in doc["smart_playlists"]:
         ident = (item["username"], item["name"])
         rows["smart_playlists"].append(
@@ -894,11 +915,12 @@ def import_settings(
                     auto_request_since=_when(item["auto_request_since"]),
                 )
             )
-        if "tracks" in item and spotify_root is not None:
-            store = SpotifyFile(spotify_root)
-            uid = user_ids[item["username"]]
-            if not store._path(uid, item["upstream_ref"]).exists():  # pyright: ignore[reportPrivateUsage]
-                store.save(uid, item["upstream_ref"], [UpstreamTrack(**t) for t in item["tracks"]])
+    if spotify_root is not None and file_writes is not None:
+        for item, absent in track_plans:
+            if absent:
+                file_writes.append(
+                    _file_writer(SpotifyFile(spotify_root), user_ids[item["username"]], item)
+                )
     for item, planned in zip(doc["smart_playlists"], rows["smart_playlists"], strict=True):
         if planned["action"] == "add":
             s.add(

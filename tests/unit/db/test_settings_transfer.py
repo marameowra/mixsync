@@ -470,7 +470,11 @@ def _playlists(s: Session, root: Path, *, write_file: bool = True) -> None:
                 entries=[{"artist": "x"}],
             ),
             MirroredPlaylist(
-                user_id=second.id, name="Other", upstream_kind="x", upstream_ref="r", cadence_days=1
+                user_id=second.id,
+                name="Other",
+                upstream_kind="listenbrainz_loves",
+                upstream_ref="r",
+                cadence_days=1,
             ),
             SmartPlaylist(
                 user_id=dj.id,
@@ -517,7 +521,7 @@ def test_mirrored_and_smart_playlists_round_trip_without_runtime_state(
     target_root = tmp_path / "dst-spotify"
     target_sessions = _destination(tmp_path / "target.db")
     with target_sessions() as target, target.begin():
-        import_settings(target, document, apply=True, spotify_root=target_root)
+        _apply(target, document, target_root)
     with target_sessions() as target:
         mirrors = {m.name: m for m in target.scalars(select(MirroredPlaylist))}
         assert {n: target.get(User, m.user_id).username for n, m in mirrors.items()} == {
@@ -549,13 +553,13 @@ def test_spotify_track_list_is_not_overwritten_or_written_on_dry_run(
         import_settings(target, document, spotify_root=target_root)
     assert not target_root.exists()
     with target_sessions() as target, target.begin():
-        import_settings(target, document, apply=True, spotify_root=target_root)
+        _apply(target, document, target_root)
     with target_sessions() as target:
         uid = target.scalar(select(User.id).where(User.username == "dj"))
     path = target_root / str(uid) / f"{REF}.json"
     path.write_text("[]")
     with target_sessions() as target, target.begin():
-        import_settings(target, document, apply=True, spotify_root=target_root)
+        _apply(target, document, target_root)
     assert path.read_text() == "[]"
 
 
@@ -607,3 +611,104 @@ def test_an_export_without_playlist_keys_still_imports(sessions, tmp_path: Path)
     with target_sessions() as target:
         assert target.scalar(select(func.count()).select_from(User)) == 2
         assert target.scalar(select(func.count()).select_from(SmartPlaylist)) == 0
+
+
+def _apply(target: Session, document: dict, root: Path | None = None) -> dict:
+    writes: list = []
+    report = import_settings(target, document, apply=True, spotify_root=root, file_writes=writes)
+    for write in writes:
+        write()
+    return report
+
+
+def _spotify_item(document: dict) -> dict:
+    return document["mirrored_playlists"][0]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d["mirrored_playlists"].append({**_spotify_item(d), "name": "Same upstream"}),
+        lambda d: _spotify_item(d).update(
+            upstream_kind="listenbrainz_loves"
+        ),  # tracks on a non-file mirror
+        lambda d: _spotify_item(d).update(upstream_kind="mystery"),
+    ],
+)
+def test_invalid_mirror_identity_or_tracks_are_rejected(sessions, tmp_path: Path, mutate) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    mutate(document)
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target:
+        with pytest.raises(TransferError):
+            import_settings(target, document)
+
+
+def test_spotify_mirror_without_tracks_needs_a_hex_ref(sessions, tmp_path: Path) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    del _spotify_item(document)["tracks"]
+    _spotify_item(document)["upstream_ref"] = "../../x"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target:
+        with pytest.raises(TransferError):
+            import_settings(target, document)
+
+
+def test_missing_track_file_of_an_existing_mirror_is_restored(sessions, tmp_path: Path) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        _apply(target, document, root)
+    with target_sessions() as target:
+        uid = target.scalar(select(User.id).where(User.username == "dj"))
+    (root / str(uid) / f"{REF}.json").unlink()
+    with target_sessions() as target:
+        report = import_settings(target, document, spotify_root=root)
+        assert report["rows"]["track_files"] == [{"key": "dj:Loves", "action": "add"}]
+    with target_sessions() as target, target.begin():
+        _apply(target, document, root)
+    assert (root / str(uid) / f"{REF}.json").exists()
+
+
+def test_mirror_skipped_for_a_name_collision_writes_no_track_file(sessions, tmp_path: Path) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        _apply(target, {**document, "mirrored_playlists": []})
+        dj = target.scalar(select(User).where(User.username == "dj"))
+        target.add(
+            MirroredPlaylist(
+                user_id=dj.id,
+                name="Loves",
+                upstream_kind="listenbrainz_loves",
+                upstream_ref="other",
+            )
+        )
+    with target_sessions() as target, target.begin():
+        report = _apply(target, document, root)
+    assert report["rows"]["track_files"] == []
+    assert not root.exists()
+
+
+def test_long_titles_round_trip_and_ids_may_differ_in_the_destination(
+    sessions, tmp_path: Path
+) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    _spotify_item(document)["tracks"] = [{"artist": "A", "title": "T" * 600, "isrc": None}]
+    root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        _roles(target)
+        role = target.scalar(select(Role).where(Role.name == "user"))
+        other = User(username="aaa", status="active", password_hash="x")
+        target.add(other)
+        target.flush()
+        target.add(UserRole(user_id=other.id, role_id=role.id))
+    with target_sessions() as target, target.begin():
+        _apply(target, document, root)
+    with target_sessions() as target:
+        uid = target.scalar(select(User.id).where(User.username == "dj"))
+    assert uid != 1  # the pre-existing user took the first id
+    assert json.loads((root / str(uid) / f"{REF}.json").read_text())[0]["title"] == "T" * 600

@@ -93,8 +93,8 @@ existing users, settings, follows, playlists, and links are skipped, never overw
 Repeated imports are safe. This transfers settings, not music, request history, or the
 operation journal; retain normal database and host backups. Mirrored and smart playlist definitions are exported too, plus the stored track list of
 Spotify-file mirrors (written on import only if absent, so the mirror syncs without a
-re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt on
-the next sync or build.
+re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt after the worker
+restarts (or on Sync now / Rebuild now).
 If app settings were added, run
 `docker compose -f deploy/compose.yml restart mixsync-web mixsync-worker` to reload their
 startup settings. The settings page's restart warning tracks the imported version.

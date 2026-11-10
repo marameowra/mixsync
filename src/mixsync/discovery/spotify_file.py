@@ -110,12 +110,12 @@ class SpotifyFile:
     def __init__(self, root: Path) -> None:
         self.root = root
 
-    def _path(self, user_id: int, ref: str) -> Path:
+    def path(self, user_id: int, ref: str) -> Path:
         return self.root / str(user_id) / f"{ref}.json"
 
     async def tracks(self, user_id: int, ref: str) -> list[UpstreamTrack]:
         try:
-            rows = json.loads(self._path(user_id, ref).read_text("utf-8"))
+            rows = json.loads(self.path(user_id, ref).read_text("utf-8"))
         except (OSError, ValueError):
             raise PermanentError(
                 "the uploaded track list is missing; upload the file again"
@@ -123,7 +123,7 @@ class SpotifyFile:
         return [UpstreamTrack(r["artist"], r["title"], r["isrc"]) for r in rows]
 
     def save(self, user_id: int, ref: str, tracks: list[UpstreamTrack]) -> None:
-        path = self._path(user_id, ref)
+        path = self.path(user_id, ref)
         body = json.dumps([{"artist": t.artist, "title": t.title, "isrc": t.isrc} for t in tracks])
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
