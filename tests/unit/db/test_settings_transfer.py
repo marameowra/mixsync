@@ -56,6 +56,7 @@ def _source(s: Session) -> None:
         AppSettings(
             id=1,
             mb_rate=0.7,
+            source_priority=[["Soulseek", True], ["Usenet", False]],
             navidrome_password_encrypted="ciphertext",
             slskd_api_key_encrypted="also-secret",
         )
@@ -148,6 +149,10 @@ def test_export_import_round_trip_is_portable_and_preserves_per_user_profiles(
         assert links["discogs"].external_username == "dj-discogs"
         assert target.get(AppSettings, 1).navidrome_password_encrypted is None
         assert target.get(AppSettings, 1).mb_rate == 0.7
+        assert target.get(AppSettings, 1).source_priority == [
+            ["Soulseek", True],
+            ["Usenet", False],
+        ]
         saved_at = target.get(AppSettings, 1).settings_saved_at
         assert saved_at is not None
         assert "web" in restart_pending(target, None, datetime.now(UTC) + timedelta(minutes=1))
@@ -181,6 +186,12 @@ def test_import_dry_run_and_repeat_are_read_only_and_idempotent(sessions, tmp_pa
         lambda d: d["discovery_playlists"][0].update(sources=[{}]),
         lambda d: d["users"][0]["matching_profile"].update(auto_accept_max=0.9),
         lambda d: d["users"][0]["matching_profile"].update(auto_accept_max=10**400),
+        lambda d: d["app_settings"].update(source_priority="Soulseek"),
+        lambda d: d["app_settings"].update(
+            source_priority=[["Soulseek", True], ["Soulseek", False]]
+        ),
+        lambda d: d["app_settings"].update(source_priority=[["Soulseek", 1]]),
+        lambda d: d["app_settings"].update(source_priority=[["Soulseek"]]),
     ],
 )
 def test_invalid_document_is_rejected_before_any_write(sessions, tmp_path: Path, mutate) -> None:
@@ -384,3 +395,19 @@ def test_import_accepts_historical_quality_preference_defaults(sessions, tmp_pat
         profile = target.scalar(select(MatchingProfile))
         assert profile is not None
         assert profile.quality_pref == {"tiers": ["lossless"]}
+
+
+def test_source_priority_empty_array_is_a_valid_saved_setting(sessions, tmp_path: Path) -> None:
+    with sessions() as source, source.begin():
+        _source(source)
+        app = source.get(AppSettings, 1)
+        assert app is not None
+        app.source_priority = []
+        document = export_settings(source)
+        assert document["app_settings"]["source_priority"] == []
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True)
+    with target_sessions() as target:
+        app = target.get(AppSettings, 1)
+        assert app is not None and app.source_priority == []

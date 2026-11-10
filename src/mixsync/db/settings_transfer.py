@@ -17,7 +17,7 @@ from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
 
 FORMAT_VERSION = 1
-_APP_FIELDS = frozenset((*EDITABLE, "min_auto_accept_confidence"))
+_APP_FIELDS = frozenset((*EDITABLE, "min_auto_accept_confidence", "source_priority"))
 _PROFILE_FIELDS = frozenset({"name", "preset", "auto_accept_max", "review_max", "quality_pref"})
 _USER_FIELDS = frozenset(
     {"username", "display_name", "status", "roles", "password_hash", "matching_profile"}
@@ -344,6 +344,38 @@ def _validate_document(
                     raise TransferError(
                         f"$.app_settings.{name}: expected null or an integer from 0 to 100"
                     )
+            elif name == "source_priority":
+                if value is not None:
+                    if not isinstance(value, list):
+                        raise TransferError(
+                            "$.app_settings.source_priority: expected null or an array"
+                        )
+                    pairs = cast(list[Any], value)
+                    names: set[str] = set()
+                    for i, raw_pair in enumerate(pairs):
+                        if not isinstance(raw_pair, list) or len(raw_pair) != 2:
+                            raise TransferError(
+                                f"$.app_settings.source_priority[{i}]: expected a name and "
+                                "boolean pair"
+                            )
+                        pair = cast(list[Any], raw_pair)
+                        name_value, enabled = pair
+                        if not isinstance(name_value, str) or not name_value:
+                            raise TransferError(
+                                f"$.app_settings.source_priority[{i}][0]: expected a non-empty "
+                                "source name"
+                            )
+                        if type(enabled) is not bool:
+                            raise TransferError(
+                                f"$.app_settings.source_priority[{i}][1]: expected a boolean"
+                            )
+                        if name_value in names:
+                            raise TransferError(
+                                "$.app_settings.source_priority: duplicate source name "
+                                f"{name_value!r}"
+                            )
+                        names.add(name_value)
+                    normalized_app[name] = value
             else:
                 from pydantic import TypeAdapter
 
