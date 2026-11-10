@@ -17,7 +17,7 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 | AcoustID | 3 req/s | 3 req/s | core |
 | ListenBrainz | 1 req/s + `X-RateLimit-*` | 1 req/s + headers | core |
 | Last.fm | unspecified | 1 req/s | deferred |
-| Spotify | unpublished quotas | 1 req/s (planned) | ToS check failed, maintainer decision pending ([Spotify](#spotify)) |
+| Spotify | unpublished quotas | 1 req/s (planned) | one-shot playlist import, library match only, never feeds downloads ([Spotify](#spotify)) |
 | Discogs | 60/min authed, 25/min not | 50/min | release search and tracklist, on demand, per-user token ([Mark unverified](unverified-and-mb-submit.md)) |
 | Deezer | none published | 1 req/s | album search and tracklist, on demand ([Mark unverified](unverified-and-mb-submit.md)) |
 | Soulseek | 5 clients per IP | 1 slskd client | core |
@@ -59,7 +59,9 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 **Deferred, not in v1; this section is the home for the deferral.** MixSync turns recommendations into Soulseek downloads, and Last.fm's terms (cl. 5.1.8, 4.7) exclude use alongside unauthorised sharing. If reconsidered: self-imposed 1 req/s, honor cache headers, cache only in the HTTP cache with a 100 MB cap, show "via Last.fm" with a link. [ToS](https://www.last.fm/api/tos)
 
 ## Spotify
-**ToS check for #337 (rechecked 2026-11-10 against the live Developer Policy and Developer Terms v10, effective 15 May 2025). Verdict: not permitted, because the only user-facing route, queuing P2P downloads from Spotify playlists, falls under the Terms' "illegal or unauthorized purpose" ban.** The maintainer decides whether to close #337 as `wontfix`.
+**ToS check for #337 (rechecked 2026-11-10 against the live Developer Policy and Developer Terms v10, effective 15 May 2025). Verdict: not permitted, because the only user-facing route, queuing P2P downloads from Spotify playlists, falls under the Terms' "illegal or unauthorized purpose" ban.** Owning the music doesn't change this: the clauses below cover what the app facilitates and where Spotify Content goes, and most jurisdictions don't treat downloading (or seeding) another copy as covered by owning one. #337 was rescoped on 2026-11-10 to the library-match-only import under [Rescoped design](#rescoped-design-337).
+
+The analysis below is of the original live sync.
 
 What mixsync would do: read-only `playlist-read-private`, a bring-your-own client ID (development mode: "Up to 5 authenticated Spotify users", and "The app owner must have a Spotify Premium account"; extended quota is for organizations with "at least 250k MAUs"), OAuth per user, self-imposed 1 req/s, and `Retry-After` honored ("Consider waiting for the number of seconds specified in `Retry-After`"; limit is a rolling 30 s window). Flow: Spotify playlist, resolve to MusicBrainz, missing tracks become `Request(source=playlist)` after owner confirmation, downloaded via Soulseek/torrent/Usenet.
 
@@ -75,7 +77,14 @@ For:
 - Policy III.9 allows transferring "the metadata of the user's playlists to another service" at the user's request. That covers a one-shot, user-triggered import of a playlist's track list. It does not obviously cover a live sync that queues downloads.
 - Terms III.1.1 licenses apps "for private personal use", which a single-household, bring-your-own-client-ID install is.
 
-If reconsidered: restrict scope to a manual one-shot import under Policy III.9 (user presses "Import", no live sync). Request only `playlist-read-private` (Policy I.1.1). Delete a user's Spotify data when they disconnect (Terms V.8; within 5 days per Appendix A 5.c). Self-imposed 1 req/s and honor `Retry-After`. Even then, the downloads it leads to still raise the IV.2.3 problem. The existing file-import path (#334, no Spotify API, no Spotify account) is not covered by these terms, which govern use of the Spotify Platform. [Developer Policy](https://developer.spotify.com/policy), [Developer Terms](https://developer.spotify.com/terms)
+### Rescoped design (#337)
+- A manual one-shot import under Policy III.9: the user presses "Import". No live sync, no polling.
+- Match against the local library only: build a Navidrome playlist from files already owned, and *list* missing tracks.
+- Spotify-sourced data never becomes a `Request` and never reaches a download source. This removes the IV.2.3, IV.2.5 and IV.2.8.1 problems; keep it under test. Policy III.5 is still arguable; III.9 is the explicit carve-out for moving a user's playlist to another service, and this design does no more than that.
+- Request only `playlist-read-private` (Policy I.1.1). Drop raw Spotify playlist data once the import finishes (Terms IV.3.1). Delete a user's Spotify data when they disconnect (Terms V.8; within 5 days per Appendix A 5.c).
+- Self-imposed 1 req/s and honor `Retry-After`.
+
+The existing file-import path (#334, no Spotify API, no Spotify account) is not covered by these terms, which govern use of the Spotify Platform. [Developer Policy](https://developer.spotify.com/policy), [Developer Terms](https://developer.spotify.com/terms)
 
 ## Discogs and Deezer (fallbacks, off by default)
 - Discogs (`MIXSYNC_DISCOGS_SUGGESTIONS`, default off): 60 req/min authenticated, 25 unauthenticated, per IP over 60 s; service `discogs`, bucket at 50/min; `X-Discogs-Ratelimit-Remaining: 0` blocks the bucket for 60 s (a moving window, no reset header); unique UA; each reviewer links their own personal token on the account page (no shared token, no unauthenticated access). Requests carry `Authorization`, so they are never cached. Only a reviewer pressing "Suggest" on Mark unverified causes requests (a search, then a release); never on page load, in VERIFY or in a job. Numbers come from an OpenAPI copy (the official page blocks fetching): re-check by hand before enabling.
