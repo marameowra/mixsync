@@ -141,3 +141,24 @@ def test_torrents_are_a_download_source_only_with_prowlarr_and_qbittorrent_set(
         _, _, handlers, _ = worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]
         assert list(_owner(handlers, JobKind.SEARCH).sources) == names
         assert services.fileops.seeding(save / "x.flac") is (len(names) == 2)  # the backstop
+
+
+def test_usenet_is_offered_only_with_sabnzbd_set_and_its_dir_is_released_from(
+    settings: Settings, sessions: sessionmaker[Session], tmp_path: Path
+) -> None:
+    prowlarr = {"prowlarr_url": "http://prowlarr:9696", "prowlarr_api_key": "k"}
+    nzb_dir = tmp_path / "usenet"
+    sab = {"sabnzbd_url": "http://sabnzbd:8080", "sabnzbd_api_key": "s", "sabnzbd_dir": nzb_dir}
+    qbit = {"qbittorrent_url": "http://qbittorrent:8080", "qbittorrent_dir": tmp_path / "t"}
+    cases = [
+        ({**prowlarr, **sab, "sabnzbd_api_key": ""}, None),
+        ({**prowlarr, **sab}, {"usenet"}),
+        ({**prowlarr, **sab, **qbit}, {"usenet", "torrent"}),
+    ]
+    for extra, protocols in cases:
+        services = build_services(settings.model_copy(update=extra), sessions)
+        _, _, handlers, _ = worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]
+        src = _owner(handlers, JobKind.SEARCH).sources.get("prowlarr")
+        got = getattr(src, "_protocols", None)
+        assert got == (frozenset(protocols) if protocols else None)
+        assert services.fileops.usenet_dir == nzb_dir

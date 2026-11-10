@@ -44,10 +44,11 @@ from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
-from mixsync.sources import DOWNLOAD_SOURCES
+from mixsync.sources import DOWNLOAD_SOURCES, prowlarr_protocols
 from mixsync.sources.prowlarr import ProwlarrSource
 from mixsync.sources.qbittorrent import Qbittorrent
 from mixsync.sources.query import queries
+from mixsync.sources.sabnzbd import Sabnzbd
 from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
 from mixsync.watchlist.poller import Watcher
@@ -200,8 +201,10 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
             debounce=timedelta(seconds=settings.slskd_search_debounce),
         ),
     }
-    needs = DOWNLOAD_SOURCES["prowlarr"][1]  # qbittorrent_dir among them
-    if (save := settings.qbittorrent_dir) and all(getattr(settings, k) for k in needs):
+    needs = DOWNLOAD_SOURCES["prowlarr"][1]
+    protocols = prowlarr_protocols(settings)  # only what a configured client downloads
+    if protocols and all(getattr(settings, k) for k in needs):
+        save, nzb_dir = settings.qbittorrent_dir, settings.sabnzbd_dir
         sources["prowlarr"] = ProwlarrSource(
             PoliteClient("prowlarr", settings, sessions),
             settings.prowlarr_url,
@@ -212,8 +215,18 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
                 settings.qbittorrent_username,
                 settings.qbittorrent_password,
                 save,
-            ),
-            protocols=frozenset({"torrent"}),  # NZBs wait for SABnzbd (#327)
+            )
+            if "torrent" in protocols and save
+            else None,
+            protocols=protocols,
+            usenet=Sabnzbd(
+                PoliteClient("sabnzbd", settings, sessions),
+                settings.sabnzbd_url,
+                settings.sabnzbd_api_key,
+                nzb_dir,
+            )
+            if "usenet" in protocols and nzb_dir
+            else None,
         )
 
     return Pipeline(

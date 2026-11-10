@@ -21,8 +21,9 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 | Discogs | 60/min authed, 25/min not | 50/min | release search and tracklist, on demand, per-user token ([Mark unverified](unverified-and-mb-submit.md)) |
 | Deezer | none published | 1 req/s | album search and tracklist, on demand ([Mark unverified](unverified-and-mb-submit.md)) |
 | Soulseek | 5 clients per IP | 1 slskd client | core |
-| Prowlarr | per indexer, enforced by Prowlarr | 1 req / 2 s (searches and `.torrent`/`.nzb` fetches, including the re-fetch at enqueue) | torrents, with qBittorrent ([sources](../../src/mixsync/sources/README.md#prowlarr)) |
+| Prowlarr | per indexer, enforced by Prowlarr | 1 req / 2 s (searches and `.torrent`/`.nzb` fetches, including the re-fetch at enqueue and the one redirect to the indexer they may take) | torrents with qBittorrent, NZBs with SABnzbd ([sources](../../src/mixsync/sources/README.md#prowlarr)) |
 | qBittorrent | local service | unlimited, like slskd | torrent downloads; seeding is left to its ratio rules ([sources](../../src/mixsync/sources/README.md#qbittorrent)) |
+| SABnzbd | local service | unlimited, like slskd | NZB downloads ([sources](../../src/mixsync/sources/README.md#sabnzbd)) |
 
 ## MusicBrainz
 - Over the limit, *all* requests from the IP are refused (HTTP 503). The limit is per IP and shared with every MB client on the network (soulsync, Picard, beets, Lidarr): pause them during heavy work such as migration. `blocked_until` pauses all workers.

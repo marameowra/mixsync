@@ -39,6 +39,9 @@ ENV_ONLY = frozenset(
         "qbittorrent_username",
         "qbittorrent_password",
         "qbittorrent_dir",
+        "sabnzbd_url",
+        "sabnzbd_api_key",
+        "sabnzbd_dir",
     }
 )
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page

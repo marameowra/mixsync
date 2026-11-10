@@ -73,6 +73,7 @@ def build_services(
         clock,
         settings.drop_dir,
         settings.qbittorrent_dir,
+        settings.sabnzbd_dir,
     )
     musicbrainz = MusicBrainzProvider(
         PoliteClient("musicbrainz", settings, session_factory),

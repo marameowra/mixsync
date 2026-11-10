@@ -1,7 +1,8 @@
 """The only module that writes under the data dir. See docs/design/data-safety.md.
 
 The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir
-(or an accepted review candidate from `quarantine/`, where `quarantine()` copies dropped downloads)
+or the SABnzbd dir (or an accepted review candidate from `quarantine/`, where `quarantine()`
+copies dropped downloads)
 (a drop-dir original is first copied into `.trash/<day>/.drop/` and checked; a seeding download,
 under the qBittorrent save path, is never released: it is only ever copied, ADR 0022),
 `clear_work()`, which empties MixSync's own re-encode scratch space, and
@@ -106,6 +107,7 @@ class FileOps:
         clock: Clock,
         drop_dir: Path | None = None,
         seeding_dir: Path | None = None,
+        usenet_dir: Path | None = None,
     ) -> None:
         self.library = data_dir / "library"
         self.quarantine_dir = data_dir / "quarantine"
@@ -121,6 +123,7 @@ class FileOps:
         self.downloads = downloads_dir
         self.drop = drop_dir
         self.seeding_dir = seeding_dir  # qBittorrent's save path for MixSync's torrents
+        self.usenet_dir = usenet_dir  # SABnzbd's mixsync folder: released like /downloads
         self._journal = journal
         self._clock = clock
 
@@ -279,17 +282,24 @@ class FileOps:
         """Whether src is a seeding download: copied from, never released (ADR 0022)."""
         return self.seeding_dir is not None and self.seeding_dir.resolve() in src.resolve().parents
 
+    def _download_base(self, real: Path) -> Path:
+        """The downloads dir, or the SABnzbd dir when real is inside it."""
+        if self.usenet_dir is not None and self.usenet_dir.resolve() in real.parents:
+            return self.usenet_dir.resolve()
+        return self.downloads.resolve()
+
     def release(self, src: Path, batch_id: str, root: str = "library") -> None:
         """Delete a download once its copy under root from this batch is verified. Refuses
-        anything not strictly inside the downloads dir (symlinks and `..` included). A file in
+        anything not strictly inside the downloads dir or the SABnzbd dir (symlinks and `..`
+        included). A file in
         the drop dir is not deleted: it moves to `.trash/<day>/.drop/` (copied and hash-checked
         first, as the drop dir may be another mount), so the user can recover it. A seeding
         download is refused whatever the caller says (ADR 0022)."""
         if self.seeding(src):
             raise SafetyError(f"{src} is a seeding download; it is never released")
-        dl = self.downloads.resolve()
         drop = self.drop.resolve() if self.drop else None
         real = src.resolve()
+        dl = self._download_base(real)
         in_drop = drop is not None and drop in real.parents
         base = drop if in_drop and drop else dl
         if self.quarantine_dir.resolve() in real.parents:  # an accepted review candidate
@@ -333,8 +343,8 @@ class FileOps:
             if old[0] == kind:
                 return src
             name = "/".join(old[2:])
-        elif self.downloads.resolve() in real.parents:
-            name = str(real.relative_to(self.downloads.resolve()))
+        elif (dl := self._download_base(real)) in real.parents:
+            name = str(real.relative_to(dl))
         elif self.seeding_dir is not None and self.seeding(src):
             name = str(real.relative_to(self.seeding_dir.resolve()))
         else:  # not a download (an old library's file, say): never ours to move

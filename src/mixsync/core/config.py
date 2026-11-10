@@ -34,12 +34,15 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     slskd_max_searches: int = Field(default=2, ge=1)  # slskd searches in flight, all workers
     slskd_search_debounce: int = Field(default=300, ge=0)  # seconds a query's result is reused
-    prowlarr_url: str = ""  # its torrents download through qBittorrent; Usenet waits for #327
+    prowlarr_url: str = ""  # its torrents download through qBittorrent, NZBs through SABnzbd
     prowlarr_api_key: str = ""
     qbittorrent_url: str = ""
     qbittorrent_username: str = ""
     qbittorrent_password: str = ""
     qbittorrent_dir: Path | None = None  # the `mixsync` category's save path: seeding, copy only
+    sabnzbd_url: str = ""
+    sabnzbd_api_key: str = ""
+    sabnzbd_dir: Path | None = None  # the `mixsync` category's folder: released after import
     max_concurrent_downloads: int = Field(default=3, ge=1)
     slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
     slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow
@@ -88,13 +91,16 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _drop_dir_apart(self) -> "Settings":
         """The drop folder holds originals that get moved to the trash, the qBittorrent dir
-        seeding downloads that are only ever copied (ADR 0022); neither may overlap the library,
-        the downloads, the old library or each other."""
-        mounts = ("data_dir", "downloads_dir", "import_source_dir", "drop_dir")
-        if self.qbittorrent_dir is not None and not Path(self.qbittorrent_dir).is_absolute():
-            # qBittorrent resolves a relative save path against its own default, not ours
-            raise ValueError("MIXSYNC_QBITTORRENT_DIR must be an absolute path")
-        for name in ("drop_dir", "qbittorrent_dir"):
+        seeding downloads that are only ever copied (ADR 0022), the SABnzbd dir Usenet downloads
+        released after import; none may overlap the library, the downloads, the old library or
+        each other, so adopt and the drop folder never scan a client's dir."""
+        own = ("drop_dir", "qbittorrent_dir", "sabnzbd_dir")
+        mounts = ("data_dir", "downloads_dir", "import_source_dir", *own)
+        for name in own[1:]:
+            if (d := getattr(self, name)) is not None and not Path(d).is_absolute():
+                # the client resolves a relative path against its own default, not ours
+                raise ValueError(f"MIXSYNC_{name.upper()} must be an absolute path")
+        for name in own:
             if (mine := getattr(self, name)) is None:
                 continue
             here = Path(mine).resolve()

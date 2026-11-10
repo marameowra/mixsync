@@ -153,6 +153,7 @@ class Candidate:
     source: str = "slskd"  # the download source it came from; the pipeline sets it per search
     url: str = ""  # an indexer release's download link, never with the API key in it
     infohash: str = ""  # a torrent's v1 info hash (lowercase hex); Soulseek and Usenet leave it
+    nzb_hash: str = ""  # an NZB's file-list SHA-1 (lowercase hex); names its SABnzbd job
 
 
 class TransferStatus(StrEnum):

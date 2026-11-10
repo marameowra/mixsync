@@ -117,7 +117,13 @@ def test_torrents_are_configured_only_with_prowlarr_and_qbittorrent_both_set(
 ) -> None:
     prowlarr = {"prowlarr_url": "http://prowlarr:9696", "prowlarr_api_key": "k"}
     qbit = {"qbittorrent_url": "http://qbittorrent:8080", "qbittorrent_dir": "/torrents"}
-    for settings, on in ((Settings(**prowlarr), False), (Settings(**prowlarr, **qbit), True)):
+    sab = {"sabnzbd_url": "http://sabnzbd:8080", "sabnzbd_api_key": "s", "sabnzbd_dir": "/usenet"}
+    cases = (
+        (Settings(**prowlarr), False),
+        (Settings(**prowlarr, **qbit), True),
+        (Settings(**prowlarr, **sab), True),  # Usenet alone is enough
+    )
+    for settings, on in cases:
         for c in client_for(sf, settings):
             login(c, "root")
             page = c.get("/account/sources").text

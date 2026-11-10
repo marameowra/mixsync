@@ -100,6 +100,26 @@ def test_release_after_discover_import(ops: FileOps, make_src: MakeSrc, data_dir
     assert not src.exists() and (data_dir / "discover" / REL).exists()
 
 
+def test_a_usenet_download_is_released_with_the_same_checks_as_downloads(
+    data_dir: Path, journal: SqlJournal, make_src: MakeSrc, tmp_path: Path
+) -> None:
+    usenet = tmp_path / "usenet"
+    ops = FileOps(data_dir, tmp_path / "downloads", journal, SystemClock(), usenet_dir=usenet)
+    (usenet / "Job").mkdir(parents=True)
+    src = make_src().rename(usenet / "Job" / "src.flac")
+    (usenet / "link.flac").symlink_to(src)
+    ops.import_file(src, "A/B/x.flac", append_tag, "b1")
+    with pytest.raises(SafetyError):
+        ops.release(usenet / "link.flac", "b1")
+    with pytest.raises(SafetyError):
+        ops.release(usenet / "Job" / ".." / "Job" / "src.flac", "b1")
+    ops.release(src, "b1")
+    assert not src.exists() and not (usenet / "Job").exists() and usenet.is_dir()
+    other = make_src(name="other").rename(usenet / "other.flac")
+    copy = ops.quarantine(other, "rejected", "q1")  # a verified copy, then a release
+    assert copy.is_file() and not other.exists() and not ops.seeding(copy)
+
+
 def test_release_and_quarantine_never_touch_a_seeding_download(
     data_dir: Path, journal: SqlJournal, make_src: MakeSrc, tmp_path: Path
 ) -> None:
