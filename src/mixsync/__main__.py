@@ -141,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
         with make_session_factory(make_engine())() as s, s.begin():
             create_user(s, args.username, password, admin=args.admin)
     elif cmd == "export-settings":
+        from pathlib import Path
+
+        from mixsync.core.config import Settings
         from mixsync.db.engine import make_engine, make_session_factory
         from mixsync.db.settings_transfer import export_settings
 
@@ -148,7 +151,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("export-settings accepts --output and --include-secrets only")
         try:
             with make_session_factory(make_engine())() as s:
-                document = export_settings(s, include_secrets=args.include_secrets)
+                document = export_settings(
+                    s,
+                    include_secrets=args.include_secrets,
+                    spotify_root=Path(Settings().config_dir) / "spotify",
+                    warn=lambda msg: print(msg, file=sys.stderr),
+                )
             rendered = json.dumps(document, indent=2, sort_keys=True) + "\n"
             if args.include_secrets:
                 print(
@@ -164,6 +172,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"export-settings failed: {e}", file=sys.stderr)
             return 1
     elif cmd == "import-settings":
+        from collections.abc import Callable
+        from pathlib import Path
+
+        from mixsync.core.config import Settings
         from mixsync.db.engine import make_engine, make_session_factory
         from mixsync.db.settings_transfer import import_settings
 
@@ -174,14 +186,25 @@ def main(argv: list[str] | None = None) -> int:
         try:
             with open(args.username, encoding="utf-8") as f:
                 document = json.load(f)
+            spotify_root = Path(Settings().config_dir) / "spotify"
+            file_writes: list[Callable[[], None]] = []
             with make_session_factory(make_engine())() as s:
                 if args.apply:
                     with s.begin():
                         report = import_settings(
-                            s, document, apply=True, include_secrets=args.include_secrets
+                            s,
+                            document,
+                            apply=True,
+                            include_secrets=args.include_secrets,
+                            spotify_root=spotify_root,
+                            file_writes=file_writes,
                         )
+                    for write in file_writes:  # only once the rows are committed
+                        write()
                 else:
-                    report = import_settings(s, document, include_secrets=args.include_secrets)
+                    report = import_settings(
+                        s, document, include_secrets=args.include_secrets, spotify_root=spotify_root
+                    )
             print(json.dumps(report, indent=2, sort_keys=True))
         except (OSError, ValueError, RecursionError) as e:  # JSON, Unicode and TransferError too
             print(f"import-settings failed: {e}", file=sys.stderr)

@@ -25,6 +25,25 @@ log = logging.getLogger(__name__)
 SORTS = {"random": "Random", "added": "Recently added first", "year": "Year, oldest first"}
 NONE_FOUND = "Navidrome lists none of the owned tracks; skipped push"
 Owned = tuple[str, str | None, datetime]  # (recording MBID, year tag, imported_at)
+INTS = ("year_from", "year_to", "added_days", "unplayed_days")
+
+
+def validate_rules(rules: dict[str, Any]) -> None:
+    """Raise ValueError unless `rules` is one the smart playlist form could have produced."""
+    if unknown := set(rules) - {"genre", "starred", *INTS}:
+        raise ValueError(f"unknown rule(s): {', '.join(sorted(unknown))}")
+    if "genre" in rules and not (
+        isinstance(rules["genre"], str) and 1 <= len(rules["genre"]) <= 100
+    ):
+        raise ValueError("genre is 1 to 100 characters")
+    if "starred" in rules and rules["starred"] is not True:
+        raise ValueError("starred is true or absent")
+    for key in INTS:
+        hi = 9999 if key.startswith("year") else 36500
+        if key in rules and not (type(rules[key]) is int and 0 <= rules[key] <= hi):
+            raise ValueError(f"{key.replace('_', ' ')} is a whole number from 0 to {hi}")
+    if rules.get("year_from", 0) > rules.get("year_to", 9999):
+        raise ValueError("the year range must run from the earlier year to the later")
 
 
 def waiting(playlist_id: int) -> Select[Any]:

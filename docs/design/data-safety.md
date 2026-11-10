@@ -57,7 +57,10 @@ Before any tag write, the full original tag set is stored in the DB, keyed by fi
 `mixsync export-settings > settings.json` exports users, roles, per-user matching
 profiles and quality preferences, app settings, follows, discovery playlist definitions,
 and linked-account identities. The JSON uses natural keys and a versioned format.
-Mirrored and smart playlists are not exported yet (#401); recreate them after an import.
+Mirrored and smart playlist definitions are exported too, plus the stored track list of
+Spotify-file mirrors (written on import only if absent, so the mirror syncs without a
+re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt after the worker
+restarts (or on Sync now / Rebuild now).
 It excludes library files, requests, operation journals, match decisions, and worker run
 state. This seeds or recovers settings; it does not replace a database backup or migrate
 a whole install between SQLite and Postgres.
