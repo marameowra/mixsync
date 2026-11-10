@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire import lifecycle, verify
 from mixsync.acquire.evidence import Evidence
+from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobKind, JobState, backoff
 from mixsync.core.matching import Candidate, CandidateFile, Profile
+from mixsync.db.auth import capabilities
 from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
@@ -109,10 +111,33 @@ def create_request(
         provisional=provisional,
         recording_mbids=recordings,
     )
+    owner = s.get(User, user_id)
+    if owner is not None and Capability.download_auto not in capabilities(s, owner):
+        lifecycle.pending_approval(req)  # no search until someone with `approve` approves it
     s.add(req)
     s.flush()
-    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
+    if req.status != "pending_approval":
+        enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
     return req
+
+
+class NotAwaiting(ValueError):
+    """The request is no longer waiting for approval (approved or denied already)."""
+
+
+def approve(s: Session, now: datetime, req: Request) -> None:
+    """Into the pipeline exactly as a request made with automatic downloads."""
+    if req.status != "pending_approval":
+        raise NotAwaiting("request is not awaiting approval")
+    lifecycle.approved(req)
+    enqueue_in(s, now, JobKind.SEARCH, {"request_id": req.id}, priority=search_priority(req))
+
+
+def deny(req: Request, reason: str) -> None:
+    """Ends the request: nothing is searched or downloaded; the requester sees the reason."""
+    if req.status != "pending_approval":
+        raise NotAwaiting("request is not awaiting approval")
+    lifecycle.denied(req, reason)
 
 
 def hold_imports(s: Session, now: datetime, batch: str) -> None:

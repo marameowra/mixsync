@@ -13,7 +13,8 @@
   "not found": ("review", "◐", "Not found"), "not_found": ("review", "◐", "Not found"),
   "expired": ("review", "◐", "Expired"), "skipped_cap": ("review", "◐", "Weekly limit reached"),
   "skipped_filter": ("review", "◐", "Filtered out"), "skipped_owned": ("confident", "●", "Already owned"),
-  "skipped_requested": ("neutral", "○", "Already requested"), "skipped": ("neutral", "○", "Skipped")
+  "skipped_requested": ("neutral", "○", "Already requested"), "skipped": ("neutral", "○", "Skipped"),
+  "pending_approval": ("review", "◐", "Awaiting approval"), "denied": ("reject", "✕", "Denied")
 } %}
 {% set tone, glyph, word = states.get(value, ("neutral", "○", value|replace("_", " ")|capitalize if value else "Pending")) %}
 <span class="tag status {{ tone }}"><span aria-hidden="true">{{ glyph }}</span>{{ label if label is not none else word }}</span>

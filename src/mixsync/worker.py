@@ -32,6 +32,8 @@ from mixsync.discovery.mirrored import LOVES, Mirror
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.resolver import TrackResolver
 from mixsync.discovery.retention import Retention
+from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
+from mixsync.discovery.spotify_file import SpotifyFile
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
@@ -337,11 +339,14 @@ def _new_queue(
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
     )
-    # upstream adapters register here by kind (#334 Spotify file next)
+    # upstream adapters register here by kind
     mirror = Mirror(
         discovery,
         TrackResolver(services.musicbrainz, listenbrainz).resolve,
-        {LOVES: Loves(discovery, listenbrainz)},
+        {
+            LOVES: Loves(discovery, listenbrainz),
+            SPOTIFY_FILE: SpotifyFile(Path(settings.config_dir) / "spotify"),
+        },
     )
     handlers = (
         HANDLERS

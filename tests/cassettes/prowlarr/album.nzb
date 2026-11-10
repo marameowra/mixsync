@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
+<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
+ <head><meta type="title">Test.Artist-Test.Album-WEB-2020-GRP</meta></head>
+ <file poster="poster@example.invalid" date="1600000000" subject="[1/3] - &quot;01 - Opening.flac&quot; yEnc (1/2)">
+  <groups><group>alt.binaries.sounds.flac</group></groups>
+  <segments><segment bytes="16000000" number="1">a1@example.invalid</segment><segment bytes="14600000" number="2">a2@example.invalid</segment></segments>
+ </file>
+ <file poster="poster@example.invalid" date="1600000000" subject="[2/3] - &quot;02 - Middle.flac&quot; yEnc (1/1)">
+  <groups><group>alt.binaries.sounds.flac</group></groups>
+  <segments><segment bytes="31600000" number="1">b1@example.invalid</segment></segments>
+ </file>
+ <file poster="poster@example.invalid" date="1600000000" subject="[3/3] - &quot;03 - Closer.flac&quot; yEnc (1/1)">
+  <groups><group>alt.binaries.sounds.flac</group></groups>
+  <segments><segment bytes="29600000" number="1">c1@example.invalid</segment></segments>
+ </file>
+</nzb>

@@ -12,6 +12,7 @@ from mixsync.core.protocols import NameLookup, ReleaseWatch
 from mixsync.db.auth import AuthUser, user_for_session
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
+from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.secretbox import SecretBox
 from mixsync.library.fileops import FileOps
 from mixsync.metadata.coverart import CoverArtClient
@@ -96,7 +97,7 @@ def current_user(request: Request, db: Db) -> AuthUser:
     user = user_for_session(db, token, datetime.now(UTC)) if token else None
     if user is None:
         raise HTTPException(303, headers={"Location": "/login"})
-    counts: dict[str, int | None] = {"pending": None, "unverified": None}
+    counts: dict[str, int | None] = {"pending": None, "unverified": None, "approvals": None}
     if request.method == "GET" and (
         request.url.path == "/" or "text/html" in request.headers.get("accept", "")
     ):
@@ -108,6 +109,9 @@ def current_user(request: Request, db: Db) -> AuthUser:
             if Capability.approve not in user.capabilities:
                 query = query.where(MatchDecision.user_id == user.id)
             counts["pending"] = db.scalar(query) or 0
+        if Capability.approve in user.capabilities:
+            awaiting = AlbumRequest.status == "pending_approval"
+            counts["approvals"] = db.scalar(select(func.count(AlbumRequest.id)).where(awaiting))
         if Capability.library_edit in user.capabilities:
             counts["unverified"] = (
                 db.scalar(select(func.count(Track.id)).where(Track.status == "unverified")) or 0

@@ -11,6 +11,13 @@
 <p>To mirror your ListenBrainz loved tracks (including Last.fm loves imported there), <a href="/account">link ListenBrainz on your account page</a>.</p>
 {% endif %}
 {% endif %}
+<form method="post" action="/mirrored/spotify" enctype="multipart/form-data">
+  {{ forms.csrf() }}
+  <p>Mirror a Spotify playlist from a file (no Spotify account link needed): a playlist JSON from Spotify's "Download your data" export, or an <a href="https://exportify.net">Exportify</a> CSV (with ISRC for best matching). Uploading a newer file for the same playlist updates it; the same file again changes nothing. Up to 5 MB.</p>
+  <p class="field"><label>File <input name="file" type="file" accept=".json,.csv" required></label></p>
+  <p class="field"><label>Playlist name (only if a data export holds several) <input name="name" type="text"></label></p>
+  <button type="submit">Upload playlist file</button>
+</form>
 {% if not rows %}<p class="empty">No mirrored playlists yet.</p>{% endif %}
 
 {% for p in rows %}

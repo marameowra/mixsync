@@ -426,3 +426,17 @@ def test_rename_to_a_taken_name_rerenders_with_an_error(
     assert r.status_code == 400 and "already have a playlist" in r.text
     with sf() as s:
         assert s.get_one(DiscoveryPlaylist, pid).name == "Discovery"
+
+
+def test_a_denied_request_shows_as_denied(client: TestClient, sf: sessionmaker[Session]) -> None:
+    pid = _seed(sf)
+    m = "0000000e-0000-0000-0000-000000000000"
+    with sf() as s, s.begin():
+        uid = s.scalars(select(User.id).where(User.username == "alice")).one()
+        r = WorkRequest(user_id=uid, release_mbid="r", status="denied", provisional=True)
+        s.add(r)
+        s.flush()
+        rid = r.id
+    _extra(sf, pid, m, request_id=rid)
+    _login(client, "alice")
+    assert _status(client.get("/discover").text.split("<h2>Discovery")[1], m[:8]) == "denied"

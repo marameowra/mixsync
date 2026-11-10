@@ -48,7 +48,7 @@ Each external system sits behind a small interface (`core/protocols.py`).
 
 | Interface | v1 | Later |
 |---|---|---|
-| `DownloadSource` | slskd | Prowlarr + qBittorrent/SABnzbd, yt-dlp |
+| `DownloadSource` | slskd; Prowlarr search (`sources/prowlarr.py`, not wired until a download client exists) | qBittorrent/SABnzbd download clients (#326, #327) |
 | `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs (`metadata/discogs.py`), Deezer (`metadata/deezer.py`) |
 | `LibraryTarget` | Navidrome | Jellyfin, Plex, Music Assistant |
 | `HistorySource` | ListenBrainz (plays and stars come through `UserLibrary`) | |
@@ -62,7 +62,8 @@ Python 3.13, uv, ruff, pyright (strict), import-linter. FastAPI, pydantic v2, Ji
 
 ## Users and permissions
 - Local accounts with a standard login form (`autocomplete="username"` / `"current-password"`) so password managers work.
-- Roles bundle capabilities (`core/capabilities.py`). v1 ships only `admin` and `user`; the approval queue and role editor come later.
+- Roles bundle capabilities (`core/capabilities.py`). There are only `admin` and `user`; a role editor comes later.
+- Automatic downloads is a per-user flag (default on; admins always have it). Off, it takes `download.auto` away, and every request the user makes (by hand, watchlist or discovery) is created `pending_approval` with no search, waiting in the approval queue (`/approvals`). Someone with `approve` approves it (it searches as any request) or denies it (it ends `denied`, with the reason shown on the requester's page).
 - Each user links a Navidrome account (stars, plays), optionally ListenBrainz, and has a matching profile (strict / balanced / loose) setting their thresholds.
 
 ## Repo layout

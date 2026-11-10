@@ -1,0 +1,188 @@
+[
+  {
+    "id": 1,
+    "guid": "https://exampletracker.example/details/1",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 90200000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 1,
+    "indexer": "ExampleTracker",
+    "title": "Test Artist - Test Album (2020) [FLAC]",
+    "sortTitle": "test artist - test album (2020) [flac]",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": "http://prowlarr:9696/1/download?apikey=REDACTED&link=flac&file=1",
+    "infoUrl": "https://exampletracker.example/details/1",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": 12,
+    "leechers": 1,
+    "protocol": "torrent",
+    "fileName": "Test Artist - Test Album (2020) [FLAC].torrent"
+  },
+  {
+    "id": 2,
+    "guid": "https://exampletracker.example/details/2",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 200000000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 1,
+    "indexer": "ExampleTracker",
+    "title": "Test Artist - Live at Somewhere (2019)",
+    "sortTitle": "test artist - live at somewhere (2019)",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": "http://prowlarr:9696/1/download?apikey=REDACTED&link=live&file=2",
+    "infoUrl": "https://exampletracker.example/details/2",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": 500,
+    "leechers": 1,
+    "protocol": "torrent",
+    "fileName": "Test Artist - Live at Somewhere (2019).torrent"
+  },
+  {
+    "id": 3,
+    "guid": "https://exampletracker.example/details/3",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 400000000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 1,
+    "indexer": "ExampleTracker",
+    "title": "Test Artist - Test Album [FLAC 24bit]",
+    "sortTitle": "test artist - test album [flac 24bit]",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": null,
+    "infoUrl": "https://exampletracker.example/details/3",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": "magnet:?xt=urn:btih:0000000000000000000000000000000000000000&dn=Test+Album",
+    "infoHash": null,
+    "seeders": 999,
+    "leechers": 1,
+    "protocol": "torrent",
+    "fileName": "Test Artist - Test Album [FLAC 24bit].torrent"
+  },
+  {
+    "id": 4,
+    "guid": "https://exampleusenet.example/details/4",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 92000000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 2,
+    "indexer": "ExampleUsenet",
+    "title": "Test.Artist-Test.Album-WEB-2020-GRP",
+    "sortTitle": "test.artist-test.album-web-2020-grp",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": "http://prowlarr:9696/2/download?apikey=REDACTED&link=nzb&file=4",
+    "infoUrl": "https://exampleusenet.example/details/4",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": null,
+    "leechers": null,
+    "protocol": "usenet",
+    "fileName": "Test.Artist-Test.Album-WEB-2020-GRP.nzb"
+  },
+  {
+    "id": 5,
+    "guid": "https://exampletracker.example/details/5",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 90100000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 1,
+    "indexer": "ExampleTracker",
+    "title": "Test Artist - Test Album (2020) [MP3 320]",
+    "sortTitle": "test artist - test album (2020) [mp3 320]",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": "http://prowlarr:9696/1/download?apikey=REDACTED&link=mp3&file=5",
+    "infoUrl": "https://exampletracker.example/details/5",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": 40,
+    "leechers": 1,
+    "protocol": "torrent",
+    "fileName": "Test Artist - Test Album (2020) [MP3 320].torrent"
+  },
+  {
+    "id": 6,
+    "guid": "https://othertracker.example/details/6",
+    "age": 120,
+    "ageHours": 2880.0,
+    "ageMinutes": 172800.0,
+    "size": 8000000000,
+    "files": null,
+    "grabs": 10,
+    "indexerId": 3,
+    "indexer": "OtherTracker",
+    "title": "Test Artist - Test Album",
+    "sortTitle": "test artist - test album",
+    "publishDate": "2020-06-01T00:00:00Z",
+    "downloadUrl": "http://prowlarr:9696/3/download?apikey=REDACTED&link=huge&file=6",
+    "infoUrl": "https://othertracker.example/details/6",
+    "indexerFlags": [],
+    "categories": [
+      {
+        "id": 3040,
+        "name": "Audio/Lossless",
+        "subCategories": []
+      }
+    ],
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": 100,
+    "leechers": 1,
+    "protocol": "torrent",
+    "fileName": "Test Artist - Test Album.torrent"
+  }
+]

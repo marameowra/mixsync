@@ -92,12 +92,23 @@ def user_for_session(s: Session, token: str, now: datetime) -> AuthUser | None:
         return None
     if now - aware(row.last_seen_at) > _LAST_SEEN_EVERY:  # every request writing holds the lock
         row.last_seen_at = now
-    caps = s.scalars(
-        select(RoleCapability.capability)
-        .join(UserRole, UserRole.role_id == RoleCapability.role_id)
-        .where(UserRole.user_id == user.id)
+    return AuthUser(user.id, user.username, capabilities(s, user))
+
+
+def capabilities(s: Session, user: User) -> frozenset[Capability]:
+    """The user's roles' capabilities, less `download_auto` when their flag is off. Admins keep
+    every capability whatever the flag says."""
+    caps = frozenset(
+        Capability(c)
+        for c in s.scalars(
+            select(RoleCapability.capability)
+            .join(UserRole, UserRole.role_id == RoleCapability.role_id)
+            .where(UserRole.user_id == user.id)
+        )
     )
-    return AuthUser(user.id, user.username, frozenset(Capability(c) for c in caps))
+    if user.download_auto or Capability.admin in caps:
+        return caps
+    return caps - {Capability.download_auto}
 
 
 def delete_session(s: Session, token: str) -> None:

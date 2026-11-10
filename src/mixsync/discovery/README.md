@@ -4,7 +4,7 @@
 Per-user playlists built from listening history, including tracks not yet owned, plus the retention rules that decide whether those provisional tracks stay.
 
 ## Owns / does not own
-- **Owns:** the ListenBrainz adapter (`listenbrainz.py`, a `HistorySource`), playlist building (`playlists.py`; unowned tracks become `Request(provisional=True, source=discovery)`), keep/expire decisions (`retention.py`), and the shared playlist track resolver (`resolver.py`: ISRC via MusicBrainz, else ListenBrainz lookup, accepted only at the matcher's balanced auto-accept band; otherwise unresolved, never guessed), and mirrored playlists (`mirrored.py`: per-user copies of upstream playlists; adapters implement `Upstream` and call `create`; missing tracks become `Request(source=playlist)` only on the owner's confirmation).
+- **Owns:** the ListenBrainz adapter (`listenbrainz.py`, a `HistorySource`), playlist building (`playlists.py`; unowned tracks become `Request(provisional=True, source=discovery)`), keep/expire decisions (`retention.py`), and the shared playlist track resolver (`resolver.py`: ISRC via MusicBrainz, else ListenBrainz lookup, accepted only at the matcher's balanced auto-accept band; otherwise unresolved, never guessed), and mirrored playlists (`mirrored.py`: per-user copies of upstream playlists; adapters implement `Upstream` and call `create`; missing tracks become `Request(source=playlist)` only on the owner's confirmation), and the Spotify-file upstream (`spotify_file.py`: parses a data-export JSON or Exportify CSV; the last uploaded track list is kept as JSON under `config_dir/spotify`, no Spotify API).
 - **Does not own:** downloading (the normal request pipeline), file moves (`library.fileops`), or Navidrome calls (the injected `LibraryTarget`).
 
 ## Rules / invariants
@@ -20,6 +20,7 @@ Per-user playlists built from listening history, including tracks not yet owned,
 - `listenbrainz`: `core`, `ratelimit`.
 - `resolver`: `core`, `match`, `metadata`, `listenbrainz`.
 - `playlists`, `retention`: `core`, `db`, `match`, `library`.
+- `spotify_file`: `core`, `db`, `discovery.mirrored`.
 - `mirrored`: `core`, `db`, `acquire.lifecycle`, `acquire.requests`, `discovery.playlists` (the resolver and adapters are injected).
 
 ## Design doc

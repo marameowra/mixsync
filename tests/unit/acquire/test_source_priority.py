@@ -116,3 +116,22 @@ def test_a_candidate_stored_before_sources_existed_loads_as_soulseek() -> None:
     file = {"path": "a.flac", "size": 1, "extension": "flac"}
     old = {"username": "peer1", "folder": FOLDER, "files": [file]}  # no "source" key
     assert candidate_from_dict(old).source == "slskd"
+
+
+class CappedSource(FakeSource):
+    max_queries = 2  # like Prowlarr: only the first query variants
+
+
+async def test_a_source_with_max_queries_is_asked_only_that_many_variants(env: Env) -> None:
+    capped = CappedSource(env.downloads, env.data_dir.parent / "scratch2")
+    variants = ["q1", "q2", "q3", "q4"]
+    env.pipeline = replace(
+        env.pipeline,
+        sources={"slskd": env.source, "capped": capped},
+        queries=lambda _artist, _album: variants,
+    )
+    env.handlers = env.pipeline.handlers()
+    rid = request(env)
+    await env.step()
+    assert env.source.queries == variants and capped.queries == ["q1", "q2"]
+    assert status(env, rid) == "no_results"
