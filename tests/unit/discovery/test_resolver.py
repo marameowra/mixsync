@@ -61,7 +61,7 @@ async def test_lookup_resolves_above_the_gate(make_client: Make) -> None:
 async def test_below_threshold_lookup_is_unresolved(make_client: Make) -> None:
     r, _ = resolver(make_client)
 
-    assert await r.resolve("Dauwd", "Lydia (Totally Different Song, lb_token=TOKEN)") is None
+    assert await r.resolve("Dauwd", "Lydia (Totally Different Song)", lb_token=TOKEN) is None
     assert await r.resolve("Someone Else", "Lydia", lb_token=TOKEN) is None
 
 
