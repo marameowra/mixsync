@@ -20,7 +20,15 @@ FORMAT_VERSION = 1
 _APP_FIELDS = frozenset((*EDITABLE, "min_auto_accept_confidence", "source_priority"))
 _PROFILE_FIELDS = frozenset({"name", "preset", "auto_accept_max", "review_max", "quality_pref"})
 _USER_FIELDS = frozenset(
-    {"username", "display_name", "status", "roles", "password_hash", "matching_profile"}
+    {
+        "username",
+        "display_name",
+        "status",
+        "roles",
+        "download_auto",
+        "password_hash",
+        "matching_profile",
+    }
 )
 _ENTITY_FIELDS = frozenset({"kind", "mbid"})
 _FOLLOW_FIELDS = frozenset(
@@ -67,6 +75,7 @@ def export_settings(s: Session, *, include_secrets: bool = False) -> dict[str, A
             "display_name": user.display_name,
             "status": user.status,
             "roles": roles,
+            "download_auto": user.download_auto,
             "matching_profile": _profile_dict(profile) if profile else None,
         }
         if include_secrets:
@@ -331,6 +340,8 @@ def _validate_document(
             raise TransferError(f"{path}.roles: contains an unknown or missing role")
         if len(set(roles)) != len(roles):
             raise TransferError(f"{path}.roles: duplicate role")
+        if "download_auto" in d and type(d["download_auto"]) is not bool:
+            raise TransferError(f"{path}.download_auto: expected a boolean")
         _validate_profile(d["matching_profile"], f"{path}.matching_profile")
         if "password_hash" in d:
             _string(d["password_hash"], f"{path}.password_hash", max_length=255)
@@ -353,12 +364,12 @@ def _validate_document(
                     pairs = cast(list[Any], value)
                     names: set[str] = set()
                     for i, raw_pair in enumerate(pairs):
-                        if not isinstance(raw_pair, list) or len(raw_pair) != 2:
+                        pair = cast(list[Any], raw_pair)
+                        if not isinstance(raw_pair, list) or len(pair) != 2:
                             raise TransferError(
                                 f"$.app_settings.source_priority[{i}]: expected a name and "
                                 "boolean pair"
                             )
-                        pair = cast(list[Any], raw_pair)
                         name_value, enabled = pair
                         if not isinstance(name_value, str) or not name_value:
                             raise TransferError(
@@ -615,6 +626,8 @@ def import_settings(
             username=username,
             display_name=user["display_name"],
             status=status,
+            # older exports predate the approval queue (#296); users then downloaded directly
+            download_auto=user.get("download_auto", True),
             password_hash=password_hash,
             matching_profile_id=profile_id,
         )

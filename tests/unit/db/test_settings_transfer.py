@@ -44,6 +44,7 @@ def _source(s: Session) -> None:
             status="active",
             password_hash="hash-a",
             matching_profile_id=profile.id,
+            download_auto=name == "dj",  # "second" waits for approval (#296)
         )
         for name in ("dj", "second")
     ]
@@ -141,6 +142,7 @@ def test_export_import_round_trip_is_portable_and_preserves_per_user_profiles(
         assert users["dj"].status == "disabled"
         assert users["dj"].password_hash == "!password-not-imported!"
         assert users["dj"].matching_profile_id != users["second"].matching_profile_id
+        assert users["dj"].download_auto and not users["second"].download_auto
         assert target.scalar(select(func.count()).select_from(Follow)) == 1
         assert target.scalar(select(func.count()).select_from(DiscoveryPlaylist)) == 1
         links = {link.service: link for link in target.scalars(select(UserLink))}
@@ -186,6 +188,7 @@ def test_import_dry_run_and_repeat_are_read_only_and_idempotent(sessions, tmp_pa
         lambda d: d["discovery_playlists"][0].update(sources=[{}]),
         lambda d: d["users"][0]["matching_profile"].update(auto_accept_max=0.9),
         lambda d: d["users"][0]["matching_profile"].update(auto_accept_max=10**400),
+        lambda d: d["users"][0].update(download_auto="yes"),
         lambda d: d["app_settings"].update(source_priority="Soulseek"),
         lambda d: d["app_settings"].update(
             source_priority=[["Soulseek", True], ["Soulseek", False]]
@@ -411,3 +414,18 @@ def test_source_priority_empty_array_is_a_valid_saved_setting(sessions, tmp_path
     with target_sessions() as target:
         app = target.get(AppSettings, 1)
         assert app is not None and app.source_priority == []
+
+
+def test_an_export_from_before_the_approval_queue_imports_users_as_auto_download(
+    sessions, tmp_path: Path
+) -> None:
+    with sessions() as source, source.begin():
+        _source(source)
+        document = export_settings(source)
+    for user in document["users"]:
+        del user["download_auto"]
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True)
+    with target_sessions() as target:
+        assert all(u.download_auto for u in target.scalars(select(User)))
