@@ -378,9 +378,16 @@ class Discovery:
         return hold
 
     @staticmethod
+    def folder_id(folders: dict[str, str], name: str) -> str | None:
+        """Folder id for a configured library name: exact case wins, else case-insensitive."""
+        if name in folders:
+            return folders[name]
+        return next((i for n, i in folders.items() if n.casefold() == name.casefold()), None)
+
+    @staticmethod
     def missing_note(wanted: list[str], folders: dict[str, str], then: str) -> str | None:
         """One message for every wanted library the user's Navidrome account cannot see."""
-        missing = [f"'{n}'" for n in wanted if n not in folders]
+        missing = [f"'{n}'" for n in wanted if Discovery.folder_id(folders, n) is None]
         if not missing:
             return None
         sees = ", ".join(folders) or "no libraries"
@@ -421,8 +428,8 @@ class Discovery:
         try:
             # a main-library entry must not resolve to its discover copy: restrict both
             folders = await lib.music_folders() if main or discover - main else {}
-            main_folder = folders.get(self.main_library) if main else None
-            folder = folders.get(self.discover_library) if discover - main else None
+            main_folder = self.folder_id(folders, self.main_library) if main else None
+            folder = self.folder_id(folders, self.discover_library) if discover - main else None
             wanted = ([self.main_library] if main else []) + (
                 [self.discover_library] if discover - main else []
             )

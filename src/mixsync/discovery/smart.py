@@ -204,7 +204,7 @@ class Smart:
             try:
                 folders = await lib.music_folders()
                 note = d.missing_note([d.main_library], folders, "using all libraries")
-                songs = await lib.library_songs(folders.get(d.main_library))
+                songs = await lib.library_songs(d.folder_id(folders, d.main_library))
                 listed = {song.recording_mbid for song in songs}
                 if owned and not any(m in listed for m, _, _ in owned):
                     note = NONE_FOUND  # Navidrome not scanned yet: keep the last playlist

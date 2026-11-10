@@ -434,15 +434,39 @@ async def test_both_libraries_missing_give_one_note_naming_what_is_visible(
     own(rig.env, 1)
     provisional(rig.env, 2)
     rig.lib.main, rig.lib.disc = {rec(1): "s1"}, {rec(2): "s2"}
-    rig.lib.folders = {"Other": "9", "Discover": "8"}
+    rig.lib.folders = {"Other": "9", "Elsewhere": "8"}
     rig.history.weekly = [ref(1), ref(2)]
     rig.disc.start_chains()
     await rig.run(JobKind.DISCOVERY_BUILD)
     await rig.run(JobKind.DISCOVERY_PUSH)
     err = rig.pl(pid).last_error or ""
     assert "'Music Library' and 'discover' libraries are not visible" in err
-    assert "(it sees: Other, Discover)" in err
+    assert "(it sees: Other, Elsewhere)" in err
     assert err in caplog.text
+
+
+async def test_library_name_case_mismatch_is_found_and_scopes_the_search(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig.link(rig.env.user_id)
+    rig.playlist()
+    own(rig.env, 1)
+    rig.lib.main, rig.lib.disc = {rec(1): "s1"}, {rec(1): "wrong"}  # unscoped search finds wrong
+    rig.lib.folders = {"music library": MAIN_FOLDER, "Discover": DISCOVER_FOLDER}
+    rig.history.weekly = [ref(1)]
+    rig.disc.start_chains()
+    await rig.run(JobKind.DISCOVERY_BUILD)
+    await rig.run(JobKind.DISCOVERY_PUSH)
+    assert rig.lib.playlists == {"pl1": ["s1"]}
+    assert "not visible" not in caplog.text
+
+
+def test_folder_id_matches_case_insensitively_and_exact_case_wins() -> None:
+    folders = {"Mixsync": "1", "MixSync": "2"}
+    assert Discovery.folder_id(folders, "MixSync") == "2"
+    assert Discovery.folder_id(folders, "Mixsync") == "1"
+    assert Discovery.folder_id(folders, "MIXSYNC") == "1"
+    assert Discovery.folder_id(folders, "other") is None
 
 
 async def test_unfound_discover_library_searches_unrestricted(rig: Rig) -> None:
