@@ -717,3 +717,25 @@ def test_long_titles_round_trip_and_ids_may_differ_in_the_destination(
         uid = target.scalar(select(User.id).where(User.username == "dj"))
     assert uid != 1  # the pre-existing user took the first id
     assert json.loads((root / str(uid) / f"{REF}.json").read_text())[0]["title"] == "T" * 600
+
+
+def test_spotify_logins_and_api_imports_are_not_exported(sessions) -> None:
+    with sessions() as s, s.begin():
+        _source(s)
+        uid = s.scalar(select(User.id).where(User.username == "dj"))
+        s.add(
+            UserLink(
+                user_id=uid,
+                service="spotify",
+                external_username="spotme",
+                secret_encrypted="refresh-ciphertext",
+                needs_relink=False,
+                verified_at=datetime.now(UTC),
+            )
+        )
+        s.add(
+            MirroredPlaylist(user_id=uid, name="Sp", upstream_kind="spotify_api", upstream_ref="x")
+        )
+        document = export_settings(s)
+    assert "spotify" not in {link["service"] for link in document["linked_accounts"]}
+    assert "spotify_api" not in {m["upstream_kind"] for m in document["mirrored_playlists"]}

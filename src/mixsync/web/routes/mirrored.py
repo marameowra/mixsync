@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mixsync.core.capabilities import Capability
+from mixsync.core.errors import PermanentError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import MirroredPlaylist
@@ -40,7 +41,11 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         .order_by(MirroredPlaylist.id)
     ).all()
     tracks = {p.id: mirrored.track_states(db, p) for p in rows}
-    missing = {p.id: [e for e, state in tracks[p.id] if state == mirrored.MISSING] for p in rows}
+    missing = {
+        p.id: [e for e, state in tracks[p.id] if state == mirrored.MISSING]
+        for p in rows
+        if p.upstream_kind not in mirrored.NEVER_REQUEST  # listed in the table, never offered
+    }
     ctx = {
         "user": user,
         "rows": rows,
@@ -48,12 +53,18 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         "missing": missing,
         "lb_linked": _lb_linked(db, user),
         "has_loves": any(p.upstream_kind == mirrored.LOVES for p in rows),
+        "spotify_on": bool(request.app.state.services.settings.spotify_client_id),
+        "spotify_linked": _linked(db, user, "spotify"),
     }
     return templates.TemplateResponse(request, "pages/mirrored.html", ctx)
 
 
 def _lb_linked(db: Db, user: AuthUser) -> bool:
-    q = select(UserLink.id).where(UserLink.user_id == user.id, UserLink.service == "listenbrainz")
+    return _linked(db, user, "listenbrainz")
+
+
+def _linked(db: Db, user: AuthUser, service: str) -> bool:
+    q = select(UserLink.id).where(UserLink.user_id == user.id, UserLink.service == service)
     return db.scalar(q) is not None
 
 
@@ -140,7 +151,10 @@ async def request_missing(
     """The confirmation: requests only the missing tracks the page listed (by release)."""
     pl = _own(db, user, playlist_id)
     shown = {str(r) for r in (await request.form()).getlist("release")}
-    mirrored.request_missing(db, datetime.now(UTC), pl, shown)
+    try:
+        mirrored.request_missing(db, datetime.now(UTC), pl, shown)
+    except PermanentError as e:  # a Spotify import: missing tracks are only listed
+        raise HTTPException(403, str(e)) from None
     return RedirectResponse("/mirrored", status_code=303)
 
 

@@ -17,7 +17,7 @@ Use free, community-run services as intended; never hammer them. Rules below wer
 | AcoustID | 3 req/s | 3 req/s | core |
 | ListenBrainz | 1 req/s + `X-RateLimit-*` | 1 req/s + headers | core |
 | Last.fm | unspecified | 1 req/s | deferred |
-| Spotify | unpublished quotas | 1 req/s (planned) | one-shot playlist import, library match only, never feeds downloads ([Spotify](#spotify)) |
+| Spotify | unpublished quotas, rolling 30 s window | 1 req/s, never cached, `Retry-After` honored | one-shot playlist import on request (`MIXSYNC_SPOTIFY_CLIENT_ID`), library match only, never feeds downloads ([Spotify](#spotify)) |
 | Discogs | 60/min authed, 25/min not | 50/min | release search and tracklist, on demand, per-user token ([Mark unverified](unverified-and-mb-submit.md)) |
 | Deezer | none published | 1 req/s | album search and tracklist, on demand ([Mark unverified](unverified-and-mb-submit.md)) |
 | Soulseek | 5 clients per IP | 1 slskd client | core |
@@ -83,6 +83,12 @@ For:
 - Spotify-sourced data never becomes a `Request` and never reaches a download source. This removes the IV.2.3, IV.2.5 and IV.2.8.1 problems; keep it under test. Policy III.5 is still arguable; III.9 is the explicit carve-out for moving a user's playlist to another service, and this design does no more than that.
 - Request only `playlist-read-private` (Policy I.1.1). Drop raw Spotify playlist data once the import finishes (Terms IV.3.1). Delete a user's Spotify data when they disconnect (Terms V.8; within 5 days per Appendix A 5.c).
 - Self-imposed 1 req/s and honor `Retry-After`.
+
+As shipped (`discovery/spotify_api.py`, `web/routes/spotify.py`):
+- Authorization Code with PKCE, no client secret. The redirect URI is MixSync's own `/spotify/callback` at the address the user opened it on, shown on the account page; Spotify accepts only `https://` or `http://127.0.0.1:PORT`. The verifier and state ride in an encrypted cookie bound to the login session. The refresh token is the user's `spotify` link, Fernet-encrypted; access tokens are memory only. A refused refresh (`invalid_grant`, or the 6-month expiry) marks the link "Reconnect Spotify".
+- Spotify is called only when a user opens the playlist picker (own and collaborative playlists only) or presses Import. An import stores just artist, title and ISRC per track as the mirror's entries (no raw responses). Scheduled and "Sync now" syncs re-match those stored entries and never call Spotify; importing again refreshes them.
+- `request_missing` refuses `spotify_api` mirrors and the page shows no request button; tested in `tests/unit/acquire/test_spotify_api_mirror.py`.
+- Disconnect deletes the link and the user's `spotify_api` mirrors at once; files and playlists already in Navidrome are left alone. Settings export leaves out Spotify links and imports.
 
 The existing file-import path (#334, no Spotify API, no Spotify account) is not covered by these terms, which govern use of the Spotify Platform. [Developer Policy](https://developer.spotify.com/policy), [Developer Terms](https://developer.spotify.com/terms)
 

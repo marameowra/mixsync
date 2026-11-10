@@ -37,6 +37,9 @@ REQUESTED, NO_RELEASE = "requested", "no known release"
 EMPTY_UPSTREAM = "upstream returned no tracks; kept the last list"
 NONE_FOUND = "Navidrome found none of the owned tracks; skipped push"
 LOVES = "listenbrainz_loves"
+SPOTIFY_API = "spotify_api"
+# kinds whose tracks never become a Request (Spotify's terms, docs/design/services-etiquette.md)
+NEVER_REQUEST = frozenset({SPOTIFY_API})
 # kinds whose newly listed missing tracks are requested without asking, once the owner confirmed
 AUTO_REQUEST = frozenset({LOVES})
 
@@ -161,7 +164,10 @@ def track_states(s: Session, pl: MirroredPlaylist) -> list[tuple[dict[str, Any],
 def request_missing(s: Session, now: datetime, pl: MirroredPlaylist, releases: set[str]) -> int:
     """The owner confirmed: request the missing tracks on `releases` (those the page showed),
     one ordinary request per release. Returns how many tracks were requested. For an
-    AUTO_REQUEST kind this first confirmation also turns on auto-requesting for later syncs."""
+    AUTO_REQUEST kind this first confirmation also turns on auto-requesting for later syncs.
+    A NEVER_REQUEST kind raises PermanentError and requests nothing."""
+    if pl.upstream_kind in NEVER_REQUEST:
+        raise PermanentError(f"{pl.upstream_kind} playlists only list missing tracks")
     if pl.upstream_kind in AUTO_REQUEST and pl.auto_request_since is None:
         pl.auto_request_since = now
     by_release: dict[str, list[str]] = {}

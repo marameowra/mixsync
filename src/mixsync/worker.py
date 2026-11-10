@@ -34,6 +34,8 @@ from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.resolver import TrackResolver
 from mixsync.discovery.retention import Retention
 from mixsync.discovery.smart import Smart
+from mixsync.discovery.spotify_api import KIND as SPOTIFY_API
+from mixsync.discovery.spotify_api import Stored
 from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
 from mixsync.discovery.spotify_file import SpotifyFile
 from mixsync.library import tag_undo
@@ -378,6 +380,7 @@ def _new_queue(
         {
             LOVES: Loves(discovery, listenbrainz),
             SPOTIFY_FILE: SpotifyFile(Path(settings.config_dir) / "spotify"),
+            SPOTIFY_API: Stored(sessions),  # the imported list: never calls Spotify
         },
     )
     smart = Smart(discovery)

@@ -19,7 +19,7 @@ from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
 from mixsync.db.models.discovery import DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
-from mixsync.discovery.mirrored import LOVES, UpstreamTrack
+from mixsync.discovery.mirrored import LOVES, SPOTIFY_API, UpstreamTrack
 from mixsync.discovery.smart import INTS, SORTS, validate_rules
 from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
 from mixsync.discovery.spotify_file import SpotifyFile
@@ -92,7 +92,8 @@ def export_settings(
     warn: Callable[[str], None] = lambda _msg: None,
 ) -> dict[str, Any]:
     """Return portable configuration; password hashes are included only by explicit opt-in.
-    With `spotify_root` (`<config_dir>/spotify`), Spotify-file mirrors carry their track list."""
+    With `spotify_root` (`<config_dir>/spotify`), Spotify-file mirrors carry their track list.
+    Spotify-API imports and Spotify logins are left out: Spotify data stays in this install."""
     users: list[dict[str, Any]] = []
     for user in s.scalars(select(User).order_by(User.username)):
         roles = s.scalars(
@@ -179,6 +180,7 @@ def export_settings(
     for m in s.scalars(
         select(MirroredPlaylist)
         .join(User, MirroredPlaylist.user_id == User.id)
+        .where(MirroredPlaylist.upstream_kind != SPOTIFY_API)
         .order_by(User.username, MirroredPlaylist.name)
     ):
         user = s.get(User, m.user_id)
@@ -224,6 +226,7 @@ def export_settings(
         s.scalars(
             select(UserLink)
             .join(User, UserLink.user_id == User.id)
+            .where(UserLink.service != "spotify")
             .order_by(User.username, UserLink.service)
         ).all(),
     )

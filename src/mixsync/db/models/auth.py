@@ -33,6 +33,7 @@ class AppSettings(TimestampMixin, Base):
     mb_base_url: Mapped[str | None] = mapped_column(Text)
     deezer_suggestions: Mapped[bool | None]
     discogs_suggestions: Mapped[bool | None]
+    spotify_client_id: Mapped[str | None] = mapped_column(Text)
     slskd_url: Mapped[str | None] = mapped_column(Text)
     slskd_max_searches: Mapped[int | None]
     slskd_search_debounce: Mapped[int | None]

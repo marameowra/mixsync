@@ -61,6 +61,10 @@ class Settings(BaseSettings):
         default=False,
         description="Mark unverified offers with Discogs lookups via a user token.",
     )
+    spotify_client_id: str = Field(
+        default="",
+        description="Client ID of your own Spotify app, for playlist import; empty turns it off.",
+    )
     slskd_url: str = Field(default="http://slskd:5030", description="Base URL of the slskd server.")
     slskd_api_key: str = Field(default="", description="API key for the slskd server.")
     slskd_max_searches: int = Field(
