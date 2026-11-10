@@ -15,7 +15,7 @@ from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
-from mixsync.db.models.discovery import DiscoveryPlaylist
+from mixsync.db.models.discovery import DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
 from mixsync.db.settings_transfer import TransferError, export_settings, import_settings
 
@@ -447,3 +447,163 @@ def test_cli_hostile_json_fails_cleanly_without_a_traceback(
         path.write_text(text)
         assert main(["import-settings", str(path), "--apply"]) == 1
         assert "Traceback" not in capsys.readouterr().err
+
+
+REF = "a" * 32
+
+
+def _playlists(s: Session, root: Path, *, write_file: bool = True) -> None:
+    _source(s)
+    dj, second = (s.scalar(select(User).where(User.username == n)) for n in ("dj", "second"))
+    assert dj and second
+    stamp = datetime(2026, 1, 2, tzinfo=UTC)
+    s.add_all(
+        [
+            MirroredPlaylist(
+                user_id=dj.id,
+                name="Loves",
+                upstream_kind="spotify_file",
+                upstream_ref=REF,
+                cadence_days=3,
+                auto_request_since=stamp,
+                navidrome_playlist_id="nd-1",
+                entries=[{"artist": "x"}],
+            ),
+            MirroredPlaylist(
+                user_id=second.id, name="Other", upstream_kind="x", upstream_ref="r", cadence_days=1
+            ),
+            SmartPlaylist(
+                user_id=dj.id,
+                name="Old",
+                rules={"genre": "jazz", "year_from": 1960, "starred": True},
+                size=20,
+                sort="year",
+                cadence_days=7,
+                navidrome_playlist_id="nd-2",
+            ),
+            SmartPlaylist(user_id=second.id, name="Any", rules={}, size=5, sort="random"),
+        ]
+    )
+    if write_file:
+        (root / str(dj.id)).mkdir(parents=True)
+        (root / str(dj.id) / f"{REF}.json").write_text(
+            json.dumps([{"artist": "A", "title": "T", "isrc": None}])
+        )
+
+
+def _export_playlists(sessions, tmp_path: Path, **kw):
+    root = tmp_path / "src-spotify"
+    with sessions() as source, source.begin():
+        _playlists(source, root, **kw)
+        warnings: list[str] = []
+        return export_settings(source, spotify_root=root, warn=warnings.append), warnings
+
+
+def test_mirrored_and_smart_playlists_round_trip_without_runtime_state(
+    sessions, tmp_path: Path
+) -> None:
+    document, warnings = _export_playlists(sessions, tmp_path)
+    assert warnings == []
+    assert set(document["mirrored_playlists"][0]) == {
+        "username",
+        "name",
+        "upstream_kind",
+        "upstream_ref",
+        "cadence_days",
+        "auto_request_since",
+        "tracks",
+    }
+    assert "nd-" not in json.dumps(document)
+    target_root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True, spotify_root=target_root)
+    with target_sessions() as target:
+        mirrors = {m.name: m for m in target.scalars(select(MirroredPlaylist))}
+        assert {n: target.get(User, m.user_id).username for n, m in mirrors.items()} == {
+            "Loves": "dj",
+            "Other": "second",
+        }
+        assert mirrors["Loves"].cadence_days == 3
+        since = mirrors["Loves"].auto_request_since
+        assert since is not None and since.replace(tzinfo=UTC) == datetime(2026, 1, 2, tzinfo=UTC)
+        assert mirrors["Loves"].navidrome_playlist_id is None and mirrors["Loves"].entries == []
+        smart = {p.name: p for p in target.scalars(select(SmartPlaylist))}
+        assert smart["Old"].rules == {"genre": "jazz", "year_from": 1960, "starred": True}
+        assert (smart["Old"].size, smart["Old"].sort, smart["Old"].cadence_days) == (20, "year", 7)
+        assert smart["Old"].navidrome_playlist_id is None and smart["Any"].rules == {}
+        path = target_root / str(mirrors["Loves"].user_id) / f"{REF}.json"
+        assert json.loads(path.read_text()) == [{"artist": "A", "title": "T", "isrc": None}]
+        report = import_settings(target, document, spotify_root=target_root)
+        planned = report["rows"]["mirrored_playlists"] + report["rows"]["smart_playlists"]
+        assert {r["action"] for r in planned} == {"skip"}
+
+
+def test_spotify_track_list_is_not_overwritten_or_written_on_dry_run(
+    sessions, tmp_path: Path
+) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    target_root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target:
+        import_settings(target, document, spotify_root=target_root)
+    assert not target_root.exists()
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True, spotify_root=target_root)
+    with target_sessions() as target:
+        uid = target.scalar(select(User.id).where(User.username == "dj"))
+    path = target_root / str(uid) / f"{REF}.json"
+    path.write_text("[]")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True, spotify_root=target_root)
+    assert path.read_text() == "[]"
+
+
+def test_missing_spotify_track_list_warns_and_exports_the_definition(
+    sessions, tmp_path: Path
+) -> None:
+    document, warnings = _export_playlists(sessions, tmp_path, write_file=False)
+    assert len(warnings) == 1 and "dj/Loves" in warnings[0]
+    assert "tracks" not in document["mirrored_playlists"][0]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d["smart_playlists"][0]["rules"].update(bogus=1),
+        lambda d: d["smart_playlists"][0]["rules"].update(year_from=3000, year_to=1000),
+        lambda d: d["smart_playlists"][0]["rules"].update(starred=False),
+        lambda d: d["smart_playlists"][0].update(sort="loudest"),
+        lambda d: d["smart_playlists"][0].update(size=0),
+        lambda d: d["mirrored_playlists"][0].update(cadence_days=0),
+        lambda d: d["mirrored_playlists"][0].update(auto_request_since="yesterday"),
+        lambda d: d["mirrored_playlists"][0].update(upstream_ref="../../x"),
+        lambda d: d["mirrored_playlists"][0].update(tracks=[{"artist": "A"}]),
+        lambda d: d["smart_playlists"].append(dict(d["smart_playlists"][0])),
+    ],
+)
+def test_invalid_playlist_definitions_are_rejected_before_any_write(
+    sessions, tmp_path: Path, mutate
+) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    mutate(document)
+    target_root = tmp_path / "dst-spotify"
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        with pytest.raises(TransferError):
+            import_settings(target, document, apply=True, spotify_root=target_root)
+    with target_sessions() as target:
+        assert target.scalar(select(func.count()).select_from(User)) == 0
+        assert target.scalar(select(func.count()).select_from(SmartPlaylist)) == 0
+    assert not target_root.exists()
+
+
+def test_an_export_without_playlist_keys_still_imports(sessions, tmp_path: Path) -> None:
+    document, _ = _export_playlists(sessions, tmp_path)
+    del document["mirrored_playlists"], document["smart_playlists"]
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True)
+    with target_sessions() as target:
+        assert target.scalar(select(func.count()).select_from(User)) == 2
+        assert target.scalar(select(func.count()).select_from(SmartPlaylist)) == 0

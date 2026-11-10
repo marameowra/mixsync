@@ -91,8 +91,10 @@ with a username absent from the export; this account lets you enable imported us
 Export refuses to overwrite an existing output path. Import only adds missing rows;
 existing users, settings, follows, playlists, and links are skipped, never overwritten.
 Repeated imports are safe. This transfers settings, not music, request history, or the
-operation journal; retain normal database and host backups. Mirrored and smart
-playlists are not exported yet (#401); recreate them after an import.
+operation journal; retain normal database and host backups. Mirrored and smart playlist definitions are exported too, plus the stored track list of
+Spotify-file mirrors (written on import only if absent, so the mirror syncs without a
+re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt on
+the next sync or build.
 If app settings were added, run
 `docker compose -f deploy/compose.yml restart mixsync-web mixsync-worker` to reload their
 startup settings. The settings page's restart warning tracks the imported version.

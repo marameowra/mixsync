@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -14,8 +17,12 @@ from mixsync.core.config import Settings
 from mixsync.db.app_settings import EDITABLE
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
-from mixsync.db.models.discovery import DiscoveryPlaylist
+from mixsync.db.models.discovery import DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
+from mixsync.discovery.mirrored import UpstreamTrack
+from mixsync.discovery.smart import SORTS
+from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
+from mixsync.discovery.spotify_file import SpotifyFile
 from mixsync.watchlist.follows import RELEASE_TYPES
 
 FORMAT_VERSION = 1
@@ -50,6 +57,23 @@ _PLAYLIST_FIELDS = frozenset(
         "keep_plays",
     }
 )
+_MIRROR_FIELDS = frozenset(
+    {
+        "username",
+        "name",
+        "upstream_kind",
+        "upstream_ref",
+        "cadence_days",
+        "auto_request_since",
+        "tracks",  # spotify_file only: the stored upload, so the mirror syncs without a re-upload
+    }
+)
+_MIRROR_REQUIRED = _MIRROR_FIELDS - {"tracks"}
+_SMART_FIELDS = frozenset({"username", "name", "rules", "size", "sort", "cadence_days"})
+_SMART_INTS = ("year_from", "year_to", "added_days", "unplayed_days")  # as the smart web form
+_SPOTIFY_REF = re.compile(r"[0-9a-f]{32}")  # ref_for(); keeps the file path inside its root
+# older exports predate these keys (#401)
+_OPTIONAL_KEYS = ("mirrored_playlists", "smart_playlists")
 _LINK_FIELDS = frozenset({"username", "service", "external_username"})
 
 
@@ -61,8 +85,15 @@ def _profile_dict(row: MatchingProfile) -> dict[str, Any]:
     return {name: getattr(row, name) for name in _PROFILE_FIELDS}
 
 
-def export_settings(s: Session, *, include_secrets: bool = False) -> dict[str, Any]:
-    """Return portable configuration; password hashes are included only by explicit opt-in."""
+def export_settings(
+    s: Session,
+    *,
+    include_secrets: bool = False,
+    spotify_root: Path | None = None,
+    warn: Callable[[str], None] = lambda _msg: None,
+) -> dict[str, Any]:
+    """Return portable configuration; password hashes are included only by explicit opt-in.
+    With `spotify_root` (`<config_dir>/spotify`), Spotify-file mirrors carry their track list."""
     users: list[dict[str, Any]] = []
     for user in s.scalars(select(User).order_by(User.username)):
         roles = s.scalars(
@@ -145,6 +176,49 @@ def export_settings(s: Session, *, include_secrets: bool = False) -> dict[str, A
                 "keep_plays": row.keep_plays,
             }
         )
+    mirrored: list[dict[str, Any]] = []
+    for m in s.scalars(
+        select(MirroredPlaylist)
+        .join(User, MirroredPlaylist.user_id == User.id)
+        .order_by(User.username, MirroredPlaylist.name)
+    ):
+        user = s.get(User, m.user_id)
+        assert user is not None
+        item: dict[str, Any] = {
+            "username": user.username,
+            "name": m.name,
+            "upstream_kind": m.upstream_kind,
+            "upstream_ref": m.upstream_ref,
+            "cadence_days": m.cadence_days,
+            "auto_request_since": m.auto_request_since.isoformat()
+            if m.auto_request_since
+            else None,
+        }
+        if m.upstream_kind == SPOTIFY_FILE and spotify_root is not None:
+            try:
+                path = spotify_root / str(m.user_id) / f"{m.upstream_ref}.json"
+                item["tracks"] = json.loads(path.read_text("utf-8"))
+            except (OSError, ValueError):
+                warn(
+                    f"warning: track list for mirrored playlist {user.username}/{m.name} is "
+                    "missing; exported the definition only, upload the file again after import"
+                )
+        mirrored.append(item)
+    smart = [
+        {
+            "username": u.username,
+            "name": p.name,
+            "rules": p.rules,
+            "size": p.size,
+            "sort": p.sort,
+            "cadence_days": p.cadence_days,
+        }
+        for p, u in s.execute(
+            select(SmartPlaylist, User)
+            .join(User, SmartPlaylist.user_id == User.id)
+            .order_by(User.username, SmartPlaylist.name)
+        )
+    ]
     links: list[dict[str, Any]] = []
     link_rows = cast(
         list[UserLink],
@@ -171,6 +245,8 @@ def export_settings(s: Session, *, include_secrets: bool = False) -> dict[str, A
         "entities": entities,
         "follows": follows,
         "discovery_playlists": playlists,
+        "mirrored_playlists": mirrored,
+        "smart_playlists": smart,
         "linked_accounts": links,
     }
 
@@ -279,6 +355,39 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any] | None:
     return d
 
 
+def _when(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _track(value: Any, path: str) -> dict[str, Any]:
+    d = _object(value, path, frozenset({"artist", "title", "isrc"}), frozenset({"artist", "title"}))
+    _string(d["artist"], f"{path}.artist", allow_empty=True, max_length=500)
+    _string(d["title"], f"{path}.title", allow_empty=True, max_length=500)
+    _string(d.get("isrc"), f"{path}.isrc", nullable=True, max_length=32)
+    return d
+
+
+def _smart_rules(value: Any, path: str) -> dict[str, Any]:
+    """The same rules the smart playlist form accepts."""
+    rules = _object(value, path, frozenset({"genre", "starred", *_SMART_INTS}))
+    if "genre" in rules:
+        _string(rules["genre"], f"{path}.genre", max_length=100)
+    if "starred" in rules and rules["starred"] is not True:
+        raise TransferError(f"{path}.starred: expected true")
+    for k in _SMART_INTS:
+        if k in rules:
+            n = _int(rules[k], f"{path}.{k}")
+            assert n is not None
+            if not 0 <= n <= (9999 if k.startswith("year") else 36500):
+                raise TransferError(f"{path}.{k}: integer is outside the supported range")
+    if rules.get("year_from", 0) > rules.get("year_to", 9999):
+        raise TransferError(f"{path}: year_from must not exceed year_to")
+    return rules
+
+
 def _validate_document(
     document: Any, *, include_secrets: bool, known_roles: set[str]
 ) -> dict[str, Any]:
@@ -294,6 +403,7 @@ def _validate_document(
                 "follows",
                 "discovery_playlists",
                 "linked_accounts",
+                *_OPTIONAL_KEYS,
             }
         ),
         frozenset(
@@ -308,6 +418,8 @@ def _validate_document(
             }
         ),
     )
+    for key in _OPTIONAL_KEYS:
+        root.setdefault(key, [])
     version = root["format_version"]
     if type(version) is not int:
         raise TransferError("$.format_version: expected an integer")
@@ -436,9 +548,12 @@ def _validate_document(
     for key, fields, required in (
         ("follows", _FOLLOW_FIELDS, _FOLLOW_FIELDS),
         ("discovery_playlists", _PLAYLIST_FIELDS, _PLAYLIST_FIELDS),
+        ("mirrored_playlists", _MIRROR_FIELDS, _MIRROR_REQUIRED),
+        ("smart_playlists", _SMART_FIELDS, _SMART_FIELDS),
         ("linked_accounts", _LINK_FIELDS, _LINK_FIELDS),
     ):
         seen: set[tuple[Any, ...]] = set()
+        seen_upstream: set[tuple[Any, ...]] = set()
         for i, item in enumerate(_list(root[key], f"$.{key}")):
             path = f"$.{key}[{i}]"
             d = _object(item, path, fields, required)
@@ -521,6 +636,44 @@ def _validate_document(
                 ):
                     raise TransferError(f"{path}: playlist values are outside supported limits")
                 identity = (username, d["name"])
+            elif key == "mirrored_playlists":
+                _string(d["name"], f"{path}.name", max_length=255)
+                kind = _string(d["upstream_kind"], f"{path}.upstream_kind", max_length=32)
+                ref = _string(d["upstream_ref"], f"{path}.upstream_ref", max_length=255)
+                cadence = _int(d["cadence_days"], f"{path}.cadence_days")
+                if cadence is None or not 1 <= cadence <= 365:
+                    raise TransferError(f"{path}.cadence_days: expected an integer from 1 to 365")
+                since = _string(
+                    d["auto_request_since"], f"{path}.auto_request_since", nullable=True
+                )
+                try:
+                    _when(since)
+                except ValueError:
+                    raise TransferError(
+                        f"{path}.auto_request_since: expected an ISO 8601 date-time"
+                    ) from None
+                if "tracks" in d:
+                    assert ref is not None
+                    if kind != SPOTIFY_FILE or not _SPOTIFY_REF.fullmatch(ref):
+                        raise TransferError(f"{path}.tracks: only for a spotify_file mirror")
+                    for j, t in enumerate(_list(d["tracks"], f"{path}.tracks")):
+                        _track(t, f"{path}.tracks[{j}]")
+                identity = (username, d["name"])
+                if (username, kind, ref) in seen_upstream:
+                    raise TransferError(f"{path}: duplicate natural key")
+                seen_upstream.add((username, kind, ref))
+            elif key == "smart_playlists":
+                _string(d["name"], f"{path}.name", max_length=255)
+                d["rules"] = _smart_rules(d["rules"], f"{path}.rules")
+                if not isinstance(d["sort"], str) or d["sort"] not in SORTS:
+                    raise TransferError(f"{path}.sort: expected one of {', '.join(SORTS)}")
+                size = _int(d["size"], f"{path}.size")
+                cadence = _int(d["cadence_days"], f"{path}.cadence_days")
+                if size is None or not 1 <= size <= 1000:
+                    raise TransferError(f"{path}.size: expected an integer from 1 to 1000")
+                if cadence is None or not 1 <= cadence <= 365:
+                    raise TransferError(f"{path}.cadence_days: expected an integer from 1 to 365")
+                identity = (username, d["name"])
             else:
                 service = _string(d["service"], f"{path}.service")
                 _string(d["external_username"], f"{path}.external_username", max_length=255)
@@ -535,9 +688,15 @@ def _validate_document(
 
 
 def import_settings(
-    s: Session, document: Any, *, apply: bool = False, include_secrets: bool = False
+    s: Session,
+    document: Any,
+    *,
+    apply: bool = False,
+    include_secrets: bool = False,
+    spotify_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate, classify and optionally insert rows. Caller owns the transaction."""
+    """Validate, classify and optionally insert rows. Caller owns the transaction. On apply,
+    exported Spotify track lists are written under `spotify_root` unless a file is already there."""
     role_names = set(s.scalars(select(Role.name)).all())
     doc = _validate_document(document, include_secrets=include_secrets, known_roles=role_names)
     existing_users = {u.username: u for u in s.scalars(select(User)).all()}
@@ -556,6 +715,22 @@ def import_settings(
         for u in [s.get(User, p.user_id)]
         if u
     }
+    existing_mirrors = s.scalars(select(MirroredPlaylist)).all()
+    mirror_names = {
+        (u.username, m.name) for m in existing_mirrors for u in [s.get(User, m.user_id)] if u
+    }
+    mirror_upstreams = {
+        (u.username, m.upstream_kind, m.upstream_ref)
+        for m in existing_mirrors
+        for u in [s.get(User, m.user_id)]
+        if u
+    }
+    existing_smart = {
+        (u.username, p.name)
+        for p in s.scalars(select(SmartPlaylist)).all()
+        for u in [s.get(User, p.user_id)]
+        if u
+    }
     existing_links = {
         (u.username, link.service)
         for link in s.scalars(select(UserLink)).all()
@@ -563,7 +738,16 @@ def import_settings(
         if u
     }
     rows: dict[str, list[dict[str, Any]]] = {
-        k: [] for k in ("users", "entities", "follows", "discovery_playlists", "linked_accounts")
+        k: []
+        for k in (
+            "users",
+            "entities",
+            "follows",
+            "discovery_playlists",
+            "mirrored_playlists",
+            "smart_playlists",
+            "linked_accounts",
+        )
     }
     for user in doc["users"]:
         add = user["username"] not in existing_users
@@ -588,6 +772,20 @@ def import_settings(
                 "key": ":".join(ident),
                 "action": "skip" if ident in existing_playlists else "add",
             }
+        )
+    for item in doc["mirrored_playlists"]:
+        taken = (item["username"], item["name"]) in mirror_names or (
+            item["username"],
+            item["upstream_kind"],
+            item["upstream_ref"],
+        ) in mirror_upstreams
+        rows["mirrored_playlists"].append(
+            {"key": f"{item['username']}:{item['name']}", "action": "skip" if taken else "add"}
+        )
+    for item in doc["smart_playlists"]:
+        ident = (item["username"], item["name"])
+        rows["smart_playlists"].append(
+            {"key": ":".join(ident), "action": "skip" if ident in existing_smart else "add"}
         )
     for item in doc["linked_accounts"]:
         ident = (item["username"], item["service"])
@@ -687,6 +885,28 @@ def import_settings(
                 **{k: item[k] for k in _PLAYLIST_FIELDS - {"username"}},
             )
         )
+    for item, planned in zip(doc["mirrored_playlists"], rows["mirrored_playlists"], strict=True):
+        if planned["action"] == "add":
+            s.add(
+                MirroredPlaylist(
+                    user_id=user_ids[item["username"]],
+                    **{k: item[k] for k in _MIRROR_REQUIRED - {"username", "auto_request_since"}},
+                    auto_request_since=_when(item["auto_request_since"]),
+                )
+            )
+        if "tracks" in item and spotify_root is not None:
+            store = SpotifyFile(spotify_root)
+            uid = user_ids[item["username"]]
+            if not store._path(uid, item["upstream_ref"]).exists():  # pyright: ignore[reportPrivateUsage]
+                store.save(uid, item["upstream_ref"], [UpstreamTrack(**t) for t in item["tracks"]])
+    for item, planned in zip(doc["smart_playlists"], rows["smart_playlists"], strict=True):
+        if planned["action"] == "add":
+            s.add(
+                SmartPlaylist(
+                    user_id=user_ids[item["username"]],
+                    **{k: item[k] for k in _SMART_FIELDS - {"username"}},
+                )
+            )
     now = datetime.now(UTC)
     for item, planned in zip(doc["linked_accounts"], rows["linked_accounts"], strict=True):
         if planned["action"] == "skip":
