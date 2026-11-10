@@ -18,6 +18,17 @@ from mixsync.ratelimit.client import PoliteClient
 
 CATEGORY = "mixsync"
 FAILED_STATES = frozenset({"error", "missingFiles"})
+# Only these may be deleted. Never by progress alone: a recheck (checkingUP,
+# checkingResumeData) restarts a finished torrent's progress from 0.
+DOWNLOADING_STATES = frozenset(
+    {"downloading", "stalledDL", "queuedDL", "pausedDL", "stoppedDL", "metaDL", "forcedDL", "error"}
+)
+
+
+def unfinished(t: dict[str, Any] | None) -> bool:
+    return (
+        t is not None and t.get("state") in DOWNLOADING_STATES and int(t.get("amount_left", 0)) > 0
+    )
 
 
 class Qbittorrent:
@@ -102,12 +113,15 @@ class Qbittorrent:
         return TransferInfo(TransferStatus.DONE, done, paths)
 
     async def remove_unfinished(self, infohash: str) -> None:
-        """Remove a dropped torrent with its partial files, only while it is unfinished. A
-        finished one is left to qBittorrent's own ratio rules (ADR 0022)."""
-        # shortcut: a torrent that finishes between the check and the delete is removed; its
-        # files were never imported. Fence it with a qBittorrent tag if that ever matters.
-        t = await self.info(infohash)
-        if t is not None and float(t.get("progress", 0)) < 1:
+        """Remove a dropped torrent with its partial files, only while it is downloading. A
+        finished or rechecking one is left to qBittorrent's own ratio rules (ADR 0022)."""
+        if not unfinished(await self.info(infohash)):
+            return
+        # Stop it first so it can't finish between the check and the delete.
+        stop = await self._call("POST", "torrents/stop", data={"hashes": infohash})
+        if stop.status_code == 404:  # qBittorrent < 5 calls it pause
+            await self._call("POST", "torrents/pause", data={"hashes": infohash})
+        if unfinished(await self.info(infohash)):
             await self._call(
                 "POST", "torrents/delete", data={"hashes": infohash, "deleteFiles": "true"}
             )

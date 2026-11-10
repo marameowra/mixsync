@@ -298,7 +298,9 @@ def with_torrents(make_client: Make, added: list[bytes], deleted: list[str]) -> 
             return httpx.Response(200, text="Ok.")
         if path == "/api/v2/torrents/info":
             row = {"hash": ALBUM_HASH, "progress": 0.5, "state": "downloading", "completed": 1}
-            return httpx.Response(200, json=[{**row, "category": "mixsync"}])
+            return httpx.Response(200, json=[{**row, "category": "mixsync", "amount_left": 9}])
+        if path == "/api/v2/torrents/stop":
+            return httpx.Response(200)
         if path == "/api/v2/torrents/delete":
             deleted.append(request.content.decode())
             return httpx.Response(200)

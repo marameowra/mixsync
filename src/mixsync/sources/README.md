@@ -26,10 +26,10 @@ Adapters that find and download music: slskd (Soulseek), and Prowlarr search (to
 - `match.candidates.rank()` scores it like any folder. Soulseek tie-breakers (free slot, queue, speed) and the peer-health penalty apply to `slskd` candidates only; indexer releases break ties on seeders, and one indexer may offer many releases (Soulseek keeps one folder per peer).
 
 ## qBittorrent
-- Web API v2 through `PoliteClient("qbittorrent", ...)` (local, unlimited, like slskd). Logs in (`auth/login`) on the first 403; the `SID` cookie stays in the client. Fields read per the official WebUI API docs (no live instance was checked): `hash`, `progress`, `state`, `completed`.
+- Web API v2 through `PoliteClient("qbittorrent", ...)` (local, unlimited, like slskd). Logs in (`auth/login`) on the first 403; the `SID` cookie stays in the client. Fields read per the official WebUI API docs (no live instance was checked): `hash`, `progress`, `state`, `completed`, `amount_left`.
 - `torrents/add` under category `mixsync` with `savepath` = `MIXSYNC_QBITTORRENT_DIR` (`autoTMM=false`, `contentLayout=Original`), so a file lands at `<dir>/<torrent name>/<path>`, the candidate's path. The dir is the same path in both containers; torrent paths that could leave it are refused.
 - Done = `progress` 1. `error`/`missingFiles`, or a torrent gone from the `mixsync` category, is a failed transfer. Lookups filter on the category: a user's own torrent is never touched.
-- Seeding downloads ([ADR 0022](../../../docs/decisions/0022-seeding-downloads-copied-never-released.md)): `clear` deletes a torrent with its files only while `progress` < 1 (dropped before it finished); a finished torrent is never removed.
+- Seeding downloads ([ADR 0022](../../../docs/decisions/0022-seeding-downloads-copied-never-released.md)): `clear` deletes a torrent with its files only while it is in a downloading state with `amount_left` > 0 (never by `progress` alone: a recheck restarts it from 0), and stops it first, then checks again, so it can't finish in between. A finished torrent is never removed, and the pipeline never calls `clear` after importing one.
 
 ## May import
 `core`, `ratelimit`.

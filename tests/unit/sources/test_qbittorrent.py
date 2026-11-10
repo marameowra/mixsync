@@ -56,6 +56,7 @@ class FakeQbit:
         self.seen: list[httpx.Request] = []
         self.login = "Ok."
         self.add = "Ok."
+        self.stop: dict[str, Any] | None = {"state": "stoppedDL"}  # None: no torrents/stop (v4)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.seen.append(request)
@@ -77,6 +78,12 @@ class FakeQbit:
         if path == "torrents/add":
             return httpx.Response(200, text=self.add)
         if path == "torrents/delete":
+            return httpx.Response(200)
+        if path == "torrents/stop" and self.stop is not None:
+            for t in self.torrents:
+                t.update(self.stop)  # what the torrent looks like once stopped
+            return httpx.Response(200)
+        if path == "torrents/pause" and self.stop is None:  # qBittorrent < 5
             return httpx.Response(200)
         return httpx.Response(404)
 
@@ -200,3 +207,26 @@ async def test_a_torrent_path_that_climbs_out_of_the_save_dir_is_refused(make: E
         evil = Candidate("t", NAME, (CandidateFile(bad, 1, "flac"),), infohash=HASH)
         with pytest.raises(PermanentError, match="unsafe path"):
             await client.status(evil)
+
+
+@pytest.mark.parametrize("state", ["checkingUP", "checkingResumeData", "stalledUP", "moving"])
+async def test_a_rechecking_or_seeding_torrent_is_never_removed_whatever_its_progress(
+    make: Env, state: str
+) -> None:
+    client, fake = make(progress=0.3, state=state)  # a recheck restarts progress from 0
+    await client.remove_unfinished(HASH)
+    assert fake.calls("torrents/delete") == [] and fake.calls("torrents/stop") == []
+
+
+async def test_a_torrent_that_finishes_while_being_stopped_is_kept(make: Env) -> None:
+    client, fake = make()
+    fake.stop = {"progress": 1, "amount_left": 0, "state": "stoppedUP"}
+    await client.remove_unfinished(HASH)
+    assert len(fake.calls("torrents/stop")) == 1 and fake.calls("torrents/delete") == []
+
+
+async def test_an_unfinished_torrent_is_paused_before_removal_on_qbittorrent_4(make: Env) -> None:
+    client, fake = make()
+    fake.stop = None
+    await client.remove_unfinished(HASH)
+    assert len(fake.calls("torrents/pause")) == 1 and len(fake.calls("torrents/delete")) == 1

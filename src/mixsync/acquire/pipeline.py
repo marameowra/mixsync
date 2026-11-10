@@ -1022,10 +1022,12 @@ class Pipeline:
         it is (ADR 0022). Cleanup only: any failure is logged and the import still counts."""
         fileops = self.importer.fileops
         try:
+            seeding = any(fileops.seeding(src) for src in srcs)
             for src in srcs:
                 if not fileops.seeding(src):
                     await asyncio.to_thread(fileops.release, src, batch, root)
-            if cand.username:  # a dropped album never came from a peer
+            # a dropped album never came from a peer; a seeding torrent is never cleared
+            if cand.username and not seeding:
                 await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)

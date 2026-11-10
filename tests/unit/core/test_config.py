@@ -73,6 +73,12 @@ def test_the_qbittorrent_dir_stays_out_of_every_scanned_or_managed_dir(
     assert str(Settings().qbittorrent_dir) == "/torrents"
 
 
+def test_a_relative_qbittorrent_dir_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MIXSYNC_QBITTORRENT_DIR", "torrents")  # qBittorrent would resolve it
+    with pytest.raises(ValidationError, match="must be an absolute path"):
+        Settings()
+
+
 def test_a_separate_drop_dir_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_DROP_DIR", "/drop")
     assert str(Settings().drop_dir) == "/drop"

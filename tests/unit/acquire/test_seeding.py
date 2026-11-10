@@ -84,6 +84,7 @@ class Torrents:
         self.progress, self.state, self.completed = 1.0, "uploading", 1
         self.added = False
         self.deleted: list[dict[str, list[str]]] = []
+        self.stopped: list[dict[str, list[str]]] = []
 
     def prowlarr(self, r: httpx.Request) -> httpx.Response:
         if r.url.path == "/api/v1/search":
@@ -112,7 +113,11 @@ class Torrents:
         if path == "torrents/info":
             row = {"hash": self.hash, "category": "mixsync", "progress": self.progress}
             row |= {"state": self.state, "completed": self.completed}
+            row |= {"amount_left": 0 if self.progress == 1 else 1000}
             return httpx.Response(200, json=[row] if self.added else [])
+        if path == "torrents/stop":
+            self.stopped.append(parse_qs(r.content.decode()))
+            return httpx.Response(200)
         if path == "torrents/delete":
             self.deleted.append(parse_qs(r.content.decode()))
             if parse_qs(r.content.decode())["deleteFiles"] == ["true"]:  # gone from the save path
@@ -164,6 +169,7 @@ def assert_seeding(env: Env, t: Torrents) -> None:
     """The torrent is still in qBittorrent with every file as downloaded, and nothing ever
     asked to release one of them."""
     assert t.added and t.deleted == [] and t.files() == t.blobs
+    assert t.stopped == []  # never cleared: a recheck could make it look unfinished
     with env.sessions() as s:
         released = s.scalars(select(FileOp.src).where(FileOp.kind == "release")).all()
     assert not [r for r in released if r.startswith(str(t.save))]

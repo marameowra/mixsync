@@ -91,6 +91,9 @@ class Settings(BaseSettings):
         seeding downloads that are only ever copied (ADR 0022); neither may overlap the library,
         the downloads, the old library or each other."""
         mounts = ("data_dir", "downloads_dir", "import_source_dir", "drop_dir")
+        if self.qbittorrent_dir is not None and not Path(self.qbittorrent_dir).is_absolute():
+            # qBittorrent resolves a relative save path against its own default, not ours
+            raise ValueError("MIXSYNC_QBITTORRENT_DIR must be an absolute path")
         for name in ("drop_dir", "qbittorrent_dir"):
             if (mine := getattr(self, name)) is None:
                 continue
