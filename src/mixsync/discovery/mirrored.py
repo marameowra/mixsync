@@ -103,9 +103,9 @@ def create(
     return pl
 
 
-def sync_now(s: Session, now: datetime, pl: MirroredPlaylist) -> bool:
-    """Bring the queued sync forward to now. False if synced within the gap."""
-    if pl.last_synced_at and now - aware(pl.last_synced_at) < BUILD_NOW_GAP:
+def sync_now(s: Session, now: datetime, pl: MirroredPlaylist, force: bool = False) -> bool:
+    """Bring the queued sync forward to now. False if synced within the gap (unless `force`)."""
+    if not force and pl.last_synced_at and now - aware(pl.last_synced_at) < BUILD_NOW_GAP:
         return False
     pl.next_sync_at = now
     moved = cast(
@@ -171,7 +171,7 @@ def request_missing(s: Session, now: datetime, pl: MirroredPlaylist, releases: s
     return sum(len(w) for w in by_release.values())
 
 
-def _key(e: dict[str, Any]) -> tuple[str, str, str | None]:
+def key(e: dict[str, Any]) -> tuple[str, str, str | None]:
     return (e["artist"], e["title"], e.get("isrc"))
 
 
@@ -229,7 +229,7 @@ class Mirror:
     ) -> list[dict[str, Any]]:
         """Entries for `tracks`; a track resolved before is not looked up again, an unresolved
         one is retried."""
-        known = {_key(e): e for e in old if e.get("recording_mbid")}
+        known = {key(e): e for e in old if e.get("recording_mbid")}
         by_mbid = {e["recording_mbid"]: e for e in old if e.get("recording_mbid")}
         entries: list[dict[str, Any]] = []
         for t in tracks:
@@ -279,7 +279,7 @@ class Mirror:
         if not tracks and old:  # likely an adapter hiccup, not a cleared playlist
             return self._stop(pid, job.id, EMPTY_UPSTREAM)
         entries = await self._resolved(tracks, old)
-        before, after = {_key(e) for e in old}, {_key(e) for e in entries}
+        before, after = {key(e) for e in old}, {key(e) for e in entries}
         log.info(
             "mirror: playlist %s: %d added, %d removed upstream",
             pid,
