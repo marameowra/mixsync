@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         description="SQLAlchemy URL of the database: sqlite: or postgresql://.",
     )
     config_dir: str = Field(
-        default="/config", description="Folder for the SQLite database, secret key and backups."
+        default="/config", description="Folder for the secret key, backups and worker state."
     )
     secret_key: str = Field(
         default="",
@@ -123,7 +123,9 @@ class Settings(BaseSettings):
         default=None,
         description="Backup folder; unset means config_dir/backups. SQLite only.",
     )
-    data_dir: str = Field(default="/data", description="Folder holding the organized library.")
+    data_dir: str = Field(
+        default="/data", description="Holds the library, discover, trash and quarantine folders."
+    )
     downloads_dir: str = Field(default="/downloads", description="Folder downloads land in.")
     drop_dir: Path | None = Field(
         default=None,
@@ -164,7 +166,7 @@ class Settings(BaseSettings):
     timezone: str = Field(default="UTC", description="Time zone that report days are read in.")
     path_template: str = Field(
         default="{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}",
-        description="Where imported files go under data_dir; must end in .{ext}.",
+        description="Where imported files go under data_dir/library; must end in .{ext}.",
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Log verbosity: DEBUG, INFO, WARNING, ERROR or CRITICAL."
