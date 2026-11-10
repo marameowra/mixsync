@@ -65,6 +65,36 @@ SQLite is the default and fits one home server. Choose Postgres to run several w
 - SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.
 - On Postgres none of this runs; back up with `pg_dump`. `mixsync backup` exits non-zero saying so.
 
+### Seed or recover settings
+
+These commands work with either database, after migrations. Export settings into the
+mounted config directory, preview the import on the destination, then apply it:
+
+```sh
+docker compose -f deploy/compose.yml exec -T mixsync-web mixsync export-settings --output /config/settings.json
+docker compose -f deploy/compose.yml exec -T mixsync-web mixsync import-settings /config/settings.json
+docker compose -f deploy/compose.yml exec -T mixsync-web mixsync import-settings /config/settings.json --apply
+```
+
+Copy `settings.json` privately to the destination's config directory before importing.
+If the destination has no active admin, first run
+`docker compose -f deploy/compose.yml exec mixsync-web mixsync user-add recovery-admin --admin`
+with a username absent from the export; this account lets you enable imported users.
+Export refuses to overwrite an existing output path. Import only adds missing rows;
+existing users, settings, follows, playlists, and links are skipped, never overwritten.
+Repeated imports are safe. This transfers settings, not music, request history, or the
+operation journal; retain normal database and host backups. Mirrored and smart
+playlists are not exported yet (#401); recreate them after an import.
+If app settings were added, run
+`docker compose -f deploy/compose.yml restart mixsync-web mixsync-worker` to reload their
+startup settings. The settings page's restart warning tracks the imported version.
+
+Users imported without password hashes are disabled. Set their passwords on the Users
+page and enable them. To preserve passwords, use `--include-secrets` on both export and
+import; exports created with `--output` have mode `0600`. Linked-account tokens and
+saved app credentials are always excluded: relink accounts and configure credentials
+on the destination. See [settings data safety](../docs/design/data-safety.md#settings-export-and-import).
+
 ## Upgrading
 `compose.yml` runs `ghcr.io/marameowra/mixsync:${MIXSYNC_TAG:-latest}`. Pin `MIXSYNC_TAG` in `.env` to a version (e.g. `1.0.1`) or leave it at `latest`.
 1. Back up: `docker compose -f deploy/compose.yml run --rm mixsync-migrate backup` (SQLite; on Postgres use `pg_dump`).
