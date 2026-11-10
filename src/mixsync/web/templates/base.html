@@ -4,6 +4,7 @@
 {% set can_edit = "library.edit" in user.capabilities if user else false %}
 {% set can_request = "request" in user.capabilities if user else false %}
 {% set is_admin = "admin" in user.capabilities if user else false %}
+{% set can_approve = "approve" in user.capabilities if user else false %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -26,8 +27,9 @@
       {%- if can_request %}{{ link("/discover", "Discover") }}{{ link("/mirrored", "Mirrored") }}{{ link("/watchlist", "Watchlist") }}{% endif %}
       {{ link("/requests", "Requests") }}
     </div>{% endif %}
-    {% if can_request or can_edit %}<div class="group"><span class="group-name">Resume</span>
+    {% if can_request or can_edit or can_approve %}<div class="group"><span class="group-name">Resume</span>
       {% if can_request %}{{ link("/review", "Review", waiting_counts.get("pending")) }}{% endif %}
+      {%- if can_approve %}{{ link("/approvals", "Approvals", waiting_counts.get("approvals")) }}{% endif %}
       {%- if can_edit %}{{ link("/library/unverified", "Unverified", waiting_counts.get("unverified")) }}{% endif %}
     </div>
     {% endif %}

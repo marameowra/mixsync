@@ -28,6 +28,7 @@ def _enum(cls: type[StrEnum]) -> Enum:
 
 
 Status = Literal[
+    "pending_approval",
     "searching",
     "no_results",
     "partial",
@@ -40,6 +41,7 @@ Status = Literal[
     "failed",
     "skipped",
     "unverified",
+    "denied",
 ]
 
 
@@ -72,7 +74,7 @@ class Request(TimestampMixin, Base):
     release_mbid: Mapped[str] = mapped_column(String(36))
     artist: Mapped[str] = mapped_column(String(255), default="")  # display; filled by the search
     album: Mapped[str] = mapped_column(String(255), default="")
-    # searching/downloading/verifying/importing/review/imported/partial/owned/failed/no_results
+    # see Status and acquire.lifecycle
     status: Mapped[Status] = mapped_column(String(16), default="searching")
     tried: Mapped[list[list[str]]] = mapped_column(JSON, default=list)  # see requests.tried_key
     no_results_attempts: Mapped[int] = mapped_column(Integer, default=0)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -72,6 +72,8 @@ class User(TimestampMixin, Base):
     display_name: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="active")  # active/disabled
     matching_profile_id: Mapped[int | None] = mapped_column(ForeignKey("matching_profiles.id"))
+    # off: the user's requests wait for approval (admins ignore it; db.auth.capabilities)
+    download_auto: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 
 
 class Role(TimestampMixin, Base):

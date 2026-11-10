@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Approvals - MixSync{% endblock %}
+{% block content %}
+<h1>Approvals</h1>
+<p class="small">Requests from users without automatic downloads wait here, oldest first. Approving starts the search; denying ends the request.</p>
+{% if rows %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Requested</th><th>Requester</th><th>Release</th><th>Source</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for r, username in rows %}
+  <tr>
+    <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+    <td>{{ username }}</td>
+    <td>{{ mb.link("release", r.release_mbid) }}{% if r.recording_mbids %}<br><small>{{ r.recording_mbids | length }} track{{ "s" if r.recording_mbids | length != 1 }}</small>{% endif %}</td>
+    <td>{{ r.source | capitalize }}</td>
+    <td>
+      <form method="post" action="/approvals/{{ r.id }}/approve">{{ forms.csrf() }}<button class="primary" type="submit">Approve request {{ r.id }}</button></form>
+      <form method="post" action="/approvals/{{ r.id }}/deny" hx-boost="true" hx-confirm="Deny this request? Nothing is downloaded.">{{ forms.csrf() }}<label>Reason (optional) <input name="reason" type="text" maxlength="500"></label> <button class="danger" type="submit">Deny request {{ r.id }}</button></form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No requests are waiting for approval.</p>
+{% endif %}
+{% endblock %}

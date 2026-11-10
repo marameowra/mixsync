@@ -15,6 +15,7 @@ from mixsync.web.csp import CSP
 from mixsync.web.csrf import check_csrf
 from mixsync.web.routes import (
     account,
+    approvals,
     auth,
     connections,
     discover,
@@ -88,6 +89,7 @@ def create_app(
     app.include_router(home.router)
     app.include_router(review.router)
     app.include_router(requests.router)
+    app.include_router(approvals.router)
     app.include_router(library.router)
     app.include_router(media.router)
     app.include_router(migration.router)

@@ -10,6 +10,10 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Request**: A wish for one release group, artist, or track, made by a person, the watchlist, or discovery. _Avoid_: Order, job, download
 
+**Automatic downloads**: A per-user permission, on by default. Off, the user's requests wait in the approval queue before anything is searched. Admins always have it. _Avoid_: Auto-approve
+
+**Approval queue**: Requests waiting (`pending_approval`) for someone with the approve capability to approve them into the pipeline or deny them (`denied`, with an optional reason). Not review: nothing has been downloaded yet. _Avoid_: Moderation, review
+
 **Candidate**: One peer's folder, or one indexer release (a torrent or NZB), that might satisfy a request. _Avoid_: Result, hit, match
 
 **Download source**: A backend that finds and fetches candidates: Soulseek, or an indexer search paired with its download client. _Avoid_: Source (that is who made the request), backend, client
