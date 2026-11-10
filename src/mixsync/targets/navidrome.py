@@ -1,9 +1,12 @@
+from datetime import datetime
 from typing import Any
 
+from mixsync.core.types import LibrarySong
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import NotAuthorizedError, NotFoundError, SubsonicClient
 
 _USER_HINT = "check your linked Navidrome account in mixsync"
+PAGE = 500  # songs per search3 page: a whole-library walk is a few calls, not one per song
 
 
 class NavidromeTarget:
@@ -44,6 +47,34 @@ class NavidromeUser:
             except NotFoundError:
                 continue  # deleted, or rescanned under a new id: not the same as 0 plays
         return counts
+
+    async def library_songs(self, music_folder_id: str | None = None) -> list[LibrarySong]:
+        """Every song of the library (all if None), paged through search3's empty query (how
+        Navidrome clients sync a library). `played` is the OpenSubsonic last-played time."""
+        out: list[LibrarySong] = []
+        while True:
+            page = await self._subsonic.search3("", PAGE, music_folder_id, len(out))
+            if page and out and str(page[0]["id"]) == out[-PAGE].id:
+                return out  # songOffset ignored: the same page again; never loop on it
+            for s in page:
+                tagged: list[dict[str, Any]] = s.get("genres") or []
+                genres = {str(g.get("name", "")) for g in tagged}
+                genres |= {str(s["genre"])} if s.get("genre") else set()
+                played = s.get("played")
+                out.append(
+                    LibrarySong(
+                        id=str(s["id"]),
+                        recording_mbid=s.get("musicBrainzId") or None,
+                        artist=str(s.get("artist") or ""),
+                        title=str(s.get("title") or ""),
+                        genres=frozenset(g.casefold() for g in genres if g),
+                        year=int(s["year"]) if s.get("year") else None,
+                        starred=bool(s.get("starred")),
+                        played=datetime.fromisoformat(played) if played else None,
+                    )
+                )
+            if len(page) < PAGE:
+                return out
 
     async def music_folders(self) -> dict[str, str]:
         """Library name -> id for the libraries this user can see (one getMusicFolders call)."""

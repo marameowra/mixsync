@@ -32,6 +32,7 @@ from mixsync.discovery.mirrored import LOVES, Mirror
 from mixsync.discovery.playlists import Discovery
 from mixsync.discovery.resolver import TrackResolver
 from mixsync.discovery.retention import Retention
+from mixsync.discovery.smart import Smart
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
@@ -343,6 +344,7 @@ def _new_queue(
         TrackResolver(services.musicbrainz, listenbrainz).resolve,
         {LOVES: Loves(discovery, listenbrainz)},
     )
+    smart = Smart(discovery)
     handlers = (
         HANDLERS
         | pipeline.handlers()
@@ -360,12 +362,14 @@ def _new_queue(
         | discovery.handlers()
         | retention.handlers()
         | mirror.handlers()
+        | smart.handlers()
     )
 
     def discovery_startup() -> None:
         discovery.start_chains()  # creates the default playlists retention must scan
         retention.start_chains()
         mirror.start_chains()
+        smart.start_chains()
 
     startup = (
         merger.backfill_templates,  # labels rows only; a reorganize plan waits for the user

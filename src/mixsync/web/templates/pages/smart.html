@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Smart playlists - MixSync{% endblock %}
+{% macro fields(p) %}
+{% set r = p.rules if p else {} %}
+  <p class="field"><label>Name <input name="name" type="text" required maxlength="200" value="{{ p.name if p else '' }}"></label></p>
+  <p class="field"><label>Genre <input name="genre" type="text" maxlength="100" value="{{ r.get('genre', '') }}"></label></p>
+  <p class="field"><label>Year from <input name="year_from" type="text" inputmode="numeric" value="{{ r.get('year_from', '') }}"></label>
+    <label>to <input name="year_to" type="text" inputmode="numeric" value="{{ r.get('year_to', '') }}"></label></p>
+  <p class="field"><label>Added within (days) <input name="added_days" type="text" inputmode="numeric" value="{{ r.get('added_days', '') }}"></label></p>
+  <p class="field"><label>Unplayed for (days) <input name="unplayed_days" type="text" inputmode="numeric" value="{{ r.get('unplayed_days', '') }}"></label></p>
+  <p class="field"><label><input name="starred" type="checkbox" value="true"{% if r.get('starred') %} checked{% endif %}> Starred only</label></p>
+  <p class="field"><label>Sort <select name="sort">{% for k, label in sorts.items() %}<option value="{{ k }}"{% if (p.sort if p else "random") == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></p>
+  <p class="field"><label>At most (tracks) <input name="size" type="text" inputmode="numeric" value="{{ p.size if p else 50 }}"></label></p>
+  <p class="field"><label>Rebuild every (days) <input name="cadence_days" type="text" inputmode="numeric" value="{{ p.cadence_days if p else 1 }}"></label></p>
+{% endmacro %}
+{% block content %}
+<h1>Smart playlists</h1>
+<p>Playlists built from rules over the music you own, pushed to Navidrome. A track must meet every rule you fill in; empty fields are no rule. A smart playlist never requests a track. Each rebuild replaces the Navidrome playlist, so edits made there are overwritten.</p>
+{% if not rows %}<p class="empty">No smart playlists yet.</p>{% endif %}
+
+{% for p in rows %}
+<h2>{{ p.name }}</h2>
+<p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}. {{ p.entries|length }} track{{ "s" if p.entries|length != 1 }}.</p>
+{% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last build: {{ p.last_error }}</p>{% endif %}
+<form method="post" action="/smart/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Rebuild now</button></form>
+{% if p.entries %}
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Track</th></tr></thead>
+  <tbody>
+  {% for e in p.entries %}<tr><td>{{ loop.index }}</td><td>{{ e.artist }} - {{ e.title }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+<details><summary>Edit rules</summary>
+<form method="post" action="/smart/{{ p.id }}/settings">
+  {{ forms.csrf() }}
+  {{ fields(p) }}
+  <button type="submit">Save</button>
+</form>
+</details>
+<form method="post" action="/smart/{{ p.id }}/delete">{{ forms.csrf() }}<button type="submit">Delete playlist</button> <span class="muted">No files are deleted; the Navidrome copy stays.</span></form>
+{% endfor %}
+
+<h2>New smart playlist</h2>
+<form method="post" action="/smart">
+  {{ forms.csrf() }}
+  {{ fields(none) }}
+  <button type="submit" class="primary">Create</button>
+</form>
+{% endblock %}

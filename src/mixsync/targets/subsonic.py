@@ -110,9 +110,15 @@ class SubsonicClient:
         return _dig(await self._call("getSong", id=song_id), "song")
 
     async def search3(
-        self, query: str, song_count: int = 20, music_folder_id: str | None = None
+        self,
+        query: str,
+        song_count: int = 20,
+        music_folder_id: str | None = None,
+        song_offset: int = 0,
     ) -> list[dict[str, Any]]:
         params: dict[str, Any] = {"query": query, "songCount": song_count}
+        if song_offset:
+            params["songOffset"] = song_offset
         params.update({"artistCount": 0, "albumCount": 0})
         if music_folder_id:
             params["musicFolderId"] = music_folder_id

@@ -23,7 +23,7 @@
   <nav class="nav" aria-label="Main">
     <a class="brand" href="/"{% if path == "/" %} aria-current="page"{% endif %}>MixSync</a>
     {% if can_request %}<div class="group"><span class="group-name">Find</span>
-      {%- if can_request %}{{ link("/discover", "Discover") }}{{ link("/mirrored", "Mirrored") }}{{ link("/watchlist", "Watchlist") }}{% endif %}
+      {%- if can_request %}{{ link("/discover", "Discover") }}{{ link("/mirrored", "Mirrored") }}{{ link("/smart", "Smart") }}{{ link("/watchlist", "Watchlist") }}{% endif %}
       {{ link("/requests", "Requests") }}
     </div>{% endif %}
     {% if can_request or can_edit %}<div class="group"><span class="group-name">Resume</span>

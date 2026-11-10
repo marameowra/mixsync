@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 
@@ -70,3 +71,17 @@ class RecordingRef:
     release_mbid: str | None
     artist: str
     title: str
+
+
+@dataclass(frozen=True)
+class LibrarySong:
+    """A Navidrome song as one user sees it: stars and plays are per user."""
+
+    id: str
+    recording_mbid: str | None
+    artist: str
+    title: str
+    genres: frozenset[str]  # lower-cased
+    year: int | None
+    starred: bool
+    played: datetime | None  # last played (Subsonic `played`); None if never

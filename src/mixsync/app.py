@@ -25,6 +25,7 @@ from mixsync.web.routes import (
     mirrored,
     requests,
     review,
+    smart,
     trash,
     users,
     watchlist,
@@ -98,6 +99,7 @@ def create_app(
     app.include_router(watchlist.router)
     app.include_router(discover.router)
     app.include_router(mirrored.router)
+    app.include_router(smart.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]  # registered by decorator

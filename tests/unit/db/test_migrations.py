@@ -19,11 +19,11 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0035_app_settings_sources"
+    assert _version(settings) == "0036_smart_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0035_app_settings_sources"
+    assert _version(settings) == "0036_smart_playlists"
 
 
 def test_revision_ids_fit_alembic_version() -> None:

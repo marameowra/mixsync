@@ -1,5 +1,6 @@
 import hashlib
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -8,7 +9,7 @@ import pytest
 
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.ratelimit.client import PoliteClient
-from mixsync.targets import subsonic
+from mixsync.targets import navidrome, subsonic
 from mixsync.targets.navidrome import NavidromeTarget
 from mixsync.targets.subsonic import SubsonicClient
 
@@ -258,3 +259,46 @@ async def test_play_counts_tolerates_missing_songs(make_client: Make) -> None:
 
     counts = await user(make_client, handler).play_counts(["s1", "gone"])
     assert counts == {"s1": 2}  # a vanished song is absent, not 0 plays
+
+
+async def test_library_songs_pages_the_empty_search_and_parses(
+    make_client: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(navidrome, "PAGE", 2)
+    pages = [
+        [
+            {"id": "a", "musicBrainzId": "m1", "genre": "Rock", "year": 1999, "starred": "x"},
+            {"id": "b", "genres": [{"name": "Jazz"}], "played": "2026-01-02T03:04:05Z"},
+        ],
+        [{"id": "c", "musicBrainzId": "m3", "title": "T", "artist": "A"}],
+    ]
+    seen: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return ok(searchResult3={"song": pages[len(seen) - 1]})
+
+    songs = await user(make_client, handler).library_songs("1")
+    assert [(p["query"], p.get("songOffset"), p["musicFolderId"]) for p in seen] == [
+        ("", None, "1"),
+        ("", "2", "1"),
+    ]
+    a, b, c = songs
+    assert (a.recording_mbid, a.genres, a.year, a.starred, a.played) == (
+        "m1",
+        frozenset({"rock"}),
+        1999,
+        True,
+        None,
+    )
+    assert (b.recording_mbid, b.genres, b.starred) == (None, frozenset({"jazz"}), False)
+    assert b.played == datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    assert (c.id, c.title, c.artist) == ("c", "T", "A")
+
+
+async def test_library_songs_stops_when_the_offset_is_ignored(
+    make_client: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(navidrome, "PAGE", 1)
+    same = user(make_client, lambda _r: ok(searchResult3={"song": [{"id": "a"}]}))
+    assert [s.id for s in await same.library_songs()] == ["a"]

@@ -123,3 +123,27 @@ class MirroredPlaylist(TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     # set on the owner's first confirmation (loves only): later syncs request new tracks unasked
     auto_request_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SmartPlaylist(TimestampMixin, Base):
+    """A user's playlist built from rules over the owned library (CONTEXT.md: Smart playlist).
+    It never makes requests."""
+
+    __tablename__ = "smart_playlists"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    # all must hold (AND); an absent key is no rule: {"genre": str, "year_from": int,
+    # "year_to": int, "added_days": int, "starred": true, "unplayed_days": int}
+    rules: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    size: Mapped[int] = mapped_column(Integer, default=50)
+    sort: Mapped[str] = mapped_column(String(16), default="random")  # random | added | year
+    cadence_days: Mapped[int] = mapped_column(Integer, default=1)
+    navidrome_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    next_build_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # the last build's tracks: [{"recording_mbid", "artist", "title"}], in playlist order
+    entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    last_error: Mapped[str | None] = mapped_column(Text)
