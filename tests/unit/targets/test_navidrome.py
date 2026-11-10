@@ -301,4 +301,6 @@ async def test_library_songs_stops_when_the_offset_is_ignored(
 ) -> None:
     monkeypatch.setattr(navidrome, "PAGE", 1)
     same = user(make_client, lambda _r: ok(searchResult3={"song": [{"id": "a"}]}))
-    assert [s.id for s in await same.library_songs()] == ["a"]
+    with pytest.raises(PermanentError) as refused:  # a partial list would shrink playlists
+        await same.library_songs()
+    assert "songOffset" in str(refused.value)

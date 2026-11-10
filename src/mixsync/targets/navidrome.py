@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+from mixsync.core.errors import PermanentError
 from mixsync.core.types import LibrarySong
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.targets.subsonic import NotAuthorizedError, NotFoundError, SubsonicClient
@@ -55,7 +56,8 @@ class NavidromeUser:
         while True:
             page = await self._subsonic.search3("", PAGE, music_folder_id, len(out))
             if page and out and str(page[0]["id"]) == out[-PAGE].id:
-                return out  # songOffset ignored: the same page again; never loop on it
+                # songOffset ignored: a partial list would shrink smart playlists, so refuse
+                raise PermanentError("server ignores search3 songOffset; can't list the library")
             for s in page:
                 tagged: list[dict[str, Any]] = s.get("genres") or []
                 genres = {str(g.get("name", "")) for g in tagged}
