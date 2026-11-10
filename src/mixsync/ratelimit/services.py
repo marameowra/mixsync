@@ -28,6 +28,7 @@ def limits(service: str, settings: Settings) -> ServiceLimits:
         "discogs": ServiceLimits(50 / 60, DAY),
         "deezer": ServiceLimits(1.0, DAY),
         "slskd": ServiceLimits(None),
+        "prowlarr": ServiceLimits(0.5),  # each search fans out to every indexer: 1 req / 2 s
         "navidrome": ServiceLimits(None),
     }
     return table[service]

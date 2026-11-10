@@ -205,7 +205,9 @@ class Pipeline:
         ranked: list[tuple[Candidate, Any]] = []
         skipped: dict[tuple[str, str, str], str] = {}  # candidate -> quality preference veto
         for name in order:  # stop at the first source with an acceptable candidate
-            for q in self.queries(album.artist, album.album):
+            # a source may cap the variants it is asked (Prowlarr: 2, to spare its indexers)
+            cap = getattr(self.sources[name], "max_queries", None)
+            for q in self.queries(album.artist, album.album)[:cap]:
                 found = [
                     c
                     for c in (replace(c, source=name) for c in await self.sources[name].search(q))

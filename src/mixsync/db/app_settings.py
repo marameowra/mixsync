@@ -33,6 +33,8 @@ ENV_ONLY = frozenset(
         "drop_dir",
         "import_source_dir",
         "backup_dir",
+        "prowlarr_url",  # new download-source connections stay env vars (#301)
+        "prowlarr_api_key",
     }
 )
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page

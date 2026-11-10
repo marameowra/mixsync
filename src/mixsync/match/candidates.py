@@ -297,6 +297,8 @@ def score_candidate(
         (candidate.queue_length > LONG_QUEUE, 0.3, f"queue of {candidate.queue_length}"),
         (candidate.upload_speed < SLOW_SPEED, 0.3, f"upload speed {candidate.upload_speed} B/s"),
     ]
+    if candidate.source != "slskd":  # an indexer release has no slot, queue or speed
+        reasons = []
     dist.add(
         "peer_health",
         min(1.0, sum(w for bad, w, _ in reasons if bad)),
@@ -337,7 +339,9 @@ _ORDER = {Band.AUTO_ACCEPT: 0, Band.REVIEW: 1, Band.REJECT: 2}
 def rank(
     candidates: Sequence[Candidate], album: AlbumInfo, profile: Profile
 ) -> list[tuple[Candidate, MatchResult]]:
-    """Best first (ties: free slot, short queue, fast peer), one folder per peer (SK-P08)."""
+    """Best first by band and distance. Ties: free slot, short queue, fast peer (Soulseek), then
+    more seeders (torrents; Usenet has none). One folder per Soulseek peer (SK-P08); an indexer
+    release (`username` is the indexer) is its own candidate, so one indexer offers many."""
     scored = sorted(
         ((c, score_candidate(c, album, profile)) for c in candidates),
         key=lambda cr: (
@@ -346,12 +350,13 @@ def rank(
             not cr[0].has_free_slot,
             cr[0].queue_length,
             -cr[0].upload_speed,
+            -cr[0].seeders,
         ),
     )
     seen: set[str] = set()
     out: list[tuple[Candidate, MatchResult]] = []
     for c, r in scored:
-        if c.username not in seen:
+        if c.source != "slskd" or c.username not in seen:
             seen.add(c.username)
             # only the files that were scored, so the rest is never downloaded
             kept = tuple(
