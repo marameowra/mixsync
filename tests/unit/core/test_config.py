@@ -55,6 +55,24 @@ def test_drop_dir_must_not_overlap_other_dirs(
         Settings()
 
 
+@pytest.mark.parametrize(
+    ("save", "drop"),
+    [("/data/torrents", None), ("/downloads/torrents", None), ("/drop/t", "/drop"), ("/", None)],
+)
+def test_the_qbittorrent_dir_stays_out_of_every_scanned_or_managed_dir(
+    monkeypatch: pytest.MonkeyPatch, save: str, drop: str | None
+) -> None:
+    """Adopt scans the downloads, the drop folder its own dir: neither ever reads a seeding
+    download, and nothing under the data dir is one."""
+    monkeypatch.setenv("MIXSYNC_QBITTORRENT_DIR", save)
+    if drop:
+        monkeypatch.setenv("MIXSYNC_DROP_DIR", drop)
+    with pytest.raises(ValidationError, match="MIXSYNC_.*_DIR must not overlap"):
+        Settings()
+    monkeypatch.setenv("MIXSYNC_QBITTORRENT_DIR", "/torrents")
+    assert str(Settings().qbittorrent_dir) == "/torrents"
+
+
 def test_a_separate_drop_dir_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_DROP_DIR", "/drop")
     assert str(Settings().drop_dir) == "/drop"

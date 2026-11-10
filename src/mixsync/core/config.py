@@ -34,8 +34,12 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     slskd_max_searches: int = Field(default=2, ge=1)  # slskd searches in flight, all workers
     slskd_search_debounce: int = Field(default=300, ge=0)  # seconds a query's result is reused
-    prowlarr_url: str = ""  # search only until a torrent / Usenet download client lands (#326)
+    prowlarr_url: str = ""  # its torrents download through qBittorrent; Usenet waits for #327
     prowlarr_api_key: str = ""
+    qbittorrent_url: str = ""
+    qbittorrent_username: str = ""
+    qbittorrent_password: str = ""
+    qbittorrent_dir: Path | None = None  # the `mixsync` category's save path: seeding, copy only
     max_concurrent_downloads: int = Field(default=3, ge=1)
     slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
     slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow
@@ -83,15 +87,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _drop_dir_apart(self) -> "Settings":
-        """The drop folder holds originals that get moved to the trash; it must not overlap
-        the library, the downloads or the old library."""
-        if self.drop_dir is None:
-            return self
-        drop = self.drop_dir.resolve()
-        for name in ("data_dir", "downloads_dir", "import_source_dir"):
-            other = Path(getattr(self, name)).resolve()
-            if drop == other or drop.is_relative_to(other) or other.is_relative_to(drop):
-                raise ValueError(f"MIXSYNC_DROP_DIR must not overlap {name} ({other})")
+        """The drop folder holds originals that get moved to the trash, the qBittorrent dir
+        seeding downloads that are only ever copied (ADR 0022); neither may overlap the library,
+        the downloads, the old library or each other."""
+        mounts = ("data_dir", "downloads_dir", "import_source_dir", "drop_dir")
+        for name in ("drop_dir", "qbittorrent_dir"):
+            if (mine := getattr(self, name)) is None:
+                continue
+            here = Path(mine).resolve()
+            for o in mounts:
+                if o == name or getattr(self, o) is None:
+                    continue
+                other = Path(getattr(self, o)).resolve()
+                if here == other or here.is_relative_to(other) or other.is_relative_to(here):
+                    raise ValueError(f"MIXSYNC_{name.upper()} must not overlap {o} ({other})")
         return self
 
     @field_validator("path_template")

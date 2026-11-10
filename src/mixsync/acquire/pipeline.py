@@ -573,7 +573,8 @@ class Pipeline:
 
     async def _quarantine(self, job: JobRecord, paths: list[Path], kind: str) -> list[Path]:
         """Move a dropped candidate's files out of /downloads (slskd may purge it) into
-        mixsync's quarantine; one journal batch per job, so a retry resumes."""
+        mixsync's quarantine; a seeding download is copied and left in place (ADR 0022). One
+        journal batch per job, so a retry resumes."""
         batch = f"request-{job.payload['request_id']}-quarantine-{job.id}"
         return [
             await asyncio.to_thread(self.importer.fileops.quarantine, p, kind, batch) for p in paths
@@ -1006,7 +1007,8 @@ class Pipeline:
         self, cand: Candidate, s: Session, now: datetime, req: Request, why: str, **kw: Any
     ) -> None:
         """drop_candidate, after cancelling what the candidate still has moving in slskd so a
-        dropped album stops downloading. Finished files stay; a failed cancel never blocks."""
+        dropped album stops downloading (an unfinished torrent is removed with its partial files).
+        Finished files stay; a failed cancel never blocks."""
         try:
             await self.sources[cand.source].clear(cand)
         except Exception:
@@ -1016,11 +1018,13 @@ class Pipeline:
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
     ) -> None:
-        """Delete the verified downloads and clear slskd's list. Cleanup only: any failure is
-        logged and the import still counts."""
+        """Delete the verified downloads and clear slskd's list; a seeding download stays where
+        it is (ADR 0022). Cleanup only: any failure is logged and the import still counts."""
+        fileops = self.importer.fileops
         try:
             for src in srcs:
-                await asyncio.to_thread(self.importer.fileops.release, src, batch, root)
+                if not fileops.seeding(src):
+                    await asyncio.to_thread(fileops.release, src, batch, root)
             if cand.username:  # a dropped album never came from a peer
                 await self.sources[cand.source].clear(cand)
         except Exception:
@@ -1071,7 +1075,7 @@ def _stale(s: Session, job: JobRecord, req: Request) -> bool:
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
     if len(local) != len(cand.files):
-        return "slskd reported no local paths"
+        return "the source reported no local paths"
     for f, path in zip(cand.files, local, strict=True):
         p = Path(path)
         if not p.is_file():

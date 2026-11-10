@@ -2,7 +2,8 @@
 
 The only deletes are `release()`, which unlinks a hash-verified download from the downloads dir
 (or an accepted review candidate from `quarantine/`, where `quarantine()` copies dropped downloads)
-(a drop-dir original is first copied into `.trash/<day>/.drop/` and checked),
+(a drop-dir original is first copied into `.trash/<day>/.drop/` and checked; a seeding download,
+under the qBittorrent save path, is never released: it is only ever copied, ADR 0022),
 `clear_work()`, which empties MixSync's own re-encode scratch space, and
 `purge_trash()`, which deletes files in `.trash/<day>/` folders older than the retention (minus
 paths the caller says an undoable plan still needs); leftovers and trashed
@@ -104,6 +105,7 @@ class FileOps:
         journal: Journal,
         clock: Clock,
         drop_dir: Path | None = None,
+        seeding_dir: Path | None = None,
     ) -> None:
         self.library = data_dir / "library"
         self.quarantine_dir = data_dir / "quarantine"
@@ -118,6 +120,7 @@ class FileOps:
         self.data_dir = data_dir
         self.downloads = downloads_dir
         self.drop = drop_dir
+        self.seeding_dir = seeding_dir  # qBittorrent's save path for MixSync's torrents
         self._journal = journal
         self._clock = clock
 
@@ -272,11 +275,18 @@ class FileOps:
         op = self._verified_op(batch_id, src, root)
         return op.dst if op else None
 
+    def seeding(self, src: Path) -> bool:
+        """Whether src is a seeding download: copied from, never released (ADR 0022)."""
+        return self.seeding_dir is not None and self.seeding_dir.resolve() in src.resolve().parents
+
     def release(self, src: Path, batch_id: str, root: str = "library") -> None:
         """Delete a download once its copy under root from this batch is verified. Refuses
         anything not strictly inside the downloads dir (symlinks and `..` included). A file in
         the drop dir is not deleted: it moves to `.trash/<day>/.drop/` (copied and hash-checked
-        first, as the drop dir may be another mount), so the user can recover it."""
+        first, as the drop dir may be another mount), so the user can recover it. A seeding
+        download is refused whatever the caller says (ADR 0022)."""
+        if self.seeding(src):
+            raise SafetyError(f"{src} is a seeding download; it is never released")
         dl = self.downloads.resolve()
         drop = self.drop.resolve() if self.drop else None
         real = src.resolve()
@@ -308,9 +318,10 @@ class FileOps:
     def quarantine(self, src: Path, kind: str, batch_id: str) -> Path:
         """Move a dropped candidate's file into `quarantine/<kind>/<day>/<folder>/<name>`
         (kind `rejected` or `review`; a file already there is re-filed under the new kind).
-        A verified copy, then a journaled release of the source, as for a released download.
-        Safe to repeat for one batch. Returns the new path (src itself for a file that is
-        neither a download nor already quarantined, which stays where it is)."""
+        A verified copy, then a journaled release of the source, as for a released download; a
+        seeding download is only copied (ADR 0022). Safe to repeat for one batch. Returns the
+        new path (src itself for a file that is neither a download, a seeding download nor
+        already quarantined, which stays where it is)."""
         if kind not in ("rejected", "review"):
             raise SafetyError(f"unknown quarantine kind: {kind!r}")
         q = self.quarantine_dir.resolve()
@@ -324,6 +335,8 @@ class FileOps:
             name = "/".join(old[2:])
         elif self.downloads.resolve() in real.parents:
             name = str(real.relative_to(self.downloads.resolve()))
+        elif self.seeding_dir is not None and self.seeding(src):
+            name = str(real.relative_to(self.seeding_dir.resolve()))
         else:  # not a download (an old library's file, say): never ours to move
             return src
         rel = self.find_imported(batch_id, src, "quarantine")
@@ -331,7 +344,8 @@ class FileOps:
             day = self._clock.now().date().isoformat()
             rel = unique(f"{kind}/{day}/{name}", lambda r: (self.quarantine_dir / r).exists())
             self.import_file(src, rel, lambda _p, _i: None, batch_id, root="quarantine")
-        self.release(src, batch_id, "quarantine")
+        if not self.seeding(src):
+            self.release(src, batch_id, "quarantine")
         return self._under(self.quarantine_dir, rel)
 
     def refile_rejected(self, src: Path, batch_id: str) -> Path:

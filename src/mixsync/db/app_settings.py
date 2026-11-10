@@ -35,6 +35,10 @@ ENV_ONLY = frozenset(
         "backup_dir",
         "prowlarr_url",  # new download-source connections stay env vars (#301)
         "prowlarr_api_key",
+        "qbittorrent_url",
+        "qbittorrent_username",
+        "qbittorrent_password",
+        "qbittorrent_dir",
     }
 )
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page

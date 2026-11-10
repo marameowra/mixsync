@@ -24,6 +24,8 @@ def configure_logging(settings: "Settings | None" = None) -> str:
         stream=sys.stderr,
         force=True,
     )
+    # httpx logs each request URL at INFO; Prowlarr's download links carry its API key
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     return level
 
 

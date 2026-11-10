@@ -11,18 +11,22 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.acquire.requests import candidate_dict
 from mixsync.core.config import Settings
 from mixsync.core.errors import AuthError, PermanentError
-from mixsync.core.matching import AlbumInfo, Candidate, Profile, TrackInfo
+from mixsync.core.matching import AlbumInfo, Candidate, Profile, TrackInfo, TransferStatus
 from mixsync.match.candidates import rank
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources.prowlarr import (
     MAX_FETCHES,
     ProwlarrSource,
     bdecode,
+    info_hash,
     to_candidate,
     torrent_files,
+    without_key,
 )
+from mixsync.sources.qbittorrent import Qbittorrent
 
 CASSETTES = Path(__file__).parents[2] / "cassettes" / "prowlarr"
 BASE = "http://prowlarr:9696"
@@ -267,3 +271,100 @@ def test_rank_keeps_every_release_of_one_indexer_and_breaks_ties_on_seeders() ->
     assert [c.seeders for c, _ in ranked] == [30, 3]
     # no upload slot, queue or speed to judge: an indexer release carries no peer penalty
     assert all(p.penalty == 0 for _, r in ranked for p in r.breakdown if p.key == "peer_health")
+
+
+ALBUM_HASH = "777fdacdb4a99c43a484126da5682b6b8a0c875c"  # the album.torrent fixture's info hash
+
+
+def test_info_hash_is_the_sha1_of_the_info_dict_as_written() -> None:
+    assert info_hash((CASSETTES / "album.torrent").read_bytes()) == ALBUM_HASH
+    for bad in (b"", b"l1:ae", b"d3:abci1ee", b"d4:info"):
+        with pytest.raises(ValueError):
+            info_hash(bad)
+
+
+def test_without_key_drops_only_the_api_key() -> None:
+    url = "http://prowlarr:9696/1/download?apikey=SECRET&link=a%2Fb&file=Album+1"
+    assert without_key(url) == "http://prowlarr:9696/1/download?link=a%2Fb&file=Album+1"
+
+
+def with_torrents(make_client: Make, added: list[bytes], deleted: list[str]) -> Qbittorrent:
+    """A qBittorrent (auth bypassed) that takes every add and reports the album half done."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/v2/torrents/add":
+            added.append(request.content)
+            return httpx.Response(200, text="Ok.")
+        if path == "/api/v2/torrents/info":
+            row = {"hash": ALBUM_HASH, "progress": 0.5, "state": "downloading", "completed": 1}
+            return httpx.Response(200, json=[{**row, "category": "mixsync"}])
+        if path == "/api/v2/torrents/delete":
+            deleted.append(request.content.decode())
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    client = make_client("qbittorrent", handler)
+    return Qbittorrent(client, "http://qbittorrent:8080", "", "", Path("/torrents"))
+
+
+async def test_a_candidate_keeps_its_link_without_the_api_key_and_its_info_hash(
+    make_client: Make,
+) -> None:
+    src = ProwlarrSource(make_client("prowlarr", serve([])), BASE, "REDACTED")
+    flac = next(c for c in await src.search(QUERY) if c.folder.endswith("[FLAC]"))
+    assert flac.url == f"{BASE}/1/download?link=flac&file=1" and flac.infohash == ALBUM_HASH
+    assert "REDACTED" not in json.dumps(candidate_dict(flac))
+
+
+async def test_enqueue_fetches_the_torrent_again_with_the_key_and_hands_it_to_qbittorrent(
+    make_client: Make,
+) -> None:
+    seen: list[httpx.Request] = []
+    added: list[bytes] = []
+    torrents = with_torrents(make_client, added, [])
+    src = ProwlarrSource(make_client("prowlarr", serve(seen)), BASE, "key-123", torrents)
+    flac = next(c for c in await src.search(QUERY) if c.folder.endswith("[FLAC]"))
+    seen.clear()
+    await src.enqueue(flac)
+    (fetch,) = seen
+    assert fetch.url.params["apikey"] == "key-123" and fetch.url.params["link"] == "flac"
+    assert len(added) == 1 and (CASSETTES / "album.torrent").read_bytes() in added[0]
+    assert (await src.status(flac)).state is TransferStatus.IN_PROGRESS
+
+
+async def test_a_torrent_that_changed_since_the_search_is_never_downloaded(
+    make_client: Make,
+) -> None:
+    added: list[bytes] = []
+    other = torrent("Something Else", [["01 - x.flac"]])
+    handler = serve([], bodies={"flac": httpx.Response(200, content=other)})
+    torrents = with_torrents(make_client, added, [])
+    src = ProwlarrSource(make_client("prowlarr", handler), BASE, "k", torrents)
+    link = f"{BASE}/1/download?link=flac"
+    cand = Candidate("ExampleTracker", "x", (), source="prowlarr", url=link, infohash=ALBUM_HASH)
+    with pytest.raises(PermanentError, match="changed since the search"):
+        await src.enqueue(cand)
+    assert added == []
+
+
+async def test_usenet_is_skipped_until_a_usenet_client_exists(make_client: Make) -> None:
+    seen: list[httpx.Request] = []
+    added: list[bytes] = []
+    torrents = with_torrents(make_client, added, [])
+    only = frozenset({"torrent"})
+    src = ProwlarrSource(make_client("prowlarr", serve(seen)), BASE, "k", torrents, only)
+    found = await src.search(QUERY)
+    assert found and all(c.infohash for c in found) and "nzb" not in fetched(seen)
+    nzb = Candidate("ExampleUsenet", "x", (), source="prowlarr", url=f"{BASE}/2/download?link=nzb")
+    with pytest.raises(PermanentError):  # never stuck: the pipeline moves to the next candidate
+        await src.enqueue(nzb)
+    assert added == []
+
+
+async def test_clear_removes_only_an_unfinished_torrent(make_client: Make) -> None:
+    deleted: list[str] = []
+    torrents = with_torrents(make_client, [], deleted)
+    src = ProwlarrSource(make_client("prowlarr", serve([])), BASE, "k", torrents)
+    await src.clear(Candidate("ExampleTracker", "x", (), source="prowlarr", infohash=ALBUM_HASH))
+    assert deleted == [f"hashes={ALBUM_HASH}&deleteFiles=true"]

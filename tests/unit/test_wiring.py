@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -127,3 +128,16 @@ def test_fake_services_are_off_unless_the_test_only_env_var_is_set(
     assert services.coverart._base == "http://fakes:5030"  # pyright: ignore[reportPrivateUsage]
     acoustid = _owner(handlers, JobKind.SEARCH).acoustid
     assert acoustid._url == "http://fakes:5030/v2/lookup"  # pyright: ignore[reportPrivateUsage]
+
+
+def test_torrents_are_a_download_source_only_with_prowlarr_and_qbittorrent_set(
+    settings: Settings, sessions: sessionmaker[Session], tmp_path: Path
+) -> None:
+    prowlarr = {"prowlarr_url": "http://prowlarr:9696", "prowlarr_api_key": "k"}
+    save = tmp_path / "torrents"
+    qbit = {"qbittorrent_url": "http://qbittorrent:8080", "qbittorrent_dir": save}
+    for extra, names in ((prowlarr, ["slskd"]), ({**prowlarr, **qbit}, ["slskd", "prowlarr"])):
+        services = build_services(settings.model_copy(update=extra), sessions)
+        _, _, handlers, _ = worker._new_queue(services)  # pyright: ignore[reportPrivateUsage]
+        assert list(_owner(handlers, JobKind.SEARCH).sources) == names
+        assert services.fileops.seeding(save / "x.flac") is (len(names) == 2)  # the backstop
