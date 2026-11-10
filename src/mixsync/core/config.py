@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     slskd_api_key: str = ""
     slskd_max_searches: int = Field(default=2, ge=1)  # slskd searches in flight, all workers
     slskd_search_debounce: int = Field(default=300, ge=0)  # seconds a query's result is reused
+    prowlarr_url: str = ""  # search only until a torrent / Usenet download client lands (#326)
+    prowlarr_api_key: str = ""
     max_concurrent_downloads: int = Field(default=3, ge=1)
     slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
     slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow

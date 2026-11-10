@@ -48,7 +48,7 @@ Each external system sits behind a small interface (`core/protocols.py`).
 
 | Interface | v1 | Later |
 |---|---|---|
-| `DownloadSource` | slskd | Prowlarr + qBittorrent/SABnzbd, yt-dlp |
+| `DownloadSource` | slskd; Prowlarr search (`sources/prowlarr.py`, not wired until a download client exists) | qBittorrent/SABnzbd download clients (#326, #327) |
 | `MetadataProvider` | MusicBrainz, AcoustID, Cover Art Archive | Discogs (`metadata/discogs.py`), Deezer (`metadata/deezer.py`) |
 | `LibraryTarget` | Navidrome | Jellyfin, Plex, Music Assistant |
 | `HistorySource` | ListenBrainz (plays and stars come through `UserLibrary`) | |
