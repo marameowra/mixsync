@@ -60,12 +60,15 @@ class Usenet:
         self.blobs = maker.blobs[("x", NAME)]
         files = "".join(
             f'<file subject="&quot;{n}&quot; yEnc (1/1)"><segments>'
-            f'<segment bytes="{len(b)}" number="1">{i}@x</segment></segments></file>'
+            # yEnc-encoded sizes, as a real NZB lists them: a bit above the decoded file's
+            f'<segment bytes="{len(b) * 102 // 100 + 500}" number="1">{i}@x</segment>'
+            "</segments></file>"
             for i, (n, b) in enumerate(sorted(self.blobs.items()))
         )
         self.nzb = f'<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">{files}</nzb>'.encode()
         self.dir = tmp / "usenet"
         self.status = "Completed"
+        self.share = 1.0  # of each decoded file SABnzbd writes
         self.job: dict[str, Any] | None = None
         self.deleted: list[dict[str, str]] = []
 
@@ -93,7 +96,7 @@ class Usenet:
             folder = self.dir / f["nzbname"]
             for name, blob in self.blobs.items():
                 folder.mkdir(parents=True, exist_ok=True)
-                (folder / name).write_bytes(blob)
+                (folder / name).write_bytes(blob[: int(len(blob) * self.share)])
             self.job = {"nzo_id": "SABnzbd_nzo_1", "name": f["nzbname"], "category": f["cat"]}
             self.job |= {"storage": str(folder), "bytes": 1}
             return httpx.Response(200, json={"status": True, "nzo_ids": ["SABnzbd_nzo_1"]})
@@ -179,3 +182,14 @@ async def test_a_failed_job_drops_the_candidate_and_is_cleared_from_sabnzbd(
             "del_files": "1",
         }
     ]
+
+
+async def test_a_completed_job_with_files_well_short_of_the_nzb_is_dropped(
+    env: Env, tmp_path: Path
+) -> None:
+    """The NZB's encoded sizes allow a decoded file down to 90 %; far less is a broken file."""
+    u = wire(env, tmp_path)
+    u.share = 0.5
+    rid = request(env)
+    await env.drain(until=lambda: status(env, rid) == "no_results")
+    assert library(env) == [] and tried(env, rid) == [["ExampleUsenet", NAME, "prowlarr"]]

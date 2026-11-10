@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -110,6 +111,24 @@ async def test_a_completed_job_is_done_with_its_files_under_the_dir(
         str(folder / "01 - Opening.flac"),
         str(folder / "sub" / "02 - Middle.flac"),
     )
+
+
+async def test_a_name_in_two_places_prefers_the_top_level_and_is_refused_when_ambiguous(
+    make_client: Make, tmp_path: Path
+) -> None:
+    folder = tmp_path / "usenet" / job_name(HASH)
+    (folder / "Bonus").mkdir(parents=True)
+    (folder / "Extra").mkdir()
+    for f in ("01.flac", "Bonus/01.flac", "Bonus/02.flac", "Extra/02.flac"):
+        (folder / f).write_bytes(b"x")
+    fake = FakeSab(folder)
+    fake.drop("queue", OURS)
+    client = sab(make_client, fake, tmp_path / "usenet")
+    one = replace(CAND, files=(CandidateFile(f"{TITLE}\\01.flac", 1, "flac"),))
+    assert (await client.status(one)).local_paths == (str(folder / "01.flac"),)
+    two = replace(CAND, files=(CandidateFile(f"{TITLE}\\02.flac", 1, "flac"),))
+    with pytest.raises(PermanentError, match="more than one subfolder"):
+        await client.status(two)
 
 
 async def test_a_job_finished_outside_the_dir_is_refused(make_client: Make, tmp_path: Path) -> None:

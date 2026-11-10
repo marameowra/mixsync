@@ -3,6 +3,7 @@ to that schema, not recorded from a live instance."""
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -418,6 +419,8 @@ async def test_a_torrent_redirected_to_the_indexer_is_fetched_there_and_hash_che
     assert flac.infohash == ALBUM_HASH and "PASS" not in json.dumps(candidate_dict(flac))
     await src.enqueue(flac)
     assert len(hits) == 2 and album in added[0] and "PASS" not in ours(caplog)
+    # the indexer gets a plain User-Agent, never MIXSYNC_MB_CONTACT
+    assert all(re.fullmatch(r"MixSync/\S+", r.headers["User-Agent"]) for r in hits)
 
 
 async def test_a_second_redirect_is_never_followed(make_client: Make) -> None:

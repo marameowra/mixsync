@@ -11,6 +11,7 @@ import hashlib
 import logging
 import re
 import xml.etree.ElementTree as ET
+from importlib.metadata import version
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -243,7 +244,9 @@ class ProwlarrSource:
         if target.scheme not in ("http", "https"):
             return response
         try:
-            response = await self._client.get(str(target))
+            # a plain User-Agent: MIXSYNC_MB_CONTACT is not for third-party indexers
+            agent = {"User-Agent": f"MixSync/{version('mixsync')}"}
+            response = await self._client.get(str(target), headers=agent)
         except httpx.TransportError as e:  # never the URL: it has the indexer's key
             raise TransientError(f"indexer unreachable ({type(e).__name__})") from e
         if response.status_code == 429 or response.status_code >= 500:

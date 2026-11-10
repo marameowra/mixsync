@@ -1082,8 +1082,10 @@ def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
         p = Path(path)
         if not p.is_file():
             return f"{p.name} is not in the downloads folder"
-        if p.stat().st_size != f.size:
-            return f"{p.name} is {p.stat().st_size} bytes, expected {f.size}"
+        size = p.stat().st_size
+        # an NZB lists yEnc-encoded sizes, ~2 % above the decoded file's
+        if not (0.9 * f.size <= size <= f.size if cand.nzb_hash else size == f.size):
+            return f"{p.name} is {size} bytes, expected {f.size}"
     return None
 
 

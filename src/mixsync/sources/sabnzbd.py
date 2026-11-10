@@ -104,13 +104,17 @@ class Sabnzbd:
         names = [f.path.rpartition("\\")[2] for f in candidate.files]
         if any(n in ("", ".", "..") or "/" in n for n in names):
             raise PermanentError("unsafe file name in the NZB")
-        # shortcut: files are matched by name anywhere under the job folder; two files of one
-        # name in different subfolders resolve to one. Match by path if releases need it.
-        found_files = await asyncio.to_thread(
-            lambda: {p.name: p for p in folder.rglob("*") if p.is_file()}
-        )
-        paths = tuple(str(found_files.get(n, folder / n)) for n in names)
-        return TransferInfo(TransferStatus.DONE, done, paths)
+        files = await asyncio.to_thread(lambda: [p for p in folder.rglob("*") if p.is_file()])
+        paths: list[str] = []
+        for n in names:
+            hits = [p for p in files if p.name == n]
+            if folder / n in hits or not hits:  # top level first; a missing file fails the check
+                paths.append(str(folder / n))
+            elif len(hits) == 1:  # SABnzbd may unpack into a subfolder
+                paths.append(str(hits[0]))
+            else:
+                raise PermanentError(f"{n!r} is in more than one subfolder of the job")
+        return TransferInfo(TransferStatus.DONE, done, tuple(paths))
 
     async def remove(self, nzb_hash: str) -> None:
         """Delete MixSync's job. Partial files go with a queued or failed one; a completed job's
