@@ -28,7 +28,7 @@ class TrackResolver:
         self._lb = lb
 
     async def resolve(
-        self, artist: str, title: str, isrc: str | None = None
+        self, artist: str, title: str, isrc: str | None = None, lb_token: str | None = None
     ) -> RecordingRef | None:
         code = (isrc or "").replace("-", "").strip().upper()
         if _ISRC.fullmatch(code):
@@ -41,5 +41,7 @@ class TrackResolver:
             ]
             if scored:
                 return min(scored, key=lambda t: t[0])[1]
-        found = await self._lb.lookup(artist, title)
+        if not lb_token:  # the lookup needs a user token; without one the track stays unresolved
+            return None
+        found = await self._lb.lookup(artist, title, lb_token)
         return found if found and _confident(artist, title, found) is not None else None

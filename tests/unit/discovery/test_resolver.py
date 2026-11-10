@@ -11,6 +11,7 @@ from mixsync.ratelimit.client import PoliteClient
 
 Make = Callable[[str, Callable[[httpx.Request], httpx.Response]], PoliteClient]
 CASSETTES = Path(__file__).parents[2] / "cassettes"
+TOKEN = "lb-token"
 CLOCKS = RecordingRef("b9ad642e-b012-41c7-b72a-42cf4911f9ff", None, "Coldplay", "Clocks")
 LYDIA = RecordingRef(
     "dad4820e-4887-4d1e-83e2-6fe1166b3f49",
@@ -50,31 +51,31 @@ async def test_isrc_resolves_to_the_confident_recording(make_client: Make) -> No
 async def test_lookup_resolves_above_the_gate(make_client: Make) -> None:
     r, seen = resolver(make_client)
 
-    assert await r.resolve("Dauwd", "Lydia") == LYDIA
+    assert await r.resolve("Dauwd", "Lydia", lb_token=TOKEN) == LYDIA
     assert seen[0].url.path == "/1/metadata/lookup/"
     assert seen[0].url.params["artist_name"] == "Dauwd"
     assert seen[0].url.params["recording_name"] == "Lydia"
-    assert "authorization" not in seen[0].headers
+    assert seen[0].headers["authorization"] == f"Token {TOKEN}"
 
 
 async def test_below_threshold_lookup_is_unresolved(make_client: Make) -> None:
     r, _ = resolver(make_client)
 
-    assert await r.resolve("Dauwd", "Lydia (Totally Different Song)") is None
-    assert await r.resolve("Someone Else", "Lydia") is None
+    assert await r.resolve("Dauwd", "Lydia (Totally Different Song)", lb_token=TOKEN) is None
+    assert await r.resolve("Someone Else", "Lydia", lb_token=TOKEN) is None
 
 
 async def test_isrc_without_a_hit_falls_through_to_lookup(make_client: Make) -> None:
     r, seen = resolver(make_client, mb_status=404)
 
-    assert await r.resolve("Dauwd", "Lydia", "XXXXX0000000") == LYDIA
+    assert await r.resolve("Dauwd", "Lydia", "XXXXX0000000", lb_token=TOKEN) == LYDIA
     assert [q.url.path for q in seen] == ["/ws/2/isrc/XXXXX0000000", "/1/metadata/lookup/"]
 
 
 async def test_isrc_recordings_below_the_gate_fall_through(make_client: Make) -> None:
     r, seen = resolver(make_client)
 
-    assert await r.resolve("Dauwd", "Lydia", "GBAYE0601498") == LYDIA
+    assert await r.resolve("Dauwd", "Lydia", "GBAYE0601498", lb_token=TOKEN) == LYDIA
     assert len(seen) == 2
 
 
@@ -87,7 +88,7 @@ async def test_isrc_hit_ignores_upstream_version_suffixes(make_client: Make) -> 
 async def test_malformed_isrc_skips_musicbrainz(make_client: Make) -> None:
     r, seen = resolver(make_client)
 
-    assert await r.resolve("Dauwd", "Lydia", "not/an?isrc") == LYDIA
+    assert await r.resolve("Dauwd", "Lydia", "not/an?isrc", lb_token=TOKEN) == LYDIA
     assert [q.url.path for q in seen] == ["/1/metadata/lookup/"]
 
 
@@ -95,4 +96,11 @@ async def test_lookup_miss_is_unresolved(make_client: Make) -> None:
     lb = ListenBrainzClient(make_client("listenbrainz", lambda _: httpx.Response(200, json={})))
     mb = MusicBrainzProvider(make_client("musicbrainz", lambda _: httpx.Response(404)))
 
-    assert await TrackResolver(mb, lb).resolve("Nobody", "Nothing", "GBAYE0601498") is None
+    assert await TrackResolver(mb, lb).resolve("Nobody", "Nothing", "GBAYE0601498", TOKEN) is None
+
+
+async def test_no_token_skips_the_listenbrainz_lookup(make_client: Make) -> None:
+    r, seen = resolver(make_client, mb_status=404)
+
+    assert await r.resolve("Dauwd", "Lydia", "XXXXX0000000") is None
+    assert [q.url.path for q in seen] == ["/ws/2/isrc/XXXXX0000000"]

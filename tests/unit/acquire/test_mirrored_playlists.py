@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mixsync.core.errors import AuthError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.core.types import RecordingRef
 from mixsync.db.auth import create_user
@@ -42,9 +43,16 @@ class FakeResolver:
         self.unresolved: set[str] = set()
         self.no_release: set[str] = set()
         self.calls: list[str] = []
+        self.tokens: list[str | None] = []
+        self.raises: Exception | None = None
 
-    async def __call__(self, artist: str, title: str, isrc: str | None) -> RecordingRef | None:
+    async def __call__(
+        self, artist: str, title: str, isrc: str | None, lb_token: str | None
+    ) -> RecordingRef | None:
         self.calls.append(title)
+        self.tokens.append(lb_token)
+        if self.raises:
+            raise self.raises
         if title in self.unresolved:
             return None
         n = int(title.split()[-1])
@@ -329,3 +337,36 @@ async def test_a_push_is_skipped_when_navidrome_finds_none_of_the_owned_tracks(
     pl = mr.pl(pid)
     assert mr.lib.pushes == 0 and pl.navidrome_playlist_id is None
     assert pl.last_error == mirrored.NONE_FOUND
+
+
+async def test_the_owners_listenbrainz_token_reaches_the_resolver(mr: MirrorRig) -> None:
+    mr.base.link(mr.env.user_id, ("listenbrainz",))
+    mr.create()
+    mr.upstream.lists["a"] = [up(1)]
+    await mr.sync()
+    assert mr.resolver.tokens == ["listenbrainz-secret"]
+
+
+async def test_without_a_listenbrainz_link_the_sync_resolves_with_no_token(mr: MirrorRig) -> None:
+    pid = mr.create()
+    mr.upstream.lists["a"] = [up(1)]
+    await mr.sync()
+    assert mr.resolver.tokens == [None]
+    assert mr.pl(pid).last_synced_at is not None
+
+
+async def test_an_auth_error_while_matching_is_shown_and_the_next_sync_scheduled(
+    mr: MirrorRig,
+) -> None:
+    pid = mr.create()
+    mr.upstream.lists["a"] = [up(1)]
+    mr.resolver.raises = AuthError("ListenBrainz rejected the user token")
+    await mr.sync()
+    pl = mr.pl(pid)
+    assert pl.last_error == "ListenBrainz rejected the user token"
+    assert pl.last_synced_at is None and not pl.entries
+    assert pl.next_sync_at is not None
+    with mr.env.sessions() as s:
+        assert s.scalars(
+            select(Job).where(Job.kind == JobKind.MIRROR_SYNC, Job.status == "queued")
+        ).first()
