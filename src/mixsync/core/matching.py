@@ -151,6 +151,8 @@ class Candidate:
     has_cue: bool = False  # a .cue sheet was in the folder (the files list drops it)
     seeders: int = 0  # torrent seeders (indexer releases); Soulseek and Usenet leave it 0
     source: str = "slskd"  # the download source it came from; the pipeline sets it per search
+    url: str = ""  # an indexer release's download link, never with the API key in it
+    infohash: str = ""  # a torrent's v1 info hash (lowercase hex); Soulseek and Usenet leave it
 
 
 class TransferStatus(StrEnum):

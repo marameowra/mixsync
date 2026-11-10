@@ -7,13 +7,15 @@ Docker Compose on a home server, next to slskd and Navidrome. Files: `Dockerfile
 
 ## Mounts
 ```
-mixsync-*:  /config (rw)  /downloads (rw)  /data (rw)  /import-source (ro, migration only)  /drop (rw, optional)
-slskd:      /downloads (rw)  /data/library (ro)
-navidrome:  /data/library (ro)  /data/discover (ro)
+mixsync-*:   /config (rw)  /downloads (rw)  /data (rw)  /import-source (ro, migration only)  /drop (rw, optional)  /torrents (ro, optional)
+slskd:       /downloads (rw)  /data/library (ro)
+navidrome:   /data/library (ro)  /data/discover (ro)
+qbittorrent: /torrents (rw, optional)
 ```
 - `/data` is one mount holding `library/`, `discover/`, `.trash/`, `.incoming/`, `quarantine/`. Never split it ([why](../docs/architecture.md#deployment)); MixSync refuses a cross-device move.
 - Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2, name it `discover` (or set `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY`), and grant the relevant users access.
 - `/drop` (set `MIXSYNC_DROP_DIR=/drop`): album folders are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash`. Files under a minute old are left alone; a rejected folder is not requeued unless its contents change.
+- `/torrents` (set `MIXSYNC_QBITTORRENT_DIR=/torrents`): qBittorrent's save path for MixSync's torrents (category `mixsync`), at the same path in both containers and apart from `/downloads`, `/data` and `/drop`. MixSync only copies from it ([ADR 0022](../docs/decisions/0022-seeding-downloads-copied-never-released.md)); qBittorrent's ratio and seed-time rules remove finished torrents, so an album takes disk twice until then.
 - Run all containers with the same `PUID`/`PGID`.
 
 ## Environment variables
@@ -34,7 +36,9 @@ navidrome:  /data/library (ro)  /data/discover (ro)
 | `MIXSYNC_SLSKD_URL`, `MIXSYNC_SLSKD_API_KEY` | slskd connection |
 | `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
 | `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
-| `MIXSYNC_PROWLARR_URL`, `MIXSYNC_PROWLARR_API_KEY` | Prowlarr connection (torrent and Usenet search, 1 request / 2 s). Not used yet: Prowlarr becomes a download source once a download client (qBittorrent, #326) is supported |
+| `MIXSYNC_PROWLARR_URL`, `MIXSYNC_PROWLARR_API_KEY` | Prowlarr connection (torrent and Usenet search, 1 request / 2 s). With qBittorrent set too, torrents are a download source; Usenet waits for SABnzbd (#327) |
+| `MIXSYNC_QBITTORRENT_URL`, `MIXSYNC_QBITTORRENT_USERNAME`, `MIXSYNC_QBITTORRENT_PASSWORD` | qBittorrent Web UI and login (empty if its auth is bypassed for MixSync); env only |
+| `MIXSYNC_QBITTORRENT_DIR` | save path of MixSync's torrents, the same in both containers; unset = no torrents |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`); not used on Postgres |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |

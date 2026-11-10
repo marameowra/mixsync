@@ -24,6 +24,7 @@ from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, backoff
+from mixsync.core.protocols import DownloadSource
 from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.discovery.listenbrainz import ListenBrainzClient
@@ -43,6 +44,9 @@ from mixsync.library.purge import TrashPurger
 from mixsync.metadata.acoustid import AcoustIdClient, fingerprint
 from mixsync.ratelimit.bucket import Slots
 from mixsync.ratelimit.client import PoliteClient
+from mixsync.sources import DOWNLOAD_SOURCES
+from mixsync.sources.prowlarr import ProwlarrSource
+from mixsync.sources.qbittorrent import Qbittorrent
 from mixsync.sources.query import queries
 from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
 from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
@@ -186,22 +190,36 @@ async def run_worker(
 
 def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
     settings, sessions, clock = services.settings, services.session_factory, services.clock
+    sources: dict[str, DownloadSource] = {
+        "slskd": SlskdSource(
+            PoliteClient("slskd", settings, sessions),
+            settings.slskd_url,
+            settings.slskd_api_key,
+            downloads_dir=Path(settings.downloads_dir),
+            slots=Slots("slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE),
+            debounce=timedelta(seconds=settings.slskd_search_debounce),
+        ),
+    }
+    needs = DOWNLOAD_SOURCES["prowlarr"][1]  # qbittorrent_dir among them
+    if (save := settings.qbittorrent_dir) and all(getattr(settings, k) for k in needs):
+        sources["prowlarr"] = ProwlarrSource(
+            PoliteClient("prowlarr", settings, sessions),
+            settings.prowlarr_url,
+            settings.prowlarr_api_key,
+            torrents=Qbittorrent(
+                PoliteClient("qbittorrent", settings, sessions),
+                settings.qbittorrent_url,
+                settings.qbittorrent_username,
+                settings.qbittorrent_password,
+                save,
+            ),
+            protocols=frozenset({"torrent"}),  # NZBs wait for SABnzbd (#327)
+        )
 
     return Pipeline(
         sessions=sessions,
         clock=clock,
-        sources={
-            "slskd": SlskdSource(
-                PoliteClient("slskd", settings, sessions),
-                settings.slskd_url,
-                settings.slskd_api_key,
-                downloads_dir=Path(settings.downloads_dir),
-                slots=Slots(
-                    "slskd-search", settings.slskd_max_searches, sessions, clock, SEARCH_LEASE
-                ),
-                debounce=timedelta(seconds=settings.slskd_search_debounce),
-            ),
-        },
+        sources=sources,
         max_searches=settings.slskd_max_searches,
         gate=DownloadGate(
             settings.max_concurrent_downloads,

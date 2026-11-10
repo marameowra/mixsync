@@ -72,6 +72,7 @@ def build_services(
         SqlJournal(session_factory, clock),
         clock,
         settings.drop_dir,
+        settings.qbittorrent_dir,
     )
     musicbrainz = MusicBrainzProvider(
         PoliteClient("musicbrainz", settings, session_factory),

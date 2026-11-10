@@ -28,10 +28,9 @@ def sf(settings: Settings) -> sessionmaker[Session]:
 
 @pytest.fixture
 def two_sources(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A second download source, configured by no setting at all."""
-    monkeypatch.setattr(
-        account, "DOWNLOAD_SOURCES", {**account.DOWNLOAD_SOURCES, "other": ("Other", ())}
-    )
+    """Soulseek and a second download source, configured by no setting at all."""
+    slskd = account.DOWNLOAD_SOURCES["slskd"]
+    monkeypatch.setattr(account, "DOWNLOAD_SOURCES", {"slskd": slskd, "other": ("Other", ())})
 
 
 def client_for(sf: sessionmaker[Session], settings: Settings) -> Iterator[TestClient]:
@@ -102,7 +101,7 @@ def test_a_source_without_its_settings_is_not_configured_and_stays_off(
         assert "not configured" in page
         assert re.search(r'name="enabled" value="slskd"[^>]* disabled', page)
         c.post("/account/sources", data={"csrf_token": tok, "enabled": "slskd"})
-        assert saved(sf) == [["slskd", False]]
+        assert saved(sf) == [["slskd", False], ["prowlarr", False]]
 
 
 def test_a_post_without_the_csrf_token_is_refused(
@@ -111,3 +110,16 @@ def test_a_post_without_the_csrf_token_is_refused(
     login(client, "root")
     assert client.post("/account/sources", data={"enabled": "slskd"}).status_code == 403
     assert saved(sf) is None
+
+
+def test_torrents_are_configured_only_with_prowlarr_and_qbittorrent_both_set(
+    sf: sessionmaker[Session],
+) -> None:
+    prowlarr = {"prowlarr_url": "http://prowlarr:9696", "prowlarr_api_key": "k"}
+    qbit = {"qbittorrent_url": "http://qbittorrent:8080", "qbittorrent_dir": "/torrents"}
+    for settings, on in ((Settings(**prowlarr), False), (Settings(**prowlarr, **qbit), True)):
+        for c in client_for(sf, settings):
+            login(c, "root")
+            page = c.get("/account/sources").text
+            box = r'name="enabled" value="prowlarr"[^>]* disabled'
+            assert bool(re.search(box, page)) is not on

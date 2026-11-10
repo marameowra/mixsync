@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from mixsync.core.clock import SystemClock
 from mixsync.core.errors import SafetyError
+from mixsync.db.journal import SqlJournal
 from mixsync.library import fileops
 from mixsync.library.fileops import FileOps
 
@@ -96,3 +98,23 @@ def test_release_after_discover_import(ops: FileOps, make_src: MakeSrc, data_dir
     assert src.exists()
     ops.release(src, "b1", root="discover")
     assert not src.exists() and (data_dir / "discover" / REL).exists()
+
+
+def test_release_and_quarantine_never_touch_a_seeding_download(
+    data_dir: Path, journal: SqlJournal, make_src: MakeSrc, tmp_path: Path
+) -> None:
+    """ADR 0022 backstop: whatever the caller asks, a file under the qBittorrent save path is
+    copied, never released, moved or deleted."""
+    seeding = tmp_path / "torrents"
+    ops = FileOps(data_dir, tmp_path / "downloads", journal, SystemClock(), seeding_dir=seeding)
+    (seeding / "Album").mkdir(parents=True)
+    src = make_src().rename(seeding / "Album" / "src.flac")
+    before = src.read_bytes()
+    ops.import_file(src, "A/B/x.flac", append_tag, "b1")
+    with pytest.raises(SafetyError, match="seeding download"):
+        ops.release(src, "b1")
+    copy = ops.quarantine(src, "rejected", "q1")
+    assert copy.read_bytes() == before and copy.parent.name == "Album"
+    assert ops.quarantine(src, "review", "q2").read_bytes() == before
+    assert src.read_bytes() == before and ops.seeding(src)
+    assert not ops.seeding(tmp_path / "downloads" / "x.flac")
