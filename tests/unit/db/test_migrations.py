@@ -19,11 +19,17 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
-    assert _version(settings) == "0036_smart_playlists"
+    assert _version(settings) == "0037_smart_playlists"
+    downgrade("-1")  # the chain runs 0035 -> 0036 -> 0037, one step at a time
+    assert _version(settings) == "0036_user_download_auto"
+    downgrade("-1")
+    assert _version(settings) == "0035_app_settings_sources"
+    upgrade()
+    assert _version(settings) == "0037_smart_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0036_smart_playlists"
+    assert _version(settings) == "0037_smart_playlists"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -292,3 +298,31 @@ def test_0023_adds_null_name_columns_without_touching_rows(settings: Settings) -
         cols = {col["name"] for col in inspect(c).get_columns("tracks")}
         assert c.execute(text("SELECT path FROM tracks")).scalar() == "a.flac"
     assert not cols & {"album_artist", "album", "year"}
+
+
+def test_0036_turns_automatic_downloads_on_for_existing_users(settings: Settings) -> None:
+    upgrade("0035_app_settings_sources")
+    day = "'2026-01-01'"
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
+            )
+        )
+        c.execute(  # a row referencing users: the upgrade must not recreate the table
+            text(
+                "INSERT INTO requests (id, user_id, release_mbid, artist, album, status, tried,"
+                " no_results_attempts, source, provisional, recording_mbids, created_at,"
+                f" updated_at) VALUES (1, 1, '', '', '', 'searching', '[]', 0, 'manual', :f,"
+                f" '[]', {day}, {day})"
+            ),
+            {"f": False},
+        )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        assert bool(c.execute(text("SELECT download_auto FROM users")).scalar()) is True
+    downgrade("0035_app_settings_sources")
+    with make_engine(settings).connect() as c:
+        assert "download_auto" not in {col["name"] for col in inspect(c).get_columns("users")}
+        assert c.execute(text("SELECT username FROM users")).scalar() == "u"

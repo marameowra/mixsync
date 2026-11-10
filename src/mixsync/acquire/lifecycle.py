@@ -23,15 +23,27 @@ IN_PROGRESS: tuple[Status, ...] = (
     "importing",
 )  # a failed job fails these
 BUSY: tuple[Status, ...] = ("downloading", "verifying", "importing")  # files moving: no delete
-OPEN: tuple[Status, ...] = (*SEARCHING, "downloading", "verifying", "review")  # may bring tracks
+OPEN: tuple[Status, ...] = (
+    "pending_approval",
+    *SEARCHING,
+    "downloading",
+    "verifying",
+    "review",
+)  # may bring tracks
 DONE: tuple[Status, ...] = (
     "imported",
     "owned",
     "failed",
     "skipped",
     "unverified",
+    "denied",
 )  # no file to come
-NO_FILE: tuple[Status, ...] = ("failed", "skipped")  # ended without a file (not in DONE's rest)
+NO_FILE: tuple[Status, ...] = (
+    "failed",
+    "skipped",
+    "denied",
+)  # ended without a file (not in DONE's rest)
+# "pending_approval": parked with no job until approved (-> searching) or denied (-> denied)
 
 
 def can_search(req: "Request") -> bool:
@@ -64,6 +76,19 @@ def _set(req: "Request", status: Status, *, keep_note: bool = False) -> None:
     req.status, req.dead_end = status, False
     if not keep_note:
         req.partial_note = None
+
+
+def pending_approval(req: "Request") -> None:
+    _set(req, "pending_approval")
+
+
+def approved(req: "Request") -> None:
+    _set(req, "searching")
+
+
+def denied(req: "Request", reason: str) -> None:
+    _set(req, "denied")
+    req.last_error = reason or None
 
 
 def failed(req: "Request", why: str) -> None:

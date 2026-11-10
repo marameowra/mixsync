@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, Select, select, update
+from sqlalchemy import CursorResult, Select, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -210,6 +210,7 @@ class Discovery:
                 return
             links, why = self.links(s, pl.user_id)
             sources, size, ratio = list(pl.sources) or DEFAULT_SOURCES, pl.size, pl.unowned_ratio
+            owner = pl.user_id
         if links is None:
             return self._stop(pid, job.id, why)
         lb_name, lb_token = links["listenbrainz"]
@@ -266,6 +267,18 @@ class Discovery:
                 )
                 for m in lifecycle.dead_recordings(r, ever)
             }
+            dead |= {  # the owner's request was denied: asking again only parks it again
+                (r.release_mbid, m)
+                for r in s.scalars(
+                    select(Request).where(
+                        Request.provisional,
+                        Request.status == "denied",
+                        Request.user_id == owner,
+                        Request.release_mbid.in_(releases),
+                    )
+                )
+                for m in r.recording_mbids
+            }
         asks: list[tuple[RecordingRef, str]] = []
         for c, release in ready:
             if (release, c.recording_mbid) in dead:
@@ -280,7 +293,7 @@ class Discovery:
             pl = s.get(DiscoveryPlaylist, pid)
             if pl is None:
                 return
-            live = self._live_requests(s)
+            live = self._live_requests(s, pl.user_id)
             by_release: dict[str, list[str]] = {}  # one request per release, all its tracks
             for c, release in asks:
                 if c.recording_mbid not in live:
@@ -328,11 +341,16 @@ class Discovery:
                 self._schedule_next(s, self.clock.now(), pl, job_id)
 
     @staticmethod
-    def _live_requests(s: Session) -> dict[str, int]:
-        """recording MBID -> a provisional request still on its way to a file."""
+    def _live_requests(s: Session, user_id: int) -> dict[str, int]:
+        """recording MBID -> a provisional request still on its way to a file. Another user's
+        request waiting for approval may never get there: it is not counted."""
         live: dict[str, int] = {}
         for r in s.scalars(
-            select(Request).where(Request.provisional, Request.status.not_in(lifecycle.DONE))
+            select(Request).where(
+                Request.provisional,
+                Request.status.not_in(lifecycle.DONE),
+                or_(Request.status != "pending_approval", Request.user_id == user_id),
+            )
         ):
             for m in r.recording_mbids:
                 live.setdefault(m, r.id)

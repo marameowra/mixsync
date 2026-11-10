@@ -110,6 +110,18 @@ def change_role(
     return RedirectResponse("/users", 303)
 
 
+@router.post("/{user_id}/download-auto")
+def set_download_auto(
+    request: Request, user_id: int, admin: Admin, db: Db, enabled: Annotated[bool, Form()]
+) -> Response:
+    """Parked requests stay parked when it is turned back on: they wait for approval."""
+    target = _target(db, user_id)
+    if is_admin(db, target.id):
+        return _page(request, admin, db, "Administrators always have automatic downloads.")
+    target.download_auto = enabled
+    return RedirectResponse("/users", 303)
+
+
 @router.post("/{user_id}/password")
 def reset_password(
     request: Request, user_id: int, admin: Admin, db: Db, password: Annotated[str, Form()] = ""

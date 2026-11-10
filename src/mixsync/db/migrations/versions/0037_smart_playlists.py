@@ -1,14 +1,14 @@
 """smart playlists: rules over the owned library, rebuilt on a cadence
 
-Revision ID: 0036_smart_playlists
-Revises: 0035_app_settings_sources
+Revision ID: 0037_smart_playlists
+Revises: 0036_user_download_auto
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0036_smart_playlists"
-down_revision: str | None = "0035_app_settings_sources"
+revision = "0037_smart_playlists"
+down_revision: str | None = "0036_user_download_auto"
 branch_labels = None
 depends_on = None
 
