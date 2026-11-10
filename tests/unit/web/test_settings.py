@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from markupsafe import escape
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,7 +16,7 @@ from mixsync.__main__ import main
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock, aware
 from mixsync.core.config import PATH_FIELDS, Settings
-from mixsync.db.app_settings import EDITABLE, load_settings
+from mixsync.db.app_settings import EDITABLE, SECRETS, load_settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
@@ -24,7 +25,7 @@ from mixsync.db.models.infra import WorkerHeartbeat
 from mixsync.db.queue import JobQueue
 from mixsync.db.secretbox import SecretBox
 from mixsync.library.paths import render
-from mixsync.web.routes.settings import GROUPS
+from mixsync.web.routes.settings import GROUPS, READ_ONLY
 from mixsync.wiring import build_services
 
 RESTART = "Saved. Restart mixsync-web and mixsync-worker to apply."
@@ -154,6 +155,17 @@ def test_read_only_settings_are_shown_and_bootstrap_secrets_are_not(client: Test
     assert 'name="qbittorrent_dir"' not in page and 'name="sabnzbd_dir"' not in page
     for name in ("secret_key", "database_url"):
         assert name not in page
+
+
+def test_every_rendered_field_has_a_description(client: TestClient) -> None:
+    for name in (*EDITABLE, *SECRETS, *READ_ONLY):
+        assert Settings.model_fields[name].description, f"{name} needs Field(description=...)"
+    login(client, "root")
+    page = client.get("/settings").text
+    for name in (*EDITABLE, *SECRETS, *READ_ONLY):
+        desc = escape(Settings.model_fields[name].description or "")
+        assert f'<span class="help" id="d-{name}">{desc}</span>' in page
+        assert f'aria-describedby="d-{name}"' in page
 
 
 SECRET = "s3cr3t-value-xyz"

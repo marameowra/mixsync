@@ -20,53 +20,155 @@ PATH_FIELDS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MIXSYNC_", hide_input_in_errors=True)
 
-    database_url: str = "sqlite:////config/mixsync.db"
-    config_dir: str = "/config"
-    secret_key: str = ""  # Fernet key for stored user secrets; wins over config_dir/secret.key
-    mb_contact: str = Field(default="https://github.com/marameowra/mixsync", min_length=1)
-    mb_rate: float = Field(default=1.0, gt=0, le=1)  # MusicBrainz allows 1 req/s per IP
-    mb_base_url: str = "https://musicbrainz.org"  # optional local mirror
-    acoustid_app_key: str = ""
-    acoustid_user_key: str = ""  # one key for the deployment; all submissions go under it
-    deezer_suggestions: bool = False  # Mark unverified offers on-demand Deezer lookups
-    discogs_suggestions: bool = False  # Mark unverified offers Discogs lookups via a user token
-    slskd_url: str = "http://slskd:5030"
-    slskd_api_key: str = ""
-    slskd_max_searches: int = Field(default=2, ge=1)  # slskd searches in flight, all workers
-    slskd_search_debounce: int = Field(default=300, ge=0)  # seconds a query's result is reused
-    prowlarr_url: str = ""  # its torrents download through qBittorrent, NZBs through SABnzbd
-    prowlarr_api_key: str = ""
-    qbittorrent_url: str = ""
-    qbittorrent_username: str = ""
-    qbittorrent_password: str = ""
-    qbittorrent_dir: Path | None = None  # the `mixsync` category's save path: seeding, copy only
-    sabnzbd_url: str = ""
-    sabnzbd_api_key: str = ""
-    sabnzbd_dir: Path | None = None  # the `mixsync` category's folder: released after import
-    max_concurrent_downloads: int = Field(default=3, ge=1)
-    slow_download_window: int = Field(default=60, ge=1)  # seconds the average rate is taken over
-    slow_download_floor: int = Field(default=50_000, ge=0)  # bytes/s: below this a transfer is slow
-    slow_download_share: float = Field(default=0.10, ge=0, le=1)  # of total download throughput
-    navidrome_url: str = "http://navidrome:4533"
-    navidrome_user: str = ""  # an admin: startScan needs it
-    navidrome_password: str = ""
-    navidrome_library: str = "Music Library"  # the main library's name in Navidrome
-    navidrome_discover_library: str = "discover"  # the library over /data/discover
-    backup_dir: Path | None = None  # unset: config_dir/backups; SQLite only (Postgres: pg_dump)
-    data_dir: str = "/data"
-    downloads_dir: str = "/downloads"
-    drop_dir: Path | None = None  # unset: no drop folder; read-write, originals go to the trash
-    adopt_downloads: bool = False  # import album folders nobody requested that land in downloads
-    adopt_settle_minutes: int = Field(default=10, ge=1)  # a folder must be this quiet to be adopted
-    import_source_dir: str = "/import-source"  # the old library; mounted read-only
-    flac_level: int = Field(default=8, ge=0, le=8)  # above 8 leaves the FLAC subset
-    canonical_media: list[str] = ["Digital Media", "CD"]  # preferred formats, best first
-    canonical_countries: list[str] = ["XW"]  # preferred release countries, best first
-    embed_cover: bool = False  # also embed the front cover (up to 1 MB) in imported files
-    trash_days: int = Field(default=30, ge=1)  # trash from day folders older than this is purged
-    timezone: str = "UTC"  # the zone report days are read in
-    path_template: str = "{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}"
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    database_url: str = Field(
+        default="sqlite:////config/mixsync.db",
+        description="SQLAlchemy URL of the database: sqlite: or postgresql://.",
+    )
+    config_dir: str = Field(
+        default="/config", description="Folder for the SQLite database, secret key and backups."
+    )
+    secret_key: str = Field(
+        default="",
+        description="Fernet key that encrypts stored secrets; wins over config_dir/secret.key.",
+    )
+    mb_contact: str = Field(
+        default="https://github.com/marameowra/mixsync",
+        min_length=1,
+        description="Contact URL or email sent in the User-Agent of MusicBrainz requests.",
+    )
+    mb_rate: float = Field(
+        default=1.0,
+        gt=0,
+        le=1,
+        description="MusicBrainz requests per second, above 0 and at most 1 (its per-IP limit).",
+    )
+    mb_base_url: str = Field(
+        default="https://musicbrainz.org",
+        description="MusicBrainz server to query; set it to use a local mirror.",
+    )
+    acoustid_app_key: str = Field(
+        default="", description="AcoustID application API key, used to look up fingerprints."
+    )
+    acoustid_user_key: str = Field(
+        default="",
+        description="AcoustID user key; all fingerprint submissions go under it.",
+    )
+    deezer_suggestions: bool = Field(
+        default=False,
+        description="Mark unverified offers with on-demand Deezer lookups.",
+    )
+    discogs_suggestions: bool = Field(
+        default=False,
+        description="Mark unverified offers with Discogs lookups via a user token.",
+    )
+    slskd_url: str = Field(default="http://slskd:5030", description="Base URL of the slskd server.")
+    slskd_api_key: str = Field(default="", description="API key for the slskd server.")
+    slskd_max_searches: int = Field(
+        default=2, ge=1, description="Most slskd searches in flight at once, across all workers."
+    )
+    slskd_search_debounce: int = Field(
+        default=300,
+        ge=0,
+        description="Seconds a search result is reused before the same query repeats.",
+    )
+    prowlarr_url: str = Field(
+        default="",
+        description="Base URL of Prowlarr; its torrents go to qBittorrent, NZBs to SABnzbd.",
+    )
+    prowlarr_api_key: str = Field(default="", description="API key for Prowlarr.")
+    qbittorrent_url: str = Field(default="", description="Base URL of the qBittorrent Web UI.")
+    qbittorrent_username: str = Field(default="", description="qBittorrent Web UI username.")
+    qbittorrent_password: str = Field(default="", description="qBittorrent Web UI password.")
+    qbittorrent_dir: Path | None = Field(
+        default=None,
+        description="Save path of the mixsync category in qBittorrent: seeding, copied only.",
+    )
+    sabnzbd_url: str = Field(default="", description="Base URL of SABnzbd.")
+    sabnzbd_api_key: str = Field(default="", description="API key for SABnzbd.")
+    sabnzbd_dir: Path | None = Field(
+        default=None,
+        description="Folder of the mixsync category in SABnzbd; released after import.",
+    )
+    max_concurrent_downloads: int = Field(
+        default=3, ge=1, description="Most downloads running at the same time."
+    )
+    slow_download_window: int = Field(
+        default=60, ge=1, description="Seconds over which a transfer's average rate is taken."
+    )
+    slow_download_floor: int = Field(
+        default=50_000,
+        ge=0,
+        description="Bytes per second below which a transfer counts as slow.",
+    )
+    slow_download_share: float = Field(
+        default=0.10,
+        ge=0,
+        le=1,
+        description="Share (0 to 1) of total download throughput below which a transfer is slow.",
+    )
+    navidrome_url: str = Field(
+        default="http://navidrome:4533", description="Base URL of the Navidrome server."
+    )
+    navidrome_user: str = Field(
+        default="", description="Navidrome admin username; startScan needs an admin."
+    )
+    navidrome_password: str = Field(default="", description="Password of the Navidrome user.")
+    navidrome_library: str = Field(
+        default="Music Library", description="Name of the main library in Navidrome."
+    )
+    navidrome_discover_library: str = Field(
+        default="discover", description="Name of the Navidrome library over /data/discover."
+    )
+    backup_dir: Path | None = Field(
+        default=None,
+        description="Backup folder; unset means config_dir/backups. SQLite only.",
+    )
+    data_dir: str = Field(default="/data", description="Folder holding the organized library.")
+    downloads_dir: str = Field(default="/downloads", description="Folder downloads land in.")
+    drop_dir: Path | None = Field(
+        default=None,
+        description="Drop folder to import from; unset means none. Originals go to the trash.",
+    )
+    adopt_downloads: bool = Field(
+        default=False,
+        description="Import album folders nobody requested that land in downloads.",
+    )
+    adopt_settle_minutes: int = Field(
+        default=10,
+        ge=1,
+        description="Minutes a folder must stay quiet before it is adopted.",
+    )
+    import_source_dir: str = Field(
+        default="/import-source", description="The old library to import from; mounted read-only."
+    )
+    flac_level: int = Field(
+        default=8,
+        ge=0,
+        le=8,
+        description="FLAC compression level, 0 to 8 (above 8 leaves the subset).",
+    )
+    canonical_media: list[str] = Field(
+        default=["Digital Media", "CD"],
+        description="Preferred release formats, best first, comma-separated.",
+    )
+    canonical_countries: list[str] = Field(
+        default=["XW"],
+        description="Preferred release countries, best first, comma-separated.",
+    )
+    embed_cover: bool = Field(
+        default=False, description="Also embed the front cover (up to 1 MB) in imported files."
+    )
+    trash_days: int = Field(
+        default=30, ge=1, description="Days after which trash in a day folder is purged."
+    )
+    timezone: str = Field(default="UTC", description="Time zone that report days are read in.")
+    path_template: str = Field(
+        default="{albumartist}/{album} ({year})/{disc:02}-{track:02} {title}.{ext}",
+        description="Where imported files go under data_dir; must end in .{ext}.",
+    )
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO", description="Log verbosity: DEBUG, INFO, WARNING, ERROR or CRITICAL."
+    )
 
     @field_validator("log_level", mode="before")
     @classmethod
