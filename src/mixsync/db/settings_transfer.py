@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -15,8 +16,11 @@ from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
 from mixsync.db.models.discovery import DiscoveryPlaylist
 from mixsync.db.models.watchlist import Follow, WatchedEntity
+from mixsync.watchlist.follows import RELEASE_TYPES
 
 FORMAT_VERSION = 1
+MAX_INT = 2**31 - 1  # every integer column fits; larger values would fail mid-write
+_DATE = re.compile(r"\d{4}(?:-\d{2}(?:-\d{2})?)?")  # as the watchlist form accepts
 _APP_FIELDS = frozenset((*EDITABLE, "min_auto_accept_confidence", "source_priority"))
 _PROFILE_FIELDS = frozenset({"name", "preset", "auto_accept_max", "review_max", "quality_pref"})
 _USER_FIELDS = frozenset(
@@ -208,6 +212,8 @@ def _int(value: Any, path: str, *, nullable: bool = False) -> int | None:
         return None
     if type(value) is not int:
         raise TransferError(f"{path}: expected an integer")
+    if abs(value) > MAX_INT:
+        raise TransferError(f"{path}: integer is outside the supported range")
     return value
 
 
@@ -386,6 +392,10 @@ def _validate_document(
                                 f"{name_value!r}"
                             )
                         names.add(name_value)
+                    if pairs and not any(enabled for _, enabled in pairs):
+                        raise TransferError(  # as the Sources page: none enabled finds nothing
+                            "$.app_settings.source_priority: at least one source must be enabled"
+                        )
                     normalized_app[name] = value
             else:
                 from pydantic import TypeAdapter
@@ -394,6 +404,8 @@ def _validate_document(
                 assert annotation is not None
                 typed = TypeAdapter(annotation).validate_python(value, strict=True)
                 normalized_app[name] = getattr(Settings(**{name: typed}), name)
+                if type(normalized_app[name]) is int and abs(normalized_app[name]) > MAX_INT:
+                    raise TransferError(f"$.app_settings.{name}: integer is outside the range")
         except ValidationError as e:
             details = "; ".join(
                 f"{err['loc']}: {err['msg']}" for err in e.errors(include_input=False)
@@ -442,15 +454,19 @@ def _validate_document(
                 if kind not in {"artist", "label"}:
                     raise TransferError(f"{path}.kind: expected artist or label")
                 release_types = _list(d["release_types"], f"{path}.release_types")
-                if any(not isinstance(x, str) for x in release_types):
-                    raise TransferError(f"{path}.release_types: expected an array of strings")
-                _string(
+                if any(x not in RELEASE_TYPES for x in release_types):
+                    raise TransferError(
+                        f"{path}.release_types: expected values from {', '.join(RELEASE_TYPES)}"
+                    )
+                min_date = _string(
                     d["min_date"],
                     f"{path}.min_date",
                     nullable=True,
                     allow_empty=True,
                     max_length=10,
                 )
+                if min_date and not _DATE.fullmatch(min_date):
+                    raise TransferError(f"{path}.min_date: expected YYYY, YYYY-MM or YYYY-MM-DD")
                 cap = _int(d["weekly_cap"], f"{path}.weekly_cap", nullable=True)
                 if cap is not None and cap < 1:
                     raise TransferError(f"{path}.weekly_cap: expected null or a positive integer")

@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     elif cmd == "import-settings":
         from mixsync.db.engine import make_engine, make_session_factory
-        from mixsync.db.settings_transfer import TransferError, import_settings
+        from mixsync.db.settings_transfer import import_settings
 
         if not args.username:
             parser.error("import-settings requires a JSON file path")
@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     report = import_settings(s, document, include_secrets=args.include_secrets)
             print(json.dumps(report, indent=2, sort_keys=True))
-        except (OSError, UnicodeError, json.JSONDecodeError, TransferError) as e:
+        except (OSError, ValueError, RecursionError) as e:  # JSON, Unicode and TransferError too
             print(f"import-settings failed: {e}", file=sys.stderr)
             return 1
         except SQLAlchemyError:

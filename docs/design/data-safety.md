@@ -56,6 +56,7 @@ Before any tag write, the full original tag set is stored in the DB, keyed by fi
 `mixsync export-settings > settings.json` exports users, roles, per-user matching
 profiles and quality preferences, app settings, follows, discovery playlist definitions,
 and linked-account identities. The JSON uses natural keys and a versioned format.
+Mirrored and smart playlists are not exported yet (#401); recreate them after an import.
 It excludes library files, requests, operation journals, match decisions, and worker run
 state. This seeds or recovers settings; it does not replace a database backup or migrate
 a whole install between SQLite and Postgres.

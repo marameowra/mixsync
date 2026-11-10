@@ -195,6 +195,11 @@ def test_import_dry_run_and_repeat_are_read_only_and_idempotent(sessions, tmp_pa
         ),
         lambda d: d["app_settings"].update(source_priority=[["Soulseek", 1]]),
         lambda d: d["app_settings"].update(source_priority=[["Soulseek"]]),
+        lambda d: d["app_settings"].update(source_priority=[["Soulseek", False]]),
+        lambda d: d["app_settings"].update(trash_days=10**30),
+        lambda d: d["follows"][0].update(weekly_cap=10**30),
+        lambda d: d["follows"][0].update(min_date="zzzz"),
+        lambda d: d["follows"][0].update(release_types=["album", "bootleg"]),
     ],
 )
 def test_invalid_document_is_rejected_before_any_write(sessions, tmp_path: Path, mutate) -> None:
@@ -429,3 +434,16 @@ def test_an_export_from_before_the_approval_queue_imports_users_as_auto_download
         import_settings(target, document, apply=True)
     with target_sessions() as target:
         assert all(u.download_auto for u in target.scalars(select(User)))
+
+
+def test_cli_hostile_json_fails_cleanly_without_a_traceback(
+    settings: Settings, tmp_path: Path, capsys
+) -> None:
+    from mixsync.db.migrate import upgrade
+
+    upgrade()
+    for name, text in (("deep.json", "[" * 100_000), ("digits.json", "1" * 5000)):
+        path = tmp_path / name
+        path.write_text(text)
+        assert main(["import-settings", str(path), "--apply"]) == 1
+        assert "Traceback" not in capsys.readouterr().err
