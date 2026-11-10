@@ -58,3 +58,20 @@ def test_exportify_csv_uses_isrc_first_artist_and_the_file_name() -> None:
 def test_malformed_files_are_rejected(data: bytes) -> None:
     with pytest.raises(BadFile):
         parse(data, "f.json")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'Track Name,Artist Name(s)\n"unclosed,' + b"x" * 200_000,
+        b"Track Name,Artist Name(s)\na\x00,b\n",
+    ],
+)
+def test_broken_csv_is_a_bad_file_not_a_crash(data: bytes) -> None:
+    with pytest.raises(BadFile):
+        parse(data, "f.csv")
+
+
+def test_a_name_overrides_the_csv_file_name() -> None:
+    found = parse(b"Track Name,Artist Name\nx,y\n", "road_trip (1).csv", "Road Trip")
+    assert list(found) == ["Road Trip"]

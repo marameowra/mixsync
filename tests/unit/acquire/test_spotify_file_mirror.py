@@ -126,3 +126,19 @@ def test_a_name_used_by_another_mirror_is_a_conflict(fr: FileRig, web: TestClien
         mirrored.create(s, fr.env.clock.now(), fr.env.user_id, "Faves", "fake", "x")
     assert fr.upload(web, export("Faves", 1)) == 409
     assert len(fr.mirrors()) == 1
+
+
+async def test_a_csv_reupload_under_another_file_name_updates_the_named_mirror(
+    fr: FileRig, web: TestClient
+) -> None:
+    own_in_navidrome(fr, 1, 2)
+    head = b"Track Name,Artist Name(s),ISRC\n"
+    assert fr.upload(web, head + b"Upstream 1,Artist,GBABC1234567\n", "road_trip.csv") == 303
+    await fr.sync()
+    assert fr.songs() == ["s1"]
+    new = head + b"Upstream 2,Artist,\nUpstream 1,Artist,GBABC1234567\n"
+    assert fr.upload(web, new, "road_trip (1).csv", name="road_trip") == 303
+    assert [p.name for p in fr.mirrors()] == ["road_trip"]
+    await fr.sync()
+    assert fr.songs() == ["s2", "s1"]
+    assert [e["isrc"] for e in fr.mirrors()[0].entries] == [None, "GBABC1234567"]

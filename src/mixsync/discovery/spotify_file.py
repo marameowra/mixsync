@@ -65,21 +65,29 @@ def _from_json(doc: object) -> Parsed:
 
 
 def _from_csv(text: str, name: str) -> Parsed:
+    if "\x00" in text:
+        raise BadFile("invalid CSV: contains NUL bytes")
     rows = csv.DictReader(io.StringIO(text))
-    fields = rows.fieldnames or []
-    artist = next((f for f in ("Artist Name(s)", "Artist Name") if f in fields), None)
-    if "Track Name" not in fields or artist is None:
-        raise BadFile('not a Spotify playlist CSV: needs "Track Name" and "Artist Name(s)" columns')
-    tracks = [
-        tr
-        for r in rows
-        if (tr := _track((r[artist] or "").split(";")[0], r["Track Name"], r.get("ISRC")))
-    ]
+    try:
+        fields = rows.fieldnames or []
+        artist = next((f for f in ("Artist Name(s)", "Artist Name") if f in fields), None)
+        if "Track Name" not in fields or artist is None:
+            raise BadFile(
+                'not a Spotify playlist CSV: needs "Track Name" and "Artist Name(s)" columns'
+            )
+        tracks = [
+            tr
+            for r in rows
+            if (tr := _track((r[artist] or "").split(";")[0], r["Track Name"], r.get("ISRC")))
+        ]
+    except csv.Error as e:
+        raise BadFile(f"invalid CSV: {e}") from e
     return {name[:255]: tracks}
 
 
-def parse(data: bytes, filename: str) -> Parsed:
-    """The playlists in an uploaded file. Raises BadFile; nothing is stored here."""
+def parse(data: bytes, filename: str, name: str = "") -> Parsed:
+    """The playlists in an uploaded file; a CSV is named `name`, else after the file. Raises
+    BadFile; nothing is stored here."""
     if len(data) > MAX_BYTES:
         raise BadFile(f"file is larger than {MAX_BYTES // 1_000_000} MB")
     try:
@@ -91,7 +99,7 @@ def parse(data: bytes, filename: str) -> Parsed:
             return _from_json(json.loads(text))
         except json.JSONDecodeError as e:
             raise BadFile(f"invalid JSON: {e.msg}") from None
-    return _from_csv(text, Path(filename).stem.strip() or "Spotify playlist")
+    return _from_csv(text, name.strip() or Path(filename).stem.strip() or "Spotify playlist")
 
 
 def ref_for(name: str) -> str:
@@ -114,26 +122,23 @@ class SpotifyFile:
             ) from None
         return [UpstreamTrack(r["artist"], r["title"], r["isrc"]) for r in rows]
 
-    def save(self, user_id: int, ref: str, tracks: list[UpstreamTrack]) -> bool:
-        """Store the list; False if it is already the stored one."""
+    def save(self, user_id: int, ref: str, tracks: list[UpstreamTrack]) -> None:
         path = self._path(user_id, ref)
         body = json.dumps([{"artist": t.artist, "title": t.title, "isrc": t.isrc} for t in tracks])
-        if path.exists() and path.read_text("utf-8") == body:
-            return False
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_text(body, "utf-8")
         os.replace(tmp, path)
-        return True
 
     def upload(
         self, s: Session, now: datetime, user_id: int, name: str, tracks: list[UpstreamTrack]
     ) -> MirroredPlaylist:
-        """The user's mirror of playlist `name`, made on the first upload; a changed list is
-        stored and synced now, the same list again does nothing. A name the user already uses
-        for another mirror raises IntegrityError."""
+        """The user's mirror of playlist `name`, made on the first upload; the list is stored,
+        and synced now if it differs from the mirror's last synced one (the same list again
+        queues nothing). A name the user already uses for another mirror raises IntegrityError."""
         ref = ref_for(name)
         pl = mirrored.create(s, now, user_id, name, KIND, ref)
-        if self.save(user_id, ref, tracks):
+        self.save(user_id, ref, tracks)
+        if [mirrored.key(e) for e in pl.entries] != [(t.artist, t.title, t.isrc) for t in tracks]:
             mirrored.sync_now(s, now, pl, force=True)
         return pl

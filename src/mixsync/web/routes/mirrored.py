@@ -88,8 +88,9 @@ async def upload_spotify(
     """Create or update a mirror from an uploaded Spotify playlist file. The whole file is
     checked before anything is written; a data export with several playlists needs `name`."""
     try:
-        found = spotify_file.parse(await file.read(spotify_file.MAX_BYTES + 1), file.filename or "")
-        pick = name.strip() or (next(iter(found)) if len(found) == 1 else "")
+        data = await file.read(spotify_file.MAX_BYTES + 1)
+        found = spotify_file.parse(data, file.filename or "", name)  # name also names a CSV
+        pick = name.strip()[:255] or (next(iter(found)) if len(found) == 1 else "")
         if pick not in found:
             raise spotify_file.BadFile(
                 f"playlist {pick!r} is not in the file"
