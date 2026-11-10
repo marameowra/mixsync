@@ -150,6 +150,8 @@ def test_read_only_settings_are_shown_and_bootstrap_secrets_are_not(client: Test
     login(client, "root")
     page = client.get("/settings").text
     assert "config_dir" in page and "data_dir" in page
+    assert "qbittorrent_dir" in page and "sabnzbd_dir" in page
+    assert 'name="qbittorrent_dir"' not in page and 'name="sabnzbd_dir"' not in page
     for name in ("secret_key", "database_url"):
         assert name not in page
 
@@ -349,3 +351,33 @@ def test_a_worker_without_a_recent_heartbeat_is_unknown_not_current(
         s.add(WorkerHeartbeat(name="w", seen_at=stale, settings_version=load_settings()[1]))
     page = client.get("/settings").text
     assert "Restart pending: web, worker (unknown: no recent heartbeat)" in page
+
+
+def test_torrent_and_usenet_connections_save_and_their_secrets_stay_write_only(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    page = client.get("/settings").text
+    assert "Torrent and Usenet" in page
+    for name in ("prowlarr_url", "qbittorrent_url", "qbittorrent_username", "sabnzbd_url"):
+        assert "source: default" in field(page, name)
+    for name in ("prowlarr_api_key", "qbittorrent_password", "sabnzbd_api_key"):
+        assert 'type="password"' in field(page, name)
+    data = {
+        "csrf_token": tok,
+        "qbittorrent_url": "http://qbit:8080",
+        "qbittorrent_password": SECRET,
+        "qbittorrent_dir": "/elsewhere",
+    }
+    assert client.post("/settings", data=data).status_code == 303
+    assert saved(sf, "qbittorrent_url") == "http://qbit:8080"
+    token = _ciphertext(sf, "qbittorrent_password")
+    assert token and SECRET not in token
+    assert load_settings()[0].qbittorrent_dir is None  # a mount path: never saved
+    page = client.get("/settings").text
+    assert SECRET not in page and "saved" in field(page, "qbittorrent_password")
+    assert (
+        client.post("/settings/reset/qbittorrent_dir", data={"csrf_token": tok}).status_code == 404
+    )
+    client.post("/settings/clear/qbittorrent_password", data={"csrf_token": tok})
+    assert _ciphertext(sf, "qbittorrent_password") is None

@@ -39,9 +39,9 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_SLSKD_MAX_SEARCHES` | slskd searches in flight across all workers (default 2); extra searches wait |
 | `MIXSYNC_SLSKD_SEARCH_DEBOUNCE` | seconds a search query's result is reused (default 300) |
 | `MIXSYNC_PROWLARR_URL`, `MIXSYNC_PROWLARR_API_KEY` | Prowlarr connection (torrent and Usenet search, 1 request / 2 s). With qBittorrent set too, torrents are a download source; with SABnzbd, Usenet; either is enough |
-| `MIXSYNC_QBITTORRENT_URL`, `MIXSYNC_QBITTORRENT_USERNAME`, `MIXSYNC_QBITTORRENT_PASSWORD` | qBittorrent Web UI and login (empty if its auth is bypassed for MixSync); env only |
+| `MIXSYNC_QBITTORRENT_URL`, `MIXSYNC_QBITTORRENT_USERNAME`, `MIXSYNC_QBITTORRENT_PASSWORD` | qBittorrent Web UI and login (empty if its auth is bypassed for MixSync); also on the settings page |
 | `MIXSYNC_QBITTORRENT_DIR` | save path of MixSync's torrents, the same in both containers; unset = no torrents |
-| `MIXSYNC_SABNZBD_URL`, `MIXSYNC_SABNZBD_API_KEY` | SABnzbd connection and API key; env only, never logged |
+| `MIXSYNC_SABNZBD_URL`, `MIXSYNC_SABNZBD_API_KEY` | SABnzbd connection and API key; also on the settings page, never logged |
 | `MIXSYNC_SABNZBD_DIR` | folder of SABnzbd's `mixsync` category, the same in both containers; unset = no Usenet |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`); not used on Postgres |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |

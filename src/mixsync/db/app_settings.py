@@ -33,19 +33,20 @@ ENV_ONLY = frozenset(
         "drop_dir",
         "import_source_dir",
         "backup_dir",
-        "prowlarr_url",  # new download-source connections stay env vars (#301)
-        "prowlarr_api_key",
-        "qbittorrent_url",
-        "qbittorrent_username",
-        "qbittorrent_password",
         "qbittorrent_dir",
-        "sabnzbd_url",
-        "sabnzbd_api_key",
         "sabnzbd_dir",
     }
 )
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page
-SECRETS = ("slskd_api_key", "navidrome_password", "acoustid_app_key", "acoustid_user_key")
+SECRETS = (
+    "slskd_api_key",
+    "navidrome_password",
+    "acoustid_app_key",
+    "acoustid_user_key",
+    "prowlarr_api_key",
+    "qbittorrent_password",
+    "sabnzbd_api_key",
+)
 EDITABLE = tuple(n for n in Settings.model_fields if n not in ENV_ONLY and n not in SECRETS)
 
 Source = Literal["saved", "environment", "default"]
