@@ -52,7 +52,35 @@ Before any tag write, the full original tag set is stored in the DB, keyed by fi
 - Postgres: no backups here. `mixsync backup` exits non-zero and says to use `pg_dump`; the nightly job does nothing; `migrate` logs a notice and upgrades.
 - Restore is manual: stop MixSync, copy a backup over the database file.
 
-> Planned — not built (#303): settings export/import.
+### Settings export and import
+
+`mixsync export-settings > settings.json` exports users, roles, per-user matching
+profiles and quality preferences, app settings, follows, discovery playlist definitions,
+and linked-account identities. The JSON uses natural keys and a versioned format.
+Mirrored and smart playlists are not exported yet (#401); recreate them after an import.
+It excludes library files, requests, operation journals, match decisions, and worker run
+state. This seeds or recovers settings; it does not replace a database backup or migrate
+a whole install between SQLite and Postgres.
+
+`mixsync import-settings settings.json` previews additions, existing rows to skip, and
+invalid input without writing. Add `--apply` to import in one transaction. Existing
+rows always win: nothing is updated or deleted, and importing does not queue jobs.
+Unknown roles, invalid references, and unsupported format versions fail before writes.
+If app settings were added, restart the web and worker processes to load their new
+startup settings; the imported settings have a fresh version for the restart warning.
+
+Password hashes are excluded by default. Newly imported users without restored hashes
+are disabled; set a password on the Users page and enable them. Restoring original
+passwords requires `--include-secrets` on both export and import. Export warns on stderr;
+use `--output settings.json` to create a new file with mode `0600` (an existing path is
+refused). Treat an export containing hashes as a credential backup.
+On an empty destination, first create a separate recovery admin with
+`mixsync user-add recovery-admin --admin` so you can enable the imported accounts.
+
+Linked-account secrets and saved app credentials are never exported, even with
+`--include-secrets`. Imported links require relinking, and app credentials must be set
+again on the destination. Keep the export private: usernames and service locations are
+still personal configuration.
 
 ## 7. Independence
 The library is plain, standard-tagged audio. Navidrome or any player works without MixSync. Its own markers are plain text tags (e.g. `MIXSYNC_STATUS`).
