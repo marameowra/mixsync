@@ -48,8 +48,8 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
-| `MIXSYNC_NAVIDROME_LIBRARY` | name of the main Navidrome library (default `Music Library`) |
-| `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY` | name of the discover Navidrome library (default `discover`) |
+| `MIXSYNC_NAVIDROME_LIBRARY` | name of the main Navidrome library, matched ignoring case (default `Music Library`) |
+| `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY` | name of the discover Navidrome library, matched ignoring case (default `discover`) |
 | `MIXSYNC_NAVIDROME_URL`, `_USER`, `_PASSWORD` | Navidrome base URL and an **admin** account (`startScan` needs admin) |
 | `PUID`, `PGID` | file ownership |
 | `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`; default `127.0.0.1,::1` |

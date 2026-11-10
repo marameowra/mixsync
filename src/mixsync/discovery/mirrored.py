@@ -346,7 +346,7 @@ class Mirror:
         lib = d.library_for(*login)
         try:
             folders = await lib.music_folders() if main else {}
-            folder = folders.get(d.main_library) if main else None
+            folder = d.folder_id(folders, d.main_library) if main else None
             note = d.missing_note(
                 [d.main_library] if main else [], folders, "searching all libraries"
             )
