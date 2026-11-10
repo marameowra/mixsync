@@ -1,4 +1,5 @@
 import random
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,8 @@ KEYS = ("artist", "album", "track_title")
 
 def seed(path: Path, n: int) -> None:
     """Decisions whose outcome depends only on the title penalty; the other two are noise."""
-    engine = create_engine(f"sqlite:///{path}")
+    # sqlite3 takes the path as is; a sqlite:/// URL would decode '%' and drop a '?' suffix
+    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(path))
     Base.metadata.create_all(engine)
     rng = random.Random(1)
     with engine.begin() as conn:
@@ -62,6 +64,36 @@ def test_connection_is_read_only(tmp_path: Path) -> None:
         conn.execute(text("update match_decisions set final_action = 'accept'"))
     with engine.connect() as conn:
         assert conn.scalar(select(func.count()).select_from(MatchDecision.__table__)) == 5
+
+
+@pytest.mark.parametrize("name", ["copy#1.db", "pc%41.db", "a?b.db", "with space.db"])
+def test_uri_characters_in_the_path_still_open_read_only(tmp_path: Path, name: str) -> None:
+    db = tmp_path / name
+    seed(db, 5)
+    before = sorted(p.name for p in tmp_path.iterdir())
+    with pytest.raises(OperationalError), open_readonly(str(db)).begin() as conn:
+        conn.execute(text("create table t (x int)"))
+    with open_readonly(str(db)).connect() as conn:
+        assert conn.scalar(select(func.count()).select_from(MatchDecision.__table__)) == 5
+    assert sorted(p.name for p in tmp_path.iterdir()) == before  # no stray file created
+
+
+@pytest.mark.parametrize("target", ["sqlite://", "sqlite:///:memory:", "missing.db"])
+def test_no_database_file_exits_with_a_message(tmp_path: Path, target: str) -> None:
+    with pytest.raises(SystemExit, match="database file"):
+        open_readonly(target if "://" in target else str(tmp_path / target))
+
+
+def test_one_outcome_only_refuses_to_fit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "db.sqlite"
+    seed(db, 10)
+    engine = create_engine(f"sqlite:///{db}")
+    with engine.begin() as conn:
+        conn.execute(text("update match_decisions set final_action = 'reject'"))
+    assert main([str(db), "--force"]) == 1
+    assert "All 10 decisions were rejected" in capsys.readouterr().err
 
 
 def test_below_threshold_exits_nonzero_unless_forced(

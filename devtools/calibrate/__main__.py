@@ -9,6 +9,7 @@ normal PR editing `DEFAULT_WEIGHTS`, gated by the regression suite (docs/design/
 import argparse
 import json
 import math
+import sqlite3
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -31,12 +32,21 @@ Row = tuple[dict[str, float], bool]  # per-feature share of the distance, human 
 
 def open_readonly(target: str) -> Engine:
     """SQLite via a `mode=ro` URI; Postgres with every transaction read-only."""
-    if "://" not in target:
-        target = f"sqlite:///{Path(target).resolve()}"
-    if target.startswith("sqlite"):
-        path = target.split("///", 1)[1].removeprefix("file:").split("?")[0]
-        return create_engine(f"sqlite:///file:{path}?mode=ro&uri=true")
-    return create_engine(target, connect_args={"options": "-c default_transaction_read_only=on"})
+    if "://" in target and not target.startswith("sqlite"):
+        ro = {"options": "-c default_transaction_read_only=on"}
+        return create_engine(target, connect_args=ro)
+    # a bare path is used as is; a sqlite:/// URL loses its scheme and query
+    path = target.split("://", 1)[1].removeprefix("/").split("?")[0] if "://" in target else target
+    path = path.removeprefix("file:")
+    if path in ("", ":memory:"):
+        raise SystemExit("devtools.calibrate needs a database file, not an in-memory database")
+    file = Path(path).resolve()
+    if not file.is_file():
+        raise SystemExit(f"no database file at {file}")
+    # as_uri percent-encodes '#', '?' and '%', which SQLite would otherwise read as URI syntax
+    # and open (or create) a different file read-write
+    uri = file.as_uri() + "?mode=ro"
+    return create_engine("sqlite://", creator=lambda: sqlite3.connect(uri, uri=True))
 
 
 def load_rows(engine: Engine) -> list[Row]:
@@ -117,12 +127,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
     if not rows:
         return 1
+    if len({ok for _, ok in rows}) < 2:
+        outcome = "accepted" if rows[0][1] else "rejected"
+        print(
+            f"All {len(rows)} decisions were {outcome}; a fit needs both outcomes.",
+            file=sys.stderr,
+        )
+        return 1
     proposed = fit(rows)
     print(f"samples: {len(rows)} ({sum(ok for _, ok in rows)} accepted)")
     print(f"{'feature':<16}{'current':>9}{'proposed':>10}")
     for k, cur in DEFAULT_WEIGHTS.items():
         print(f"{k:<16}{cur:>9.3f}{proposed[k]:>10.3f}{'  *' if proposed[k] != cur else ''}")
-    print(f"agreement with human outcomes, threshold {THRESHOLD}:")
+    # approximate: each decision keeps its logged max distance, since the breakdown omits
+    # zero-penalty features; the scorer renormalises by the new weights
+    print(f"approximate agreement with human outcomes, threshold {THRESHOLD}:")
     print(f"  before: {agreement(DEFAULT_WEIGHTS, rows):.1%}")
     print(f"  after:  {agreement(proposed, rows):.1%}")
     print("Proposals only (in-sample). Land them through a PR that passes the regression suite.")
