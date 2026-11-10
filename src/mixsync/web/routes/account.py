@@ -149,6 +149,8 @@ def _page(
         "links": by_service,
         "error": error,
         "discogs": discogs,
+        "spotify_on": bool(request.app.state.services.settings.spotify_client_id),
+        "spotify_redirect": str(request.url_for("spotify_callback")),
         "auto_accept": confidence(profile.auto_accept_max),
         "review": confidence(profile.review_max),
         "tiers": [

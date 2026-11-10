@@ -44,6 +44,7 @@ class Services:
     discogs: DiscogsClient
     navidrome_http: PoliteClient
     listenbrainz_http: PoliteClient
+    spotify_http: PoliteClient
     secret_box: SecretBox
     settings_version: datetime | None  # app_settings.updated_at when `settings` was loaded
     fake_services_url: str = ""  # FAKE_SERVICES_ENV; "" is the real services
@@ -103,6 +104,7 @@ def build_services(
         discogs=DiscogsClient(PoliteClient("discogs", settings, session_factory)),
         navidrome_http=PoliteClient("navidrome", settings, session_factory),
         listenbrainz_http=PoliteClient("listenbrainz", settings, session_factory),
+        spotify_http=PoliteClient("spotify", settings, session_factory),
         secret_box=load_box(settings),
         settings_version=settings_version,
         fake_services_url=fake,

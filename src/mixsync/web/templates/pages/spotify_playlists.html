@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Import from Spotify - MixSync{% endblock %}
+{% block content %}
+<h1>Import from Spotify</h1>
+<p>Your own and collaborative Spotify playlists (Spotify does not let this app read others). Import reads the playlist once and builds a mirrored playlist: tracks already in your library go to a Navidrome playlist, missing ones are only listed. Nothing is downloaded or requested.</p>
+{% if not rows %}<p class="empty">No playlists of your own on Spotify.</p>{% else %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Playlist</th><th>Tracks</th><th></th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+  <tr>
+    <td>{{ p.name }}</td>
+    <td>{{ p.total }}</td>
+    <td><form method="post" action="/spotify/import">{{ forms.csrf() }}<input type="hidden" name="playlist_id" value="{{ p.id }}"><input type="hidden" name="name" value="{{ p.name }}"><button type="submit">Import</button></form></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+<p><a href="/mirrored">Back to mirrored playlists</a></p>
+{% endblock %}

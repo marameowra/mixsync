@@ -4,7 +4,7 @@
 {% block content %}
 <h1>Account</h1>
 <p>Connect your listening services for discovery playlists. Stored secrets are never shown.</p>
-{% if links.values() | selectattr("needs_relink") | list %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The stored secret for a linked service can no longer be decrypted (the secret key changed or was lost). Link it again below.</p>{% endif %}
+{% if links.values() | selectattr("needs_relink") | rejectattr("service", "eq", "spotify") | list %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> The stored secret for a linked service can no longer be decrypted (the secret key changed or was lost). Link it again below.</p>{% endif %}
 {% for sv, label in (("listenbrainz", "ListenBrainz"), ("navidrome", "Navidrome"), ("discogs", "Discogs")) if sv != "discogs" or discogs %}
 {% set link = links[sv] %}
 <h2>{{ label }}</h2>
@@ -18,6 +18,17 @@
 </form>
 {% if link %}<form method="post" action="/account/{{ sv }}/unlink">{{ forms.csrf() }}<button class="danger" type="submit">Unlink {{ label }}</button></form>{% endif %}
 {% endfor %}
+{% set link = links.get("spotify") %}
+{% if spotify_on or link %}
+<h2>Spotify</h2>
+<p>Import your own Spotify playlists on <a href="/mirrored">Mirrored playlists</a>. MixSync asks only to read your playlists, matches them against your library, and never requests or downloads missing tracks.</p>
+{% if link and link.needs_relink %}<p>{{ status("review", "Reconnect Spotify") }} Spotify no longer accepts the stored login; it expires 6 months after connecting.</p>{% elif link %}<p>{{ status("verified", "Connected as " ~ link.external_username) }}</p>{% else %}<p>{{ status("pending", "Not connected") }}</p>{% endif %}
+{% if spotify_on %}
+<p>Your Spotify app on the Spotify developer dashboard needs this exact redirect URI: <code>{{ spotify_redirect }}</code>. Spotify accepts only <code>https://</code> addresses, or <code>http://127.0.0.1:PORT/</code> (never <code>localhost</code>), so open MixSync at an address of that kind. In development mode the app's owner needs Spotify Premium, and each user (up to 5) must be on its allowlist.</p>
+<form method="post" action="/spotify/connect">{{ forms.csrf() }}<button type="submit">{{ "Reconnect" if link else "Connect" }} Spotify</button></form>
+{% endif %}
+{% if link %}<form method="post" action="/spotify/disconnect">{{ forms.csrf() }}<p>Disconnecting deletes your Spotify login and every playlist imported from Spotify here, at once. No music file is touched, and playlists already in Navidrome stay as they are.</p><button class="danger" type="submit">Disconnect Spotify</button></form>{% endif %}
+{% endif %}
 <h2>Matching</h2>
 {% if error and error[0] == "matching" %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> {{ error[1] }}</p>{% endif %}
 <form method="post" action="/account/matching/preset">

@@ -39,6 +39,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "mb_base_url",
         "deezer_suggestions",
         "discogs_suggestions",
+        "spotify_client_id",
     ),
     "slskd": ("slskd_url", "slskd_max_searches", "slskd_search_debounce"),
     "Torrent and Usenet": (

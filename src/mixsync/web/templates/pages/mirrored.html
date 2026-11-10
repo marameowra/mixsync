@@ -18,6 +18,10 @@
   <p class="field"><label>Playlist name (only if a data export holds several) <input name="name" type="text"></label></p>
   <button type="submit">Upload playlist file</button>
 </form>
+{% if spotify_on %}
+{% if spotify_linked %}<p><a href="/spotify/playlists">Import a playlist from your Spotify account</a>: one of your own or collaborative playlists, read once when you press Import. Tracks you own become a Navidrome playlist; missing ones are only listed here, never requested.</p>
+{% else %}<p>To import a playlist from your Spotify account, <a href="/account">connect Spotify on your account page</a>.</p>{% endif %}
+{% endif %}
 {% if not rows %}<p class="empty">No mirrored playlists yet.</p>{% endif %}
 
 {% for p in rows %}
@@ -26,8 +30,11 @@
 <p>Last synced {{ p.last_synced_at or "never" }}; next sync {{ p.next_sync_at or "-" }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last sync: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/mirrored/{{ p.id }}/sync">{{ forms.csrf() }}<button type="submit">Sync now</button></form>
+{% if p.upstream_kind == "spotify_api" %}<p>Imported from Spotify. A sync matches the imported list against your library again without calling Spotify; to pick up changes made on Spotify, import it again. Missing tracks are listed only: Spotify's terms do not allow requesting them.</p>
+{% if spotify_on and spotify_linked %}<form method="post" action="/spotify/import">{{ forms.csrf() }}<input type="hidden" name="playlist_id" value="{{ p.upstream_ref }}"><input type="hidden" name="name" value="{{ p.name }}"><button type="submit">Import again from Spotify</button></form>{% endif %}
+{% endif %}
 {% if p.auto_request_since %}<p>Newly loved missing tracks are requested automatically.</p>{% elif p.upstream_kind == "listenbrainz_loves" %}<p>After you confirm the first request, newly loved missing tracks are requested automatically.</p>{% endif %}
-{% set want = missing[p.id] %}
+{% set want = missing.get(p.id) %}
 {% if want %}
 <form method="post" action="/mirrored/{{ p.id }}/request">
   {{ forms.csrf() }}

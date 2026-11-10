@@ -27,6 +27,7 @@ def limits(service: str, settings: Settings) -> ServiceLimits:
         "listenbrainz": ServiceLimits(1.0, HOUR),
         "discogs": ServiceLimits(50 / 60, DAY),
         "deezer": ServiceLimits(1.0, DAY),
+        "spotify": ServiceLimits(1.0),  # never cached: every call carries the user's token
         "slskd": ServiceLimits(None),
         "prowlarr": ServiceLimits(0.5),  # each search fans out to every indexer: 1 req / 2 s
         "qbittorrent": ServiceLimits(None),  # local, like slskd
