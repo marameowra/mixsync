@@ -67,6 +67,13 @@ class Qbittorrent:
                 " on /settings (or MIXSYNC_QBITTORRENT_USERNAME and _PASSWORD)"
             )
 
+    async def ping(self) -> None:
+        """Log in, then read the app version (the settings page's Test button); changes nothing."""
+        await self._sign_in()
+        response = await self._call("GET", "app/version")
+        if response.status_code != 200:
+            raise PermanentError(f"qbittorrent app/version returned {response.status_code}")
+
     async def info(self, infohash: str) -> dict[str, Any] | None:
         """The torrent, if it is in MixSync's category (a user's own torrent is never ours)."""
         response = await self._call(

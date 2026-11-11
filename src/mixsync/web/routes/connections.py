@@ -17,6 +17,9 @@ from mixsync.db.auth import AuthUser
 from mixsync.metadata.acoustid import AcoustIdClient
 from mixsync.metadata.musicbrainz import MusicBrainzProvider
 from mixsync.ratelimit.client import PoliteClient
+from mixsync.sources.prowlarr import ProwlarrSource
+from mixsync.sources.qbittorrent import Qbittorrent
+from mixsync.sources.sabnzbd import Sabnzbd
 from mixsync.sources.slskd import SlskdSource
 from mixsync.targets.subsonic import SubsonicClient
 from mixsync.web.deps import Db, require
@@ -31,6 +34,9 @@ FIELDS = {
     "navidrome": ("navidrome_url", "navidrome_user", "navidrome_password"),
     "musicbrainz": ("mb_base_url",),
     "acoustid": ("acoustid_app_key",),
+    "prowlarr": ("prowlarr_url", "prowlarr_api_key"),
+    "qbittorrent": ("qbittorrent_url", "qbittorrent_username", "qbittorrent_password"),
+    "sabnzbd": ("sabnzbd_url", "sabnzbd_api_key"),
 }
 
 
@@ -44,6 +50,13 @@ async def _ping(service: str, v: dict[str, str], http: PoliteClient, request: Re
         await SubsonicClient(http, v["navidrome_url"], user, password).ping()
     elif service == "musicbrainz":
         await MusicBrainzProvider(http, v["mb_base_url"]).ping()
+    elif service == "prowlarr":
+        await ProwlarrSource(http, v["prowlarr_url"], v["prowlarr_api_key"]).ping()
+    elif service == "qbittorrent":
+        user, password = v["qbittorrent_username"], v["qbittorrent_password"]
+        await Qbittorrent(http, v["qbittorrent_url"], user, password, Path()).ping()
+    elif service == "sabnzbd":
+        await Sabnzbd(http, v["sabnzbd_url"], v["sabnzbd_api_key"], Path()).ping()
     else:
         key = v["acoustid_app_key"]
         await AcoustIdClient(http, settings.model_copy(update={"acoustid_app_key": key})).ping()
