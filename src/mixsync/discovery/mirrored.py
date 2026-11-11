@@ -180,8 +180,9 @@ def request_missing(s: Session, now: datetime, pl: MirroredPlaylist, releases: s
     return sum(len(w) for w in by_release.values())
 
 
-def key(e: dict[str, Any]) -> tuple[str, str, str | None]:
-    return (e["artist"], e["title"], e.get("isrc"))
+def key(e: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    """An entry's upstream identity; a stale Spotify import's stripped entry has none."""
+    return (e.get("artist"), e.get("title"), e.get("isrc"))
 
 
 class Mirror:

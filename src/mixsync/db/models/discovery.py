@@ -123,6 +123,10 @@ class MirroredPlaylist(TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     # set on the owner's first confirmation (loves only): later syncs request new tracks unasked
     auto_request_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # spotify_api only (#416): the last successful import, and when the worker may next try a
+    # background re-import (None: it gave up until the user imports again)
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reimport_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SmartPlaylist(TimestampMixin, Base):

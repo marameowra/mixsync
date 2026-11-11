@@ -19,17 +19,19 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0042_mirrored_spotify_import"
+    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042, one step at a time
     assert _version(settings) == "0041_tracks_request_id"
-    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
     downgrade("-1")
     assert _version(settings) == "0039_app_settings_spotify"
     upgrade()
-    assert _version(settings) == "0041_tracks_request_id"
+    assert _version(settings) == "0042_mirrored_spotify_import"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0041_tracks_request_id"
+    assert _version(settings) == "0042_mirrored_spotify_import"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -353,3 +355,37 @@ def test_0041_backfills_track_request_id_from_batch_id(settings: Settings) -> No
     downgrade("0040_http_cache_expires_index")
     with make_engine(settings).connect() as c:
         assert "request_id" not in {col["name"] for col in inspect(c).get_columns("tracks")}
+
+
+def test_0042_dates_existing_spotify_imports_from_their_creation(settings: Settings) -> None:
+    upgrade("0041_tracks_request_id")
+    day = "'2026-01-01'"
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
+            )
+        )
+        for name, kind in (("A", "spotify_api"), ("B", "spotify_file")):
+            c.execute(
+                text(
+                    "INSERT INTO mirrored_playlists (user_id, name, upstream_kind, upstream_ref,"
+                    " cadence_days, entries, created_at, updated_at)"
+                    f" VALUES (1, :n, :k, :n, 1, '[]', {day}, '2026-03-01')"
+                ),
+                {"n": name, "k": kind},
+            )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        rows = {
+            n: (i and str(i)[:10], r and str(r)[:10])
+            for n, i, r in c.execute(
+                text("SELECT name, imported_at, reimport_after FROM mirrored_playlists")
+            )
+        }
+    assert rows == {"A": ("2026-01-01", "2026-06-18"), "B": (None, None)}  # 182 - 14 days on
+    downgrade("0041_tracks_request_id")
+    with make_engine(settings).connect() as c:
+        cols = {col["name"] for col in inspect(c).get_columns("mirrored_playlists")}
+    assert "imported_at" not in cols and "reimport_after" not in cols

@@ -16,7 +16,7 @@ from mixsync.core.errors import PermanentError
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.discovery import MirroredPlaylist
-from mixsync.discovery import loves, mirrored, spotify_file
+from mixsync.discovery import loves, mirrored, spotify_api, spotify_file
 from mixsync.web.deps import Db, require
 from mixsync.web.templating import templates
 
@@ -51,6 +51,8 @@ def playlist_list(request: Request, user: User, db: Db) -> HTMLResponse:
         "rows": rows,
         "tracks": tracks,
         "missing": missing,
+        "stale_at": {p.id: spotify_api.stale_at(p) for p in rows},
+        "now": request.app.state.services.clock.now(),
         "lb_linked": _lb_linked(db, user),
         "has_loves": any(p.upstream_kind == mirrored.LOVES for p in rows),
         "spotify_on": bool(request.app.state.services.settings.spotify_client_id),

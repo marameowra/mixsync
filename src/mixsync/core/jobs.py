@@ -28,6 +28,7 @@ class JobKind(StrEnum):
     DISCOVERY_PUSH = "discovery_push"
     DISCOVERY_RETAIN = "discovery_retain"
     MIRROR_SYNC = "mirror_sync"
+    SPOTIFY_REIMPORT = "spotify_reimport"  # daily; never requests
     SMART_BUILD = "smart_build"  # owned library only; never requests
     DB_BACKUP = "db_backup"
     NAME_BACKFILL = "name_backfill"
