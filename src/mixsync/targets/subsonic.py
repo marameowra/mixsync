@@ -11,8 +11,13 @@ _AUTH_CODES = {40, 41}
 _NOT_AUTHORIZED = 50
 _NOT_FOUND = 70
 
-_ADMIN_HINT = "check MIXSYNC_NAVIDROME_USER and its password"
-_ADMIN_ONLY = "MIXSYNC_NAVIDROME_USER must be an admin user to start scans"
+_ADMIN_HINT = (
+    "check navidrome_user and navidrome_password on /settings"
+    " (or MIXSYNC_NAVIDROME_USER and _PASSWORD)"
+)
+_ADMIN_ONLY = (
+    "navidrome_user (on /settings or MIXSYNC_NAVIDROME_USER) must be an admin user to start scans"
+)
 
 
 class NotFoundError(PermanentError):

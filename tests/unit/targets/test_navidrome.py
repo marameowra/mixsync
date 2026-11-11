@@ -75,7 +75,7 @@ async def test_full_scan_and_ping(make_client: Make) -> None:
 
 @pytest.mark.parametrize(
     ("name", "needle"),
-    [("error_40", "check MIXSYNC_NAVIDROME_USER"), ("error_50", "must be an admin")],
+    [("error_40", "on /settings (or MIXSYNC_NAVIDROME_USER"), ("error_50", "must be an admin")],
 )
 async def test_failed_status_is_permanent(make_client: Make, name: str, needle: str) -> None:
     client = subsonic_client(make_client, lambda _r: fixture(name))

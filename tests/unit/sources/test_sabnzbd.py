@@ -195,7 +195,9 @@ async def test_the_api_key_is_never_in_a_url_or_a_log(
     await client.remove(HASH)
     assert fake.seen and all(KEY not in str(r.url) for r in fake.seen)
     bad = Sabnzbd(make_client("sabnzbd", fake), BASE, "wrong", tmp_path)
-    with pytest.raises(AuthError, match="MIXSYNC_SABNZBD_API_KEY"):
+    with pytest.raises(
+        AuthError, match=r"sabnzbd_api_key on /settings \(or MIXSYNC_SABNZBD_API_KEY\)"
+    ):
         await bad.status(CAND)
     assert KEY not in caplog.text
 

@@ -144,7 +144,10 @@ class SlskdSource:
             raise TransientError(f"slskd unreachable: {e!r}") from e
         code = response.status_code
         if code in (401, 403):
-            raise AuthError(f"slskd rejected the API key ({code}); check MIXSYNC_SLSKD_API_KEY")
+            raise AuthError(
+                f"slskd rejected the API key ({code}); check slskd_api_key on /settings"
+                " (or MIXSYNC_SLSKD_API_KEY)"
+            )
         if code >= 500:
             raise TransientError(f"slskd {path} returned {code}")
         if code >= 400:

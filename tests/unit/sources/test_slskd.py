@@ -250,7 +250,9 @@ async def test_a_failed_search_is_not_reused(make_client: Make) -> None:
 @pytest.mark.parametrize("code", [401, 403])
 async def test_sk_p06_auth_failure_names_the_api_key(make_client: Make, code: int) -> None:
     src = source(make_client, lambda r: httpx.Response(code))
-    with pytest.raises(PermanentError, match="API_KEY"):
+    with pytest.raises(
+        PermanentError, match=r"slskd_api_key on /settings \(or MIXSYNC_SLSKD_API_KEY\)"
+    ):
         await src.search("x")
 
 
