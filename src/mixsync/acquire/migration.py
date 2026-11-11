@@ -262,9 +262,7 @@ def retry(s: Session, now: datetime, req: Request) -> str | None:
     """Send a failed or skipped album on again. With files already in the library, import that
     same decision again (it skips what is in); else re-match from the first VERIFY, so it lands
     in review (or imports) with fresh choices. Returns why it cannot, else None."""
-    batch = s.scalar(
-        select(Track.batch_id).where(verify.in_request(Track.batch_id, req.id)).limit(1)
-    )
+    batch = s.scalar(select(Track.batch_id).where(Track.request_id == req.id).limit(1))
     copied = s.scalar(
         select(FileOp.id)
         .where(

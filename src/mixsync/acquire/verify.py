@@ -18,7 +18,7 @@ from mixsync.acquire.evidence import Evidence
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import LIVE, JobKind, backoff
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Job, Request
+from mixsync.db.models.work import JOB_REQUEST_ID, Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 
 VERIFY_ATTEMPTS = 10  # AcoustID being down must not exhaust the retries in minutes
@@ -35,12 +35,12 @@ def decision_of(batch: str) -> int:
 
 def in_request(column: Any, request_id: Any) -> ColumnElement[bool]:
     """`column` (a batch id) is one of the request's: a SQL condition; `request_id` may be a
-    column to join on."""
+    column to join on. Unindexable: tracks have `Track.request_id` for this."""
     return column.like(literal("request-") + cast(request_id, String) + "-%")
 
 
 def _of(request_id: int) -> ColumnElement[bool]:
-    return and_(Job.kind == JobKind.VERIFY, Job.payload["request_id"].as_integer() == request_id)
+    return and_(Job.kind == JobKind.VERIFY, JOB_REQUEST_ID == request_id)
 
 
 def start(

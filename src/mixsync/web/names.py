@@ -3,6 +3,7 @@
 Order: the mb_name table, local rows, then the response cache, then (detail pages only) a few
 cached, rate-limited lookups. List pages pass no lookups, so they never call MusicBrainz."""
 
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -79,3 +80,9 @@ async def resolve(
         with Session(db.get_bind()) as s, s.begin():
             put_names(s, datetime.now(UTC), learned)
     return found
+
+
+def resolve_listed(db: Session, namer: NameLookup, refs: set[Ref]) -> dict[str, str]:
+    """resolve() for a list page's plain `def` (threadpool) handler. With no lookups it awaits no
+    network, so it runs on a private loop in this thread, off the server's event loop."""
+    return asyncio.run(resolve(db, namer, refs))

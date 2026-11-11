@@ -9,7 +9,7 @@ from mixsync.acquire.lifecycle import is_busy, is_dead_end, is_waiting
 from mixsync.core.jobs import LIVE, JobState
 from mixsync.db.models.discovery import ProvisionalHold
 from mixsync.db.models.watchlist import FollowHit
-from mixsync.db.models.work import Job
+from mixsync.db.models.work import JOB_REQUEST_ID, Job
 from mixsync.db.models.work import Request as AlbumRequest
 
 
@@ -18,11 +18,11 @@ class NotDeletable(ValueError):
 
 
 def _of(req_id: int) -> ColumnElement[bool]:
-    return Job.payload["request_id"].as_integer() == req_id
+    return JOB_REQUEST_ID == req_id
 
 
 def live_states(db: Session, ids: list[int]) -> dict[int, set[JobState]]:
-    rid = Job.payload["request_id"].as_integer()
+    rid = JOB_REQUEST_ID
     states: dict[int, set[JobState]] = {}
     for req_id, status in db.execute(
         select(rid, Job.status).where(rid.in_(ids), Job.status.in_(LIVE))

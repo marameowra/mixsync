@@ -14,7 +14,7 @@ from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import User
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.deps import Db, Namer, require
-from mixsync.web.names import resolve
+from mixsync.web.names import resolve_listed
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/approvals")
@@ -23,14 +23,14 @@ MAX_REASON = 500
 
 
 @router.get("")
-async def queue(request: Request, user: Approver, db: Db, namer: Namer) -> HTMLResponse:
+def queue(request: Request, user: Approver, db: Db, namer: Namer) -> HTMLResponse:
     rows = db.execute(
         select(AlbumRequest, User.username)
         .join(User, User.id == AlbumRequest.user_id)
         .where(AlbumRequest.status == "pending_approval")
         .order_by(AlbumRequest.created_at, AlbumRequest.id)
     ).all()
-    names = await resolve(db, namer, {("release", r.release_mbid) for r, _ in rows})
+    names = resolve_listed(db, namer, {("release", r.release_mbid) for r, _ in rows})
     return templates.TemplateResponse(
         request, "pages/approvals.html", {"user": user, "rows": rows, "names": names}
     )

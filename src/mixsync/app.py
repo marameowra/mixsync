@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -36,6 +38,8 @@ from mixsync.web.routes import settings as settings_routes
 from mixsync.web.templating import templates
 from mixsync.wiring import Services, build_services
 
+log = logging.getLogger(__name__)
+
 
 def create_app(
     session_factory: sessionmaker[Session] | None = None,
@@ -56,11 +60,15 @@ def create_app(
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
 
     @app.middleware("http")
-    async def add_csp(  # pyright: ignore[reportUnusedFunction]  # registered by decorator
+    async def csp_and_timing(  # pyright: ignore[reportUnusedFunction]  # registered by decorator
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        start = time.perf_counter()
         response = await call_next(request)
         response.headers.setdefault("Content-Security-Policy", CSP)  # a route may relax it
+        # Until the body is sent: a streamed response logs its time to first byte.
+        ms = (time.perf_counter() - start) * 1000
+        log.debug("%s %s %s %.1fms", request.method, request.url.path, response.status_code, ms)
         return response
 
     @app.exception_handler(Exception)

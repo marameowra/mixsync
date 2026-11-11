@@ -19,17 +19,17 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0041_tracks_request_id"
+    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041, one step at a time
     assert _version(settings) == "0040_http_cache_expires_index"
-    downgrade("-1")  # the chain runs 0038 -> 0039 -> 0040, one step at a time
-    assert _version(settings) == "0039_app_settings_spotify"
     downgrade("-1")
-    assert _version(settings) == "0038_app_settings_torrent_usenet"
+    assert _version(settings) == "0039_app_settings_spotify"
     upgrade()
-    assert _version(settings) == "0040_http_cache_expires_index"
+    assert _version(settings) == "0041_tracks_request_id"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0040_http_cache_expires_index"
+    assert _version(settings) == "0041_tracks_request_id"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -326,3 +326,30 @@ def test_0036_turns_automatic_downloads_on_for_existing_users(settings: Settings
     with make_engine(settings).connect() as c:
         assert "download_auto" not in {col["name"] for col in inspect(c).get_columns("users")}
         assert c.execute(text("SELECT username FROM users")).scalar() == "u"
+
+
+def test_0041_backfills_track_request_id_from_batch_id(settings: Settings) -> None:
+    upgrade("0040_http_cache_expires_index")
+    with make_engine(settings).begin() as c:
+        for path, batch in (
+            ("a.flac", "request-12-decision-3"),
+            ("b.flac", "request-7-decision-40"),
+            ("c.flac", "promote-5"),
+        ):
+            c.execute(
+                text(
+                    "INSERT INTO tracks (path, artist_mbids, status, batch_id, imported_at,"
+                    " created_at, updated_at) VALUES (:p, '[]', 'verified', :b,"
+                    " '2026-01-01', '2026-01-01', '2026-01-01')"
+                ),
+                {"p": path, "b": batch},
+            )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        rows = {p: r for p, r in c.execute(text("SELECT path, request_id FROM tracks"))}
+        indexes = {i["name"] for i in inspect(c).get_indexes("tracks")}
+    assert rows == {"a.flac": 12, "b.flac": 7, "c.flac": None}
+    assert "ix_tracks_request_id" in indexes
+    downgrade("0040_http_cache_expires_index")
+    with make_engine(settings).connect() as c:
+        assert "request_id" not in {col["name"] for col in inspect(c).get_columns("tracks")}

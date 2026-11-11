@@ -10,6 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from mixsync.acquire import review
 from mixsync.acquire.evidence import Evidence
@@ -123,9 +124,12 @@ def recheck(user: User, db: Db) -> RedirectResponse:
 async def review_detail(
     request: Request, decision_id: int, user: User, db: Db, namer: Namer
 ) -> HTMLResponse:
-    d = decision_for(db, user, decision_id)
-    flags = _flags(request, db, user)  # before `resolve`, which ends the transaction
-    split = _split_options(db, d)
+    # Async for resolve()'s MusicBrainz lookups; DB and tag reads go to the threadpool.
+    def reads() -> tuple[MatchDecision, dict[str, bool], dict[str, Any] | None]:
+        d = decision_for(db, user, decision_id)
+        return d, _flags(request, db, user), _split_options(db, d)
+
+    d, flags, split = await run_in_threadpool(reads)  # before `resolve`: it ends the transaction
     refs = {("release", d.release_mbid)} | {
         ("recording", r) for r in Evidence.parse(d.evidence).acoustid_recording_ids
     }
@@ -136,7 +140,7 @@ async def review_detail(
     ctx = {
         "user": user,
         "d": d,
-        "prefill": _prefill(d),
+        "prefill": await run_in_threadpool(_prefill, d),  # reads every file's tags
         "names": names,
         "split": split,
         **flags,

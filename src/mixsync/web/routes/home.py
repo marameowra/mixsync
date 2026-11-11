@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
@@ -8,14 +10,24 @@ from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, Prov
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.library import fragmentation
 from mixsync.web.deps import CurrentUser, Db, Namer
-from mixsync.web.names import resolve
+from mixsync.web.names import resolve_listed
 from mixsync.web.templating import templates
 
 router = APIRouter()
+FRAGMENTS_TTL = 60.0  # seconds a home page's fragment count may lag a library change
+
+
+def _fragments(request: Request, db: Db) -> int:
+    """len(fragmentation.find), a scan of every verified track, at most once per TTL per app."""
+    at, n = getattr(request.app.state, "fragments_count", (float("-inf"), 0))
+    if time.monotonic() - at >= FRAGMENTS_TTL:
+        n = len(fragmentation.find(db))
+        request.app.state.fragments_count = (time.monotonic(), n)
+    return n
 
 
 @router.get("/")
-async def home(request: Request, user: CurrentUser, db: Db, namer: Namer) -> HTMLResponse:
+def home(request: Request, user: CurrentUser, db: Db, namer: Namer) -> HTMLResponse:
     counts = request.state.waiting_counts
     promotions = None
     fragments = None
@@ -25,7 +37,7 @@ async def home(request: Request, user: CurrentUser, db: Db, namer: Namer) -> HTM
     discovery: list[tuple[ProvisionalHold, ProvisionalTrack, str | None, str | None]] = []
     if Capability.library_edit in user.capabilities:
         promotions = len(recheck.promote_plans(db, "draft"))
-        fragments = len(fragmentation.find(db))
+        fragments = _fragments(request, db)
     if Capability.request in user.capabilities:
         in_progress = list(
             db.scalars(
@@ -101,7 +113,7 @@ async def home(request: Request, user: CurrentUser, db: Db, namer: Namer) -> HTM
         ]
     refs = {("release", r.release_mbid) for r in (*in_progress, *recent) if r.release_mbid}
     refs |= {("recording", h.recording_mbid) for h, *_ in discovery}
-    names = await resolve(db, namer, refs)  # list page: stored and cached names, no lookups
+    names = resolve_listed(db, namer, refs)  # list page: stored and cached names, no lookups
     return templates.TemplateResponse(
         request,
         "pages/home.html",
