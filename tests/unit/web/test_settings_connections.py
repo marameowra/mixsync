@@ -226,3 +226,107 @@ def test_the_whole_click_times_out(client: TestClient, monkeypatch: pytest.Monke
 
     client.app.state.connection_transport = httpx.MockTransport(stall)  # type: ignore[attr-defined]
     assert "Timed out." in press(client, tok, "slskd", **FORMS["slskd"])
+
+
+# Prowlarr, qBittorrent and SABnzbd (#414). qBittorrent logs in first, so it sends two requests.
+SOURCES = {
+    "prowlarr": {"prowlarr_url": "http://pr.test:9696", "prowlarr_api_key": "PRKEY"},
+    "qbittorrent": {
+        "qbittorrent_url": "http://qb.test:8080",
+        "qbittorrent_username": "admin",
+        "qbittorrent_password": "QBPASS",
+    },
+    "sabnzbd": {"sabnzbd_url": "http://sab.test:8085", "sabnzbd_api_key": "SABKEY"},
+}
+
+
+def _qb(good: bool) -> Handler:
+    def handle(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/auth/login"):
+            return httpx.Response(200, text="Ok." if good else "Fails.")
+        return httpx.Response(200, text="v5.0.0")
+
+    return handle
+
+
+SOURCE_OK: dict[str, Handler] = {
+    "prowlarr": lambda r: httpx.Response(200, json={"version": "1"}),
+    "qbittorrent": _qb(True),
+    "sabnzbd": lambda r: httpx.Response(200, json={"queue": {"slots": []}}),
+}
+SOURCE_REJECTED: dict[str, Handler] = {
+    "prowlarr": lambda r: httpx.Response(401),
+    "qbittorrent": _qb(False),
+    "sabnzbd": lambda r: httpx.Response(200, json={"status": False, "error": "API Key Incorrect"}),
+}
+
+
+@pytest.mark.parametrize("service", list(SOURCES))
+def test_source_ok_and_saves_nothing(
+    client: TestClient, sf: sessionmaker[Session], service: str
+) -> None:
+    tok = login(client, "root")
+    fake(client, SOURCE_OK[service])
+    text = press(client, tok, service, **SOURCES[service])
+    assert "OK" in text
+    assert all(r.headers["User-Agent"].startswith("MixSync/") for r in SENT)
+    assert not any(s in text for s in ("PRKEY", "QBPASS", "SABKEY"))
+    with sf() as s:
+        assert s.get(AppSettings, 1) is None
+
+
+@pytest.mark.parametrize("service", list(SOURCES))
+def test_source_rejected_credentials_report_auth_failed(client: TestClient, service: str) -> None:
+    tok = login(client, "root")
+    fake(client, SOURCE_REJECTED[service])
+    text = press(client, tok, service, **SOURCES[service])
+    assert "Authentication failed" in text
+    assert not any(s in text for s in ("PRKEY", "QBPASS", "SABKEY"))
+
+
+@pytest.mark.parametrize("service", list(SOURCES))
+def test_source_bad_url_and_missing_credential_send_nothing(
+    client: TestClient, service: str
+) -> None:
+    tok = login(client, "root")
+    fake(client, SOURCE_OK[service])
+    form = {k: "ftp://x" if k.endswith("_url") else v for k, v in SOURCES[service].items()}
+    assert "Bad URL" in press(client, tok, service, **form)
+    secret = next(k for k in SOURCES[service] if k.endswith(("_key", "_password")))
+    form = {k: "" if k == secret else v for k, v in SOURCES[service].items()}
+    assert f"Set {secret}" in press(client, tok, service, **form)
+    assert SENT == []
+
+
+def test_qbittorrent_ping_only_logs_in_and_reads_the_version(client: TestClient) -> None:
+    tok = login(client, "root")
+    fake(client, SOURCE_OK["qbittorrent"])
+    press(client, tok, "qbittorrent", **SOURCES["qbittorrent"])
+    assert [r.url.path for r in SENT] == ["/api/v2/auth/login", "/api/v2/app/version"]
+
+
+def test_sabnzbd_ping_checks_the_key_and_keeps_it_out_of_the_url(client: TestClient) -> None:
+    tok = login(client, "root")
+    fake(client, SOURCE_OK["sabnzbd"])
+    press(client, tok, "sabnzbd", **SOURCES["sabnzbd"])
+    assert b"mode=queue" in SENT[0].content and b"apikey=SABKEY" in SENT[0].content
+    assert "SABKEY" not in str(SENT[0].url)
+
+
+def test_source_form_values_beat_saved_and_blank_uses_saved(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "prowlarr_api_key": "saved"})
+    fake(client, SOURCE_OK["prowlarr"])
+    press(client, tok, "prowlarr", prowlarr_url="http://unsaved.test", prowlarr_api_key="")
+    assert SENT[0].url.host == "unsaved.test" and SENT[0].headers["X-Api-Key"] == "saved"
+    with sf() as s:
+        assert s.scalars(select(AppSettings.prowlarr_url)).one() is None
+
+
+def test_settings_page_has_source_test_buttons(client: TestClient) -> None:
+    login(client, "root")
+    page = client.get("/settings").text
+    for service in SOURCES:
+        assert f'hx-post="/settings/test/{service}"' in page

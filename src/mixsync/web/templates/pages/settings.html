@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Settings - MixSync{% endblock %}
 {% block content %}
-{% set connection_tests = {"slskd_url": "slskd", "navidrome_url": "navidrome", "mb_base_url": "musicbrainz", "acoustid_app_key": "acoustid"} %}
+{% set connection_tests = {"slskd_url": "slskd", "navidrome_url": "navidrome", "mb_base_url": "musicbrainz", "acoustid_app_key": "acoustid", "prowlarr_url": "prowlarr", "qbittorrent_url": "qbittorrent", "sabnzbd_url": "sabnzbd"} %}
 {% macro test_button(service) %}
       <span class="help"><button class="btn quiet" type="button" hx-post="/settings/test/{{ service }}" hx-target="#test-{{ service }}">Test {{ service }} connection</button>
         <span id="test-{{ service }}" role="status"></span></span>

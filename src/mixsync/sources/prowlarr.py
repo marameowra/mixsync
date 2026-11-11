@@ -200,6 +200,12 @@ class ProwlarrSource:
             raise TransientError(f"prowlarr returned {response.status_code}")
         return response
 
+    async def ping(self) -> None:
+        """One authenticated status call (the settings page's Test button); never a search."""
+        response = await self._get(f"{self._base}/api/v1/system/status")
+        if response.status_code != 200:
+            raise PermanentError(f"prowlarr system/status returned {response.status_code}")
+
     async def search(self, query: str) -> list[Candidate]:
         """Releases ranked by title, then a plausible album size, then seeders; the top
         MAX_FETCHES with a .torrent / .nzb link get their file list fetched and are returned."""
