@@ -251,6 +251,29 @@ async def test_no_cache_skips_the_read_but_refreshes_the_cache(
         assert n == 2
 
 
+async def test_404_is_cached_only_for_services_with_a_negative_ttl(
+    settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
+) -> None:
+    n = 0
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        nonlocal n
+        n += 1
+        return httpx.Response(404)
+
+    async with client("listenbrainz", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/a")
+        await c.get("https://x.test/a")
+        assert n == 2  # no negative_ttl: every miss asks again
+    async with client("coverart", settings, sessions, clock, httpx.MockTransport(handler)) as c:
+        await c.get("https://x.test/b")
+        assert (await c.get("https://x.test/b")).status_code == 404
+        assert n == 3  # answered from the cache
+        clock.t += timedelta(days=1, seconds=1)
+        await c.get("https://x.test/b")
+        assert n == 4
+
+
 async def test_musicbrainz_search_ttl_is_shorter(
     settings: Settings, sessions: sessionmaker[Session], clock: FakeClock
 ) -> None:

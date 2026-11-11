@@ -1,11 +1,12 @@
 {# Only authenticated same-origin artwork routes are valid. The letter sits under the <img> in the
    same grid cell; a failed load with alt="" renders nothing, so the letter shows (no inline
-   onerror: the CSP forbids it). `id` + hx-preserve keep the loaded <img> across live-region swaps. #}
+   onerror: the CSP forbids it). `id` + hx-preserve keep the loaded <img> across live-region swaps;
+   htmx keeps the old element whole, so the id must change whenever src does. #}
 {% macro artwork(title, src=none, size='sm', id=none) -%}
 {% set name = title or 'Untitled' %}
 {% set has_cover = src is valid_artwork_src %}
-<span class="art art-{{ size if size in ('xs', 'sm', 'md', 'lg') else 'sm' }}{% if not has_cover %} missing{% endif %}" role="img" aria-label="{{ 'Cover art for ' if has_cover else 'No cover art for ' }}{{ name }}"{% if id and has_cover %} id="{{ id }}" hx-preserve{% endif %}>
+<span class="art art-{{ size if size in ('xs', 'sm', 'md', 'lg') else 'sm' }}{% if not has_cover %} missing{% endif %}" role="img" aria-label="{{ 'Cover art for ' if has_cover else 'No cover art for ' }}{{ name }}">
   <span aria-hidden="true">{{ name | first | upper }}</span>
-  {% if has_cover %}<img src="{{ src }}" alt="" loading="lazy" decoding="async">{% endif %}
+  {% if has_cover %}<img src="{{ src }}" alt="" loading="lazy" decoding="async"{% if id %} id="{{ id }}" hx-preserve{% endif %}>{% endif %}
 </span>
 {%- endmacro %}

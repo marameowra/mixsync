@@ -11,7 +11,7 @@
   {% for r in items %}
   <tr>
     <td>{{ r.id }}</td>
-    <td><div class="release-heading">{{ artwork(r.album or r.release_mbid, "/media/artwork/release/" ~ r.release_mbid ~ ("?group=" ~ r.release_group_mbid if r.release_group_mbid else ""), "xs", "art-req-" ~ r.id) }}<span>{% if r.album %}{{ r.artist }} - {{ r.album }}{% else %}{{ mb.link("release", r.release_mbid) }}{% endif %}</span></div></td>
+    <td><div class="release-heading">{{ artwork(r.album or r.release_mbid, "/media/artwork/release/" ~ r.release_mbid ~ ("?group=" ~ r.release_group_mbid if r.release_group_mbid else ""), "xs", "art-req-" ~ r.id ~ "-" ~ r.release_mbid ~ "-" ~ (r.release_group_mbid or "")) }}<span>{% if r.album %}{{ r.artist }} - {{ r.album }}{% else %}{{ mb.link("release", r.release_mbid) }}{% endif %}</span></div></td>
     <td>{% if r.status == "review" %}<a href="/review">{{ status("review", "Needs review") }}</a>{% elif r.id in queued %}{{ status("pending", "Queued") }} ({{ r.status | replace("_", " ") }}){% else %}{{ status(r.status) }}{% endif %}{% if r.status in ("no_results", "partial") and r.next_search_at %}<br><small>Next search {{ r.next_search_at.strftime("%Y-%m-%d %H:%M") }}</small>{% endif %}</td>
     <td>{{ r.dropped }} of {{ budget }}</td>
     <td>{{ r.last_error or "" }}</td>

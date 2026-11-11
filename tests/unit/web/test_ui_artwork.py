@@ -49,8 +49,44 @@ def test_artwork_id_adds_hx_preserve_only_with_a_cover() -> None:
             '{% from "macros/media.html" import artwork %}{{ artwork("T", src, "xs", "art-1") }}'
         ).render(src=src)
 
-    assert 'id="art-1" hx-preserve' in render("/media/cover/42")
+    dom = Elements()
+    dom.feed(render("/media/cover/42"))
+    img = next(attrs for tag, attrs in dom.tags if tag == "img")
+    assert img.get("id") == "art-1" and "hx-preserve" in img  # the label and letter re-render
+    assert "id" not in dom.tags[0][1]
     assert "hx-preserve" not in render(None)
+
+
+def test_requests_table_preserve_id_changes_when_the_group_fills_in() -> None:
+    """htmx keeps a preserved element whole, so a new src needs a new id or it never loads."""
+
+    class Row:
+        id = 7
+        release_mbid = "22222222-2222-2222-2222-222222222222"
+        release_group_mbid: str | None = None
+        album = artist = last_error = next_search_at = None
+        status = "searching"
+        dropped = 0
+
+    def img_id() -> str | None:
+        text = templates.env.get_template("pages/requests_table.html").render(
+            items=[Row],
+            live_url="/requests/live",
+            in_progress=True,
+            queued=set(),
+            deletable=set(),
+            delete_plans={},
+            music=set(),
+            budget=5,
+            csrf_token="t",
+        )
+        dom = Elements()
+        dom.feed(text)
+        return next(attrs for tag, attrs in dom.tags if tag == "img").get("id")
+
+    before = img_id()
+    Row.release_group_mbid = "33333333-3333-3333-3333-333333333333"
+    assert before and img_id() != before
 
 
 @pytest.mark.parametrize(
