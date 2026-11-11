@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mixsync.acquire.merge import merge_build
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
@@ -18,7 +19,7 @@ from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
 from mixsync.db.models.work import Job
-from mixsync.db.queue import JobQueue
+from mixsync.db.queue import JobQueue, enqueue_in
 from mixsync.library import fragmentation
 from mixsync.worker import run_job
 
@@ -165,7 +166,7 @@ def test_post_queues_one_build_without_musicbrainz(world: World) -> None:  # noq
         assert len(_builds(world)) == 1
         page = c.get(BUILD)
         assert page.status_code == 200 and "Building the merge plan" in page.text
-        assert 'hx-trigger="every 5s"' in page.text
+        assert 'hx-trigger="load delay:1s, every 5s"' in page.text
 
 
 def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> None:  # noqa: F811
@@ -235,3 +236,25 @@ def test_group_without_verified_tracks_fails_with_message_and_retry(world: World
             assert job.status == JobState.FAILED  # a LookupError is not retried
         page = c.get(url).text
         assert f"no verified tracks in release group {other}" in page and "Try again" in page
+
+
+def test_merge_build_picks_the_newest_job_of_its_own_group(world: World) -> None:  # noqa: F811
+    now = SystemClock().now()
+    with world.sessions.begin() as s:
+        enqueue_in(s, now, JobKind.MERGE_PLAN, {"group": GROUP, "after": 0})
+        enqueue_in(s, now, JobKind.MERGE_PLAN, {"group": GROUP, "after": 0})
+        enqueue_in(s, now, JobKind.MERGE_PLAN, {"group": "other", "after": 0})
+    with world.sessions() as s:
+        job, _ = merge_build(s, GROUP)
+        newest = max(j.id for j in s.scalars(select(Job)) if j.payload["group"] == GROUP)
+        assert job is not None and job.id == newest
+        assert merge_build(s, "unknown") == (None, None)
+
+
+def test_polled_fragment_keeps_the_five_second_trigger(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        _post(c, tok)
+        frag = c.get(BUILD, headers={"HX-Request": "true"})
+        assert frag.status_code == 200 and "Building the merge plan" in frag.text
+        assert 'hx-trigger="every 5s"' in frag.text and "load delay" not in frag.text

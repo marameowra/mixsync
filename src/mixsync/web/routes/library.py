@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from starlette.concurrency import run_in_threadpool
 
 from mixsync.acquire import missing_scan, recheck
@@ -103,7 +103,9 @@ def _check_count(plan: Plan, count: str) -> None:
 @router.get("/fragments")
 def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
-    ours = select(Plan).where(Plan.kind != missing_scan.KIND)  # a scan draft moves no file
+    ours = (
+        select(Plan).options(defer(Plan.ops)).where(Plan.kind != missing_scan.KIND)
+    )  # a scan draft moves no file
     plans = [
         *db.scalars(ours.where(stuck).order_by(Plan.id.desc())),
         *db.scalars(ours.where(~stuck).order_by(Plan.id.desc()).limit(20)),
@@ -272,6 +274,8 @@ def build_status(request: Request, user: User, db: Db, group: str) -> Response:
         "url": f"/library/fragments/plan?{urlencode({'group': group})}",
         "job": job,
         "building": job is not None and job.status in LIVE,
+        # a full page polls once after 1 s (the worker is quick); polled fragments keep 5 s
+        "first_poll": request.headers.get("HX-Request") != "true",
     }
     return render(request, "pages/merge_build.html", "pages/merge_build_live.html", ctx)
 

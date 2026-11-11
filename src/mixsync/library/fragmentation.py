@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from mixsync.core.matching import AlbumInfo, TrackInfo
@@ -33,12 +33,26 @@ def find(s: Session) -> list[Fragment]:
             Track.release_mbid.is_not(None),
         )
     ).all()
-    stored = {c.release_group_mbid: c.release_mbid for c in s.scalars(select(CanonicalRelease))}
+    stored = {
+        g: r
+        for g, r in s.execute(
+            select(CanonicalRelease.release_group_mbid, CanonicalRelease.release_mbid)
+        )
+    }
     kept = {
         op["track_id"]
-        for p in s.scalars(select(Plan).where(Plan.kind == "merge", Plan.status == "done"))
-        if stored.get(p.release_group_mbid) == p.canonical_release_mbid
-        for op in p.ops
+        for (ops,) in s.execute(
+            select(Plan.ops)
+            .join(  # a done merge onto the group's current canonical
+                CanonicalRelease,
+                and_(
+                    CanonicalRelease.release_group_mbid == Plan.release_group_mbid,
+                    CanonicalRelease.release_mbid == Plan.canonical_release_mbid,
+                ),
+            )
+            .where(Plan.kind == "merge", Plan.status == "done")
+        )
+        for op in ops
         if op["op"] == "keep"
     }
     groups: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
