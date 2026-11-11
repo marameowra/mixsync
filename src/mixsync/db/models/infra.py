@@ -27,7 +27,8 @@ class HttpCache(Base):
     headers: Mapped[dict[str, Any]] = mapped_column(JSON)
     body: Mapped[bytes] = mapped_column(LargeBinary)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # the purge finds expired rows without scanning the bodies (#422)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class MbName(Base):

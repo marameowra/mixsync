@@ -4,7 +4,7 @@ import asyncio
 import random
 from collections.abc import Callable, Collection
 from datetime import timedelta
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -13,6 +13,7 @@ from mixsync.acquire.pipeline import Handler
 from mixsync.core.clock import Clock
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.db import progress
+from mixsync.db.base import Base
 from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Plan
 from mixsync.db.models.safety import FileOp
@@ -22,7 +23,7 @@ from mixsync.db.undo import UNDOABLE_STATUSES, undoable
 from mixsync.library import tag_undo
 from mixsync.library.fileops import FileOps
 
-MONITOR_BATCH = 10_000
+BATCH = 500  # rows per transaction: each holds SQLite's write lock only briefly (#422)
 INTERVAL = timedelta(days=1)
 MONITOR_KEEP = timedelta(days=7)  # finished download-monitor rows; nothing reads them again
 Rng = Callable[[float, float], float]
@@ -125,18 +126,27 @@ class TrashPurger:
         return {p.split("/", 1)[0] for p in keep} | {d for d in days if d >= floor}
 
     def _purge_monitor_rows(self) -> None:
-        """One row per 30 s per transfer; only their dedup key names them. In batches, each in
-        its own transaction, so the first purge after a long gap never holds the write lock long."""
-        old = select(Job.id).where(
+        """One row per 30 s per transfer; only their dedup key names them."""
+        self._delete_in_batches(
+            Job,
+            Job.id,
             Job.kind == JobKind.DOWNLOAD,
             Job.status == JobState.SUCCEEDED,
             Job.idempotency_key.like("monitor:%"),
             Job.updated_at < self.clock.now() - MONITOR_KEEP,
         )
+
+    def _purge_cache_rows(self) -> None:
+        """Expired cache rows are dead weight."""
+        self._delete_in_batches(HttpCache, HttpCache.key, HttpCache.expires_at < self.clock.now())
+
+    def _delete_in_batches(self, model: type[Base], pk: Any, *where: Any) -> None:
+        """Each batch in its own transaction, so the first purge after a long gap never holds
+        the write lock long."""
+        old = select(pk).where(*where).limit(BATCH)
         while True:
             with self.sessions.begin() as s:
-                gone = delete(Job).where(Job.id.in_(old.limit(MONITOR_BATCH))).returning(Job.id)
-                if not s.scalars(gone).all():
+                if not s.execute(delete(model).where(pk.in_(old)).returning(pk)).all():
                     return
 
     async def purge(self, job: JobRecord) -> None:
@@ -153,8 +163,7 @@ class TrashPurger:
                 f"purge-quarantine-{self.clock.now().date().isoformat()}",
             )
             # after the file purge, so a failing cache delete cannot skip it
-            with self.sessions.begin() as s:  # expired cache rows are dead weight (bodies stay)
-                s.execute(delete(HttpCache).where(HttpCache.expires_at < self.clock.now()))
+            await asyncio.to_thread(self._purge_cache_rows)
             await asyncio.to_thread(self._purge_monitor_rows)
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()

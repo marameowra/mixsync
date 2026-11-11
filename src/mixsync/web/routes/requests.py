@@ -119,22 +119,23 @@ def delete_row(db: Session, req: AlbumRequest, user_id: int) -> None:
 
 
 @router.post("/delete-imported")
-def delete_imported(user: User, db: Db) -> RedirectResponse:
+def delete_imported(request: Request, user: User, db: Db) -> RedirectResponse:
     mine = select(AlbumRequest).where(
         AlbumRequest.user_id == user.id,
         AlbumRequest.status == "imported",
         AlbumRequest.migration_id.is_(None),
     )
-    for req in db.scalars(mine).all():
-        try:
-            # On SQLite (no pysqlite SAVEPOINT recipe in db/engine.py) this may open the transaction
-            # itself when the request has not written yet; a refused row still undoes only its own.
-            with db.begin_nested():  # a refused row rolls back only its own changes
-                delete_row(db, req, user.id)
+    ids = list(db.scalars(mine.with_only_columns(AlbumRequest.id)))
+    db.commit()  # the session is spent: each request below gets its own short transaction (#422)
+    for rid in ids:
+        try:  # a refused row rolls back only its own changes
+            with request.app.state.session_factory.begin() as s:
+                if req := s.scalar(mine.where(AlbumRequest.id == rid)):  # still imported
+                    delete_row(s, req, user.id)
         except HTTPException:
             continue
         except IntegrityError as e:
-            log.warning("clear imported: kept request %s: %s", req.id, e)
+            log.warning("clear imported: kept request %s: %s", rid, e)
     return RedirectResponse("/requests", status_code=303)
 
 

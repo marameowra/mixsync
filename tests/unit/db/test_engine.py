@@ -15,5 +15,5 @@ def test_pragmas_applied(settings: Settings) -> None:
 
         assert pragma("journal_mode") == "wal"
         assert pragma("foreign_keys") == 1
-        assert pragma("busy_timeout") == 5000
+        assert pragma("busy_timeout") == 15000
         assert pragma("synchronous") == 1  # NORMAL

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Connection, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.jobs import JobKind, JobState
@@ -337,6 +337,43 @@ def test_purge_deletes_expired_http_cache_rows_and_keeps_fresh_ones(
         assert list(s.scalars(select(HttpCache.key))) == ["fresh"]
 
 
+def test_expired_http_cache_rows_are_deleted_in_short_batches(
+    fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(purge, "BATCH", 2)
+
+    def row(key: str, expires: datetime) -> HttpCache:
+        return HttpCache(
+            key=key, service="mb", status=200, headers={}, body=b"x", fetched_at=NOW,
+            expires_at=expires,
+        )  # fmt: skip
+
+    with sessions.begin() as s:
+        s.add_all(row(f"old{i}", NOW - timedelta(seconds=1)) for i in range(5))
+        s.add(row("fresh", NOW + timedelta(hours=1)))
+    deleted: list[int] = []  # rows deleted per transaction
+
+    def on_commit(conn: Connection) -> None:
+        deleted.append(conn.info.pop("cache_rows", 0))
+
+    def on_delete(conn: Connection, _cursor: object, statement: str, *_a: object) -> None:
+        if statement.startswith("DELETE FROM http_cache"):
+            conn.info["cache_rows"] = conn.info.get("cache_rows", 0) + 1
+
+    engine = sessions.kw["bind"]
+    event.listen(engine, "commit", on_commit)
+    event.listen(engine, "before_cursor_execute", on_delete)
+    try:
+        asyncio.run(TrashPurger(sessions, clock, fo, 30).purge(_job(1)))
+    finally:
+        event.remove(engine, "commit", on_commit)
+        event.remove(engine, "before_cursor_execute", on_delete)
+    with sessions() as s:
+        assert list(s.scalars(select(HttpCache.key))) == ["fresh"]
+    # 2 + 2 + 1 rows, then an empty batch ends it: one delete per transaction, none spanning all
+    assert deleted.count(1) == 4 and max(deleted) == 1
+
+
 def test_a_failing_cache_delete_neither_skips_the_file_purge_nor_the_chain(
     fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -388,7 +425,7 @@ def test_purge_deletes_old_succeeded_monitor_rows_and_keeps_everything_else(
 def test_old_monitor_rows_beyond_one_batch_are_all_deleted(
     fo: FileOps, sessions: sessionmaker[Session], clock: Clock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(purge, "MONITOR_BATCH", 2)
+    monkeypatch.setattr(purge, "BATCH", 2)
     old = NOW - MONITOR_KEEP - timedelta(hours=1)
     with sessions.begin() as s:
         s.add_all(

@@ -10,7 +10,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import insert, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import pipeline, verify
@@ -18,12 +19,14 @@ from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import AlbumInfo, Candidate, TrackInfo, TransferStatus
+from mixsync.core.matching import AlbumInfo, Band, Candidate, TrackInfo, TransferStatus
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
+from mixsync.db.engine import make_engine
 from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
@@ -692,6 +695,41 @@ async def test_a_failed_cancel_does_not_block_the_drop(
     rid = request(env)
     await env.drain()
     assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
+
+
+async def test_a_slow_cancel_after_a_reject_does_not_block_another_writer(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#422: slskd's cancel can take minutes; the verify step must have committed by then, or
+    the web process's writes fail with "database is locked" once busy_timeout runs out."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    real = pipeline.score_files
+    reject = lambda *a, **k: replace(real(*a, **k), band=Band.REJECT)  # noqa: E731
+    monkeypatch.setattr(pipeline, "score_files", reject)
+    other = make_engine(env.settings)  # another connection, as the web process has
+    writes: list[str] = []
+
+    async def slow_clear(cand: Candidate) -> None:  # mid-cancel, someone else writes
+        with other.begin() as c:
+            if other.dialect.name == "sqlite":
+                c.exec_driver_sql("PRAGMA busy_timeout=200")
+            try:
+                c.execute(
+                    insert(HttpCache).values(
+                        key="web", service="mb", status=200, headers={}, body=b"",
+                        fetched_at=env.clock.now(), expires_at=env.clock.now(),
+                    )
+                )  # fmt: skip
+                writes.append("ok")
+            except OperationalError as e:
+                writes.append(str(e.orig))
+
+    monkeypatch.setattr(env.source, "clear", slow_clear)
+    rid = request(env)
+    await env.drain(until=lambda: bool(writes))
+    assert writes == ["ok"]
+    assert tried(env, rid) == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto"]
 
 
 async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:

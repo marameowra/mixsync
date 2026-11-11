@@ -19,17 +19,17 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0040_http_cache_expires_index"
+    downgrade("-1")  # the chain runs 0038 -> 0039 -> 0040, one step at a time
     assert _version(settings) == "0039_app_settings_spotify"
-    downgrade("-1")  # the chain runs 0037 -> 0038 -> 0039, one step at a time
-    assert _version(settings) == "0038_app_settings_torrent_usenet"
     downgrade("-1")
-    assert _version(settings) == "0037_smart_playlists"
+    assert _version(settings) == "0038_app_settings_torrent_usenet"
     upgrade()
-    assert _version(settings) == "0039_app_settings_spotify"
+    assert _version(settings) == "0040_http_cache_expires_index"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0039_app_settings_spotify"
+    assert _version(settings) == "0040_http_cache_expires_index"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
