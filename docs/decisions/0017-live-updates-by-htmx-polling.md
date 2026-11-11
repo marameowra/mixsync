@@ -13,6 +13,7 @@ The web app and the worker can run as separate processes (`mixsync web`, `mixsyn
 
 ## Decision
 - A **live region** is a server-rendered fragment that HTMX re-fetches every 5 s (`hx-trigger="every 5s"`, no visibility filter: browsers already throttle timers in hidden tabs, and trigger filters need eval, see [ADR 0020](0020-htmx-is-the-only-js.md)) and swaps in place.
+- A region whose work usually finishes in a second or two (the merge-plan build, #431) may poll every 1 s while it runs, falling back to 5 s while it waits out a retry.
 - The server ends the polling: once nothing in the region is in progress, it renders the fragment without the trigger.
 - A route answers an HTMX request (`HX-Request` header) with only the fragment, and a normal request with the full page.
 - htmx is vendored into the app's static files, pinned, with its license. No CDN.

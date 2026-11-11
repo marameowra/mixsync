@@ -166,7 +166,7 @@ def test_post_queues_one_build_without_musicbrainz(world: World) -> None:  # noq
         assert len(_builds(world)) == 1
         page = c.get(BUILD)
         assert page.status_code == 200 and "Building the merge plan" in page.text
-        assert 'hx-trigger="load delay:1s, every 5s"' in page.text
+        assert 'hx-trigger="every 1s"' in page.text  # a build is quick: no 5 s wait
 
 
 def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> None:  # noqa: F811
@@ -201,6 +201,7 @@ def test_transient_musicbrainz_error_retries(world: World, error: Exception, sto
         assert job.status == JobState.RETRY_WAIT and stored in job.last_error
         page = c.get(BUILD)
         assert page.status_code == 200 and "trying again shortly" in page.text
+        assert 'hx-trigger="every 5s"' in page.text  # no fast polling through the backoff
 
 
 def test_permanent_error_shows_message_and_retry(world: World) -> None:  # noqa: F811
@@ -251,10 +252,10 @@ def test_merge_build_picks_the_newest_job_of_its_own_group(world: World) -> None
         assert merge_build(s, "unknown") == (None, None)
 
 
-def test_polled_fragment_keeps_the_five_second_trigger(world: World) -> None:  # noqa: F811
+def test_polled_fragment_keeps_polling_every_second(world: World) -> None:  # noqa: F811
     with _client(world) as c:
         tok = _login(c)
         _post(c, tok)
         frag = c.get(BUILD, headers={"HX-Request": "true"})
         assert frag.status_code == 200 and "Building the merge plan" in frag.text
-        assert 'hx-trigger="every 5s"' in frag.text and "load delay" not in frag.text
+        assert 'hx-trigger="every 1s"' in frag.text
