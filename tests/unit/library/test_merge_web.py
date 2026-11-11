@@ -249,3 +249,12 @@ def test_merge_build_picks_the_newest_job_of_its_own_group(world: World) -> None
         newest = max(j.id for j in s.scalars(select(Job)) if j.payload["group"] == GROUP)
         assert job is not None and job.id == newest
         assert merge_build(s, "unknown") == (None, None)
+
+
+def test_polled_fragment_keeps_the_five_second_trigger(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        _post(c, tok)
+        frag = c.get(BUILD, headers={"HX-Request": "true"})
+        assert frag.status_code == 200 and "Building the merge plan" in frag.text
+        assert 'hx-trigger="every 5s"' in frag.text and "load delay" not in frag.text
