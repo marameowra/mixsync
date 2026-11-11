@@ -18,6 +18,7 @@ from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
+from mixsync.db.models.library import Plan
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobQueue, enqueue_in
 from mixsync.library import fragmentation
@@ -133,6 +134,20 @@ def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None: 
             assert fragmentation.find(s) == []
         world.imp(make_src("flac", "again"), OLD, "r1", batch="later")
         with world.sessions() as s:
+            assert [f.group_mbid for f in fragmentation.find(s)] == [GROUP]
+
+
+def test_a_merge_onto_an_old_canonical_settles_nothing(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        pid = _preview(c, tok, world)
+        assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
+        _drain(world)
+        with world.sessions() as s:
+            assert fragmentation.find(s) == []
+        with world.sessions.begin() as s:  # as if the canonical moved on since that merge
+            s.get(Plan, pid).canonical_release_mbid = "an-older-canonical"
+        with world.sessions() as s:  # only the kept bonus track is off canonical, now unsettled
             assert [f.group_mbid for f in fragmentation.find(s)] == [GROUP]
 
 

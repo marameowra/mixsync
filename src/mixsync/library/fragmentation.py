@@ -49,8 +49,10 @@ def find(s: Session) -> list[Fragment]:
         CanonicalRelease.release_group_mbid == Plan.release_group_mbid,
         CanonicalRelease.release_mbid == Plan.canonical_release_mbid,
     )
-    kept = {  # only merges onto the current canonical of a group that still has off tracks
-        op["track_id"]
+    # only merges onto the current canonical of a group that still has off tracks; keyed by
+    # group, so a keep never settles a track that has since moved to another group
+    kept = {
+        (p.release_group_mbid, op["track_id"])
         for p in s.scalars(
             select(Plan)
             .join(CanonicalRelease, on_canonical)
@@ -67,7 +69,7 @@ def find(s: Session) -> list[Fragment]:
     for g, r, n in counts:
         groups[str(g)][str(r)] = n
     # a group with no stored canonical has every track off it, and nothing can have kept one
-    unsettled = {str(g) for tid, g in s.execute(off) if tid not in kept}
+    unsettled = {str(g) for tid, g in s.execute(off) if (g, tid) not in kept}
     unsettled |= {g for g in groups if g not in stored}
     return [
         Fragment(g, stored.get(g), dict(rels))
