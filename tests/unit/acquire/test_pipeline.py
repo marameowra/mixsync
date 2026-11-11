@@ -575,7 +575,7 @@ async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None
         while job is None or job.kind is not JobKind.SEARCH:
             job = await env.step()
         assert status(env, rid) == "no_results"
-        (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
+        (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]
         due = nxt.run_after.replace(tzinfo=env.clock.t.tzinfo)
         assert due - env.clock.now() == timedelta(hours=wait)
     assert env.clock.now() - t0 == timedelta(hours=sum(waits[:-1]))
@@ -695,6 +695,42 @@ async def test_a_failed_cancel_does_not_block_the_drop(
     rid = request(env)
     await env.drain()
     assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
+
+
+async def test_a_download_rerun_after_its_drop_committed_only_cancels_again(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cancel runs after the drop commits; a worker killed during it re-runs the job, which
+    must not drop the candidate a second time (budget, second search)."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.state["peer1"] = TransferStatus.FAILED
+    rid = request(env)
+    jobs: list[JobRecord] = []
+    run = env.handlers[JobKind.DOWNLOAD]
+
+    async def recording(job: JobRecord) -> None:
+        jobs.append(job)
+        await run(job)
+
+    env.handlers[JobKind.DOWNLOAD] = recording
+    cancels: list[str] = []
+
+    async def clear(cand: Candidate) -> None:
+        cancels.append(cand.username)
+        if len(cancels) == 1:  # the worker dies here; the same job runs again
+            await run(jobs[-1])
+
+    monkeypatch.setattr(env.source, "clear", clear)
+    for kind in (JobKind.SEARCH, JobKind.DOWNLOAD, JobKind.DOWNLOAD):
+        job = await env.step()
+        assert job and job.kind is kind
+    assert cancels == ["peer1", "peer1"]  # the re-run still cancels
+    with env.sessions() as s:
+        req = s.get_one(Request, rid)
+        dropped, tried = req.dropped, req.tried
+    assert tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert len([j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]) <= 1
+    assert dropped <= 1
 
 
 async def test_a_slow_cancel_after_a_reject_does_not_block_another_writer(
@@ -1592,7 +1628,7 @@ async def test_a_confident_partial_import_keeps_the_request_open(env: Env) -> No
         req = s.get(Request, rid)
         assert req and req.last_error == "partial: 1 of 2 tracks present"
         assert req.tried == [["peer1", FOLDER]]  # not fetched again
-    later = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
+    later = [j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]
     assert len(later) == 1 and later[0].payload == {"request_id": rid}
     assert later[0].run_after.replace(tzinfo=UTC) > env.clock.now()
 
@@ -1637,7 +1673,7 @@ async def test_a_second_copy_of_the_same_track_is_not_downloaded(env: Env) -> No
     searched = len(env.source.queries)
     await env.drain(until=lambda: len(env.source.queries) > searched)
     assert env.source.enqueued == ["peer1"] and status(env, rid) == "partial"
-    assert [j.payload for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED] == [
+    assert [j.payload for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED] == [
         {"request_id": rid}
     ]  # Song Two is still wanted
 

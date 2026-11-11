@@ -327,7 +327,9 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                self._drop(cand, s, now, self._request(s, job), str(e), spent=p.get("bytes", 0) > 0)
+                req = self._request(s, job)
+                if not _redrop(req, cand):
+                    self._drop(cand, s, now, req, str(e), spent=p.get("bytes", 0) > 0)
             await self._cancel(cand)
             return
         stalled = datetime.fromisoformat(p["since"])
@@ -340,7 +342,9 @@ class Pipeline:
         dropped = True
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if info.state is not TransferStatus.DONE:
+            if _redrop(req, cand):
+                pass  # the drop committed but the cancel never finished: only cancel again
+            elif info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
                 self._drop(cand, s, now, req, why, spent=info.bytes > 0)
             elif problem := _missing(cand, info.local_paths):  # never import a missing file
@@ -1089,6 +1093,12 @@ class Pipeline:
 def _stale(s: Session, job: JobRecord, req: Request) -> bool:
     """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
     return req.status != "verifying" or verify.superseded(s, job.id, req.id)
+
+
+def _redrop(req: Request, cand: Candidate) -> bool:
+    """A DOWNLOAD re-run after its drop committed (the worker died during the slow cancel that
+    follows): dropping again would spend budget twice and start a second search."""
+    return tried_key(cand.source, cand.username, cand.folder) in req.tried
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:
