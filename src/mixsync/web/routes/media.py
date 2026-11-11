@@ -18,7 +18,11 @@ User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 
 async def _artwork_response(
-    request: Request, art: CoverArtClient, release: str | None, group: str | None
+    request: Request,
+    art: CoverArtClient,
+    release: str | None,
+    group: str | None,
+    cache: str = "private, max-age=31536000, immutable",  # the URL names the MBID
 ) -> Response:
     try:
         data = await art.front(release, group)
@@ -27,7 +31,7 @@ async def _artwork_response(
     if data is None:
         raise HTTPException(404, headers={"Cache-Control": "private, max-age=300"})
     etag = f'"{hashlib.sha1(data, usedforsecurity=False).hexdigest()}"'
-    headers = {"Cache-Control": "private, max-age=31536000, immutable", "ETag": etag}
+    headers = {"Cache-Control": cache, "ETag": etag}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     media_type = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
@@ -58,7 +62,8 @@ async def cover(request: Request, decision_id: int, user: User, db: Db, art: Cov
     db.commit()  # the login's last_seen write must not hold the SQLite lock during the bucket's
     if not mbid:
         raise HTTPException(404, headers={"Cache-Control": "private, max-age=86400"})
-    return await _artwork_response(request, art, mbid, group)
+    # a decision's release can change, so this URL must not be immutable
+    return await _artwork_response(request, art, mbid, group, "private, max-age=86400")
 
 
 @router.get("/artwork/{kind}/{mbid}")
