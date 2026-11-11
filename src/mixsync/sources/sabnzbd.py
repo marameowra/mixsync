@@ -52,9 +52,10 @@ class Sabnzbd:
         return body
 
     async def ping(self) -> None:
-        """An empty queue read (the settings page's Test button): unlike `version`, it checks
+        """A one-slot queue read (the settings page's Test button): unlike `version`, it checks
         the key."""
-        await self._call("queue", limit="0")
+        if "queue" not in await self._call("queue", limit="1"):  # a 200 from something else
+            raise PermanentError("sabnzbd queue answer has no queue; is the URL SABnzbd's /api?")
 
     async def _slots(self, mode: str, name: str) -> list[dict[str, Any]]:
         body = await self._call(mode, cat=CATEGORY, search=name)

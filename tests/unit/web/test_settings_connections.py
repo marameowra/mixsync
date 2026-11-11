@@ -275,6 +275,23 @@ def test_source_ok_and_saves_nothing(
         assert s.get(AppSettings, 1) is None
 
 
+@pytest.mark.parametrize(
+    ("service", "answer"),
+    [
+        ("prowlarr", httpx.Response(200, text="<html>")),
+        ("sabnzbd", httpx.Response(200, text="<html>")),
+        ("sabnzbd", httpx.Response(200, json={"version": "4"})),
+    ],
+)
+def test_a_200_from_something_else_is_not_ok(
+    client: TestClient, service: str, answer: httpx.Response
+) -> None:
+    tok = login(client, "root")
+    fake(client, lambda r: answer)
+    text = press(client, tok, service, **SOURCES[service])
+    assert "Failed:" in text and "OK" not in text
+
+
 @pytest.mark.parametrize("service", list(SOURCES))
 def test_source_rejected_credentials_report_auth_failed(client: TestClient, service: str) -> None:
     tok = login(client, "root")

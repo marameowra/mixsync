@@ -205,6 +205,7 @@ class ProwlarrSource:
         response = await self._get(f"{self._base}/api/v1/system/status")
         if response.status_code != 200:
             raise PermanentError(f"prowlarr system/status returned {response.status_code}")
+        response.json()  # a 200 page from something that isn't Prowlarr raises ValueError
 
     async def search(self, query: str) -> list[Candidate]:
         """Releases ranked by title, then a plausible album size, then seeders; the top
