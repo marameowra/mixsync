@@ -327,9 +327,10 @@ class Pipeline:
             raise
         except PermanentError as e:  # this peer is out, not the request: try the next candidate
             with self.sessions.begin() as s:
-                await self._drop(
-                    cand, s, now, self._request(s, job), str(e), spent=p.get("bytes", 0) > 0
-                )
+                req = self._request(s, job)
+                if not _redrop(req, cand):
+                    self._drop(cand, s, now, req, str(e), spent=p.get("bytes", 0) > 0)
+            await self._cancel(cand)
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -338,25 +339,29 @@ class Pipeline:
             if now - stalled < DOWNLOAD_STALL:
                 self._monitor(job, now, info.bytes, stalled)
                 return
+        dropped = True
         with self.sessions.begin() as s:
             req = self._request(s, job)
-            if info.state is not TransferStatus.DONE:
+            if _redrop(req, cand):
+                pass  # the drop committed but the cancel never finished: only cancel again
+            elif info.state is not TransferStatus.DONE:
                 why = "transfer failed" if info.state is TransferStatus.FAILED else "stalled"
-                await self._drop(cand, s, now, req, why, spent=info.bytes > 0)
-                return
-            problem = _missing(cand, info.local_paths)
-            if problem:  # never import a missing or partial file (SK-P04)
-                await self._drop(cand, s, now, req, problem, spent=True)  # the files landed
-                return
-            verify.start(
-                s,
-                now,
-                req,
-                req.release_mbid,
-                p["candidate"],
-                list(info.local_paths),
-                idempotency_key=f"verify:{job.id}",
-            )
+                self._drop(cand, s, now, req, why, spent=info.bytes > 0)
+            elif problem := _missing(cand, info.local_paths):  # never import a missing file
+                self._drop(cand, s, now, req, problem, spent=True)  # the files landed (SK-P04)
+            else:
+                dropped = False
+                verify.start(
+                    s,
+                    now,
+                    req,
+                    req.release_mbid,
+                    p["candidate"],
+                    list(info.local_paths),
+                    idempotency_key=f"verify:{job.id}",
+                )
+        if dropped:
+            await self._cancel(cand)
 
     def _monitor(
         self, job: JobRecord, now: datetime, sent: int, since: datetime, **more: Any
@@ -396,15 +401,13 @@ class Pipeline:
                 if not local:
                     await self._quarantine(job, paths, "rejected")
                 with self.sessions.begin() as s:
-                    if not _stale(s, job, self._request(s, job)):
-                        await self._drop(
-                            cand,
-                            s,
-                            self.clock.now(),
-                            self._request(s, job),
-                            why,
-                            spent=True,
+                    stale = _stale(s, job, self._request(s, job))
+                    if not stale:
+                        self._drop(
+                            cand, s, self.clock.now(), self._request(s, job), why, spent=True
                         )
+                if not stale:
+                    await self._cancel(cand)
                 return
         files: list[FileTrack] = []
         readable: list[Path] = []  # aligned with `files`; the rest are never imported
@@ -416,8 +419,9 @@ class Pipeline:
             except PermanentError as e:
                 if not local:  # a corrupt download: another peer may have a good copy
                     with self.sessions.begin() as s:
-                        if not _stale(s, job, self._request(s, job)):
-                            await self._drop(
+                        stale = _stale(s, job, self._request(s, job))
+                        if not stale:
+                            self._drop(
                                 cand,
                                 s,
                                 self.clock.now(),
@@ -425,6 +429,8 @@ class Pipeline:
                                 f"unreadable: {path.name}: {e}",
                                 spent=True,
                             )
+                    if not stale:
+                        await self._cancel(cand)
                     return
                 # local files cannot be fetched again: identify the album from the rest
                 first = first or e
@@ -536,6 +542,7 @@ class Pipeline:
             ]
 
         now = self.clock.now()
+        dropped = False
         with self.sessions.begin() as s:
             req = self._request(s, job)
             if _stale(s, job, req):
@@ -558,7 +565,7 @@ class Pipeline:
             elif result.band is Band.REVIEW and provisional:  # discovery never fills Review
                 d.status = "rejected_auto"
                 why = "; ".join(result.vetoes) or f"distance {result.distance:.2f}"
-                await self._drop(
+                self._drop(
                     cand,
                     s,
                     now,
@@ -566,10 +573,14 @@ class Pipeline:
                     f"would need review, which discovery skips: {why}",
                     spent=True,
                 )
+                dropped = True
             elif result.band is Band.REVIEW:
                 lifecycle.review(req)
             else:  # reject never deletes: the files went to quarantine
-                await self._drop(cand, s, now, req, "rejected after download", spent=True)
+                self._drop(cand, s, now, req, "rejected after download", spent=True)
+                dropped = True
+        if dropped:  # committed first: the cancel's HTTP calls must not hold the write lock
+            await self._cancel(cand)
 
     async def _quarantine(self, job: JobRecord, paths: list[Path], kind: str) -> list[Path]:
         """Move a dropped candidate's files out of /downloads (slskd may purge it) into
@@ -783,12 +794,14 @@ class Pipeline:
             left = [t for t in album.tracks if t.recording_id not in have]
             with self.sessions.begin() as s:
                 req = self._request(s, job)
-                if left and not req.from_files and album.release_group_id:
-                    # another copy of what we have: the rest of the album is still wanted
+                dropped = bool(left and not req.from_files and album.release_group_id)
+                if dropped:  # another copy of what we have: the rest of the album is still wanted
                     text = f"{len(album.tracks) - len(left)} of {len(album.tracks)} tracks present"
-                    await self._drop(cand, s, self.clock.now(), req, text, partial=text)
+                    self._drop(cand, s, self.clock.now(), req, text, partial=text)
                 else:
                     lifecycle.owned(req)
+            if dropped:
+                await self._cancel(cand)
             return
         art = await self._fetch_cover(target) if self.embed_cover else None
         embed = art if art and len(art) <= MAX_EMBED_BYTES else None
@@ -958,14 +971,16 @@ class Pipeline:
             lifecycle.finished(
                 req, errors, notes, unverified=bool(local and recheck), dead_end=dead_end
             )
-            if partial and not errors and not local:
-                await self._drop(cand, s, now, req, partial, partial=partial, notes=notes)
+            if dropped := bool(partial and not errors and not local):
+                self._drop(cand, s, now, req, partial, partial=partial, notes=notes)
             if len(errors) < len(results):
                 enqueue_rescan(s, now)
                 if root == "discover":
                     hold_imports(s, now, batch)
                 if recheck:
                     enqueue_recheck(s, now, recheck, None)
+        if dropped:
+            await self._cancel(cand)
 
     async def _unowned(
         self, album: AlbumInfo, files: list[canonical.File], batch: str
@@ -1003,17 +1018,22 @@ class Pipeline:
     def _imported(self, src: Path, batch: str, root: str = "library") -> bool:
         return self.importer.fileops.find_imported(batch, src, root) is not None
 
-    async def _drop(
-        self, cand: Candidate, s: Session, now: datetime, req: Request, why: str, **kw: Any
+    @staticmethod
+    def _drop(
+        cand: Candidate, s: Session, now: datetime, req: Request, why: str, **kw: Any
     ) -> None:
-        """drop_candidate, after cancelling what the candidate still has moving in slskd so a
-        dropped album stops downloading (an unfinished torrent is removed with its partial files).
-        Finished files stay; a failed cancel never blocks."""
+        """drop_candidate; the caller then awaits `_cancel` once its transaction is committed."""
+        drop_candidate(s, now, req, cand.username, cand.folder, why, source=cand.source, **kw)
+
+    async def _cancel(self, cand: Candidate) -> None:
+        """Cancel what a dropped candidate still has moving in slskd, so the album stops
+        downloading (an unfinished torrent is removed with its partial files). Finished files
+        stay; a failed cancel never blocks. Never call it inside a transaction: the source's HTTP
+        calls can take minutes, and SQLite's write lock would be held all along (#422)."""
         try:
             await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
-        drop_candidate(s, now, req, cand.username, cand.folder, why, source=cand.source, **kw)
 
     async def _release(
         self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
@@ -1073,6 +1093,12 @@ class Pipeline:
 def _stale(s: Session, job: JobRecord, req: Request) -> bool:
     """A re-run of a VERIFY that already recorded its decision, or one a repick superseded."""
     return req.status != "verifying" or verify.superseded(s, job.id, req.id)
+
+
+def _redrop(req: Request, cand: Candidate) -> bool:
+    """A DOWNLOAD re-run after its drop committed (the worker died during the slow cancel that
+    follows): dropping again would spend budget twice and start a second search."""
+    return tried_key(cand.source, cand.username, cand.folder) in req.tried
 
 
 def _missing(cand: Candidate, local: tuple[str, ...]) -> str | None:

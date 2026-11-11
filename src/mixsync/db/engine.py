@@ -10,7 +10,7 @@ from mixsync.core.config import Settings
 _PRAGMAS = (
     "journal_mode=WAL",
     "foreign_keys=ON",
-    "busy_timeout=5000",
+    "busy_timeout=15000",  # stopgap until no write lock is held long (#422)
     "synchronous=NORMAL",
 )
 

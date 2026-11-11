@@ -10,7 +10,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import insert, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from mixsync.acquire import pipeline, verify
@@ -18,12 +19,14 @@ from mixsync.acquire.evidence import Evidence
 from mixsync.acquire.requests import create_request
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
-from mixsync.core.matching import AlbumInfo, Candidate, TrackInfo, TransferStatus
+from mixsync.core.matching import AlbumInfo, Band, Candidate, TrackInfo, TransferStatus
 from mixsync.core.types import AcoustIdResult, Fingerprint, ReleaseRef
 from mixsync.db import canonical as canonical_db
 from mixsync.db import decisions
 from mixsync.db.auth import create_user
+from mixsync.db.engine import make_engine
 from mixsync.db.models.auth import MatchingProfile, User
+from mixsync.db.models.infra import HttpCache
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
 from mixsync.db.models.work import Job, Request
@@ -572,7 +575,7 @@ async def test_no_results_backs_off_then_caps(env: Env, web: TestClient) -> None
         while job is None or job.kind is not JobKind.SEARCH:
             job = await env.step()
         assert status(env, rid) == "no_results"
-        (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
+        (nxt,) = [j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]
         due = nxt.run_after.replace(tzinfo=env.clock.t.tzinfo)
         assert due - env.clock.now() == timedelta(hours=wait)
     assert env.clock.now() - t0 == timedelta(hours=sum(waits[:-1]))
@@ -692,6 +695,77 @@ async def test_a_failed_cancel_does_not_block_the_drop(
     rid = request(env)
     await env.drain()
     assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
+
+
+async def test_a_download_rerun_after_its_drop_committed_only_cancels_again(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cancel runs after the drop commits; a worker killed during it re-runs the job, which
+    must not drop the candidate a second time (budget, second search)."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.state["peer1"] = TransferStatus.FAILED
+    rid = request(env)
+    jobs: list[JobRecord] = []
+    run = env.handlers[JobKind.DOWNLOAD]
+
+    async def recording(job: JobRecord) -> None:
+        jobs.append(job)
+        await run(job)
+
+    env.handlers[JobKind.DOWNLOAD] = recording
+    cancels: list[str] = []
+
+    async def clear(cand: Candidate) -> None:
+        cancels.append(cand.username)
+        if len(cancels) == 1:  # the worker dies here; the same job runs again
+            await run(jobs[-1])
+
+    monkeypatch.setattr(env.source, "clear", clear)
+    for kind in (JobKind.SEARCH, JobKind.DOWNLOAD, JobKind.DOWNLOAD):
+        job = await env.step()
+        assert job and job.kind is kind
+    assert cancels == ["peer1", "peer1"]  # the re-run still cancels
+    with env.sessions() as s:
+        req = s.get_one(Request, rid)
+        dropped, tried = req.dropped, req.tried
+    assert tried == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert len([j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]) <= 1
+    assert dropped <= 1
+
+
+async def test_a_slow_cancel_after_a_reject_does_not_block_another_writer(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#422: slskd's cancel can take minutes; the verify step must have committed by then, or
+    the web process's writes fail with "database is locked" once busy_timeout runs out."""
+    env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    real = pipeline.score_files
+    reject = lambda *a, **k: replace(real(*a, **k), band=Band.REJECT)  # noqa: E731
+    monkeypatch.setattr(pipeline, "score_files", reject)
+    other = make_engine(env.settings)  # another connection, as the web process has
+    writes: list[str] = []
+
+    async def slow_clear(cand: Candidate) -> None:  # mid-cancel, someone else writes
+        with other.begin() as c:
+            if other.dialect.name == "sqlite":
+                c.exec_driver_sql("PRAGMA busy_timeout=200")
+            try:
+                c.execute(
+                    insert(HttpCache).values(
+                        key="web", service="mb", status=200, headers={}, body=b"",
+                        fetched_at=env.clock.now(), expires_at=env.clock.now(),
+                    )
+                )  # fmt: skip
+                writes.append("ok")
+            except OperationalError as e:
+                writes.append(str(e.orig))
+
+    monkeypatch.setattr(env.source, "clear", slow_clear)
+    rid = request(env)
+    await env.drain(until=lambda: bool(writes))
+    assert writes == ["ok"]
+    assert tried(env, rid) == [["peer1", "Music\\Alpha Band\\Alpha Album"]]
+    assert [d.status for d in decision_rows(env, 2)] == ["rejected_auto"]
 
 
 async def test_a_refusing_peer_tries_the_next_candidate(env: Env) -> None:
@@ -1554,7 +1628,7 @@ async def test_a_confident_partial_import_keeps_the_request_open(env: Env) -> No
         req = s.get(Request, rid)
         assert req and req.last_error == "partial: 1 of 2 tracks present"
         assert req.tried == [["peer1", FOLDER]]  # not fetched again
-    later = [j for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED]
+    later = [j for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED]
     assert len(later) == 1 and later[0].payload == {"request_id": rid}
     assert later[0].run_after.replace(tzinfo=UTC) > env.clock.now()
 
@@ -1599,7 +1673,7 @@ async def test_a_second_copy_of_the_same_track_is_not_downloaded(env: Env) -> No
     searched = len(env.source.queries)
     await env.drain(until=lambda: len(env.source.queries) > searched)
     assert env.source.enqueued == ["peer1"] and status(env, rid) == "partial"
-    assert [j.payload for j in env.jobs(JobKind.SEARCH) if j.status is JobState.QUEUED] == [
+    assert [j.payload for j in env.jobs(JobKind.SEARCH) if j.status == JobState.QUEUED] == [
         {"request_id": rid}
     ]  # Song Two is still wanted
 
