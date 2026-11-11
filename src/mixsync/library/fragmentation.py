@@ -33,7 +33,10 @@ def find(s: Session) -> list[Fragment]:
     )
     group, release = Track.release_group_mbid, Track.release_mbid
     counts = s.execute(
-        select(group, release, func.count()).where(*verified).group_by(group, release)
+        select(group, release, func.count())
+        .where(*verified)
+        .group_by(group, release)
+        .order_by(group, release)  # a stable releases order on the page, on Postgres too
     ).all()
     stored = {c.release_group_mbid: c.release_mbid for c in s.scalars(select(CanonicalRelease))}
     # verified tracks off their group's stored canonical release: usually few
