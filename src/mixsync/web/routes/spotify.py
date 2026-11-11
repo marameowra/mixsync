@@ -1,6 +1,7 @@
 """Spotify playlist import (#337): connect (OAuth with PKCE), list the user's own playlists,
-import one as a mirrored playlist, disconnect. Spotify is called only from these user actions.
-Imported playlists never become requests (discovery/spotify_api.py)."""
+import one as a mirrored playlist, disconnect. Besides these user actions, only the worker's
+daily re-import of existing imports calls Spotify (spotify_api.Reimport). Imported playlists
+never become requests (discovery/spotify_api.py)."""
 
 import hmac
 import json
@@ -133,21 +134,15 @@ async def _session(request: Request, db: Db, box: Box, user: AuthUser) -> tuple[
         raise HTTPException(400, "Connect Spotify on your account page first.")
     me = link.external_username
     db.commit()  # don't hold the SQLite write lock across the outbound calls
+    sessions = request.app.state.session_factory
     try:
-        access, new = await client.refresh(refresh)
+        access = await spotify_api.access_token(client, sessions, box, user.id, refresh)
     except Revoked:
-        new, access = "", ""
+        raise HTTPException(400, "Spotify refused the stored login; reconnect Spotify.") from None
     except TransientError:
         raise HTTPException(503, "Couldn't reach Spotify; try again.") from None
     except PermanentError as e:
         raise HTTPException(502, str(e)) from None
-    if new != refresh:
-        with request.app.state.session_factory.begin() as s:
-            if link := get_link(s, user.id, SERVICE):
-                link.secret_encrypted = box.encrypt(new) if new else ""  # "" never decrypts
-                link.needs_relink = not new
-    if not access:
-        raise HTTPException(400, "Spotify refused the stored login; reconnect Spotify.")
     return access, me
 
 
@@ -189,7 +184,8 @@ async def import_playlist(
         raise HTTPException(400, f"playlist {name!r} has no tracks")
     try:
         with request.app.state.session_factory.begin() as s:
-            spotify_api.save(s, datetime.now(UTC), user.id, playlist_id, name, tracks)
+            now = request.app.state.services.clock.now()
+            spotify_api.save(s, now, user.id, playlist_id, name, tracks)
     except IntegrityError:
         raise HTTPException(409, f"you already have a playlist named {name!r}") from None
     return RedirectResponse("/mirrored", 303)
