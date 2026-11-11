@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from mixsync.acquire import missing_scan, recheck
 from mixsync.acquire.merge import (
@@ -48,7 +49,7 @@ from mixsync.submit.mb_seed import (
 )
 from mixsync.web.csp import csp_with_form_target
 from mixsync.web.deps import CurrentUser, Db, Files, Merge, Namer, require
-from mixsync.web.names import MAX_LOOKUPS, resolve
+from mixsync.web.names import MAX_LOOKUPS, resolve, resolve_listed
 from mixsync.web.routes.requests import delete_row
 from mixsync.web.templating import render, templates
 
@@ -100,7 +101,7 @@ def _check_count(plan: Plan, count: str) -> None:
 
 
 @router.get("/fragments")
-async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
+def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
     ours = select(Plan).where(Plan.kind != missing_scan.KIND)  # a scan draft moves no file
     plans = [
@@ -120,7 +121,7 @@ async def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLR
             "user": user,
             "items": items,
             "plans": plans,
-            "names": await resolve(db, namer, refs),
+            "names": resolve_listed(db, namer, refs),
             "allowed": {p.id: _allowed(db, p, _days(request)) for p in plans},
         },
     )
@@ -313,7 +314,12 @@ def _by_folder(ops: list[dict[str, Any]]) -> dict[str, Any]:
 async def plan_detail(
     plan_id: int, request: Request, user: CurrentUser, db: Db, namer: Namer
 ) -> HTMLResponse:
-    plan = _plan(db, plan_id, user)
+    # Async for resolve()'s MusicBrainz lookups; the DB reads go to the threadpool.
+    def reads() -> tuple[Plan, set[str], list[dict[str, Any]]]:
+        plan = _plan(db, plan_id, user)
+        return plan, _allowed(db, plan, _days(request)), progress.with_done(db, plan)
+
+    plan, allowed, ops = await run_in_threadpool(reads)  # all DB reads first: resolve() commits
     kinds = ("move", "trash", "keep", "refused")
     counts = {k: sum(op["op"] == k for op in plan.ops) for k in kinds}
     refs = {("release-group", plan.release_group_mbid), ("release", plan.canonical_release_mbid)}
@@ -323,8 +329,6 @@ async def plan_detail(
                 ("release", op["old"].get("release_mbid") or ""),
                 ("release", op["tags"].get("release_id") or ""),
             }
-    allowed = _allowed(db, plan, _days(request))  # all DB reads first: resolve() commits
-    ops = progress.with_done(db, plan)
     ctx = {
         "user": user,
         "plan": plan,

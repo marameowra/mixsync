@@ -4,25 +4,24 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import verify
 from mixsync.acquire.lifecycle import BUSY, DONE, IN_PROGRESS
-from mixsync.acquire.merge import DeleteRefused, PlanInProgress, live_job
+from mixsync.acquire.merge import DeleteRefused, PlanInProgress
 from mixsync.acquire.request_delete import NotDeletable, live_states
 from mixsync.acquire.request_delete import deletable as is_deletable
 from mixsync.acquire.request_delete import delete_request as drop_request
 from mixsync.acquire.requests import REQUEST_BUDGET, create_request
 from mixsync.core.capabilities import Capability
-from mixsync.core.jobs import JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.library import Plan, Track
-from mixsync.db.models.work import Job
+from mixsync.db.models.work import JOB_REQUEST_ID, Job
 from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.web.deps import CurrentUser, Db, Merge, Namer, require
-from mixsync.web.names import resolve
+from mixsync.web.names import resolve_listed
 from mixsync.web.routes.review import parse_release_mbid
 from mixsync.web.templating import render
 
@@ -33,26 +32,37 @@ User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 def _waiting(db: Session, ids: list[int], now: datetime) -> set[int]:
     """Requests whose next step is due but the worker has not taken it yet."""
-    rid = Job.payload["request_id"].as_integer()
+    rid = JOB_REQUEST_ID
     due = select(rid).where(rid.in_(ids), Job.status == JobState.QUEUED, Job.run_after <= now)
     return set(db.scalars(due))
 
 
 def _delete_plans(db: Session, ids: list[int]) -> dict[int, int]:
-    """Request id -> its delete plan that is confirmed but not done (queued, running or failed)."""
-    q = select(Plan).where(Plan.kind == "delete", Plan.status.in_(["draft", "running", "failed"]))
+    """Request id -> its delete plan that is confirmed but not done (queued, running or failed).
+    A draft counts once confirmed: a MERGE or UNDO_MERGE job for it is live (merge.live_job)."""
+    confirmed = (
+        select(Job.id)
+        .where(
+            Job.kind.in_([JobKind.MERGE, JobKind.UNDO_MERGE]),
+            Job.status.in_(LIVE),
+            Job.payload["plan_id"].as_integer() == Plan.id,
+        )
+        .exists()
+    )
+    q = select(Plan.id, Plan.ops).where(
+        Plan.kind == "delete",
+        or_(Plan.status.in_(["running", "failed"]), and_(Plan.status == "draft", confirmed)),
+    )
     found: dict[int, int] = {}
-    for p in db.scalars(q.order_by(Plan.id)):
-        if p.status == "draft" and not live_job(db, p.id):
-            continue
-        for op in p.ops:
+    for plan_id, ops in db.execute(q.order_by(Plan.id)):
+        for op in ops:
             if op["op"] == "request" and op["request_id"] in ids:
-                found[op["request_id"]] = p.id
+                found[op["request_id"]] = plan_id
     return found
 
 
 @router.get("")
-async def request_list(
+def request_list(
     request: Request,
     user: User,
     db: Db,
@@ -72,7 +82,7 @@ async def request_list(
     music = set(  # requests with library tracks from their imports: one query for the page
         db.scalars(
             select(AlbumRequest.id)
-            .join(Track, verify.in_request(Track.batch_id, AlbumRequest.id))
+            .join(Track, Track.request_id == AlbumRequest.id)
             .where(AlbumRequest.id.in_(candidates))
             .distinct()
         )
@@ -91,7 +101,7 @@ async def request_list(
             "music": music,
             "queued": queued,
             "budget": REQUEST_BUDGET,
-            "names": await resolve(db, namer, {("release", r.release_mbid) for r in items}),
+            "names": resolve_listed(db, namer, {("release", r.release_mbid) for r in items}),
         },
     )
 
@@ -158,7 +168,7 @@ def delete_with_music(
         raise HTTPException(404, "no such request")
     if req.user_id != user.id and Capability.library_edit not in user.capabilities:
         raise HTTPException(403, "not your request")
-    ids = list(db.scalars(select(Track.id).where(verify.in_request(Track.batch_id, req.id))))
+    ids = list(db.scalars(select(Track.id).where(Track.request_id == req.id)))
     if not ids:
         raise HTTPException(404, "this request imported no music")
     db.commit()  # the login's last_seen write must not hold the SQLite lock while build runs

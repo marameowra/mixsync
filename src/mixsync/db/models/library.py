@@ -1,7 +1,9 @@
+import re
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy.engine.default import DefaultExecutionContext
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mixsync.db.base import Base, TimestampMixin
@@ -16,6 +18,15 @@ class CanonicalRelease(TimestampMixin, Base):
     release_mbid: Mapped[str] = mapped_column(String(36))
 
 
+_REQUEST_BATCH = re.compile(r"request-(\d+)-")  # acquire.verify.batch_id's format
+
+
+def _request_id(ctx: DefaultExecutionContext) -> int | None:
+    """The request a `request-<id>-decision-<id>` batch imported for, else None."""
+    m = _REQUEST_BATCH.match(ctx.get_current_parameters()["batch_id"])
+    return int(m[1]) if m else None
+
+
 class Track(TimestampMixin, Base):
     __tablename__ = "tracks"
 
@@ -28,6 +39,9 @@ class Track(TimestampMixin, Base):
     acoustid_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16))  # verified | unverified
     batch_id: Mapped[str] = mapped_column(String(64))
+    # Derived from batch_id on insert (batch_id never changes), so the request's tracks are an
+    # indexed lookup instead of a LIKE on batch_id. No foreign key: tracks outlive their request.
+    request_id: Mapped[int | None] = mapped_column(index=True, default=_request_id)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # The file's album artist, album and year tags (ADR 0018); null until filled, "" if untagged.
     album_artist: Mapped[str | None] = mapped_column(Text)

@@ -16,7 +16,7 @@ from mixsync.db.models.library import Track
 from mixsync.db.models.work import Request as WorkRequest
 from mixsync.discovery import playlists, retention
 from mixsync.web.deps import Db, Namer, require
-from mixsync.web.names import resolve
+from mixsync.web.names import resolve_listed
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/discover")
@@ -56,7 +56,7 @@ def _artwork_src(release: str | None, group: str | None) -> str | None:
 
 
 @router.get("")
-async def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
+def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     rows = db.scalars(
         select(DiscoveryPlaylist)
         .where(DiscoveryPlaylist.user_id == user.id)
@@ -148,7 +148,7 @@ async def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> H
         "rows": rows,
         "tracks": tracks,
         "soon": soon,
-        "names": await resolve(db, namer, unnamed),
+        "names": resolve_listed(db, namer, unnamed),
         "linked": {"listenbrainz", "navidrome"} <= linked,
     }
     return templates.TemplateResponse(request, "pages/discover.html", ctx)

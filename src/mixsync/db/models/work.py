@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    bindparam,
     false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -62,6 +63,14 @@ class Job(TimestampMixin, Base):
     last_error: Mapped[str | None]
     idempotency_key: Mapped[str | None] = mapped_column(String(200), unique=True)
     parent_job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
+
+
+# A job's payload request_id. The key is rendered as a literal so the SQL equals the expression of
+# ix_jobs_request_id: SQLite does not use an expression index when the JSON path is a bound value.
+JOB_REQUEST_ID = Job.payload[
+    bindparam("request_id_key", "request_id", JSON.JSONStrIndexType(), literal_execute=True)
+].as_integer()
+Index("ix_jobs_request_id", JOB_REQUEST_ID)
 
 
 class Request(TimestampMixin, Base):

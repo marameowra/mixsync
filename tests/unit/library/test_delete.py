@@ -58,7 +58,7 @@ def _setup(w: World) -> TestClient:
                 s.execute(
                     update(Track)
                     .where(Track.recording_mbid == rec, Track.release_mbid == OLD)
-                    .values(batch_id=f"request-{req.id}-decision-1")
+                    .values(batch_id=f"request-{req.id}-decision-1", request_id=req.id)
                 )
     return c
 

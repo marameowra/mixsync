@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
-from mixsync.acquire import lifecycle, verify
+from mixsync.acquire import lifecycle
 from mixsync.acquire.evidence import Evidence
 from mixsync.core.capabilities import Capability
 from mixsync.core.jobs import LIVE, JobKind, JobState, backoff
@@ -20,7 +20,7 @@ from mixsync.db.models.auth import AppSettings, MatchingProfile, User
 from mixsync.db.models.discovery import DiscoveryPlaylist, ProvisionalHold, ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Job, Request
+from mixsync.db.models.work import JOB_REQUEST_ID, Job, Request
 from mixsync.db.queue import enqueue_in
 from mixsync.library import albums
 from mixsync.match.candidates import parse_quality
@@ -170,10 +170,7 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
 
 
 def _has_tracks(s: Session, req: Request) -> bool:
-    return (
-        s.scalar(select(Track.id).where(verify.in_request(Track.batch_id, req.id)).limit(1))
-        is not None
-    )
+    return s.scalar(select(Track.id).where(Track.request_id == req.id).limit(1)) is not None
 
 
 def _failed_candidate(s: Session, payload: dict[str, Any]) -> list[str] | None:
@@ -199,11 +196,7 @@ def fail_request_of_job(
         return
     with Session(c) as s:  # joins the queue's transaction: the caller commits
         req = s.get(Request, rid)
-        newer = s.scalar(
-            select(Job.id)
-            .where(Job.id > job_id, Job.payload["request_id"].as_integer() == rid)
-            .limit(1)
-        )
+        newer = s.scalar(select(Job.id).where(Job.id > job_id, JOB_REQUEST_ID == rid).limit(1))
         if req and req.status in lifecycle.IN_PROGRESS and newer is None:
             lifecycle.job_failed(req, _has_tracks(s, req), error)
             req.updated_at = now  # the queue's clock, as the job rows use
