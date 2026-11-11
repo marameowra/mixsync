@@ -33,12 +33,23 @@ def find(s: Session) -> list[Fragment]:
             Track.release_mbid.is_not(None),
         )
     ).all()
-    stored = {c.release_group_mbid: c.release_mbid for c in s.scalars(select(CanonicalRelease))}
+    stored = {
+        g: r
+        for g, r in s.execute(
+            select(CanonicalRelease.release_group_mbid, CanonicalRelease.release_mbid)
+        )
+    }
     kept = {
         op["track_id"]
-        for p in s.scalars(select(Plan).where(Plan.kind == "merge", Plan.status == "done"))
-        if stored.get(p.release_group_mbid) == p.canonical_release_mbid
-        for op in p.ops
+        for group, canon, ops in s.execute(
+            select(Plan.release_group_mbid, Plan.canonical_release_mbid, Plan.ops).where(
+                Plan.kind == "merge",
+                Plan.status == "done",
+                Plan.release_group_mbid.in_(stored),  # only groups with a stored canonical count
+            )
+        )
+        if stored.get(group) == canon
+        for op in ops
         if op["op"] == "keep"
     }
     groups: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))

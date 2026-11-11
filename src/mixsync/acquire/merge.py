@@ -131,9 +131,12 @@ def enqueue_merge_plan(s: Session, now: datetime, group: str) -> None:
 
 def merge_build(s: Session, group: str) -> tuple[Job | None, int | None]:
     """The group's newest merge build job and the draft it made, if it has made one."""
-    # shortcut: the group is matched in Python, as in live_job; filter in SQL if jobs pile up
-    jobs = s.scalars(select(Job).where(Job.kind == JobKind.MERGE_PLAN).order_by(Job.id.desc()))
-    job = next((j for j in jobs if j.payload.get("group") == group), None)
+    job = s.scalars(
+        select(Job)
+        .where(Job.kind == JobKind.MERGE_PLAN, Job.payload["group"].as_string() == group)
+        .order_by(Job.id.desc())
+        .limit(1)
+    ).first()
     if job is None:
         return None, None
     # max: a double click can queue two builds; the later one discards the earlier draft
@@ -215,7 +218,6 @@ class Merger:
         with self.sessions() as s:
             stored = canonical_db.get(s, group)
             tracks = list(s.scalars(select(Track).where(Track.release_group_mbid == group)))
-            rows = set(s.scalars(select(Track.path)))
             busy = _open_plan(s, group)
         if busy:
             raise PlanInProgress(busy)
@@ -228,8 +230,13 @@ class Merger:
                 raise LookupError(f"MusicBrainz lists no releases for {group}")
             cid = canonical.choose(releases, self.canonical_media, self.canonical_countries)
         album = await self.metadata.get_release(cid)
+
+        def taken(r: str) -> bool:  # one indexed lookup per candidate path, not every track path
+            with self.sessions() as s:
+                return s.scalar(select(Track.id).where(Track.path == r).limit(1)) is not None
+
         ops = fragmentation.build_ops(
-            tracks, album, self.template, lambda r: r in rows or self.fileops.has(r), self._size
+            tracks, album, self.template, lambda r: taken(r) or self.fileops.has(r), self._size
         )
         with self.sessions.begin() as s:
             if busy := _open_plan(s, group):  # confirmed since we looked
