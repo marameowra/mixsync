@@ -1,6 +1,7 @@
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +13,6 @@ from mixsync.app import create_app
 from mixsync.core.config import Settings
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
-from mixsync.db.base import Base
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
 from mixsync.db.models.auth import User
@@ -162,12 +162,15 @@ def test_delete_plan_link_shows_for_running_failed_and_confirmed_drafts(
     assert shown == {"running", "failed", "confirmed"}
 
 
-def test_request_lookups_can_use_their_indexes() -> None:
-    """On SQLite the job filter's text must equal ix_jobs_request_id's expression to use it."""
-    import mixsync.db.models  # noqa: F401  (registers every table)
-
-    engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
+def test_request_lookups_can_use_their_indexes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On SQLite the job filter's text must equal ix_jobs_request_id's expression to use it.
+    The schema comes from the migrations, so an edit to only one copy of it fails here."""
+    url = f"sqlite:///{tmp_path / 'indexes.db'}"
+    monkeypatch.setenv("MIXSYNC_DATABASE_URL", url)
+    upgrade()
+    engine = create_engine(url)
     queries = {
         "ix_jobs_request_id": select(Job.id).where(JOB_REQUEST_ID.in_([1, 2])),
         "ix_tracks_request_id": select(Track.id).where(Track.request_id == 1),
