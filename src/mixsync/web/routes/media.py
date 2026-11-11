@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
@@ -17,15 +18,22 @@ User = Annotated[AuthUser, Depends(require(Capability.request))]
 
 
 async def _artwork_response(
-    art: CoverArtClient, release: str | None, group: str | None
+    request: Request,
+    art: CoverArtClient,
+    release: str | None,
+    group: str | None,
+    cache: str = "private, max-age=31536000, immutable",  # the URL names the MBID
 ) -> Response:
-    headers = {"Cache-Control": "private, max-age=86400"}
     try:
         data = await art.front(release, group)
     except (TransientError, PermanentError):
         raise HTTPException(404, headers={"Cache-Control": "no-store"}) from None
     if data is None:
-        raise HTTPException(404, headers=headers)
+        raise HTTPException(404, headers={"Cache-Control": "private, max-age=300"})
+    etag = f'"{hashlib.sha1(data, usedforsecurity=False).hexdigest()}"'
+    headers = {"Cache-Control": cache, "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
     media_type = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
     return Response(data, media_type=media_type, headers=headers)
 
@@ -46,7 +54,7 @@ def preview(request: Request, decision_id: int, index: int, user: User, db: Db) 
 
 
 @router.get("/cover/{decision_id}")
-async def cover(decision_id: int, user: User, db: Db, art: Cover) -> Response:
+async def cover(request: Request, decision_id: int, user: User, db: Db, art: Cover) -> Response:
     """The candidate release's front cover, fetched server-side through the polite client."""
     d = decision_for(db, user, decision_id)
     mbid = d.release_mbid
@@ -54,11 +62,13 @@ async def cover(decision_id: int, user: User, db: Db, art: Cover) -> Response:
     db.commit()  # the login's last_seen write must not hold the SQLite lock during the bucket's
     if not mbid:
         raise HTTPException(404, headers={"Cache-Control": "private, max-age=86400"})
-    return await _artwork_response(art, mbid, group)
+    # a decision's release can change, so this URL must not be immutable
+    return await _artwork_response(request, art, mbid, group, "private, max-age=86400")
 
 
 @router.get("/artwork/{kind}/{mbid}")
 async def artwork(
+    request: Request,
     kind: Literal["release", "release-group"],
     mbid: UUID,
     user: User,
@@ -71,4 +81,4 @@ async def artwork(
         (str(mbid), str(group) if group else None) if kind == "release" else (None, str(mbid))
     )
     db.commit()  # keep the login write out of the cover-art bucket transaction
-    return await _artwork_response(art, release, release_group)
+    return await _artwork_response(request, art, release, release_group)

@@ -42,7 +42,7 @@ async def test_nothing_found(make_client: Make) -> None:
     assert await art.front("R", "G") is None
     assert seen == ORDER
     seen.clear()
-    assert await art.front("R", None) is None and seen == ORDER[:2]
+    assert await art.front("R", None) is None and seen == []  # the 404s are cached a day
 
 
 async def test_group_only_skips_release_requests(make_client: Make) -> None:
@@ -70,3 +70,22 @@ async def test_requests_go_to_the_given_base_url(make_client: Make, base: str, h
 
     assert await CoverArtClient(make_client("coverart", handler), base).front("R", None) is None
     assert set(hosts) == {host}
+
+
+async def test_no_art_is_cached_but_server_errors_are_not(make_client: Make) -> None:
+    seen: list[str] = []
+    art = CoverArtClient(make_client("coverart", serve(None, seen)))
+    assert await art.front("R", "G") is None
+    seen.clear()
+    assert await art.front("R", "G") is None and seen == []
+    failing: list[int] = []
+
+    def handler(_r: httpx.Request) -> httpx.Response:
+        failing.append(1)
+        return httpx.Response(500)
+
+    broken = CoverArtClient(make_client("coverart", handler))
+    for _ in range(2):
+        with pytest.raises(TransientError):
+            await broken.front("X", None)
+    assert len(failing) == 2

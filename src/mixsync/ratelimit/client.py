@@ -102,9 +102,10 @@ class PoliteClient:
                     self.bucket.block, _DISCOGS_WINDOW
                 )  # a moving 60 s window, no reset header
             if response.status_code not in (429, 503):
-                if ttl is not None and response.status_code == 200:
+                keep = ttl if response.status_code == 200 else self.lim.negative_ttl
+                if ttl is not None and keep is not None and response.status_code in (200, 404):
                     await asyncio.to_thread(
-                        self.cache.put, request, response, self.clock.now(), ttl
+                        self.cache.put, request, response, self.clock.now(), keep
                     )
                 return response
             await asyncio.to_thread(self.bucket.block, self._delay(response, attempt))

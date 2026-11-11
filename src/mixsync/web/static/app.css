@@ -234,7 +234,7 @@ button.danger.filled { background: var(--danger); color: var(--on-danger); }
   .art.lg, .art-lg { width: var(--art-lg); height: var(--art-lg); }
 }
 
-.art object, .art > span, .art object > span { display: grid; place-items: center; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: cover; }
+.art > span, .art > img { grid-area: 1 / 1; display: grid; place-items: center; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: cover; }
 
 .plan-op, .plan-file { white-space: nowrap; overflow-wrap: normal; }
 
