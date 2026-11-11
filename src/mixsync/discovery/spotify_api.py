@@ -343,8 +343,10 @@ class Reimport:
 
     async def run(self, job: JobRecord) -> None:
         try:
-            await self.reimport_due()
-            self.strip_stale()
+            try:
+                await self.reimport_due()
+            finally:  # IV.3.1: a failed re-import must not keep Spotify data past stale
+                self.strip_stale()
         finally:  # the chain goes on after a failure too; the key makes a retry add no second
             now = self.clock.now()
             with self.sessions.begin() as s:
