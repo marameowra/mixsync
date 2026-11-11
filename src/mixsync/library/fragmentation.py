@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from mixsync.core.matching import AlbumInfo, TrackInfo
@@ -26,28 +26,46 @@ def find(s: Session) -> list[Fragment]:
     """Groups whose verified tracks span several releases or sit off the stored canonical one.
     A track that a done merge onto the current canonical kept (its recording is not on that
     release) is settled: it alone does not list the group again."""
-    rows = s.execute(
-        select(Track.id, Track.release_group_mbid, Track.release_mbid).where(
-            Track.status == "verified",
-            Track.release_group_mbid.is_not(None),
-            Track.release_mbid.is_not(None),
-        )
+    verified = (
+        Track.status == "verified",
+        Track.release_group_mbid.is_not(None),
+        Track.release_mbid.is_not(None),
+    )
+    group, release = Track.release_group_mbid, Track.release_mbid
+    counts = s.execute(
+        select(group, release, func.count()).where(*verified).group_by(group, release)
     ).all()
     stored = {c.release_group_mbid: c.release_mbid for c in s.scalars(select(CanonicalRelease))}
-    kept = {
+    # verified tracks off their group's stored canonical release: usually few
+    off = (
+        select(Track.id, group)
+        .join(CanonicalRelease, CanonicalRelease.release_group_mbid == group)
+        .where(*verified, CanonicalRelease.release_mbid != release)
+    )
+    on_canonical = and_(
+        CanonicalRelease.release_group_mbid == Plan.release_group_mbid,
+        CanonicalRelease.release_mbid == Plan.canonical_release_mbid,
+    )
+    kept = {  # only merges onto the current canonical of a group that still has off tracks
         op["track_id"]
-        for p in s.scalars(select(Plan).where(Plan.kind == "merge", Plan.status == "done"))
-        if stored.get(p.release_group_mbid) == p.canonical_release_mbid
+        for p in s.scalars(
+            select(Plan)
+            .join(CanonicalRelease, on_canonical)
+            .where(
+                Plan.kind == "merge",
+                Plan.status == "done",
+                Plan.release_group_mbid.in_(off.with_only_columns(group)),
+            )
+        )
         for op in p.ops
         if op["op"] == "keep"
     }
-    groups: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    unsettled: set[str] = set()
-    for tid, group, release in rows:
-        g, r = str(group), str(release)
-        groups[g][r] += 1
-        if r != stored.get(g) and tid not in kept:
-            unsettled.add(g)
+    groups: dict[str, dict[str, int]] = defaultdict(dict)
+    for g, r, n in counts:
+        groups[str(g)][str(r)] = n
+    # a group with no stored canonical has every track off it, and nothing can have kept one
+    unsettled = {str(g) for tid, g in s.execute(off) if tid not in kept}
+    unsettled |= {g for g in groups if g not in stored}
     return [
         Fragment(g, stored.get(g), dict(rels))
         for g, rels in sorted(groups.items())

@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from starlette.concurrency import run_in_threadpool
 
 from mixsync.acquire import missing_scan, recheck
@@ -103,7 +103,8 @@ def _check_count(plan: Plan, count: str) -> None:
 @router.get("/fragments")
 def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
-    ours = select(Plan).where(Plan.kind != missing_scan.KIND)  # a scan draft moves no file
+    # a scan draft moves no file; ops (thousands for a reorganize) are not shown here
+    ours = select(Plan).options(defer(Plan.ops)).where(Plan.kind != missing_scan.KIND)
     plans = [
         *db.scalars(ours.where(stuck).order_by(Plan.id.desc())),
         *db.scalars(ours.where(~stuck).order_by(Plan.id.desc()).limit(20)),

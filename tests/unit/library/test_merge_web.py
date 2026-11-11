@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mixsync.acquire.merge import enqueue_merge_plan, merge_build
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock
 from mixsync.core.config import Settings
@@ -165,7 +166,17 @@ def test_post_queues_one_build_without_musicbrainz(world: World) -> None:  # noq
         assert len(_builds(world)) == 1
         page = c.get(BUILD)
         assert page.status_code == 200 and "Building the merge plan" in page.text
-        assert 'hx-trigger="every 5s"' in page.text
+        assert 'hx-trigger="every 1s"' in page.text  # a build is quick: no 5 s wait
+
+
+def test_build_status_ignores_a_newer_build_of_another_group(world: World) -> None:  # noqa: F811
+    with world.sessions.begin() as s:
+        enqueue_merge_plan(s, SystemClock().now(), GROUP)
+        enqueue_merge_plan(s, SystemClock().now(), "another-group")
+    with world.sessions() as s:
+        job, plan_id = merge_build(s, GROUP)
+        assert job is not None and job.payload["group"] == GROUP and plan_id is None
+        assert merge_build(s, "no-such-group") == (None, None)
 
 
 def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> None:  # noqa: F811
@@ -200,6 +211,7 @@ def test_transient_musicbrainz_error_retries(world: World, error: Exception, sto
         assert job.status == JobState.RETRY_WAIT and stored in job.last_error
         page = c.get(BUILD)
         assert page.status_code == 200 and "trying again shortly" in page.text
+        assert 'hx-trigger="every 5s"' in page.text  # no fast polling through the backoff
 
 
 def test_permanent_error_shows_message_and_retry(world: World) -> None:  # noqa: F811
