@@ -18,6 +18,7 @@ from mixsync.core.config import Settings
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.auth import create_user
+from mixsync.db.models.library import Plan
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobQueue, enqueue_in
 from mixsync.library import fragmentation
@@ -136,6 +137,20 @@ def test_merged_group_leaves_the_list(world: World, make_src: MakeSrc) -> None: 
             assert [f.group_mbid for f in fragmentation.find(s)] == [GROUP]
 
 
+def test_a_merge_onto_an_old_canonical_settles_nothing(world: World) -> None:  # noqa: F811
+    with _client(world) as c:
+        tok = _login(c)
+        pid = _preview(c, tok, world)
+        assert c.post(f"/library/plans/{pid}/confirm", data={"csrf_token": tok}).status_code == 303
+        _drain(world)
+        with world.sessions() as s:
+            assert fragmentation.find(s) == []
+        with world.sessions.begin() as s:  # as if the canonical moved on since that merge
+            s.get(Plan, pid).canonical_release_mbid = "an-older-canonical"
+        with world.sessions() as s:  # only the kept bonus track is off canonical, now unsettled
+            assert [f.group_mbid for f in fragmentation.find(s)] == [GROUP]
+
+
 def test_confirmed_draft_survives_new_preview(world: World) -> None:  # noqa: F811
     with _client(world) as c:
         tok = _login(c)
@@ -166,7 +181,7 @@ def test_post_queues_one_build_without_musicbrainz(world: World) -> None:  # noq
         assert len(_builds(world)) == 1
         page = c.get(BUILD)
         assert page.status_code == 200 and "Building the merge plan" in page.text
-        assert 'hx-trigger="load delay:1s, every 5s"' in page.text
+        assert 'hx-trigger="every 1s"' in page.text  # a build is quick: no 5 s wait
 
 
 def test_finished_build_redirects_to_the_plan_within_one_poll(world: World) -> None:  # noqa: F811
@@ -201,6 +216,7 @@ def test_transient_musicbrainz_error_retries(world: World, error: Exception, sto
         assert job.status == JobState.RETRY_WAIT and stored in job.last_error
         page = c.get(BUILD)
         assert page.status_code == 200 and "trying again shortly" in page.text
+        assert 'hx-trigger="every 5s"' in page.text  # no fast polling through the backoff
 
 
 def test_permanent_error_shows_message_and_retry(world: World) -> None:  # noqa: F811
@@ -251,10 +267,10 @@ def test_merge_build_picks_the_newest_job_of_its_own_group(world: World) -> None
         assert merge_build(s, "unknown") == (None, None)
 
 
-def test_polled_fragment_keeps_the_five_second_trigger(world: World) -> None:  # noqa: F811
+def test_polled_fragment_keeps_polling_every_second(world: World) -> None:  # noqa: F811
     with _client(world) as c:
         tok = _login(c)
         _post(c, tok)
         frag = c.get(BUILD, headers={"HX-Request": "true"})
         assert frag.status_code == 200 and "Building the merge plan" in frag.text
-        assert 'hx-trigger="every 5s"' in frag.text and "load delay" not in frag.text
+        assert 'hx-trigger="every 1s"' in frag.text

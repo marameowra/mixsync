@@ -230,14 +230,13 @@ class Merger:
                 raise LookupError(f"MusicBrainz lists no releases for {group}")
             cid = canonical.choose(releases, self.canonical_media, self.canonical_countries)
         album = await self.metadata.get_release(cid)
+        with self.sessions() as s:  # a lookup per candidate path, not every library path
 
-        def taken(r: str) -> bool:  # one indexed lookup per candidate path, not every track path
-            with self.sessions() as s:
-                return s.scalar(select(Track.id).where(Track.path == r).limit(1)) is not None
+            def taken(r: str) -> bool:
+                row = s.scalar(select(Track.id).where(Track.path == r))
+                return row is not None or self.fileops.has(r)
 
-        ops = fragmentation.build_ops(
-            tracks, album, self.template, lambda r: taken(r) or self.fileops.has(r), self._size
-        )
+            ops = fragmentation.build_ops(tracks, album, self.template, taken, self._size)
         with self.sessions.begin() as s:
             if busy := _open_plan(s, group):  # confirmed since we looked
                 raise PlanInProgress(busy)

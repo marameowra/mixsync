@@ -1,6 +1,7 @@
 {% import "macros/forms.html" as forms with context %}
 {% import "macros/live.html" as live %}
-{% call live.region(url, building, "load delay:1s, " if first_poll else "") %}
+{# a build is one or two MusicBrainz calls: poll fast, except while it waits out a retry #}
+{% call live.region(url, building, "5s" if job and job.status == "retry_wait" else "1s") %}
 {% if building %}<p role="status">Building the merge plan for release group {{ group }}&hellip; looking up its releases on MusicBrainz. Nothing moves.{% if job.status == "retry_wait" %} MusicBrainz did not answer ({{ job.last_error }}); trying again shortly.{% endif %}</p>
 <p><a href="{{ url }}">Refresh</a></p>
 {% elif job %}<p class="notice danger" role="alert">✕ No plan was built: {{ job.last_error or job.status }}</p>

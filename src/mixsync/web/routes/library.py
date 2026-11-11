@@ -103,9 +103,8 @@ def _check_count(plan: Plan, count: str) -> None:
 @router.get("/fragments")
 def fragments(request: Request, user: User, db: Db, namer: Namer) -> HTMLResponse:
     stuck = Plan.status.in_(("running", "undoing", "failed"))  # these block their release group
-    ours = (
-        select(Plan).options(defer(Plan.ops)).where(Plan.kind != missing_scan.KIND)
-    )  # a scan draft moves no file
+    # a scan draft moves no file; ops (thousands for a reorganize) are not shown here
+    ours = select(Plan).options(defer(Plan.ops)).where(Plan.kind != missing_scan.KIND)
     plans = [
         *db.scalars(ours.where(stuck).order_by(Plan.id.desc())),
         *db.scalars(ours.where(~stuck).order_by(Plan.id.desc()).limit(20)),
@@ -274,8 +273,6 @@ def build_status(request: Request, user: User, db: Db, group: str) -> Response:
         "url": f"/library/fragments/plan?{urlencode({'group': group})}",
         "job": job,
         "building": job is not None and job.status in LIVE,
-        # a full page polls once after 1 s (the worker is quick); polled fragments keep 5 s
-        "first_poll": request.headers.get("HX-Request") != "true",
     }
     return render(request, "pages/merge_build.html", "pages/merge_build_live.html", ctx)
 
