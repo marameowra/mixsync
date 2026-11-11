@@ -217,7 +217,9 @@ async def test_a_failed_file_fetch_skips_only_that_release(make_client: Make) ->
 
 async def test_a_rejected_api_key_is_an_auth_error(make_client: Make) -> None:
     src = ProwlarrSource(make_client("prowlarr", lambda _r: httpx.Response(401)), BASE, "bad")
-    with pytest.raises(AuthError, match="MIXSYNC_PROWLARR_API_KEY"):
+    with pytest.raises(
+        AuthError, match=r"prowlarr_api_key on /settings \(or MIXSYNC_PROWLARR_API_KEY\)"
+    ):
         await src.search(QUERY)
 
 

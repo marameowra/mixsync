@@ -63,7 +63,8 @@ class Qbittorrent:
         response = await self._send("POST", "auth/login", data=self._login)
         if response.status_code != 200 or response.text.strip() != "Ok.":  # "Fails." / 403 ban
             raise AuthError(
-                "qbittorrent rejected the login; check MIXSYNC_QBITTORRENT_USERNAME and _PASSWORD"
+                "qbittorrent rejected the login; check qbittorrent_username and _password"
+                " on /settings (or MIXSYNC_QBITTORRENT_USERNAME and _PASSWORD)"
             )
 
     async def info(self, infohash: str) -> dict[str, Any] | None:

@@ -195,7 +195,10 @@ class ProwlarrSource:
         except httpx.TransportError as e:
             raise TransientError(f"prowlarr unreachable: {e!r}") from e
         if response.status_code in (401, 403):
-            raise AuthError("prowlarr rejected the API key; check MIXSYNC_PROWLARR_API_KEY")
+            raise AuthError(
+                "prowlarr rejected the API key; check prowlarr_api_key on /settings"
+                " (or MIXSYNC_PROWLARR_API_KEY)"
+            )
         if response.status_code >= 500:
             raise TransientError(f"prowlarr returned {response.status_code}")
         return response

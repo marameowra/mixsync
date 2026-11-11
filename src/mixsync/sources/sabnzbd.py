@@ -46,7 +46,10 @@ class Sabnzbd:
         except ValueError:  # older versions answer errors in plain text, "error: ..."
             body = {"status": False, "error": response.text.removeprefix("error:").strip()}
         if response.status_code in (401, 403) or "API Key" in str(body.get("error", "")):
-            raise AuthError("sabnzbd rejected the API key; check MIXSYNC_SABNZBD_API_KEY")
+            raise AuthError(
+                "sabnzbd rejected the API key; check sabnzbd_api_key on /settings"
+                " (or MIXSYNC_SABNZBD_API_KEY)"
+            )
         if response.status_code != 200:
             raise PermanentError(f"sabnzbd {mode} returned {response.status_code}")
         return body

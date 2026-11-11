@@ -133,7 +133,9 @@ async def test_logs_in_on_a_403_and_keeps_the_session_cookie(make: Env) -> None:
 async def test_a_rejected_login_is_an_auth_error(make: Env) -> None:
     client, fake = make()
     fake.login = "Fails."
-    with pytest.raises(AuthError, match="MIXSYNC_QBITTORRENT_USERNAME"):
+    with pytest.raises(
+        AuthError, match=r"_password on /settings \(or MIXSYNC_QBITTORRENT_USERNAME"
+    ):
         await client.info(HASH)
 
 
