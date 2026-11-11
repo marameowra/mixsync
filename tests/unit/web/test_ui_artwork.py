@@ -25,22 +25,32 @@ def test_artwork_missing_cover_is_a_labelled_title_initial() -> None:
     dom = Elements()
     dom.feed(text)
     assert "missing" in (dom.tags[0][1].get("class") or "").split()
-    assert ("span", {"role": "img", "aria-label": "No cover art for Blue Train"}) in dom.tags
+    assert dom.tags[0][1]["aria-label"] == "No cover art for Blue Train"
     assert ">B</span>" in text
     assert not any(tag in ("img", "object") for tag, _ in dom.tags)
 
 
-def test_artwork_cover_has_native_http_failure_fallback() -> None:
+def test_artwork_cover_is_a_lazy_img_over_the_letter() -> None:
     text = _art("Blue Train", "/media/cover/42")
     dom = Elements()
     dom.feed(text)
-    obj = next(attrs for tag, attrs in dom.tags if tag == "object")
+    img = next(attrs for tag, attrs in dom.tags if tag == "img")
     assert "missing" not in (dom.tags[0][1].get("class") or "").split()
-    assert obj.get("data") == "/media/cover/42"
-    assert "type" not in obj  # The cover proxy can return either JPEG or PNG.
-    assert 'aria-label="No cover art for Blue Train"' in text
-    assert text.index("<object ") < text.index('role="img"') < text.index("</object>")
-    assert "onerror" not in text
+    assert img.get("src") == "/media/cover/42" and img.get("loading") == "lazy"
+    assert img.get("alt") == ""  # a failed load renders nothing, so the letter below shows
+    assert dom.tags[0][1]["aria-label"] == "Cover art for Blue Train"
+    assert text.index(">B</span>") < text.index("<img ")
+    assert "onerror" not in text and "<object" not in text
+
+
+def test_artwork_id_adds_hx_preserve_only_with_a_cover() -> None:
+    def render(src: str | None) -> str:
+        return templates.env.from_string(
+            '{% from "macros/media.html" import artwork %}{{ artwork("T", src, "xs", "art-1") }}'
+        ).render(src=src)
+
+    assert 'id="art-1" hx-preserve' in render("/media/cover/42")
+    assert "hx-preserve" not in render(None)
 
 
 @pytest.mark.parametrize(
@@ -55,8 +65,8 @@ def test_artwork_accepts_typed_same_origin_musicbrainz_routes(src: str) -> None:
     text = _art("Blue Train", src)
     dom = Elements()
     dom.feed(text)
-    obj = next(attrs for tag, attrs in dom.tags if tag == "object")
-    assert obj.get("data") == src
+    img = next(attrs for tag, attrs in dom.tags if tag == "img")
+    assert img.get("src") == src
 
 
 @pytest.mark.parametrize(
@@ -71,7 +81,7 @@ def test_artwork_accepts_typed_same_origin_musicbrainz_routes(src: str) -> None:
 )
 def test_artwork_rejects_malformed_musicbrainz_routes(src: str) -> None:
     text = _art("Blue Train", src)
-    assert "<object" not in text
+    assert "<img" not in text
 
 
 @pytest.mark.parametrize(
@@ -85,6 +95,6 @@ def test_artwork_rejects_malformed_musicbrainz_routes(src: str) -> None:
 )
 def test_artwork_never_embeds_untrusted_or_external_sources(src: str) -> None:
     text = _art('<img src=x onerror="bad()">', src)
-    assert "<object" not in text and "<img" not in text
+    assert "<object" not in text and "<img " not in text
     assert "&lt;img" in text
     assert "No cover art for" in text

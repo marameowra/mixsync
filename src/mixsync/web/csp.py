@@ -1,6 +1,6 @@
 from urllib.parse import urlsplit
 
-# object-src stays 'self': covers render as <object data="/media/..."> (same-origin)
+# covers render as <img src="/media/..."> (same-origin, allowed by default-src)
 CSP = (
     "default-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; "
     "frame-ancestors 'none'"

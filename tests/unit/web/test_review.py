@@ -10,7 +10,7 @@ import httpx
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, event, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.acquire import lifecycle, request_delete, review, verify
@@ -1240,7 +1240,7 @@ def test_cover_art_for_candidate(client: TestClient, sf: sessionmaker[Session]) 
     client.app.dependency_overrides[get_coverart] = lambda: fake  # type: ignore[attr-defined]
     i = _extra_decision(sf, "alice", target={"release_group_id": "rg"})
     _login(client, "alice")
-    assert f'data="/media/cover/{i}"' in client.get(f"/review/{i}").text
+    assert f'src="/media/cover/{i}"' in client.get(f"/review/{i}").text
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert fake.seen == (MBID, "rg")
@@ -1293,8 +1293,8 @@ def test_requests_and_home_show_known_release_artwork(
         )
     _login(client, "alice")
     src = f"/media/artwork/release/{MBID}?group=33333333-3333-3333-3333-333333333333"
-    assert f'data="{src}"' in client.get("/requests").text
-    assert f'data="{src}"' in client.get("/").text
+    assert f'src="{src}"' in client.get("/requests").text
+    assert f'src="{src}"' in client.get("/").text
 
 
 def test_discover_old_entry_uses_existing_request_artwork(
@@ -1327,7 +1327,7 @@ def test_discover_old_entry_uses_existing_request_artwork(
             )
         )
     _login(client, "alice")
-    assert f'data="/media/artwork/release/{MBID}?group={group}"' in client.get("/discover").text
+    assert f'src="/media/artwork/release/{MBID}?group={group}"' in client.get("/discover").text
 
 
 def test_watchlist_follow_artwork_uses_release_and_group(
@@ -1356,7 +1356,7 @@ def test_watchlist_follow_artwork_uses_release_and_group(
         )
     _login(client, "alice")
     assert (
-        f'data="/media/artwork/release/{MBID}?group={group}"'
+        f'src="/media/artwork/release/{MBID}?group={group}"'
         in client.get(f"/watchlist/{follow_id}").text
     )
 
@@ -1385,7 +1385,7 @@ def test_watchlist_catalog_artwork_uses_group_route(
     client.app.dependency_overrides[get_watch] = lambda: Watch()  # type: ignore[attr-defined]
     _login(client, "alice")
     assert (
-        f'data="/media/artwork/release-group/{group}"'
+        f'src="/media/artwork/release-group/{group}"'
         in client.get(f"/watchlist/{follow_id}/catalog").text
     )
 
@@ -1424,7 +1424,7 @@ def test_cover_404_when_upstream_has_nothing(
     _login(client, "alice")
     r = client.get(f"/media/cover/{i}")
     assert r.status_code == 404
-    assert r.headers["cache-control"] == ("private, max-age=86400" if code == 404 else "no-store")
+    assert r.headers["cache-control"] == ("private, max-age=300" if code == 404 else "no-store")
 
 
 def test_cover_404_without_a_release(client: TestClient, sf: sessionmaker[Session]) -> None:
@@ -1791,3 +1791,60 @@ def test_split_form_is_not_offered_without_unassigned_files_or_for_discovery(
     _login(client, "alice")
     for i in (plain, discovery):
         assert "/split" not in client.get(f"/review/{i}").text
+
+
+def test_artwork_success_is_immutable_with_etag_and_304(
+    client: TestClient, make_client: Any
+) -> None:
+    _real_cover(client, make_client, lambda r: httpx.Response(200, content=b"\xff\xd8jpeg"))
+    _login(client, "alice")
+    r = client.get(f"/media/artwork/release/{MBID}")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "private, max-age=31536000, immutable"
+    tag = {"If-None-Match": r.headers["etag"]}
+    again = client.get(f"/media/artwork/release/{MBID}", headers=tag)
+    assert again.status_code == 304 and again.content == b""
+
+
+def test_missing_artwork_is_not_refetched_but_errors_are(
+    client: TestClient, make_client: Any
+) -> None:
+    calls: list[str] = []
+    status = [404]
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        calls.append(r.url.path)
+        return httpx.Response(status[0])
+
+    _real_cover(client, make_client, handler)
+    _login(client, "alice")
+    assert client.get(f"/media/artwork/release/{MBID}").status_code == 404
+    first = len(calls)
+    assert client.get(f"/media/artwork/release/{MBID}").status_code == 404
+    assert len(calls) == first  # the negative entry answered
+    other = "33333333-3333-3333-3333-333333333333"
+    status[0] = 503
+    assert client.get(f"/media/artwork/release/{other}").status_code == 404
+    first = len(calls)
+    client.get(f"/media/artwork/release/{other}")
+    assert len(calls) > first  # a transient error is not cached
+
+
+def test_artwork_with_image_accept_runs_no_count_queries(
+    client: TestClient, sf: sessionmaker[Session], make_client: Any
+) -> None:
+    _real_cover(client, make_client, lambda r: httpx.Response(200, content=b"\xff\xd8jpeg"))
+    _login(client, "alice")
+    sql: list[str] = []
+    engine = sf.kw["bind"]
+
+    def listener(_c: Any, _cur: Any, statement: str, *_a: Any) -> None:
+        sql.append(statement)
+
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        accept = {"Accept": "image/avif,image/webp,*/*"}
+        client.get(f"/media/artwork/release/{MBID}", headers=accept)
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+    assert sql and not any("count(" in s.lower() for s in sql)
