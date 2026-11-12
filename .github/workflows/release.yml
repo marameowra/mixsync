@@ -58,6 +58,8 @@ jobs:
             ghcr.io/marameowra/mixsync:latest
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
-      - run: |
-          git tag "v${{ needs.version.outputs.version }}" "$GITHUB_SHA"
-          git push origin "v${{ needs.version.outputs.version }}"
+      # Creates the tag too. A tag pushed with GITHUB_TOKEN wouldn't trigger an on-tag workflow.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          V: v${{ needs.version.outputs.version }}
+        run: gh release create "$V" --target "$GITHUB_SHA" --title "$V" --generate-notes
