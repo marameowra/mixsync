@@ -14,7 +14,9 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Approval queue**: Requests waiting (`pending_approval`) for someone with the approve capability to approve them into the pipeline or deny them (`denied`, with an optional reason). Not review: nothing has been downloaded yet. _Avoid_: Moderation, review
 
-**Candidate**: One peer's folder, or one indexer release (a torrent or NZB), that might satisfy a request. _Avoid_: Result, hit, match
+**Candidate**: One peer's folder, one indexer release (a torrent or NZB), or one album folder inside a pack, that might satisfy a request. _Avoid_: Result, hit, match
+
+**Pack**: An indexer release whose files span more than one album folder (a discography or label pack). Only its best-matching folder is a candidate for a request. _Avoid_: Bundle, collection
 
 **Download source**: A backend that finds and fetches candidates: Soulseek, or an indexer search paired with its download client. _Avoid_: Source (that is who made the request), backend, client
 
