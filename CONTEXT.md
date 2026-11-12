@@ -102,6 +102,10 @@ One line per term. _Avoid_ lists synonyms not to use. Specs: [`docs/design/`](do
 
 **Smart playlist**: A playlist built from rules over the owned library only; it never makes requests. _Avoid_: Dynamic, auto playlist
 
+**Radio**: A per-user playlist grown by similarity from a seed (a track, album, artist or playlist); its unowned tracks are provisional. _Avoid_: Station, mix, similar playlist
+
+**Arc order**: An ordering of a playlist's tracks by tempo, key and energy, or along a mood curve, instead of its own order. Never applied to a mirrored playlist. _Avoid_: Mix, DJ order, sort
+
 **Unresolved track**: A playlist entry that could not be matched confidently to a recording; listed on the playlist, never guessed. _Avoid_: Missing track (that is a resolved recording not yet owned)
 
 ### Administration
