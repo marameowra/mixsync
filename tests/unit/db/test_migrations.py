@@ -19,19 +19,21 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0043_requests_autoincrement"
+    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042 -> 0043, one step at a time
     assert _version(settings) == "0042_mirrored_spotify_import"
-    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0041_tracks_request_id"
     downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
     downgrade("-1")
     assert _version(settings) == "0039_app_settings_spotify"
     upgrade()
-    assert _version(settings) == "0042_mirrored_spotify_import"
+    assert _version(settings) == "0043_requests_autoincrement"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0042_mirrored_spotify_import"
+    assert _version(settings) == "0043_requests_autoincrement"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -389,3 +391,43 @@ def test_0042_dates_existing_spotify_imports_from_their_creation(settings: Setti
     with make_engine(settings).connect() as c:
         cols = {col["name"] for col in inspect(c).get_columns("mirrored_playlists")}
     assert "imported_at" not in cols and "reimport_after" not in cols
+
+
+def test_0043_requests_never_reuse_an_orphaned_id(settings: Settings) -> None:
+    upgrade("0042_mirrored_spotify_import")
+    day = "'2026-01-01'"
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
+            )
+        )
+        for rid in (1, 2):
+            c.execute(
+                text(
+                    "INSERT INTO requests (id, user_id, release_mbid, artist, album, tried,"
+                    f" no_results_attempts, status, created_at, updated_at)"
+                    f" VALUES ({rid}, 1, 'm', '', '', '[]', 0, 'done', {day}, {day})"
+                )
+            )
+        # request 9 was deleted earlier; its track is still tagged with it
+        c.execute(
+            text(
+                "INSERT INTO tracks (path, artist_mbids, status, batch_id, request_id,"
+                " imported_at, created_at, updated_at) VALUES ('a.flac', '[]', 'verified',"
+                f" 'request-9-decision-1', 9, {day}, {day}, {day})"
+            )
+        )
+    upgrade()
+    insert = text(
+        "INSERT INTO requests (user_id, release_mbid, artist, album, tried, no_results_attempts,"
+        f" status, created_at, updated_at) VALUES (1, 'm', '', '', '[]', 0, 'done', {day}, {day})"
+    )
+    with make_engine(settings).begin() as c:
+        assert c.execute(text("SELECT id FROM requests ORDER BY id")).scalars().all() == [1, 2]
+        c.execute(insert)
+        assert c.execute(text("SELECT MAX(id) FROM requests")).scalar() == 10
+        c.execute(text("DELETE FROM requests WHERE id = 10"))
+        c.execute(insert)
+        assert c.execute(text("SELECT MAX(id) FROM requests")).scalar() == 11

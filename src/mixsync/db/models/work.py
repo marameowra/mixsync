@@ -77,6 +77,8 @@ class Request(TimestampMixin, Base):
     """One requested release and where the acquire pipeline has got to."""
 
     __tablename__ = "requests"
+    # SQLite must never reuse a deleted id: tracks and batch ids still carry it (#428)
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
