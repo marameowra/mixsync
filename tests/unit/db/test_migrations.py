@@ -411,6 +411,26 @@ def test_0043_requests_never_reuse_an_orphaned_id(settings: Settings) -> None:
                     f" VALUES ({rid}, 1, 'm', '', '', '[]', 0, 'done', {day}, {day})"
                 )
             )
+        # a follow hit links request 1: the table rebuild must not trip its foreign key
+        c.execute(
+            text(
+                "INSERT INTO watched_entities (id, kind, mbid, created_at, updated_at)"
+                f" VALUES (1, 'artist', 'a', {day}, {day})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO follows (id, user_id, entity_id, name, release_types, created_at,"
+                f" updated_at) VALUES (1, 1, 1, 'A', '[]', {day}, {day})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO follow_hits (follow_id, release_group_mbid, release_mbid, artist,"
+                " title, release_date, status, request_id, created_at, updated_at) VALUES"
+                f" (1, 'g', 'm', '', '', '', 'requested', 1, {day}, {day})"
+            )
+        )
         # request 9 was deleted earlier; its track is still tagged with it
         c.execute(
             text(

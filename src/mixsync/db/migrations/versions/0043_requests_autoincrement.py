@@ -17,6 +17,11 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "sqlite":  # Postgres sequences never reuse values
         return
+    # The rebuild drops `requests`, which follow_hits / provisional_holds reference; SQLite only
+    # lets foreign keys be switched off outside a transaction. Ids are copied unchanged.
+    ctx = op.get_context()
+    with ctx.autocommit_block():
+        bind.exec_driver_sql("PRAGMA foreign_keys=OFF")
     with op.batch_alter_table(
         "requests", recreate="always", table_kwargs={"sqlite_autoincrement": True}
     ):
@@ -39,6 +44,8 @@ def upgrade() -> None:
         bind.execute(
             sa.text("INSERT INTO sqlite_sequence (name, seq) VALUES ('requests', :n)"), {"n": top}
         )
+    with ctx.autocommit_block():  # commits the rebuild, then restores enforcement
+        bind.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 def downgrade() -> None:
