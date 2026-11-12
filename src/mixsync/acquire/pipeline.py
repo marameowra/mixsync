@@ -39,7 +39,7 @@ from mixsync.acquire.requests import (
 )
 from mixsync.core.clock import Clock, aware
 from mixsync.core.errors import AuthError, PermanentError, TransientError
-from mixsync.core.jobs import JobKind, JobState
+from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.matching import (
     AlbumInfo,
     Band,
@@ -64,7 +64,7 @@ from mixsync.db import decisions
 from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.matching import MatchDecision
-from mixsync.db.models.work import Job, Request
+from mixsync.db.models.work import JOB_REQUEST_ID, Job, Request
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.library import canonical, measure, tags
 from mixsync.library.encode import encodable, to_flac
@@ -330,7 +330,7 @@ class Pipeline:
                 req = self._request(s, job)
                 if not _redrop(req, cand):
                     self._drop(cand, s, now, req, str(e), spent=p.get("bytes", 0) > 0)
-            await self._cancel(cand)
+            await self._cancel(cand, job.payload["request_id"])
             return
         stalled = datetime.fromisoformat(p["since"])
         if info.state in (TransferStatus.QUEUED, TransferStatus.IN_PROGRESS):
@@ -361,7 +361,7 @@ class Pipeline:
                     idempotency_key=f"verify:{job.id}",
                 )
         if dropped:
-            await self._cancel(cand)
+            await self._cancel(cand, job.payload["request_id"])
 
     def _monitor(
         self, job: JobRecord, now: datetime, sent: int, since: datetime, **more: Any
@@ -407,7 +407,7 @@ class Pipeline:
                             cand, s, self.clock.now(), self._request(s, job), why, spent=True
                         )
                 if not stale:
-                    await self._cancel(cand)
+                    await self._cancel(cand, job.payload["request_id"])
                 return
         files: list[FileTrack] = []
         readable: list[Path] = []  # aligned with `files`; the rest are never imported
@@ -430,7 +430,7 @@ class Pipeline:
                                 spent=True,
                             )
                     if not stale:
-                        await self._cancel(cand)
+                        await self._cancel(cand, job.payload["request_id"])
                     return
                 # local files cannot be fetched again: identify the album from the rest
                 first = first or e
@@ -580,7 +580,7 @@ class Pipeline:
                 self._drop(cand, s, now, req, "rejected after download", spent=True)
                 dropped = True
         if dropped:  # committed first: the cancel's HTTP calls must not hold the write lock
-            await self._cancel(cand)
+            await self._cancel(cand, job.payload["request_id"])
 
     async def _quarantine(self, job: JobRecord, paths: list[Path], kind: str) -> list[Path]:
         """Move a dropped candidate's files out of /downloads (slskd may purge it) into
@@ -801,7 +801,7 @@ class Pipeline:
                 else:
                     lifecycle.owned(req)
             if dropped:
-                await self._cancel(cand)
+                await self._cancel(cand, job.payload["request_id"])
             return
         art = await self._fetch_cover(target) if self.embed_cover else None
         embed = art if art and len(art) <= MAX_EMBED_BYTES else None
@@ -960,7 +960,9 @@ class Pipeline:
             req = self._request(s, job)
             migrating, local = req.migration_id is not None, req.from_files
         if results and not errors and not migrating:  # the old library is never touched
-            await self._release(cand, [r.src for r in results], batch, root)
+            await self._release(
+                cand, job.payload["request_id"], [r.src for r in results], batch, root
+            )
         now = self.clock.now()
         with self.sessions.begin() as s:
             req = self._request(s, job)
@@ -980,7 +982,7 @@ class Pipeline:
                 if recheck:
                     enqueue_recheck(s, now, recheck, None)
         if dropped:
-            await self._cancel(cand)
+            await self._cancel(cand, job.payload["request_id"])
 
     async def _unowned(
         self, album: AlbumInfo, files: list[canonical.File], batch: str
@@ -1025,18 +1027,39 @@ class Pipeline:
         """drop_candidate; the caller then awaits `_cancel` once its transaction is committed."""
         drop_candidate(s, now, req, cand.username, cand.folder, why, source=cand.source, **kw)
 
-    async def _cancel(self, cand: Candidate) -> None:
+    def _shared(self, cand: Candidate, req_id: int) -> bool:
+        """Another live request's job holds the same torrent or SABnzbd job (#452): clearing it
+        would break that request. Own session: never inside the caller's transaction."""
+        for key, value in (("infohash", cand.infohash), ("nzb_hash", cand.nzb_hash)):
+            if not value:
+                continue
+            with self.sessions() as s:
+                if s.scalar(
+                    select(Job.id)
+                    .where(
+                        Job.kind.in_((JobKind.DOWNLOAD, JobKind.VERIFY, JobKind.IMPORT)),
+                        Job.status.in_(LIVE),
+                        JOB_REQUEST_ID != req_id,
+                        Job.payload["candidate"][key].as_string() == value,
+                    )
+                    .limit(1)
+                ):
+                    return True
+        return False
+
+    async def _cancel(self, cand: Candidate, req_id: int) -> None:
         """Cancel what a dropped candidate still has moving in slskd, so the album stops
         downloading (an unfinished torrent is removed with its partial files). Finished files
         stay; a failed cancel never blocks. Never call it inside a transaction: the source's HTTP
         calls can take minutes, and SQLite's write lock would be held all along (#422)."""
         try:
-            await self.sources[cand.source].clear(cand)
+            if not self._shared(cand, req_id):
+                await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
 
     async def _release(
-        self, cand: Candidate, srcs: list[Path], batch: str, root: str = "library"
+        self, cand: Candidate, req_id: int, srcs: list[Path], batch: str, root: str = "library"
     ) -> None:
         """Delete the verified downloads and clear slskd's list; a seeding download stays where
         it is (ADR 0022). Cleanup only: any failure is logged and the import still counts."""
@@ -1047,7 +1070,7 @@ class Pipeline:
                 if not fileops.seeding(src):
                     await asyncio.to_thread(fileops.release, src, batch, root)
             # a dropped album never came from a peer; a seeding torrent is never cleared
-            if cand.username and not seeding:
+            if cand.username and not seeding and not self._shared(cand, req_id):
                 await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)

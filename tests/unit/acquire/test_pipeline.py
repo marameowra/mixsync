@@ -697,6 +697,32 @@ async def test_a_failed_cancel_does_not_block_the_drop(
     assert env.source.enqueued == ["peer1", "peer2"] and status(env, rid) == "imported"
 
 
+@pytest.mark.parametrize("key", ["infohash", "nzb_hash"])
+@pytest.mark.parametrize("other_live", [True, False])
+async def test_a_shared_download_is_cleared_only_when_no_other_request_uses_it(
+    env: Env, key: str, other_live: bool
+) -> None:
+    """#452: two requests can share one torrent or SABnzbd job; clearing it for one must not
+    break the other, and the last one to drop it removes it."""
+    cand = env.source.add("peer1", "Music\\Alpha Band\\Alpha Album")
+    env.source.catalog["alpha album"] = [replace(cand, **{key: "ab" * 20})]
+    env.source.state["peer1"] = TransferStatus.FAILED
+    other = request(env, str(ALBUM_B.release_id))
+    now = env.clock.now()
+    with env.sessions.begin() as s:
+        s.add(
+            Job(
+                kind=JobKind.DOWNLOAD,
+                payload={"request_id": other, "candidate": {key: "ab" * 20}},
+                status=JobState.RETRY_WAIT if other_live else JobState.SUCCEEDED,
+                run_after=now + timedelta(days=1),
+            )
+        )
+    rid = request(env)
+    await env.drain(until=lambda: status(env, rid) == "no_results")
+    assert env.source.cleared == ([] if other_live else ["peer1"])
+
+
 async def test_a_download_rerun_after_its_drop_committed_only_cancels_again(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
