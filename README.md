@@ -71,6 +71,10 @@ plugin, a Soulseek account, and an [AcoustID application key](https://acoustid.o
 
 For discovery playlists, add `/data/discover` as a second library in Navidrome (0.58+).
 
+**Apply** on the settings page restarts MixSync to apply changes, relying on the compose
+`restart: unless-stopped` policy. Without a restart policy (systemd needs `Restart=always`), set
+`MIXSYNC_SELF_RESTART=false` and restart web and worker by hand.
+
 Keep `/data` as **one** mount: library, trash, and quarantine must sit on the same filesystem so
 moves stay atomic. Full details, including every environment variable, running behind a TLS
 reverse proxy, backups, and upgrades, are in the [deploy guide](deploy/README.md).

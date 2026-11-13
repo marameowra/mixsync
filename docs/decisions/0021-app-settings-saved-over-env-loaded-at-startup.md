@@ -28,3 +28,4 @@ Every app setting came from `MIXSYNC_*` env vars, so changing one meant editing 
 - Until a restart, the page shows saved values that are not yet in effect; the restart-pending banner says so.
 - Settings export/import (#303) should carry saved app settings.
 - ADR 0013's AcoustID user key can now also be saved in the UI.
+- The deferred auto-restart came in #349: Apply stores a restart request, and processes started before it exit cleanly for their restart policy to restart. `MIXSYNC_SELF_RESTART=false` turns it off for installs without one. Settings still load only at startup.

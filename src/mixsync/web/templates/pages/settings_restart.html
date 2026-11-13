@@ -1,0 +1,10 @@
+{% import "macros/forms.html" as forms with context %}
+{% import "macros/live.html" as live %}
+{# The restart banner (ADR 0021, #349): a live region while an Apply restarts web and worker. #}
+<div id="restart"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% call live.region("/settings/restart", restarting, "2s") %}
+{% if restart %}<p class="notice caution" role="status"><span aria-hidden="true">▲</span> {% if restarting %}Restarting&hellip; {% endif %}Restart pending: {{ restart|join(", ") }}</p>
+{% if self_restart and not dirty and not restarting %}<form method="post" action="/settings/apply">{{ forms.csrf() }}<button type="submit">Apply now</button> <span class="help">Restarts mixsync on the saved settings. Running jobs finish first.</span></form>{% endif %}
+{% endif %}
+{% endcall %}
+</div>

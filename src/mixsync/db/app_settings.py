@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.exc import OperationalError, ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import aware
 from mixsync.core.config import MEDIA_SERVER_KINDS, Settings, env_names
@@ -42,6 +42,7 @@ ENV_ONLY = frozenset(
         "backup_dir",
         "qbittorrent_dir",
         "sabnzbd_dir",
+        "self_restart",
     }
 )
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page
@@ -166,3 +167,10 @@ def restart_pending(s: Session, web_version: datetime | None, now: datetime) -> 
     elif behind(beat.settings_version):
         out.append("worker")
     return out
+
+
+def restart_requested(sessions: sessionmaker[Session], since: datetime) -> bool:
+    """Whether an Apply stored a restart request later than `since`, a process start (#349)."""
+    with sessions() as s:
+        at = s.scalar(select(AppSettings.restart_requested_at).where(AppSettings.id == 1))
+    return at is not None and aware(at) > since

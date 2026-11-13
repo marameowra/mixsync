@@ -158,6 +158,10 @@ class Settings(BaseSettings):
         validation_alias=_env("media_server_discover_library"),
         description="Name of the media server library over /data/discover.",
     )
+    self_restart: bool = Field(
+        default=True,
+        description="Apply on the settings page restarts web and worker; needs a restart policy.",
+    )
     backup_dir: Path | None = Field(
         default=None,
         description="Backup folder; unset means config_dir/backups. SQLite only.",
