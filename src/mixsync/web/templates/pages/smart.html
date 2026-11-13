@@ -15,7 +15,7 @@
 {% endmacro %}
 {% block content %}
 <h1>Smart playlists</h1>
-<p>Playlists built from rules over the music you own, pushed to Navidrome. A track must meet every rule you fill in; empty fields are no rule. A smart playlist never requests a track. Each rebuild replaces the Navidrome playlist, so edits made there are overwritten.</p>
+<p>Playlists built from rules over the music you own, pushed to your media server. A track must meet every rule you fill in; empty fields are no rule. A smart playlist never requests a track. Each rebuild replaces the playlist on the media server, so edits made there are overwritten.</p>
 {% if not rows %}<p class="empty">No smart playlists yet.</p>{% endif %}
 
 {% for p in rows %}
@@ -40,7 +40,7 @@
   <button type="submit">Save</button>
 </form>
 </details>
-<form method="post" action="/smart/{{ p.id }}/delete">{{ forms.csrf() }}<button type="submit">Delete playlist</button> <span class="muted">No files are deleted; the Navidrome copy stays.</span></form>
+<form method="post" action="/smart/{{ p.id }}/delete">{{ forms.csrf() }}<button type="submit">Delete playlist</button> <span class="muted">No files are deleted; the media server copy stays.</span></form>
 {% endfor %}
 
 <h2>New smart playlist</h2>

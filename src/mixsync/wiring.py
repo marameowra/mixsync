@@ -42,7 +42,7 @@ class Services:
     coverart: CoverArtClient
     deezer: DeezerClient
     discogs: DiscogsClient
-    navidrome_http: PoliteClient
+    media_server_http: PoliteClient
     listenbrainz_http: PoliteClient
     spotify_http: PoliteClient
     secret_box: SecretBox
@@ -102,7 +102,7 @@ def build_services(
         coverart=CoverArtClient(PoliteClient("coverart", settings, session_factory), fake),
         deezer=DeezerClient(PoliteClient("deezer", settings, session_factory)),
         discogs=DiscogsClient(PoliteClient("discogs", settings, session_factory)),
-        navidrome_http=PoliteClient("navidrome", settings, session_factory),
+        media_server_http=PoliteClient("media_server", settings, session_factory),
         listenbrainz_http=PoliteClient("listenbrainz", settings, session_factory),
         spotify_http=PoliteClient("spotify", settings, session_factory),
         secret_box=load_box(settings),

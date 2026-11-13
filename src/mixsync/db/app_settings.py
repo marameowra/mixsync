@@ -8,15 +8,22 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from mixsync.core.clock import aware
-from mixsync.core.config import Settings
+from mixsync.core.config import MEDIA_SERVER_KINDS, Settings, env_names
 from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.db.engine import make_engine
-from mixsync.db.models.auth import AppSettings
+from mixsync.db.models.accounts import UserLink
+from mixsync.db.models.auth import AppSettings, User
+from mixsync.db.models.discovery import (
+    DiscoveryPlaylist,
+    MirroredPlaylist,
+    ProvisionalTrack,
+    SmartPlaylist,
+)
 from mixsync.db.models.infra import WorkerHeartbeat
 from mixsync.db.secretbox import load_box
 
@@ -40,7 +47,7 @@ ENV_ONLY = frozenset(
 # saved encrypted in `<name>_encrypted` (ADR 0010); write-only on the settings page
 SECRETS = (
     "slskd_api_key",
-    "navidrome_password",
+    "media_server_password",
     "acoustid_app_key",
     "acoustid_user_key",
     "prowlarr_api_key",
@@ -56,7 +63,7 @@ Source = Literal["saved", "environment", "default"]
 class Resolved:
     value: Any
     source: Source
-    env_set: bool  # MIXSYNC_<NAME> is set, whether or not a saved value overrides it
+    env_set: bool  # its variable or old alias is set, whether or not a saved value overrides it
     unreadable: bool = False  # a saved secret that this key can't decrypt
 
 
@@ -91,7 +98,7 @@ def resolve(s: Session) -> tuple[Settings, dict[str, Resolved]]:
     env = {k.upper() for k in os.environ}
     out: dict[str, Resolved] = {}
     for name in (*EDITABLE, *SECRETS):
-        env_set = f"MIXSYNC_{name.upper()}" in env
+        env_set = any(n in env for n in env_names(name))
         source: Source = "saved" if name in saved else "environment" if env_set else "default"
         out[name] = Resolved(getattr(settings, name), source, env_set, name in unreadable)
     return settings, out
@@ -113,6 +120,31 @@ def load_settings() -> tuple[Settings, datetime | None]:
         ) from e
     finally:
         engine.dispose()
+
+
+def _server_link() -> ColumnElement[bool]:
+    return UserLink.service.in_(list(MEDIA_SERVER_KINDS))
+
+
+def server_link_users(s: Session) -> list[str]:
+    """Usernames with a media server link: the users a switch of server makes relink."""
+    q = select(User.username).join(UserLink, UserLink.user_id == User.id)
+    return list(s.scalars(q.where(_server_link()).order_by(User.username)))
+
+
+def switch_media_server(s: Session, kind: str) -> None:
+    """ADR 0024: stored ids belong to the old server, so clear them (the next push creates
+    playlists again and tracks are looked up again), and every media server link must be made
+    again. Nothing on disk changes."""
+    for model in (DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist):
+        s.execute(update(model).values(server_playlist_id=None))
+    s.execute(update(ProvisionalTrack).values(server_song_id=None))
+    # an empty secret never decrypts, so link_secret keeps needs_relink set until a relink
+    s.execute(
+        update(UserLink)
+        .where(_server_link())
+        .values(service=kind, secret_encrypted="", needs_relink=True)
+    )
 
 
 def restart_pending(s: Session, web_version: datetime | None, now: datetime) -> list[str]:

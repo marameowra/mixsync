@@ -335,7 +335,7 @@ async def test_a_push_is_skipped_when_navidrome_finds_none_of_the_owned_tracks(
     mr.upstream.lists["a"] = [up(1), up(2)]
     await mr.sync()
     pl = mr.pl(pid)
-    assert mr.lib.pushes == 0 and pl.navidrome_playlist_id is None
+    assert mr.lib.pushes == 0 and pl.server_playlist_id is None
     assert pl.last_error == mirrored.NONE_FOUND
 
 

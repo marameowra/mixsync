@@ -58,7 +58,7 @@ def _source(s: Session) -> None:
             id=1,
             mb_rate=0.7,
             source_priority=[["Soulseek", True], ["Usenet", False]],
-            navidrome_password_encrypted="ciphertext",
+            media_server_password_encrypted="ciphertext",
             slskd_api_key_encrypted="also-secret",
             prowlarr_url="http://prowlarr:9696",
             prowlarr_api_key_encrypted="prowlarr-secret",
@@ -152,7 +152,7 @@ def test_export_import_round_trip_is_portable_and_preserves_per_user_profiles(
         assert set(links) == {"listenbrainz", "discogs"}
         assert all(link.needs_relink and link.secret_encrypted == "" for link in links.values())
         assert links["discogs"].external_username == "dj-discogs"
-        assert target.get(AppSettings, 1).navidrome_password_encrypted is None
+        assert target.get(AppSettings, 1).media_server_password_encrypted is None
         assert target.get(AppSettings, 1).mb_rate == 0.7
         assert target.get(AppSettings, 1).prowlarr_url == "http://prowlarr:9696"
         assert target.get(AppSettings, 1).prowlarr_api_key_encrypted is None
@@ -441,6 +441,38 @@ def test_an_export_from_before_the_approval_queue_imports_users_as_auto_download
         assert all(u.download_auto for u in target.scalars(select(User)))
 
 
+def test_an_export_from_before_the_media_server_rename_imports(sessions, tmp_path: Path) -> None:
+    with sessions() as source, source.begin():
+        _source(source)
+        dj = source.scalar(select(User.id).where(User.username == "dj"))
+        source.add(
+            UserLink(
+                user_id=dj,
+                service="navidrome",
+                external_username="dj-nd",
+                secret_encrypted="nd-ciphertext",
+                needs_relink=False,
+                verified_at=datetime.now(UTC),
+            )
+        )
+        document = export_settings(source)
+    app = document["app_settings"]
+    assert "media_server_url" not in app  # nothing saved for it in the source
+    app.update({"navidrome_url": "http://nd:4533", "navidrome_discover_library": "Disc"})
+    target_sessions = _destination(tmp_path / "target.db")
+    with target_sessions() as target, target.begin():
+        import_settings(target, document, apply=True)
+    with target_sessions() as target:
+        row = target.get(AppSettings, 1)
+        assert row is not None
+        assert (row.media_server_url, row.media_server_discover_library) == (
+            "http://nd:4533",
+            "Disc",
+        )
+        links = {(u.service, u.external_username) for u in target.scalars(select(UserLink))}
+        assert ("navidrome", "dj-nd") in links
+
+
 def test_cli_hostile_json_fails_cleanly_without_a_traceback(
     settings: Settings, tmp_path: Path, capsys
 ) -> None:
@@ -471,7 +503,7 @@ def _playlists(s: Session, root: Path, *, write_file: bool = True) -> None:
                 upstream_ref=REF,
                 cadence_days=3,
                 auto_request_since=stamp,
-                navidrome_playlist_id="nd-1",
+                server_playlist_id="nd-1",
                 entries=[{"artist": "x"}],
             ),
             MirroredPlaylist(
@@ -488,7 +520,7 @@ def _playlists(s: Session, root: Path, *, write_file: bool = True) -> None:
                 size=20,
                 sort="year",
                 cadence_days=7,
-                navidrome_playlist_id="nd-2",
+                server_playlist_id="nd-2",
             ),
             SmartPlaylist(user_id=second.id, name="Any", rules={}, size=5, sort="random"),
         ]
@@ -536,11 +568,11 @@ def test_mirrored_and_smart_playlists_round_trip_without_runtime_state(
         assert mirrors["Loves"].cadence_days == 3
         since = mirrors["Loves"].auto_request_since
         assert since is not None and since.replace(tzinfo=UTC) == datetime(2026, 1, 2, tzinfo=UTC)
-        assert mirrors["Loves"].navidrome_playlist_id is None and mirrors["Loves"].entries == []
+        assert mirrors["Loves"].server_playlist_id is None and mirrors["Loves"].entries == []
         smart = {p.name: p for p in target.scalars(select(SmartPlaylist))}
         assert smart["Old"].rules == {"genre": "jazz", "year_from": 1960, "starred": True}
         assert (smart["Old"].size, smart["Old"].sort, smart["Old"].cadence_days) == (20, "year", 7)
-        assert smart["Old"].navidrome_playlist_id is None and smart["Any"].rules == {}
+        assert smart["Old"].server_playlist_id is None and smart["Any"].rules == {}
         path = target_root / str(mirrors["Loves"].user_id) / f"{REF}.json"
         assert json.loads(path.read_text()) == [{"artist": "A", "title": "T", "isrc": None}]
         report = import_settings(target, document, spotify_root=target_root)

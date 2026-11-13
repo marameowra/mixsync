@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Settings - MixSync{% endblock %}
 {% block content %}
-{% set connection_tests = {"slskd_url": "slskd", "navidrome_url": "navidrome", "mb_base_url": "musicbrainz", "acoustid_app_key": "acoustid", "prowlarr_url": "prowlarr", "qbittorrent_url": "qbittorrent", "sabnzbd_url": "sabnzbd"} %}
+{% set connection_tests = {"slskd_url": "slskd", "media_server_url": "media_server", "mb_base_url": "musicbrainz", "acoustid_app_key": "acoustid", "prowlarr_url": "prowlarr", "qbittorrent_url": "qbittorrent", "sabnzbd_url": "sabnzbd"} %}
 {% macro test_button(service) %}
       <span class="help"><button class="btn quiet" type="button" hx-post="/settings/test/{{ service }}" hx-target="#test-{{ service }}">Test {{ service }} connection</button>
         <span id="test-{{ service }}" role="status"></span></span>
@@ -11,6 +11,7 @@
 {% if restart %}<p class="notice caution" role="status"><span aria-hidden="true">▲</span> Restart pending: {{ restart|join(", ") }}</p>{% endif %}
 {% if saved %}<p class="notice ok" role="status"><span aria-hidden="true">●</span> Saved. Restart mixsync-web and mixsync-worker to apply.</p>{% endif %}
 {% if has_errors %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> Nothing was saved. Fix the fields below.</p>{% endif %}
+{% if kind_change %}<div class="notice caution" role="alert"><p><span aria-hidden="true">▲</span> Nothing was saved yet. Switching the media server from {{ kind_change.from }} to {{ kind_change.to }} forgets every playlist and song id stored for it: the next push creates the playlists again on the new server. {% if kind_change.users %}These users must link their media server account again: {{ kind_change.users|join(", ") }}.{% else %}No user has a media server link.{% endif %} No file on disk changes. Secrets typed in this form were not kept; enter them again. Confirm with the button under the form.</p></div>{% endif %}
 <form method="post" action="/settings">
   {{ forms.csrf() }}
   <fieldset>
@@ -64,6 +65,7 @@
     {% endfor %}
   </fieldset>
   <button type="submit">Save settings</button>
+  {% if kind_change %}<button class="danger" type="submit" name="confirm_kind" value="{{ kind_change.to }}">Switch to {{ kind_change.to }} and save</button>{% endif %}
 </form>
 {% for fields in groups.values() %}{% for f in fields if f.source == "saved" %}
 <form id="reset-{{ f.name }}" method="post" action="/settings/reset/{{ f.name }}">{{ forms.csrf() }}</form>

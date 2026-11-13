@@ -198,7 +198,7 @@ async def test_a_rebuild_replaces_the_navidrome_copy(sr: SmartRig) -> None:
     await sr.build()
     assert sr.songs() == ["s3"]  # 1 aged out, 3 joined
     assert len(sr.lib.playlists) == 1  # replaced, not a second playlist
-    assert sr.pl(pid).navidrome_playlist_id == "pl1"
+    assert sr.pl(pid).server_playlist_id == "pl1"
     assert [e["title"] for e in sr.pl(pid).entries] == ["Title 3"]
 
 

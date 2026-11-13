@@ -203,7 +203,7 @@ def test_build_now_enqueues_once_and_is_owner_only(
 def test_unlinked_user_sees_account_pointer(client: TestClient) -> None:
     _login(client, "bob")
     text = client.get("/discover").text
-    assert "Link ListenBrainz and Navidrome on" in text and "Build now" not in text
+    assert "Link ListenBrainz and your media server on" in text and "Build now" not in text
 
 
 def test_unauthenticated_post_is_refused(client: TestClient) -> None:

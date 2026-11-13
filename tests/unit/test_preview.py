@@ -146,7 +146,7 @@ def test_network_guard_refuses_non_loopback(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_env_pins_external_services_to_a_dead_loopback(tmp_path: Path) -> None:
     env = preview_env(tmp_path)
-    for k in ("MB_BASE_URL", "SLSKD_URL", "NAVIDROME_URL"):
+    for k in ("MB_BASE_URL", "SLSKD_URL", "MEDIA_SERVER_URL"):
         assert env[f"MIXSYNC_{k}"] == "http://127.0.0.1:9"
-    for k in ("SLSKD_API_KEY", "ACOUSTID_APP_KEY", "ACOUSTID_USER_KEY", "NAVIDROME_PASSWORD"):
+    for k in ("SLSKD_API_KEY", "ACOUSTID_APP_KEY", "ACOUSTID_USER_KEY", "MEDIA_SERVER_PASSWORD"):
         assert env[f"MIXSYNC_{k}"] == ""

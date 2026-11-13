@@ -15,7 +15,7 @@ class UserLink(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    service: Mapped[str] = mapped_column(String(20))  # listenbrainz/navidrome
+    service: Mapped[str] = mapped_column(String(20))  # listenbrainz/discogs/a media server kind
     external_username: Mapped[str] = mapped_column(String(255))
     secret_encrypted: Mapped[str] = mapped_column(Text)  # Fernet token
     needs_relink: Mapped[bool] = mapped_column(Boolean, default=False)  # key can't decrypt it

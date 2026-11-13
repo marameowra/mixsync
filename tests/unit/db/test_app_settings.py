@@ -51,6 +51,23 @@ def test_nothing_saved_and_no_env_gives_the_defaults(
     assert _resolved(settings)["trash_days"] == Resolved(30, "default", False)
 
 
+def test_old_navidrome_variables_still_set_the_media_server(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_NAVIDROME_URL", "http://old:4533")
+    monkeypatch.setenv("MIXSYNC_NAVIDROME_DISCOVER_LIBRARY", "Old")
+    monkeypatch.setenv("MIXSYNC_MEDIA_SERVER_DISCOVER_LIBRARY", "New")  # the new name wins
+    upgrade()
+    loaded = load_settings()[0]
+    assert (loaded.media_server_kind, loaded.media_server_url) == ("navidrome", "http://old:4533")
+    assert loaded.media_server_discover_library == "New"
+    assert _resolved(settings)["media_server_url"] == Resolved(
+        "http://old:4533", "environment", True
+    )
+    _save(settings, media_server_url="http://saved:4533")  # saved still beats either name
+    assert load_settings()[0].media_server_url == "http://saved:4533"
+
+
 def test_env_only_gives_the_env_value(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIXSYNC_TRASH_DAYS", "7")
     upgrade()

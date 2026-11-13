@@ -3,7 +3,7 @@
 {% from "macros/ui.html" import status %}
 {% block content %}
 <h1>Mirrored playlists</h1>
-<p>Read-only copies of playlists curated elsewhere, kept in their upstream order and pushed to Navidrome. Each sync replaces the Navidrome playlist, so edits made there are overwritten. A track removed upstream leaves the playlist only; no file is moved or deleted.</p>
+<p>Read-only copies of playlists curated elsewhere, kept in their upstream order and pushed to your media server. Each sync replaces the playlist on the media server, so edits made there are overwritten. A track removed upstream leaves the playlist only; no file is moved or deleted.</p>
 {% if not has_loves %}
 {% if lb_linked %}
 <form method="post" action="/mirrored/loves">{{ forms.csrf() }}<p>Mirror your ListenBrainz loved tracks, newest first, as a "Loves" playlist. Last.fm loves count once imported into ListenBrainz.</p><button type="submit">Mirror my ListenBrainz loves</button></form>
@@ -19,7 +19,7 @@
   <button type="submit">Upload playlist file</button>
 </form>
 {% if spotify_on %}
-{% if spotify_linked %}<p><a href="/spotify/playlists">Import a playlist from your Spotify account</a>: one of your own or collaborative playlists, read when you press Import and again in the background before the import goes stale after 6 months. Tracks you own become a Navidrome playlist; missing ones are only listed here, never requested.</p>
+{% if spotify_linked %}<p><a href="/spotify/playlists">Import a playlist from your Spotify account</a>: one of your own or collaborative playlists, read when you press Import and again in the background before the import goes stale after 6 months. Tracks you own become a playlist on your media server; missing ones are only listed here, never requested.</p>
 {% else %}<p>To import a playlist from your Spotify account, <a href="/account">connect Spotify on your account page</a>.</p>{% endif %}
 {% endif %}
 {% if not rows %}<p class="empty">No mirrored playlists yet.</p>{% endif %}
@@ -32,7 +32,7 @@
 <form method="post" action="/mirrored/{{ p.id }}/sync">{{ forms.csrf() }}<button type="submit">Sync now</button></form>
 {% if p.upstream_kind == "spotify_api" %}<p>Imported from Spotify. A sync matches the imported list against your library again without calling Spotify; to pick up changes made on Spotify, import it again. Missing tracks are listed only: Spotify's terms do not allow requesting them.</p>
 {% set stale = stale_at[p.id] %}
-{% if stale and stale <= now %}<p>{{ status("stale") }} Last imported {{ p.imported_at.date() }}. Spotify's terms do not allow keeping its data longer, so only the tracks you own are kept, and the Navidrome playlist stays as it was until you import it again.</p>
+{% if stale and stale <= now %}<p>{{ status("stale") }} Last imported {{ p.imported_at.date() }}. Spotify's terms do not allow keeping its data longer, so only the tracks you own are kept, and the media server playlist stays as it was until you import it again.</p>
 {% elif stale %}<p>Goes stale on {{ stale.date() }} unless it is imported again; MixSync tries that in the background during the last two weeks.</p>{% endif %}
 {% if spotify_on and spotify_linked %}<form method="post" action="/spotify/import">{{ forms.csrf() }}<input type="hidden" name="playlist_id" value="{{ p.upstream_ref }}"><input type="hidden" name="name" value="{{ p.name }}"><button type="submit">Import again from Spotify</button></form>{% endif %}
 {% endif %}

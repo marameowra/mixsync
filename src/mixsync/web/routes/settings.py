@@ -20,7 +20,14 @@ from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
 from mixsync.core.config import Settings
 from mixsync.core.jobs import LIVE
-from mixsync.db.app_settings import EDITABLE, SECRETS, resolve, restart_pending
+from mixsync.db.app_settings import (
+    EDITABLE,
+    SECRETS,
+    resolve,
+    restart_pending,
+    server_link_users,
+    switch_media_server,
+)
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
 from mixsync.db.models.library import Plan
@@ -56,11 +63,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "adopt_downloads",
         "adopt_settle_minutes",
     ),
-    "Navidrome": (
-        "navidrome_url",
-        "navidrome_user",
-        "navidrome_library",
-        "navidrome_discover_library",
+    "Media server": (
+        "media_server_kind",
+        "media_server_url",
+        "media_server_user",
+        "media_server_library",
+        "media_server_discover_library",
     ),
     "Library and organize": (
         "flac_level",
@@ -116,6 +124,7 @@ def _page(
     errors: dict[str, str] | None = None,
     submitted: dict[str, str] | None = None,
     saved: bool = False,
+    kind_change: str | None = None,
 ) -> HTMLResponse:
     settings, resolved = resolve(db)
     cap = auto_accept_cap(db)
@@ -157,6 +166,12 @@ def _page(
         "saved": saved,
         "has_errors": bool(errors),
         "restart": restart_pending(db, services.settings_version, services.clock.now()),
+        "kind_change": kind_change
+        and {
+            "from": settings.media_server_kind,
+            "to": kind_change,
+            "users": server_link_users(db),
+        },
     }
     return templates.TemplateResponse(
         request, "pages/settings.html", ctx, status_code=400 if errors else 200
@@ -196,6 +211,11 @@ async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
         errors["cap"] = CAP_ERROR
     if errors:
         return _page(request, admin, db, errors, submitted)
+    kind = values.get("media_server_kind")
+    if kind is not None and kind != resolve(db)[0].media_server_kind:
+        if form.get("confirm_kind") != kind:  # nothing is saved until the admin confirms
+            return _page(request, admin, db, submitted=submitted, kind_change=kind)
+        switch_media_server(db, kind)
     row = db.get(AppSettings, 1) or AppSettings(id=1)
     for name, value in values.items():
         setattr(row, name, value)
@@ -255,6 +275,11 @@ def missing_tracks_discard(plan_id: int, admin: Admin, db: Db) -> Response:
 def reset(name: str, admin: Admin, db: Db) -> Response:
     if name not in EDITABLE:
         raise HTTPException(404)
+    if (
+        name == "media_server_kind"
+        and Settings().media_server_kind != resolve(db)[0].media_server_kind
+    ):
+        raise HTTPException(409, "Reset would switch the media server; save the kind instead.")
     row = db.get(AppSettings, 1)
     if row:
         setattr(row, name, None)

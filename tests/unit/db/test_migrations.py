@@ -19,21 +19,21 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0044_media_server_names"
+    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042 -> 0043 -> 0044, one step at a time
     assert _version(settings) == "0043_requests_autoincrement"
-    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042 -> 0043, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0042_mirrored_spotify_import"
     downgrade("-1")
     assert _version(settings) == "0041_tracks_request_id"
     downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
-    downgrade("-1")
-    assert _version(settings) == "0039_app_settings_spotify"
     upgrade()
-    assert _version(settings) == "0043_requests_autoincrement"
+    assert _version(settings) == "0044_media_server_names"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0043_requests_autoincrement"
+    assert _version(settings) == "0044_media_server_names"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -453,3 +453,94 @@ def test_0043_requests_never_reuse_an_orphaned_id(settings: Settings) -> None:
         c.execute(text("DELETE FROM requests WHERE id = 10"))
         c.execute(insert)
         assert c.execute(text("SELECT MAX(id) FROM requests")).scalar() == 11
+
+
+def test_0044_keeps_every_media_server_value_under_its_new_name(settings: Settings) -> None:
+    upgrade("0043_requests_autoincrement")
+    day = "'2026-01-01'"
+    stamps = f"{day}, {day}"
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {stamps})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO app_settings (id, navidrome_url, navidrome_user, navidrome_library,"
+                " navidrome_discover_library, navidrome_password_encrypted, created_at,"
+                f" updated_at) VALUES (1, 'http://nd', 'admin', 'Main', 'disc', 'token', {stamps})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO user_links (user_id, service, external_username, secret_encrypted,"
+                f" needs_relink, verified_at, created_at, updated_at) VALUES (1, 'navidrome',"
+                f" 'me', 'sec', :f, {day}, {stamps})"
+            ),
+            {"f": False},
+        )
+        c.execute(
+            text(
+                "INSERT INTO discovery_playlists (id, user_id, name, sources, size, unowned_ratio,"
+                " cadence_days, retention_days, keep_plays, navidrome_playlist_id, entries,"
+                f" created_at, updated_at) VALUES (1, 1, 'd', '[]', 1, 0.3, 7, 30, 3, 'pd', '[]',"
+                f" {stamps})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO mirrored_playlists (user_id, name, upstream_kind, upstream_ref,"
+                " cadence_days, entries, navidrome_playlist_id, created_at, updated_at)"
+                f" VALUES (1, 'm', 'loves', 'r', 1, '[]', 'pm', {stamps})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO smart_playlists (user_id, name, rules, size, sort, cadence_days,"
+                " navidrome_playlist_id, entries, created_at, updated_at)"
+                f" VALUES (1, 's', '{{}}', 1, 'random', 1, 'ps', '[]', {stamps})"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO provisional_tracks (id, path, recording_mbid, batch_id, imported_at,"
+                f" status, navidrome_song_id, created_at, updated_at) VALUES (1, 'a.flac', 'r',"
+                f" 'b', {day}, 'active', 'song', {stamps})"
+            )
+        )
+        c.execute(  # rows referencing both tables: the renames must not recreate them
+            text(
+                "INSERT INTO provisional_holds (user_id, recording_mbid, playlist_id,"
+                f" provisional_track_id, created_at, updated_at) VALUES (1, 'r', 1, 1, {stamps})"
+            )
+        )
+    upgrade()
+    with make_engine(settings).connect() as c:
+        app = c.execute(
+            text(
+                "SELECT media_server_kind, media_server_url, media_server_user,"
+                " media_server_library, media_server_discover_library,"
+                " media_server_password_encrypted FROM app_settings"
+            )
+        ).one()
+        ids = [
+            c.execute(text(f"SELECT server_playlist_id FROM {t}")).scalar()
+            for t in ("discovery_playlists", "mirrored_playlists", "smart_playlists")
+        ]
+        song = c.execute(text("SELECT server_song_id FROM provisional_tracks")).scalar()
+        link = c.execute(text("SELECT service, external_username FROM user_links")).one()
+        holds = c.execute(text("SELECT count(*) FROM provisional_holds")).scalar()
+    assert tuple(app) == (None, "http://nd", "admin", "Main", "disc", "token")
+    assert ids == ["pd", "pm", "ps"]
+    assert song == "song"
+    assert tuple(link) == ("navidrome", "me")  # the kind's value: existing links keep working
+    assert holds == 1
+    downgrade("0043_requests_autoincrement")
+    with make_engine(settings).connect() as c:
+        assert c.execute(text("SELECT navidrome_url FROM app_settings")).scalar() == "http://nd"
+        song = c.execute(text("SELECT navidrome_song_id FROM provisional_tracks")).scalar()
+        cols = {col["name"] for col in inspect(c).get_columns("app_settings")}
+    assert song == "song"
+    assert "media_server_kind" not in cols

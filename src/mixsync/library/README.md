@@ -5,7 +5,7 @@ Everything that touches the music library on disk: where files go, how they get 
 
 ## Owns / does not own
 - **Owns:** path templates (`paths.py`), **all filesystem writes under `/data`** (`fileops.py`), tags (`tags.py`, `tag_undo.py`), canonical release policy (`canonical.py`), the importer, trash purge (`purge.py`), the fragmentation report (`fragmentation.py`), template drift (`layout.py`).
-- **Does not own:** scoring (`match`), downloading (`sources`), or notifying Navidrome (`targets`, called by the composition root after import). Merge execution and undo live in `acquire/merge.py`.
+- **Does not own:** scoring (`match`), downloading (`sources`), or notifying the media server (`targets`, called by the composition root after import). Merge execution and undo live in `acquire/merge.py`.
 
 ## Rules / invariants
 - `fileops.import_file` follows the journaled sequence in [data safety](../../../docs/design/data-safety.md). On startup the worker calls `fileops.recover()`: each pending op is completed or rolled back.

@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mixsync.core.config import Settings
+from mixsync.core.config import MEDIA_SERVER_KINDS, Settings
 from mixsync.db.app_settings import EDITABLE
 from mixsync.db.models.accounts import UserLink
 from mixsync.db.models.auth import AppSettings, MatchingProfile, Role, User, UserRole
@@ -74,6 +74,9 @@ _SPOTIFY_REF = re.compile(r"[0-9a-f]{32}")  # ref_for(); keeps the file path ins
 # older exports predate these keys (#401)
 _OPTIONAL_KEYS = ("mirrored_playlists", "smart_playlists")
 _LINK_FIELDS = frozenset({"username", "service", "external_username"})
+_RENAMED = {
+    f"navidrome_{n}": f"media_server_{n}" for n in ("url", "user", "library", "discover_library")
+}
 
 
 class TransferError(ValueError):
@@ -457,6 +460,8 @@ def _validate_document(
         if "password_hash" in d:
             _string(d["password_hash"], f"{path}.password_hash", max_length=255)
         users.append(d)
+    if isinstance(old := root["app_settings"], dict):  # exports made before #440: navidrome_*
+        root["app_settings"] = {_RENAMED.get(k, k): v for k, v in cast(dict[str, Any], old).items()}
     app = _object(root["app_settings"], "$.app_settings", _APP_FIELDS)
     normalized_app: dict[str, Any] = {}
     for name, value in app.items():
@@ -674,7 +679,7 @@ def _validate_document(
             else:
                 service = _string(d["service"], f"{path}.service")
                 _string(d["external_username"], f"{path}.external_username", max_length=255)
-                if service not in {"listenbrainz", "navidrome", "discogs"}:
+                if service not in {"listenbrainz", "discogs", *MEDIA_SERVER_KINDS}:
                     raise TransferError(f"{path}.service: unsupported linked account service")
                 identity = (username, service)
             if identity in seen:

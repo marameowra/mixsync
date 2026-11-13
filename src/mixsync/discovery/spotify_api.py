@@ -11,7 +11,7 @@ matched against the local library only. Terms and limits: docs/design/services-e
 - Refresh or delete (Developer Terms IV.3.1, #416): an import goes stale STALE_AFTER its last
   success. Within REIMPORT_WINDOW of that, `Reimport` imports it again in the background, at
   most once a day per mirror. A stale mirror's entries keep only their matches to owned
-  tracks, its Navidrome playlist stays as it was, and it is not synced until imported again.
+  tracks, its media server playlist stays as it was, and it is not synced until imported again.
 - Missing tracks are only listed: `mirrored.request_missing` refuses this kind.
 - Disconnecting deletes the link and the user's mirrors of this kind at once.
 
@@ -274,7 +274,7 @@ async def access_token(
 
 def disconnect(s: Session, user_id: int) -> None:
     """Delete the user's Spotify login and every mirror imported from Spotify. Files and the
-    playlists already in Navidrome are left alone; a queued sync finds no row and stops."""
+    playlists already on the media server are left alone; a queued sync finds no row and stops."""
     s.execute(delete(UserLink).where(UserLink.user_id == user_id, UserLink.service == SERVICE))
     s.execute(
         delete(MirroredPlaylist).where(

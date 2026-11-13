@@ -41,10 +41,11 @@ class AppSettings(TimestampMixin, Base):
     slow_download_window: Mapped[int | None]
     slow_download_floor: Mapped[int | None]
     slow_download_share: Mapped[float | None] = mapped_column(Float)
-    navidrome_url: Mapped[str | None] = mapped_column(Text)
-    navidrome_user: Mapped[str | None] = mapped_column(Text)
-    navidrome_library: Mapped[str | None] = mapped_column(Text)
-    navidrome_discover_library: Mapped[str | None] = mapped_column(Text)
+    media_server_kind: Mapped[str | None] = mapped_column(Text)
+    media_server_url: Mapped[str | None] = mapped_column(Text)
+    media_server_user: Mapped[str | None] = mapped_column(Text)
+    media_server_library: Mapped[str | None] = mapped_column(Text)
+    media_server_discover_library: Mapped[str | None] = mapped_column(Text)
     adopt_downloads: Mapped[bool | None]
     adopt_settle_minutes: Mapped[int | None]
     flac_level: Mapped[int | None]
@@ -61,7 +62,7 @@ class AppSettings(TimestampMixin, Base):
     sabnzbd_url: Mapped[str | None] = mapped_column(Text)
     # Fernet ciphertext of the secret settings; NULL is not saved
     slskd_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
-    navidrome_password_encrypted: Mapped[str | None] = mapped_column(Text)
+    media_server_password_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_app_key_encrypted: Mapped[str | None] = mapped_column(Text)
     acoustid_user_key_encrypted: Mapped[str | None] = mapped_column(Text)
     prowlarr_api_key_encrypted: Mapped[str | None] = mapped_column(Text)

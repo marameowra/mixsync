@@ -12,11 +12,11 @@ _NOT_AUTHORIZED = 50
 _NOT_FOUND = 70
 
 _ADMIN_HINT = (
-    "check navidrome_user and navidrome_password on /settings"
-    " (or MIXSYNC_NAVIDROME_USER and _PASSWORD)"
+    "check media_server_user and media_server_password on /settings"
+    " (or MIXSYNC_MEDIA_SERVER_USER and _PASSWORD)"
 )
 _ADMIN_ONLY = (
-    "navidrome_user (on /settings or MIXSYNC_NAVIDROME_USER) must be an admin user to start scans"
+    "media_server_user (on /settings or MIXSYNC_MEDIA_SERVER_USER) must be an admin to start scans"
 )
 
 

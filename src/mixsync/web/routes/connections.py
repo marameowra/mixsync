@@ -21,7 +21,7 @@ from mixsync.sources.prowlarr import ProwlarrSource
 from mixsync.sources.qbittorrent import Qbittorrent
 from mixsync.sources.sabnzbd import Sabnzbd
 from mixsync.sources.slskd import SlskdSource
-from mixsync.targets.subsonic import SubsonicClient
+from mixsync.targets import media_server
 from mixsync.web.deps import Db, require
 
 router = APIRouter(prefix="/settings")
@@ -31,7 +31,7 @@ TIMEOUT = 10.0  # seconds for the whole click, a rate-limit wait included
 # service -> the form fields it reads; a blank field means its effective value
 FIELDS = {
     "slskd": ("slskd_url", "slskd_api_key"),
-    "navidrome": ("navidrome_url", "navidrome_user", "navidrome_password"),
+    "media_server": ("media_server_url", "media_server_user", "media_server_password"),
     "musicbrainz": ("mb_base_url",),
     "acoustid": ("acoustid_app_key",),
     "prowlarr": ("prowlarr_url", "prowlarr_api_key"),
@@ -45,9 +45,9 @@ async def _ping(service: str, v: dict[str, str], http: PoliteClient, request: Re
     if service == "slskd":
         downloads = Path(settings.downloads_dir)
         await SlskdSource(http, v["slskd_url"], v["slskd_api_key"], downloads_dir=downloads).ping()
-    elif service == "navidrome":
-        user, password = v["navidrome_user"], v["navidrome_password"]
-        await SubsonicClient(http, v["navidrome_url"], user, password).ping()
+    elif service == "media_server":
+        user, password = v["media_server_user"], v["media_server_password"]
+        await media_server.ping(http, v["media_server_url"], user, password)
     elif service == "musicbrainz":
         await MusicBrainzProvider(http, v["mb_base_url"]).ping()
     elif service == "prowlarr":
