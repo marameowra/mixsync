@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import signal
 import sys
 from typing import TYPE_CHECKING
 
@@ -98,7 +99,11 @@ def main(argv: list[str] | None = None) -> int:
         # built here, not by uvicorn: a bad key file must stop startup (build_services loads it)
         settings, version = startup_settings()
         uvicorn.run(
-            create_app(services=build_services(settings, settings_version=version)),
+            create_app(
+                services=build_services(settings, settings_version=version),
+                # the graceful shutdown `docker stop` gets; the restart policy brings web back
+                stop_server=lambda: os.kill(os.getpid(), signal.SIGTERM),
+            ),
             host="0.0.0.0",
             port=8080,
             log_level=settings.log_level.lower(),

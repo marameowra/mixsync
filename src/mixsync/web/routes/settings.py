@@ -6,7 +6,10 @@ rendered back, blank keeps the saved one, Clear removes it. Saved values are pre
 effective value of an unsaved one is shown as a placeholder, so Save never saves it by accident.
 The auto-accept cap is the exception: it is its own value, and blank clears it."""
 
+import asyncio
+import logging
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
@@ -19,6 +22,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire import missing_scan
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
+from mixsync.core.clock import aware
 from mixsync.core.config import Settings, env_names
 from mixsync.core.jobs import LIVE
 from mixsync.db.app_settings import (
@@ -37,7 +41,10 @@ from mixsync.web.deps import Box, Db, require
 from mixsync.web.routes.account import percent
 from mixsync.web.templating import render, templates
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings")
+# seconds web waits after an Apply, so the redirected page and its assets load first
+RESTART_GRACE = 3.0
 Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
 
 GROUPS: dict[str, tuple[str, ...]] = {
@@ -93,6 +100,7 @@ READ_ONLY = (
     "backup_dir",
     "qbittorrent_dir",
     "sabnzbd_dir",
+    "self_restart",
 )
 
 
@@ -124,6 +132,46 @@ def _parse(name: str, raw: str) -> Any:
     return getattr(Settings(**{name: value}), name) if value != [] else None  # ",": blank
 
 
+def _restart(request: Request, db: Session) -> dict[str, Any]:
+    """The restart banner's context: who is behind, and whether an Apply is restarting them."""
+    services = request.app.state.services
+    pending = restart_pending(db, services.settings_version, services.clock.now())
+    row = db.get(AppSettings, 1)
+    asked, saved = (row.restart_requested_at, row.settings_saved_at) if row else (None, None)
+    return {
+        "restart": pending,
+        "restarting": bool(pending and asked and saved and aware(asked) >= aware(saved)),
+        "self_restart": services.settings.self_restart,
+    }
+
+
+def _request_restart(request: Request, db: Session, user: AuthUser) -> None:
+    """Store a restart request (the worker and `all` stop once they see it), then stop web."""
+    row = db.get(AppSettings, 1) or AppSettings(id=1)
+    row.restart_requested_at = request.app.state.services.clock.now()
+    db.add(row)
+    log.info("%s requested a restart to apply app settings", user.username)
+    if stop := request.app.state.stop_server:
+        asyncio.get_running_loop().call_later(RESTART_GRACE, stop)
+
+
+def _dirty(db: Session, form: Mapping[str, Any]) -> bool:
+    """Whether the submitted form differs from what the page prefills: unsaved changes."""
+    _, resolved = resolve(db)
+    for name in EDITABLE:
+        r = resolved[name]
+        shown = _text(r.value) if r.source == "saved" else ""
+        sent = str(form.get(name, "")).strip()
+        if isinstance(r.value, bool):  # the select's values are lower case
+            shown, sent = shown.lower(), sent.lower()
+        if sent != shown:
+            return True
+    cap = auto_accept_cap(db)
+    if str(form.get("cap", "")).strip() != ("" if cap is None else str(confidence(cap))):
+        return True
+    return any(str(form.get(n, "")).strip() for n in SECRETS)
+
+
 def _page(
     request: Request,
     user: AuthUser,
@@ -135,7 +183,6 @@ def _page(
 ) -> HTMLResponse:
     settings, resolved = resolve(db)
     cap = auto_accept_cap(db)
-    services = request.app.state.services
     errors, submitted = errors or {}, submitted or {}
     fields: dict[str, dict[str, Any]] = {}
     for name in EDITABLE:
@@ -172,13 +219,14 @@ def _page(
         "cap_error": errors.get("cap"),
         "saved": saved,
         "has_errors": bool(errors),
-        "restart": restart_pending(db, services.settings_version, services.clock.now()),
         "kind_change": kind_change
         and {
             "from": settings.media_server_kind,
             "to": kind_change,
             "users": server_link_users(db),
         },
+        "dirty": bool(errors),
+        **_restart(request, db),
     }
     return templates.TemplateResponse(
         request, "pages/settings.html", ctx, status_code=400 if errors else 200
@@ -240,7 +288,35 @@ async def save(request: Request, admin: Admin, db: Db, box: Box) -> Response:
             .where(MatchingProfile.auto_accept_max > cap)
             .values(auto_accept_max=cap)
         )
+    if request.app.state.services.settings.self_restart:  # Apply; otherwise a plain Save
+        _request_restart(request, db, admin)
     return RedirectResponse("/settings?saved=1", 303)
+
+
+@router.post("/apply")
+async def apply_now(request: Request, admin: Admin, db: Db) -> Response:
+    """Apply now: restart on the saved settings, changing none of them."""
+    if not request.app.state.services.settings.self_restart:
+        raise HTTPException(404, "self-restart is off")
+    _request_restart(request, db, admin)
+    return RedirectResponse("/settings", 303)
+
+
+@router.get("/restart")
+def restart_status(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    """The restart banner as a live region (ADR 0017)."""
+    return templates.TemplateResponse(
+        request, "pages/settings_restart.html", {"user": admin, **_restart(request, db)}
+    )
+
+
+@router.post("/changed")
+async def changed(request: Request, admin: Admin, db: Db) -> HTMLResponse:
+    """htmx: the Apply button only while the form has unsaved changes (ADR 0020: no own JS)."""
+    ctx = {"user": admin, "dirty": _dirty(db, await request.form()), "oob": True}
+    return templates.TemplateResponse(
+        request, "pages/settings_apply.html", ctx | _restart(request, db)
+    )
 
 
 @router.post("/missing-tracks/scan")

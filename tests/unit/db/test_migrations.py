@@ -19,8 +19,10 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0045_restart_requested"
+    downgrade("-1")  # the chain runs 0039 -> ... -> 0045, one step at a time
     assert _version(settings) == "0044_media_server_names"
-    downgrade("-1")  # the chain runs 0039 -> ... -> 0044, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0043_requests_autoincrement"
     downgrade("-1")
     assert _version(settings) == "0042_mirrored_spotify_import"
@@ -29,11 +31,11 @@ def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
     upgrade()
-    assert _version(settings) == "0044_media_server_names"
+    assert _version(settings) == "0045_restart_requested"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0044_media_server_names"
+    assert _version(settings) == "0045_restart_requested"
 
 
 def test_revision_ids_fit_alembic_version() -> None:

@@ -25,6 +25,7 @@ from mixsync.core.config import Settings
 from mixsync.core.errors import TransientError
 from mixsync.core.jobs import DEFAULT_LEASE, JobKind, backoff
 from mixsync.core.protocols import DownloadSource
+from mixsync.db.app_settings import restart_requested
 from mixsync.db.backup import NightlyBackup
 from mixsync.db.queue import JobQueue, JobRecord, LeaseLostError
 from mixsync.discovery.listenbrainz import ListenBrainzClient
@@ -155,7 +156,10 @@ async def run_worker(
     lease: timedelta = DEFAULT_LEASE,
     poll: float = 1.0,
     startup: tuple[Callable[[], None], ...] = (),
+    restart: Callable[[], bool] = lambda: False,
 ) -> None:
+    """Runs jobs one at a time until `stop`, or until `restart` (checked with the liveness
+    write, between jobs) says an Apply wants this process restarted (#349)."""
     pending = list(startup)
     loop = asyncio.get_running_loop()
     retry_at = alive_at = loop.time()
@@ -163,6 +167,12 @@ async def run_worker(
         if loop.time() >= alive_at:  # not every poll: an idle SQLite worker would write each second
             await _alive(queue, worker)
             alive_at = loop.time() + ALIVE_EVERY
+            try:
+                if await asyncio.to_thread(restart):
+                    log.info("restart requested to apply app settings; the worker stops")
+                    return
+            except Exception:  # like liveness: never stop polling over it
+                log.exception("checking for a restart request failed; trying again")
         if pending and loop.time() >= retry_at:
             for initialize in pending.copy():
                 if stop.is_set():
@@ -429,13 +439,24 @@ def _new_queue(
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup
 
 
+def restart_check(services: Services) -> Callable[[], bool]:
+    """True once a restart was requested after now, the process start; never when
+    MIXSYNC_SELF_RESTART is off."""
+    if not services.settings.self_restart:
+        return lambda: False
+    started = services.clock.now()
+    return lambda: restart_requested(services.session_factory, started)
+
+
 async def serve_worker(settings: Settings, settings_version: datetime | None = None) -> None:
     services = build_services(settings, settings_version=settings_version)
+    restart = restart_check(services)
     queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stop.set)
-    await run_worker(queue, worker, stop, handlers, startup=startup)
+    # returning exits cleanly; the restart policy starts it again on the saved settings
+    await run_worker(queue, worker, stop, handlers, startup=startup, restart=restart)
 
 
 async def serve_all(settings: Settings, settings_version: datetime | None = None) -> None:
@@ -445,9 +466,14 @@ async def serve_all(settings: Settings, settings_version: datetime | None = None
     services = build_services(settings, settings_version=settings_version)
     queue, worker, handlers, startup = _new_queue(services)
     stop = asyncio.Event()
+
+    def stop_server() -> None:
+        server.should_exit = True
+
     server = uvicorn.Server(
         uvicorn.Config(
-            lambda: create_app(services=services),
+            # Apply stops the server; the finally below then lets the worker finish its job
+            lambda: create_app(services=services, stop_server=stop_server),
             factory=True,
             host="0.0.0.0",
             port=8080,

@@ -45,7 +45,10 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     settings: Settings | None = None,
     services: Services | None = None,
+    stop_server: Callable[[], None] | None = None,
 ) -> FastAPI:
+    """`stop_server` shuts the server down cleanly: Apply on the settings page calls it (#349)."""
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # a tag restore killed with the web process leaves its track missing until this puts it back
@@ -56,6 +59,7 @@ def create_app(
     services = services or build_services(settings or Settings(), session_factory)
     app.state.services = services
     app.state.settings = services.settings
+    app.state.stop_server = stop_server
     app.state.session_factory = user_sessions(services.session_factory)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web" / "static"))
 

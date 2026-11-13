@@ -80,6 +80,9 @@ def test_non_admins_get_403_on_get_and_post(client: TestClient) -> None:
     assert client.post("/settings", data={"csrf_token": tok, "trash_days": "5"}).status_code == 403
     assert client.post("/settings/reset/trash_days", data={"csrf_token": tok}).status_code == 403
     assert client.post("/settings/clear/slskd_api_key", data={"csrf_token": tok}).status_code == 403
+    assert client.post("/settings/apply", data={"csrf_token": tok}).status_code == 403
+    assert client.post("/settings/changed", data={"csrf_token": tok}).status_code == 403
+    assert client.get("/settings/restart").status_code == 403
     assert 'href="/settings"' not in client.get("/account").text
 
 
@@ -97,7 +100,7 @@ def test_save_persists_then_reset_clears(client: TestClient, sf: sessionmaker[Se
     }
     r = client.post("/settings", data=data)
     assert r.status_code == 303 and r.headers["location"] == "/settings?saved=1"
-    assert RESTART in client.get("/settings?saved=1").text
+    assert "Saved.</p>" in client.get("/settings?saved=1").text  # Apply restarts by itself
     assert saved(sf, "trash_days") == 7 and saved(sf, "adopt_downloads") is True
     assert saved(sf, "canonical_media") == ["CD", "Vinyl"] and saved(sf, "log_level") == "DEBUG"
     assert saved(sf, "mb_contact") is None  # blank is not saved
@@ -311,7 +314,7 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
     # Enter picks the first submit button: one with form="..." belongs to another form, and a
     # type="button" (the Test buttons) never submits
     first = re.search(r'<button(?![^>]*\sform=)(?![^>]*type="button")[^>]*>([^<]*)', main.group(0))
-    assert first and first.group(1) == "Save settings"
+    assert first and first.group(1) == "Apply"
     assert 'id="reset-trash_days" method="post" action="/settings/reset/trash_days"' in page
     client.post("/settings/reset/trash_days", data={"csrf_token": tok})
     assert saved(sf, "trash_days") is None and saved(sf, "flac_level") == 3
@@ -463,3 +466,76 @@ def test_switching_the_media_server_asks_first_then_clears_ids_and_links(
     # a reset would switch back to the default without asking: refused
     r = client.post("/settings/reset/media_server_kind", data={"csrf_token": tok})
     assert r.status_code == 409 and saved(sf, "media_server_kind") == "jellyfin"
+
+
+def test_apply_saves_and_requests_a_restart_and_apply_now_only_requests_one(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    assert client.post("/settings", data={"csrf_token": tok, "trash_days": "7"}).status_code == 303
+    assert saved(sf, "trash_days") == 7 and saved(sf, "restart_requested_at")
+    page = client.get("/settings").text
+    assert "Restarting&hellip; Restart pending: web, worker" in page
+    assert 'hx-get="/settings/restart"' in page and "Apply now" not in page  # polls until back
+    with sf() as s, s.begin():  # the restart request is forgotten: the banner offers Apply now
+        row = s.get(AppSettings, 1)
+        assert row
+        row.restart_requested_at, version = None, row.settings_saved_at
+    page = client.get("/settings").text
+    assert "Restarting" not in page and 'action="/settings/apply"' in page
+    assert client.post("/settings/apply", data={"csrf_token": tok}).status_code == 303
+    assert saved(sf, "restart_requested_at") and saved(sf, "settings_saved_at") == version
+    assert saved(sf, "trash_days") == 7
+
+
+def test_apply_shows_only_while_the_form_has_unsaved_changes(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "trash_days": "7", "adopt_downloads": "true"})
+    with sf() as s, s.begin():
+        row = s.get(AppSettings, 1)
+        assert row
+        row.restart_requested_at = None
+    apply = '<button type="submit">Apply</button>'
+    page = client.get("/settings").text
+    assert f"<noscript>{apply}" in page  # without JS it is always there
+    clean = {"csrf_token": tok, "trash_days": "7", "adopt_downloads": "true"}
+    r = client.post("/settings/changed", data=clean)
+    assert f"<noscript>{apply}" in r.text and "Apply now" in r.text
+    r = client.post("/settings/changed", data=clean | {"trash_days": "8"})
+    assert f"<noscript>{apply}" not in r.text and apply in r.text
+    assert "Apply now" not in r.text and 'id="restart" hx-swap-oob="true"' in r.text
+    r = client.post("/settings/changed", data=clean | {"slskd_api_key": "k"})
+    assert apply in r.text and "<noscript>" not in r.text
+
+
+def test_without_self_restart_save_says_restart_by_hand_and_requests_nothing(
+    sf: sessionmaker[Session],
+) -> None:
+    with TestClient(create_app(sf, Settings(self_restart=False)), follow_redirects=False) as c:
+        tok = login(c, "root")
+        page = c.get("/settings").text
+        assert '<button type="submit">Save</button>' in page
+        assert "Restart web and worker by hand to apply." in page and ">Apply</button>" not in page
+        assert c.post("/settings", data={"csrf_token": tok, "trash_days": "7"}).status_code == 303
+        assert saved(sf, "trash_days") == 7 and saved(sf, "restart_requested_at") is None
+        page = c.get("/settings?saved=1").text
+        assert RESTART in page and "Restart pending: web" in page and "Apply now" not in page
+        assert c.post("/settings/apply", data={"csrf_token": tok}).status_code == 404
+        assert saved(sf, "restart_requested_at") is None
+
+
+def test_apply_stops_web_after_its_response(
+    sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("mixsync.web.routes.settings.RESTART_GRACE", 0)
+    stopped: list[bool] = []
+    app = create_app(sf, Settings(), stop_server=lambda: stopped.append(True))
+    with TestClient(app, follow_redirects=False) as c:
+        tok = login(c, "root")
+        c.get("/settings")
+        assert not stopped
+        c.post("/settings", data={"csrf_token": tok, "trash_days": "7"})
+        c.get("/healthz")  # a turn of the event loop runs the scheduled stop
+        assert stopped == [True]

@@ -8,8 +8,8 @@
 {%- endmacro %}
 <h1>Settings</h1>
 <p>A saved value beats the environment, which beats the default. Changes apply when mixsync-web and mixsync-worker restart. A blank field is left as it is; use Reset to clear a saved value.</p>
-{% if restart %}<p class="notice caution" role="status"><span aria-hidden="true">▲</span> Restart pending: {{ restart|join(", ") }}</p>{% endif %}
-{% if saved %}<p class="notice ok" role="status"><span aria-hidden="true">●</span> Saved. Restart mixsync-web and mixsync-worker to apply.</p>{% endif %}
+{% include "pages/settings_restart.html" %}
+{% if saved %}<p class="notice ok" role="status"><span aria-hidden="true">●</span> Saved.{% if not self_restart %} Restart mixsync-web and mixsync-worker to apply.{% endif %}</p>{% endif %}
 {% if has_errors %}<p class="notice danger" role="alert"><span aria-hidden="true">✕</span> Nothing was saved. Fix the fields below.</p>{% endif %}
 {% if kind_change %}<div class="notice caution" role="alert"><p><span aria-hidden="true">▲</span> Nothing was saved yet. Switching the media server from {{ kind_change.from }} to {{ kind_change.to }} forgets every playlist and song id stored for it: the next push creates the playlists again on the new server. {% if kind_change.users %}These users must link their media server account again: {{ kind_change.users|join(", ") }}.{% else %}No user has a media server link.{% endif %} No file on disk changes. Secrets typed in this form were not kept; enter them again. Confirm with the button under the form.</p></div>{% endif %}
 <form method="post" action="/settings">
@@ -64,7 +64,11 @@
     </div>
     {% endfor %}
   </fieldset>
-  <button type="submit">Save settings</button>
+  {% if self_restart %}
+  <div id="apply" hx-post="/settings/changed" hx-trigger="input from:closest form delay:300ms" hx-include="closest form">{% include "pages/settings_apply.html" %}</div>
+  {% else %}
+  <button type="submit">Save</button> <span class="help">Restart web and worker by hand to apply.</span>
+  {% endif %}
   {% if kind_change %}<button class="danger" type="submit" name="confirm_kind" value="{{ kind_change.to }}">Switch to {{ kind_change.to }} and save</button>{% endif %}
 </form>
 {% for fields in groups.values() %}{% for f in fields if f.source == "saved" %}

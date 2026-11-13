@@ -46,6 +46,7 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_SABNZBD_DIR` | folder of SABnzbd's `mixsync` category, the same in both containers; unset = no Usenet |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`); not used on Postgres |
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
+| `MIXSYNC_SELF_RESTART` | `true` (default): **Apply** on the settings page saves and restarts web and worker, see [Applying settings](#applying-settings). `false`: the button only saves; restart both by hand |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
 | `MIXSYNC_MEDIA_SERVER_KIND` | the media server mixsync hands off to: `navidrome` (default, the only one today) |
@@ -74,6 +75,11 @@ SQLite is the default and fits one home server. Choose Postgres to run several w
 
 - SQLite is backed up nightly to `/config/backups` (`MIXSYNC_BACKUP_DIR`; newest 7 kept) and before any `mixsync migrate` that upgrades an existing database. `mixsync backup` takes one now.
 - On Postgres none of this runs; back up with `pg_dump`. `mixsync backup` exits non-zero saying so.
+
+### Applying settings
+App settings saved on the settings page take effect when web and worker restart ([ADR 0021](../docs/decisions/0021-app-settings-saved-over-env-loaded-at-startup.md)). **Apply** saves and asks both to restart: web stops a few seconds after its response, and the worker finishes the job it is running, then stops (`mixsync all` stops once its worker has). Both exit cleanly and rely on their restart policy to come back on the new settings; the banner shows "Restarting…" until both report the new version.
+
+Self-restart needs a restart policy: `restart: unless-stopped` (as in `compose.yml`), or `Restart=always` under systemd (`on-failure` does not restart a clean exit). An install with none (e.g. `mixsync web` run by hand) should set `MIXSYNC_SELF_RESTART=false`, or Apply leaves it stopped.
 
 ### Seed or recover settings
 

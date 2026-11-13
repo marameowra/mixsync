@@ -1,0 +1,5 @@
+{# Inside #apply: the Apply button while the form has unsaved changes (#349). Without JS the
+   noscript button is always there. The banner comes along out of band to hide Apply now. #}
+{% set button %}<button type="submit">Apply</button> <span class="help">Saves your changes and restarts mixsync. Running jobs finish first.</span>{% endset %}
+{% if dirty %}{{ button }}{% else %}<noscript>{{ button }}</noscript>{% endif %}
+{% if oob %}{% include "pages/settings_restart.html" %}{% endif %}
