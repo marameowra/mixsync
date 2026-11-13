@@ -109,6 +109,18 @@ def test_save_persists_then_reset_clears(client: TestClient, sf: sessionmaker[Se
     assert client.post("/settings/reset/nope", data={"csrf_token": tok}).status_code == 404
 
 
+def test_the_override_warning_names_the_old_variable_when_only_it_is_set(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_NAVIDROME_URL", "http://old:4533")
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "media_server_url": "http://saved:4533"})
+    block = field(client.get("/settings").text, "media_server_url")
+    assert "source: saved" in block
+    assert "MIXSYNC_NAVIDROME_URL is set but ignored" in block
+    assert "MIXSYNC_MEDIA_SERVER_URL" not in block
+
+
 def test_source_badges_and_the_env_override_warning(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -6,6 +6,7 @@ rendered back, blank keeps the saved one, Clear removes it. Saved values are pre
 effective value of an unsaved one is shown as a placeholder, so Save never saves it by accident.
 The auto-accept cap is the exception: it is its own value, and blank clears it."""
 
+import os
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 from mixsync.acquire import missing_scan
 from mixsync.acquire.requests import auto_accept_cap
 from mixsync.core.capabilities import Capability
-from mixsync.core.config import Settings
+from mixsync.core.config import Settings, env_names
 from mixsync.core.jobs import LIVE
 from mixsync.db.app_settings import (
     EDITABLE,
@@ -95,6 +96,12 @@ READ_ONLY = (
 )
 
 
+def _env(name: str) -> str:
+    """The variable an admin actually set (an old alias counts), else the preferred one."""
+    names = env_names(name)
+    return next((n for n in names if n in os.environ), names[0])
+
+
 def _help(name: str) -> str:
     return Settings.model_fields[name].description or ""
 
@@ -137,7 +144,7 @@ def _page(
         fields[name] = {
             "name": name,
             "help": _help(name),
-            "env": f"MIXSYNC_{name.upper()}",
+            "env": _env(name),
             "kind": "bool" if isinstance(r.value, bool) else "text",
             "source": r.source,
             "effective": _text(r.value),
@@ -149,7 +156,7 @@ def _page(
         {
             "name": n,
             "help": _help(n),
-            "env": f"MIXSYNC_{n.upper()}",
+            "env": _env(n),
             "source": resolved[n].source,
             "unreadable": resolved[n].unreadable,
             "warn": resolved[n].source == "saved" and resolved[n].env_set,
