@@ -9,18 +9,25 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from markupsafe import escape
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.__main__ import main
 from mixsync.app import create_app
 from mixsync.core.clock import SystemClock, aware
-from mixsync.core.config import PATH_FIELDS, Settings
+from mixsync.core.config import MEDIA_SERVER_KINDS, PATH_FIELDS, Settings
 from mixsync.db.app_settings import EDITABLE, SECRETS, load_settings
 from mixsync.db.auth import create_user
 from mixsync.db.engine import make_engine, make_session_factory
 from mixsync.db.migrate import upgrade
-from mixsync.db.models.auth import AppSettings
+from mixsync.db.models.accounts import UserLink
+from mixsync.db.models.auth import AppSettings, User
+from mixsync.db.models.discovery import (
+    DiscoveryPlaylist,
+    MirroredPlaylist,
+    ProvisionalTrack,
+    SmartPlaylist,
+)
 from mixsync.db.models.infra import WorkerHeartbeat
 from mixsync.db.queue import JobQueue
 from mixsync.db.secretbox import SecretBox
@@ -100,6 +107,18 @@ def test_save_persists_then_reset_clears(client: TestClient, sf: sessionmaker[Se
     assert client.post("/settings/reset/trash_days", data={"csrf_token": tok}).status_code == 303
     assert saved(sf, "trash_days") is None and saved(sf, "adopt_downloads") is True
     assert client.post("/settings/reset/nope", data={"csrf_token": tok}).status_code == 404
+
+
+def test_the_override_warning_names_the_old_variable_when_only_it_is_set(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MIXSYNC_NAVIDROME_URL", "http://old:4533")
+    tok = login(client, "root")
+    client.post("/settings", data={"csrf_token": tok, "media_server_url": "http://saved:4533"})
+    block = field(client.get("/settings").text, "media_server_url")
+    assert "source: saved" in block
+    assert "MIXSYNC_NAVIDROME_URL is set but ignored" in block
+    assert "MIXSYNC_MEDIA_SERVER_URL" not in block
 
 
 def test_source_badges_and_the_env_override_warning(
@@ -195,29 +214,31 @@ def test_a_saved_secret_is_ciphertext_and_never_rendered(
         "saved" in block and 'type="password"' in block and 'autocomplete="new-password"' in block
     )
     assert 'value=""' in block and "placeholder" not in block
-    assert "not set" in field(page, "navidrome_password")
+    assert "not set" in field(page, "media_server_password")
 
 
 def test_blank_keeps_a_new_value_replaces_and_clear_removes(
     client: TestClient, sf: sessionmaker[Session]
 ) -> None:
     tok = login(client, "root")
-    client.post("/settings", data={"csrf_token": tok, "navidrome_password": SECRET})
-    first = _ciphertext(sf, "navidrome_password")
-    client.post("/settings", data={"csrf_token": tok, "navidrome_password": "", "trash_days": "3"})
-    assert _ciphertext(sf, "navidrome_password") == first
-    client.post("/settings", data={"csrf_token": tok, "navidrome_password": "other"})
-    second = _ciphertext(sf, "navidrome_password")
+    client.post("/settings", data={"csrf_token": tok, "media_server_password": SECRET})
+    first = _ciphertext(sf, "media_server_password")
+    client.post(
+        "/settings", data={"csrf_token": tok, "media_server_password": "", "trash_days": "3"}
+    )
+    assert _ciphertext(sf, "media_server_password") == first
+    client.post("/settings", data={"csrf_token": tok, "media_server_password": "other"})
+    second = _ciphertext(sf, "media_server_password")
     assert second and second != first
     page = client.get("/settings").text
     assert (
-        'id="clear-navidrome_password" method="post" action="/settings/clear/navidrome_password"'
-        in page
+        'id="clear-media_server_password" method="post"'
+        ' action="/settings/clear/media_server_password"' in page
     )
     assert client.post("/settings/clear/trash_days", data={"csrf_token": tok}).status_code == 404
-    r = client.post("/settings/clear/navidrome_password", data={"csrf_token": tok})
+    r = client.post("/settings/clear/media_server_password", data={"csrf_token": tok})
     assert r.status_code == 303
-    assert _ciphertext(sf, "navidrome_password") is None
+    assert _ciphertext(sf, "media_server_password") is None
     assert saved(sf, "trash_days") == 3
 
 
@@ -298,8 +319,8 @@ def test_the_first_button_saves_and_reset_changes_only_its_field(
 
 def test_a_secret_keeps_its_surrounding_spaces(client: TestClient) -> None:
     tok = login(client, "root")
-    client.post("/settings", data={"csrf_token": tok, "navidrome_password": " pw "})
-    assert load_settings()[0].navidrome_password == " pw "
+    client.post("/settings", data={"csrf_token": tok, "media_server_password": " pw "})
+    assert load_settings()[0].media_server_password == " pw "
 
 
 def test_restart_pending_names_the_processes_behind_the_saved_settings(
@@ -393,3 +414,52 @@ def test_torrent_and_usenet_connections_save_and_their_secrets_stay_write_only(
     )
     client.post("/settings/clear/qbittorrent_password", data={"csrf_token": tok})
     assert _ciphertext(sf, "qbittorrent_password") is None
+
+
+def test_switching_the_media_server_asks_first_then_clears_ids_and_links(
+    client: TestClient, sf: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(MEDIA_SERVER_KINDS, "jellyfin", "Jellyfin")  # a second kind to switch to
+    now = datetime.now(UTC)
+    with sf() as s, s.begin():
+        alice = s.scalars(select(User).where(User.username == "alice")).one()
+        for service in ("navidrome", "listenbrainz"):
+            link = UserLink(user_id=alice.id, service=service, external_username="ali")
+            s.add(link)
+            link.secret_encrypted, link.verified_at = "token", now
+        s.add(DiscoveryPlaylist(user_id=alice.id, name="d", server_playlist_id="pd"))
+        mirror = MirroredPlaylist(user_id=alice.id, name="m", upstream_kind="loves")
+        mirror.upstream_ref, mirror.cadence_days, mirror.server_playlist_id = "r", 1, "pm"
+        s.add(mirror)
+        s.add(SmartPlaylist(user_id=alice.id, name="s", server_playlist_id="ps"))
+        track = ProvisionalTrack(path="a.flac", recording_mbid="r", batch_id="b", imported_at=now)
+        track.server_song_id = "song"
+        s.add(track)
+
+    def state() -> tuple[object, ...]:
+        with sf() as s:
+            ids = [
+                s.scalar(select(m.server_playlist_id))
+                for m in (DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist)
+            ]
+            links = sorted((u.service, u.needs_relink) for u in s.scalars(select(UserLink)))
+            return (*ids, s.scalar(select(ProvisionalTrack.server_song_id)), links)
+
+    before = ("pd", "pm", "ps", "song", [("listenbrainz", False), ("navidrome", False)])
+    assert state() == before
+    tok = login(client, "root")
+    data = {"csrf_token": tok, "media_server_kind": "navidrome"}
+    assert client.post("/settings", data=data).status_code == 303  # the same kind: no question
+    assert saved(sf, "media_server_kind") == "navidrome" and state() == before
+    asked = client.post("/settings", data={**data, "media_server_kind": "jellyfin"})
+    assert asked.status_code == 200
+    assert "These users must link their media server account again: alice." in asked.text
+    assert 'name="confirm_kind" value="jellyfin"' in asked.text
+    assert saved(sf, "media_server_kind") == "navidrome" and state() == before  # nothing yet
+    data = {**data, "media_server_kind": "jellyfin", "confirm_kind": "jellyfin"}
+    assert client.post("/settings", data=data).status_code == 303
+    assert saved(sf, "media_server_kind") == "jellyfin"
+    assert state() == (None, None, None, None, [("jellyfin", True), ("listenbrainz", False)])
+    # a reset would switch back to the default without asking: refused
+    r = client.post("/settings/reset/media_server_kind", data={"csrf_token": tok})
+    assert r.status_code == 409 and saved(sf, "media_server_kind") == "jellyfin"

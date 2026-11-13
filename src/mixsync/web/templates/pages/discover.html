@@ -5,10 +5,10 @@
 {% from "macros/ui.html" import status %}
 {% block content %}
 <h1>Discover</h1>
-<p>Playlists built from your ListenBrainz listening and pushed to Navidrome. New tracks join once they are imported.</p>
+<p>Playlists built from your ListenBrainz listening and pushed to your media server. New tracks join once they are imported.</p>
 <p><a href="/discover/new">New playlist</a></p>
 {% if not rows %}<p class="empty">No playlists yet. Link your listening services to start discovering music.</p>{% endif %}
-{% if not linked %}<p class="notice"><span aria-hidden="true">i</span> Link ListenBrainz and Navidrome on <a href="/account">your account</a> to build playlists.</p>{% endif %}
+{% if not linked %}<p class="notice"><span aria-hidden="true">i</span> Link ListenBrainz and your media server on <a href="/account">your account</a> to build playlists.</p>{% endif %}
 
 {% if soon %}
 <h2>Expiring in the next 7 days</h2>

@@ -48,7 +48,7 @@ class FakeValidator:
             raise TransientError("down")
         return "discogs-real-name" if self.ok else None
 
-    async def navidrome_ping(self, username: str, password: str) -> Ping:
+    async def media_server_ping(self, username: str, password: str) -> Ping:
         self.pings += 1
         return self.ping if self.ok else Ping.rejected
 
@@ -356,7 +356,7 @@ def _subsonic(status: str, code: int = 0) -> httpx.Response:
 def _ping(settings: Settings, sf: sessionmaker[Session], handler: object) -> DefaultValidator:
     t = httpx.MockTransport(handler)  # type: ignore[arg-type]
     return DefaultValidator(
-        PoliteClient("navidrome", settings, sf, transport=t),
+        PoliteClient("media_server", settings, sf, transport=t),
         "http://nd",
         ListenBrainzClient(PoliteClient("listenbrainz", settings, sf, transport=t)),
         DiscogsClient(PoliteClient("discogs", settings, sf, transport=t)),
@@ -367,9 +367,9 @@ async def test_default_validator_ok_and_rejected(
     settings: Settings, sf: sessionmaker[Session]
 ) -> None:
     ok = _ping(settings, sf, lambda r: _subsonic("ok"))
-    assert await ok.navidrome_ping("u", "p") == Ping.ok
+    assert await ok.media_server_ping("u", "p") == Ping.ok
     bad = _ping(settings, sf, lambda r: _subsonic("failed", 40))
-    assert await bad.navidrome_ping("u", "p") == Ping.rejected
+    assert await bad.media_server_ping("u", "p") == Ping.rejected
 
 
 async def test_default_validator_transport_error_is_unreachable(
@@ -378,7 +378,7 @@ async def test_default_validator_transport_error_is_unreachable(
     def boom(r: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down")
 
-    assert await _ping(settings, sf, boom).navidrome_ping("u", "p") == Ping.unreachable
+    assert await _ping(settings, sf, boom).media_server_ping("u", "p") == Ping.unreachable
 
 
 def test_listenbrainz_unreachable_message(

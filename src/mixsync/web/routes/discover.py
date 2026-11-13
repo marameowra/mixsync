@@ -149,7 +149,7 @@ def playlist_list(request: Request, user: User, db: Db, namer: Namer) -> HTMLRes
         "tracks": tracks,
         "soon": soon,
         "names": resolve_listed(db, namer, unnamed),
-        "linked": {"listenbrainz", "navidrome"} <= linked,
+        "linked": {"listenbrainz", request.app.state.settings.media_server_kind} <= linked,
     }
     return templates.TemplateResponse(request, "pages/discover.html", ctx)
 

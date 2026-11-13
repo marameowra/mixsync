@@ -363,7 +363,7 @@ async def test_a_stale_import_keeps_only_its_owned_matches_and_is_not_synced(
         "rec_title": "Title 1",
     }  # no Spotify artist, title or ISRC
     assert entry["recording_mbid"]
-    assert mr.pl(pid).navidrome_playlist_id
+    assert mr.pl(pid).server_playlist_id
     assert {p: mr.pl(p).entries for p in (other, bobs)} == before
     pushes = mr.lib.pushes
     with env.sessions.begin() as s:

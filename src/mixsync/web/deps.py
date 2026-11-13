@@ -73,9 +73,9 @@ def get_box(request: Request) -> SecretBox:
 Box = Annotated[SecretBox, Depends(get_box)]
 
 
-def get_navidrome_http(request: Request) -> PoliteClient:
-    """Account links ping Navidrome as the user through it."""
-    http: PoliteClient = request.app.state.services.navidrome_http
+def get_media_server_http(request: Request) -> PoliteClient:
+    """Account links ping the media server as the user through it."""
+    http: PoliteClient = request.app.state.services.media_server_http
     return http
 
 

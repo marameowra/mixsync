@@ -378,7 +378,7 @@ async def test_a_failed_promote_stays_kept_and_the_file_stays(env: Env) -> None:
 
 def set_song_id(r: RRig, song_id: str | None) -> None:
     with r.env.sessions.begin() as s:
-        s.scalars(select(ProvisionalTrack)).one().navidrome_song_id = song_id
+        s.scalars(select(ProvisionalTrack)).one().server_song_id = song_id
 
 
 async def test_a_missing_discover_library_changes_no_hold(
@@ -422,7 +422,7 @@ async def test_an_unknown_song_is_never_expired(env: Env) -> None:
     assert r.holds()[0].expired_at is None
     with env.sessions() as s:
         err = s.scalars(select(DiscoveryPlaylist)).one().last_error or ""
-    assert "1 discovery tracks not found in Navidrome" in err
+    assert "1 discovery tracks not found on the media server" in err
     assert env.jobs(JobKind.DISCOVERY_PUSH) == []
 
 
@@ -470,7 +470,7 @@ async def test_a_song_id_navidrome_forgot_is_looked_up_again(env: Env) -> None:
     r.lib.plays = {SONG: 3}
     await r.retain(env.user_id)
     assert_promoted(r, "plays")
-    assert r.track().navidrome_song_id == SONG
+    assert r.track().server_song_id == SONG
 
 
 async def test_a_forgotten_song_that_cannot_be_found_is_not_expired(env: Env) -> None:
@@ -480,7 +480,7 @@ async def test_a_forgotten_song_that_cannot_be_found_is_not_expired(env: Env) ->
     r.lib.gone, r.lib.song = {"old"}, None
     env.clock.advance(timedelta(days=40))
     await r.retain(env.user_id)
-    assert r.track().status == "active" and r.track().navidrome_song_id is None
+    assert r.track().status == "active" and r.track().server_song_id is None
     assert r.holds()[0].expired_at is None
 
 
@@ -639,9 +639,9 @@ async def test_a_build_error_survives_unknown_songs_and_the_note_clears(env: Env
     with env.sessions.begin() as s:
         s.scalars(select(DiscoveryPlaylist)).one().last_error = None
     await r.retain(env.user_id)
-    assert "not found in Navidrome" in (error() or "")
+    assert "not found on the media server" in (error() or "")
     await r.retain(env.user_id)  # the note is ours: it is rewritten, not stacked
-    assert (error() or "").count("not found in Navidrome") == 1
+    assert (error() or "").count("not found on the media server") == 1
     r.lib.song = SONG
     await r.retain(env.user_id)
     assert error() is None

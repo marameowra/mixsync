@@ -75,7 +75,7 @@ class RecordingRef:
 
 @dataclass(frozen=True)
 class LibrarySong:
-    """A Navidrome song as one user sees it: stars and plays are per user."""
+    """A media server song as one user sees it: stars and plays are per user."""
 
     id: str
     recording_mbid: str | None

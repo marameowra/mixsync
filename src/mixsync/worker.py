@@ -52,7 +52,7 @@ from mixsync.sources.qbittorrent import Qbittorrent
 from mixsync.sources.query import queries
 from mixsync.sources.sabnzbd import Sabnzbd
 from mixsync.sources.slskd import SEARCH_LEASE, SlskdSource
-from mixsync.targets.navidrome import NavidromeTarget, NavidromeUser
+from mixsync.targets import media_server
 from mixsync.watchlist.poller import Watcher
 from mixsync.wiring import Services, build_services
 
@@ -253,12 +253,7 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
         canonical_media=tuple(settings.canonical_media),
         canonical_countries=tuple(settings.canonical_countries),
         coverart=services.coverart,
-        target=NavidromeTarget(
-            services.navidrome_http,
-            settings.navidrome_url,
-            settings.navidrome_user,
-            settings.navidrome_password,
-        ),
+        target=media_server.library_target(services.media_server_http, settings),
     )
 
 
@@ -358,12 +353,11 @@ def _new_queue(
         sessions,
         clock,
         listenbrainz,
-        lambda user, password: NavidromeUser(
-            services.navidrome_http, settings.navidrome_url, user, password
-        ),
+        media_server.user_library(services.media_server_http, settings),
         services.secret_box,
-        main_library=settings.navidrome_library,
-        discover_library=settings.navidrome_discover_library,
+        main_library=settings.media_server_library,
+        discover_library=settings.media_server_discover_library,
+        server=settings.media_server_kind,
     )
     retention = Retention(
         discovery,

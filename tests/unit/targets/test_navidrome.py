@@ -26,7 +26,7 @@ def fixture(name: str) -> httpx.Response:
 def subsonic_client(
     make: Make, handler: Callable[[httpx.Request], httpx.Response]
 ) -> SubsonicClient:
-    return SubsonicClient(make("navidrome", handler), "http://nd:4533/", "admin", PASSWORD)
+    return SubsonicClient(make("media_server", handler), "http://nd:4533/", "admin", PASSWORD)
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +42,7 @@ async def test_rescan_sends_token_auth_and_never_the_password(make_client: Make)
         return fixture("ok")
 
     await NavidromeTarget(
-        make_client("navidrome", handler), "http://nd:4533", "admin", PASSWORD
+        make_client("media_server", handler), "http://nd:4533", "admin", PASSWORD
     ).rescan()
 
     (request,) = seen
@@ -75,11 +75,11 @@ async def test_full_scan_and_ping(make_client: Make) -> None:
 
 @pytest.mark.parametrize(
     ("name", "needle"),
-    [("error_40", "on /settings (or MIXSYNC_NAVIDROME_USER"), ("error_50", "must be an admin")],
+    [("error_40", "on /settings (or MIXSYNC_MEDIA_SERVER_USER"), ("error_50", "must be an admin")],
 )
 async def test_failed_status_is_permanent(make_client: Make, name: str, needle: str) -> None:
     client = subsonic_client(make_client, lambda _r: fixture(name))
-    with pytest.raises(PermanentError, match="MIXSYNC_NAVIDROME_USER") as exc:
+    with pytest.raises(PermanentError, match="MIXSYNC_MEDIA_SERVER_USER") as exc:
         await client.start_scan()
     assert needle in str(exc.value)
     assert PASSWORD not in str(exc.value)
@@ -122,7 +122,7 @@ def err(code: int) -> httpx.Response:
 
 
 def user(make: Make, handler: Callable[[httpx.Request], httpx.Response]) -> NavidromeUser:
-    return NavidromeUser(make("navidrome", handler), "http://nd:4533", "ann", PASSWORD)
+    return NavidromeUser(make("media_server", handler), "http://nd:4533", "ann", PASSWORD)
 
 
 async def test_starred_and_play_counts(make_client: Make) -> None:
@@ -172,7 +172,7 @@ async def test_search3_and_music_folders_parse(make_client: Make) -> None:
         assert request.url.params["musicFolderId"] == "2"
         return ok(searchResult3={"song": [{"id": "a"}]})
 
-    sc = SubsonicClient(make_client("navidrome", handler), "http://nd", "ann", PASSWORD)
+    sc = SubsonicClient(make_client("media_server", handler), "http://nd", "ann", PASSWORD)
     assert await sc.get_music_folders() == [{"id": 1, "name": "music"}]
     assert await sc.search3("q", music_folder_id="2") == [{"id": "a"}]
 

@@ -31,7 +31,7 @@ from mixsync.library.importer import Importer
 log = logging.getLogger(__name__)
 
 EVERY = timedelta(days=1)
-UNKNOWN_NOTE = " discovery tracks not found in Navidrome; not expiring them"
+UNKNOWN_NOTE = " discovery tracks not found on the media server; not expiring them"
 MISSING_TAIL = "retention left every hold as it is"  # ends the missing-library note
 SOON = timedelta(days=7)
 
@@ -164,7 +164,7 @@ class Retention:
                     pl.keep_plays,
                     h.expires_at and aware(h.expires_at),
                     h.kept_at is not None,
-                    pt.navidrome_song_id,
+                    pt.server_song_id,
                     pt.title or e.get("title", ""),  # old rows: what the playlist says
                     pt.artist or e.get("artist", ""),
                 )
@@ -180,14 +180,14 @@ class Retention:
     async def _retain(self, job: JobRecord, uid: int) -> None:
         with self.d.sessions() as s:
             rows = self._rows(s, uid)
-            links, why = self.d.links(s, uid, frozenset({"navidrome"}))
+            links, why = self.d.links(s, uid, frozenset({self.d.server}))
         if not rows:
             return
         if links is None:
             return self._note(
                 rows, why
-            )  # nothing is expired or trashed without a look at Navidrome
-        lib = self.d.library_for(*links["navidrome"])
+            )  # nothing is expired or trashed without a look at the media server
+        lib = self.d.library_for(*links[self.d.server])
         reasons: dict[int, str] = {}  # hold id -> why it is kept
         try:
             folders = await lib.music_folders()
@@ -201,12 +201,12 @@ class Retention:
                 if r.song_id is None and not r.kept:
                     r.song_id = await lib.resolve(r.mbid, r.title, r.artist, folder)
             counts = await self._counts(lib, rows)
-            for r in rows:  # a cached id Navidrome no longer knows: look the song up again
+            for r in rows:  # a cached id the server no longer knows: look the song up again
                 if r.song_id and not r.kept and r.song_id not in counts:
                     r.song_id = await lib.resolve(r.mbid, r.title, r.artist, folder)
                     counts |= await self._counts(lib, [r])
         except PermanentError as e:
-            return self._note(rows, f"Navidrome: {e}")
+            return self._note(rows, f"{self.d.label}: {e}")
         for r in rows:
             if r.kept:
                 reasons[r.hold_id] = "manual"
@@ -237,7 +237,7 @@ class Retention:
                     hold.expired_at = now
                     changed.add(r.mbid)
                 pt = s.get_one(ProvisionalTrack, r.track_id)
-                pt.navidrome_song_id = r.song_id
+                pt.server_song_id = r.song_id
             for pid in {r.playlist_id for r in rows}:  # our note only; other errors stay
                 pl = s.get_one(DiscoveryPlaylist, pid)
                 ours = (pl.last_error or "").endswith((UNKNOWN_NOTE, MISSING_TAIL))
@@ -362,7 +362,7 @@ class Retention:
             return canonical_db.store(s, group, pick)
 
     def _push_after(self, mbids: set[str], job_id: int) -> None:
-        """Navidrome rescans, then each affected playlist is pushed (twice, like an import)."""
+        """The media server rescans, then each affected playlist is pushed twice, like an import."""
         now = self.d.clock.now()
         with self.d.sessions.begin() as s:
             enqueue_rescan(s, now)

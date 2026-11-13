@@ -26,10 +26,10 @@ SENT: list[httpx.Request] = []
 # per service: the form it submits, a working answer and a rejected-credentials answer
 FORMS = {
     "slskd": {"slskd_url": "http://slskd.test:5030", "slskd_api_key": "k"},
-    "navidrome": {
-        "navidrome_url": "http://nd.test:4533",
-        "navidrome_user": "admin",
-        "navidrome_password": "pw",
+    "media_server": {
+        "media_server_url": "http://nd.test:4533",
+        "media_server_user": "admin",
+        "media_server_password": "pw",
     },
     "musicbrainz": {"mb_base_url": "http://mb.test"},
     "acoustid": {"acoustid_app_key": "k"},
@@ -42,13 +42,13 @@ def _subsonic(status: str, **extra: object) -> httpx.Response:
 
 OK: dict[str, Handler] = {
     "slskd": lambda r: httpx.Response(200, json={"version": {}}),
-    "navidrome": lambda r: _subsonic("ok"),
+    "media_server": lambda r: _subsonic("ok"),
     "musicbrainz": lambda r: httpx.Response(200, json={"id": "x", "name": "United Kingdom"}),
     "acoustid": lambda r: httpx.Response(200, json={"status": "ok", "results": []}),
 }
 REJECTED: dict[str, Handler] = {
     "slskd": lambda r: httpx.Response(401),
-    "navidrome": lambda r: _subsonic("failed", error={"code": 40, "message": "Wrong user"}),
+    "media_server": lambda r: _subsonic("failed", error={"code": 40, "message": "Wrong user"}),
     "acoustid": lambda r: httpx.Response(
         400, json={"status": "error", "error": {"code": 4, "message": "invalid API key"}}
     ),
@@ -130,7 +130,7 @@ def test_unreachable_and_timeout_are_told_apart(client: TestClient, service: str
     assert "Timed out." in press(client, tok, service, **FORMS[service])
 
 
-@pytest.mark.parametrize("service", ["slskd", "navidrome", "musicbrainz"])
+@pytest.mark.parametrize("service", ["slskd", "media_server", "musicbrainz"])
 def test_bad_url_is_refused_without_a_request(client: TestClient, service: str) -> None:
     tok = login(client, "root")
     fake(client, OK[service])
@@ -173,9 +173,9 @@ def test_requests_spend_the_shared_rate_limit(
 
 def test_missing_credentials_are_named(client: TestClient) -> None:
     tok = login(client, "root")
-    fake(client, OK["navidrome"])
-    text = press(client, tok, "navidrome", navidrome_url="http://nd.test")
-    assert "Set navidrome_user and navidrome_password first." in text
+    fake(client, OK["media_server"])
+    text = press(client, tok, "media_server", media_server_url="http://nd.test")
+    assert "Set media_server_user and media_server_password first." in text
     assert SENT == []
 
 
@@ -207,7 +207,7 @@ def test_a_non_json_answer_is_a_visible_error(client: TestClient) -> None:
     assert "the answer was not JSON" in press(client, tok, "slskd", **FORMS["slskd"])
 
 
-@pytest.mark.parametrize("service", ["slskd", "navidrome", "musicbrainz"])
+@pytest.mark.parametrize("service", ["slskd", "media_server", "musicbrainz"])
 def test_a_server_error_is_not_called_unreachable(client: TestClient, service: str) -> None:
     tok = login(client, "root")
     fake(client, lambda r: httpx.Response(500))

@@ -14,7 +14,7 @@ qbittorrent: /torrents (rw, optional)
 sabnzbd:     /usenet (rw, optional)
 ```
 - `/data` is one mount holding `library/`, `discover/`, `.trash/`, `.incoming/`, `quarantine/`. Never split it ([why](../docs/architecture.md#deployment)); MixSync refuses a cross-device move.
-- Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2, name it `discover` (or set `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY`), and grant the relevant users access.
+- Discovery needs Navidrome 0.58+ (multiple libraries): add `/data/discover` as Library 2, name it `discover` (or set `MIXSYNC_MEDIA_SERVER_DISCOVER_LIBRARY`), and grant the relevant users access.
 - `/drop` (set `MIXSYNC_DROP_DIR=/drop`): album folders are identified every few minutes and imported or sent to review; imported originals move to `/data/.trash`. Files under a minute old are left alone; a rejected folder is not requeued unless its contents change.
 - `/torrents` (set `MIXSYNC_QBITTORRENT_DIR=/torrents`): qBittorrent's save path for MixSync's torrents (category `mixsync`), at the same path in both containers and apart from `/downloads`, `/data` and `/drop`. MixSync only copies from it ([ADR 0022](../docs/decisions/0022-seeding-downloads-copied-never-released.md)); qBittorrent's ratio and seed-time rules remove finished torrents, so an album takes disk twice until then.
 - `/usenet` (set `MIXSYNC_SABNZBD_DIR=/usenet`): the folder of SABnzbd's `mixsync` category, at the same path in both containers and apart from `/downloads`, `/data`, `/drop` and `/torrents`. Usenet downloads do not seed: after a verified import MixSync deletes them there (journaled), as it does in `/downloads`.
@@ -48,9 +48,10 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_DROP_DIR` | drop folder path in the container; unset = off |
 | `MIXSYNC_ADOPT_DOWNLOADS` | `true`: album folders in `/downloads` MixSync did not request are identified and imported or sent to review; a verified import deletes the originals. Default off. Files MixSync downloaded itself are never adopted |
 | `MIXSYNC_ADOPT_SETTLE_MINUTES` | idle time before a folder is adopted (default 10); raise it if peers queue the rest of a hand download longer |
-| `MIXSYNC_NAVIDROME_LIBRARY` | name of the main Navidrome library, matched ignoring case (default `Music Library`) |
-| `MIXSYNC_NAVIDROME_DISCOVER_LIBRARY` | name of the discover Navidrome library, matched ignoring case (default `discover`) |
-| `MIXSYNC_NAVIDROME_URL`, `_USER`, `_PASSWORD` | Navidrome base URL and an **admin** account (`startScan` needs admin) |
+| `MIXSYNC_MEDIA_SERVER_KIND` | the media server mixsync hands off to: `navidrome` (default, the only one today) |
+| `MIXSYNC_MEDIA_SERVER_LIBRARY` | name of the main library on the media server, matched ignoring case (default `Music Library`) |
+| `MIXSYNC_MEDIA_SERVER_DISCOVER_LIBRARY` | name of the discover library on the media server, matched ignoring case (default `discover`) |
+| `MIXSYNC_MEDIA_SERVER_URL`, `_USER`, `_PASSWORD` | media server base URL and an **admin** account (rescans need admin). The older `MIXSYNC_NAVIDROME_*` names still work when the new one is unset |
 | `PUID`, `PGID` | file ownership |
 | `FORWARDED_ALLOW_IPS` | proxy addresses uvicorn trusts for `X-Forwarded-*`; default `127.0.0.1,::1` |
 
@@ -94,7 +95,7 @@ existing users, settings, follows, playlists, and links are skipped, never overw
 Repeated imports are safe. This transfers settings, not music, request history, or the
 operation journal; retain normal database and host backups. Mirrored and smart playlist definitions are exported too, plus the stored track list of
 Spotify-file mirrors (written on import only if absent, so the mirror syncs without a
-re-upload); their runtime state (entries, Navidrome playlist ids, schedules) is rebuilt after the worker
+re-upload); their runtime state (entries, media server playlist ids, schedules) is rebuilt after the worker
 restarts (or on Sync now / Rebuild now).
 If app settings were added, run
 `docker compose -f deploy/compose.yml restart mixsync-web mixsync-worker` to reload their

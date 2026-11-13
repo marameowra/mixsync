@@ -142,7 +142,7 @@ def deny(req: Request, reason: str) -> None:
 
 def hold_imports(s: Session, now: datetime, batch: str) -> None:
     """A discover import landed: start the holds on its tracks' retention clock and queue a push
-    of each playlist that wants them (after the rescan that makes Navidrome see the files)."""
+    of each playlist that wants them (after the rescan that shows the media server the files)."""
     for pt in s.scalars(
         select(ProvisionalTrack).where(
             ProvisionalTrack.batch_id == batch, ProvisionalTrack.status == "active"
@@ -157,7 +157,7 @@ def hold_imports(s: Session, now: datetime, batch: str) -> None:
             hold.provisional_track_id = hold.provisional_track_id or pt.id
             if hold.expires_at is None:
                 hold.expires_at = now + timedelta(days=pl.retention_days)
-            # a second, later push for when Navidrome's scan was still running at the first
+            # a second, later push for when the media server's scan was still running at the first
             for suffix, delay in (("", 2 * RESCAN_DELAY), (":late", LATE_PUSH)):
                 enqueue_in(
                     s,

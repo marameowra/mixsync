@@ -1,5 +1,6 @@
 """The discovery playlist generator: build a pick list from ListenBrainz, ask for what is not
-owned, and push what is to the user's Navidrome. Retention of the provisional tracks is slice 7."""
+owned, and push what is to the user's media server. Retention of the provisional tracks is
+slice 7."""
 
 import logging
 import random
@@ -15,6 +16,7 @@ from mixsync.acquire import lifecycle
 from mixsync.acquire.pipeline import Handler
 from mixsync.acquire.requests import create_request
 from mixsync.core.clock import Clock, aware
+from mixsync.core.config import MEDIA_SERVER_KINDS
 from mixsync.core.errors import AuthError, PermanentError
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.protocols import HistorySource, UserLibrary
@@ -31,12 +33,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SOURCES: list[dict[str, Any]] = [{"type": "weekly_exploration"}]
 BUILD_NOW_GAP = timedelta(hours=1)  # a button must not turn into a ListenBrainz poll loop
-NO_LINKS = "link ListenBrainz/Navidrome on /account"
+NO_LINKS = "link ListenBrainz and your media server on /account"
 JITTER_CAP = timedelta(hours=6)  # "weekly" stays weekly: up to 10% of the cadence, this at most
-LINK_NAMES = {"listenbrainz": "ListenBrainz", "navidrome": "Navidrome"}
-# last_error prefixes a push writes; a good push clears only these, never a build's error
-PUSH_ERRORS = ("Navidrome: ", "Navidrome needs relinking", "the '")
-LibraryFor = Callable[[str, str], UserLibrary]  # (Navidrome username, password)
+LINK_NAMES = {"listenbrainz": "ListenBrainz", **MEDIA_SERVER_KINDS}
+LibraryFor = Callable[[str, str], UserLibrary]  # (media server username, password)
 
 
 def waiting(playlist_id: int) -> Select[Any]:
@@ -108,12 +108,16 @@ class Discovery:
         library_for: LibraryFor,
         box: SecretBox,
         rng: Rng = random.uniform,
-        main_library: str = "Music Library",  # Navidrome library names; None found: unrestricted
+        main_library: str = "Music Library",  # media server library names; None found: unrestricted
         discover_library: str = "discover",  # the library over /data/discover
+        server: str = "navidrome",  # the media server kind: its UserLink.service
     ) -> None:
         self.sessions, self.clock, self.history = sessions, clock, history
         self.library_for, self.box, self.rng = library_for, box, rng
         self.main_library, self.discover_library = main_library, discover_library
+        self.server, self.label = server, MEDIA_SERVER_KINDS[server]
+        # last_error prefixes a push writes; a good push clears only these, never a build's error
+        self.push_errors = (f"{self.label}: ", f"{self.label} needs relinking", "the '")
 
     def handlers(self) -> dict[JobKind, Handler]:
         return {JobKind.DISCOVERY_BUILD: self.build, JobKind.DISCOVERY_PUSH: self.push}
@@ -149,9 +153,10 @@ class Discovery:
         self,
         s: Session,
         user_id: int,
-        need: frozenset[str] = frozenset({"listenbrainz", "navidrome"}),
+        need: frozenset[str] | None = None,  # default: ListenBrainz and the media server
     ) -> tuple[dict[str, tuple[str, str]] | None, str]:
         """(service -> (external username, secret), "") when `need` links work, else (None, why)."""
+        need = need or frozenset({"listenbrainz", self.server})
         out: dict[str, tuple[str, str]] = {}
         relink: list[str] = []
         for link in s.scalars(select(UserLink).where(UserLink.user_id == user_id)):
@@ -386,14 +391,14 @@ class Discovery:
 
     @staticmethod
     def missing_note(wanted: list[str], folders: dict[str, str], then: str) -> str | None:
-        """One message for every wanted library the user's Navidrome account cannot see."""
+        """One message for every wanted library the user's media server account cannot see."""
         missing = [f"'{n}'" for n in wanted if Discovery.folder_id(folders, n) is None]
         if not missing:
             return None
         sees = ", ".join(folders) or "no libraries"
         return (
             f"the {' and '.join(missing)} {'library is' if len(missing) == 1 else 'libraries are'}"
-            f" not visible to your Navidrome account (it sees: {sees}); {then}"
+            f" not visible to your media server account (it sees: {sees}); {then}"
         )
 
     async def push(self, job: JobRecord) -> None:
@@ -405,7 +410,7 @@ class Discovery:
             links, why = self.links(s, pl.user_id)
             if links is None:
                 return self._note(pid, why)
-            entries, name, existing = list(pl.entries), pl.name, pl.navidrome_playlist_id
+            entries, name, existing = list(pl.entries), pl.name, pl.server_playlist_id
             mbids: list[str] = [e["recording_mbid"] for e in entries]
             main = {
                 m
@@ -422,7 +427,7 @@ class Discovery:
                     )
                 )
             )
-        lib = self.library_for(*links["navidrome"])
+        lib = self.library_for(*links[self.server])
         note = None
         ids: list[str] = []
         try:
@@ -442,14 +447,16 @@ class Discovery:
                 where = main_folder if m in main else folder
                 song = await lib.resolve(m, e["title"], e["artist"], where)
                 if song is None:
-                    log.info("discovery: %s is not in Navidrome yet; a later push adds it", m)
+                    log.info(
+                        "discovery: %s is not on the media server yet; a later push adds it", m
+                    )
                 elif song not in ids:
                     ids.append(song)
             new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing) if ids else None
         except PermanentError as e:  # AuthError, not authorized: retrying would not help
-            return self._note(pid, f"Navidrome: {e}")
+            return self._note(pid, f"{self.label}: {e}")
         with self.sessions.begin() as s:
             if (pl := s.get(DiscoveryPlaylist, pid)) is not None:
-                if note or (pl.last_error or "").startswith(PUSH_ERRORS):
+                if note or (pl.last_error or "").startswith(self.push_errors):
                     pl.last_error = note  # a good push clears what an earlier one reported
-                pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id
+                pl.server_playlist_id = new_id or pl.server_playlist_id

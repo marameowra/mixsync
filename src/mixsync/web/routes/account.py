@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from mixsync.acquire.requests import auto_accept_cap, profile_for, source_rows
 from mixsync.core.capabilities import Capability
+from mixsync.core.config import MEDIA_SERVER_KINDS
 from mixsync.core.errors import PermanentError, TransientError
 from mixsync.core.jobs import WORKER_STALE_AFTER
 from mixsync.core.matching import Profile
@@ -25,7 +26,7 @@ from mixsync.match.profiles import BALANCED, LOOSE, STRICT, confidence, from_con
 from mixsync.metadata.discogs import DiscogsClient
 from mixsync.ratelimit.client import PoliteClient
 from mixsync.sources import DOWNLOAD_SOURCES, prowlarr_protocols
-from mixsync.targets.subsonic import SubsonicClient
+from mixsync.targets import media_server
 from mixsync.web.deps import (
     SESSION_COOKIE,
     Box,
@@ -33,14 +34,13 @@ from mixsync.web.deps import (
     Db,
     get_discogs,
     get_listenbrainz_http,
-    get_navidrome_http,
+    get_media_server_http,
     require,
 )
 from mixsync.web.routes.auth import admit, forget, refund
 from mixsync.web.templating import templates
 
 router = APIRouter(prefix="/account")
-SERVICES = ("listenbrainz", "navidrome", "discogs")
 PRESETS = (STRICT, BALANCED, LOOSE)
 Admin = Annotated[AuthUser, Depends(require(Capability.admin))]
 
@@ -57,7 +57,7 @@ class LinkValidator(Protocol):
         TransientError when ListenBrainz can't be reached."""
         ...
 
-    async def navidrome_ping(self, username: str, password: str) -> Ping: ...
+    async def media_server_ping(self, username: str, password: str) -> Ping: ...
 
     async def discogs_username(self, token: str) -> str | None:
         """The username the token belongs to, or None if Discogs rejects it. Raises
@@ -67,9 +67,9 @@ class LinkValidator(Protocol):
 
 class DefaultValidator:
     def __init__(
-        self, http: PoliteClient, navidrome_url: str, lb: ListenBrainzClient, discogs: DiscogsClient
+        self, http: PoliteClient, server_url: str, lb: ListenBrainzClient, discogs: DiscogsClient
     ) -> None:
-        self._http, self._url, self._lb, self._discogs = http, navidrome_url, lb, discogs
+        self._http, self._url, self._lb, self._discogs = http, server_url, lb, discogs
 
     async def discogs_username(self, token: str) -> str | None:
         return await self._discogs.username(token)  # rejection is None; the text is not shown
@@ -80,9 +80,9 @@ class DefaultValidator:
         except PermanentError:
             return None  # the exception text is not shown
 
-    async def navidrome_ping(self, username: str, password: str) -> Ping:
+    async def media_server_ping(self, username: str, password: str) -> Ping:
         try:
-            await SubsonicClient(self._http, self._url, username, password).ping()
+            await media_server.ping(self._http, self._url, username, password)
         except TransientError:
             return Ping.unreachable
         except PermanentError:
@@ -92,13 +92,13 @@ class DefaultValidator:
 
 def get_validator(
     request: Request,
-    http: Annotated[PoliteClient, Depends(get_navidrome_http)],
+    http: Annotated[PoliteClient, Depends(get_media_server_http)],
     lb_http: Annotated[PoliteClient, Depends(get_listenbrainz_http)],
     discogs: Annotated[DiscogsClient, Depends(get_discogs)],
 ) -> LinkValidator:
     v: LinkValidator | None = getattr(request.app.state, "link_validator", None)
     return v or DefaultValidator(
-        http, request.app.state.settings.navidrome_url, ListenBrainzClient(lb_http), discogs
+        http, request.app.state.settings.media_server_url, ListenBrainzClient(lb_http), discogs
     )
 
 
@@ -114,7 +114,8 @@ def get_link(s: Session, user_id: int, service: str) -> UserLink | None:
 
 def _service(request: Request, service: str, *, linking: bool = True) -> str:
     """`linking` False is for removing a stored link, which stays possible with Discogs off."""
-    if service not in SERVICES or (
+    kind = request.app.state.settings.media_server_kind
+    if service not in ("listenbrainz", kind, "discogs") or (
         linking and service == "discogs" and not request.app.state.settings.discogs_suggestions
     ):
         raise HTTPException(404, "no such service")
@@ -130,6 +131,7 @@ def _page(
     status: int = 400,
 ) -> HTMLResponse:
     discogs = request.app.state.settings.discogs_suggestions
+    kind = request.app.state.settings.media_server_kind
     by_service = {
         link.service: link
         for link in user_links(s, box, user.id)
@@ -149,6 +151,7 @@ def _page(
         "links": by_service,
         "error": error,
         "discogs": discogs,
+        "server": (kind, MEDIA_SERVER_KINDS[kind]),  # (UserLink.service, label)
         "spotify_on": bool(request.app.state.services.settings.spotify_client_id),
         "spotify_redirect": str(request.url_for("spotify_callback")),
         "auto_accept": confidence(profile.auto_accept_max),
@@ -374,8 +377,9 @@ async def save(
     username: Annotated[str, Form()] = "",
 ) -> Response:
     _service(request, service)
-    # a Navidrome password may legitimately start or end with spaces; the rest are identifiers
-    secret = secret if service == "navidrome" else secret.strip()
+    # a media server password may legitimately start or end with spaces; the rest are identifiers
+    kind = request.app.state.settings.media_server_kind
+    secret = secret if service == kind else secret.strip()
     username = username.strip()
     db.commit()  # don't hold the SQLite write lock across the outbound call
     name, msg, status = "", "That is too long.", 400
@@ -395,20 +399,21 @@ async def save(
             except TransientError:
                 name, msg = "", "Couldn't reach Discogs; try again."
         else:
-            name, msg = "", "Navidrome did not accept that username and password."
-            keys = (("navidrome-user", str(user.id)), ("navidrome-target", username.lower()))
+            label = MEDIA_SERVER_KINDS[kind]
+            name, msg = "", f"{label} did not accept that username and password."
+            keys = (("media-server-user", str(user.id)), ("media-server-target", username.lower()))
             # shortcut: shares the login limiter's in-process state and 10 per 15 minutes policy;
             # a rejected guess counts against the user and the target; a link clears the target.
             if username and secret and not admit(*keys):
                 msg, status = "Too many attempts, try again later.", 429
             elif username and secret:
-                match await validator.navidrome_ping(username, secret):
+                match await validator.media_server_ping(username, secret):
                     case Ping.ok:
                         name = username
                         refund(keys[0])  # a success is not a failed guess
                         forget(keys[1])
                     case Ping.unreachable:
-                        msg = "Couldn't reach Navidrome; try again."
+                        msg = f"Couldn't reach {label}; try again."
                         refund(*keys)
                     case Ping.rejected:
                         pass

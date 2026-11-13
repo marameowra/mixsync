@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # the fields library/paths.render fills in; tests/unit/web/test_settings.py checks they match
@@ -15,10 +15,29 @@ PATH_FIELDS = {
     "title": "t",
     "genre": "g",
 }
+# ADR 0024: kind -> the name users see; each kind's adapters are built in targets/media_server.py
+MEDIA_SERVER_KINDS = {"navidrome": "Navidrome"}
+# settings renamed in #440 still read their old variable, after the new one
+ENV_ALIASES = {
+    f"media_server_{n}": f"MIXSYNC_NAVIDROME_{n.upper()}"
+    for n in ("url", "user", "password", "library", "discover_library")
+}
+
+
+def _env(name: str) -> AliasChoices:
+    return AliasChoices(f"MIXSYNC_{name.upper()}", ENV_ALIASES[name])
+
+
+def env_names(name: str) -> tuple[str, ...]:
+    """The environment variables a setting reads, preferred first."""
+    return (f"MIXSYNC_{name.upper()}", *([ENV_ALIASES[name]] if name in ENV_ALIASES else []))
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MIXSYNC_", hide_input_in_errors=True)
+    # populate_by_name: an aliased field still takes its own name as a constructor keyword
+    model_config = SettingsConfigDict(
+        env_prefix="MIXSYNC_", hide_input_in_errors=True, populate_by_name=True
+    )
 
     database_url: str = Field(
         default="sqlite:////config/mixsync.db",
@@ -110,18 +129,34 @@ class Settings(BaseSettings):
         le=1,
         description="Share (0 to 1) of total download throughput below which a transfer is slow.",
     )
-    navidrome_url: str = Field(
-        default="http://navidrome:4533", description="Base URL of the Navidrome server."
+    media_server_kind: str = Field(
+        default="navidrome",
+        description="The media server mixsync hands off to: navidrome.",
     )
-    navidrome_user: str = Field(
-        default="", description="Navidrome admin username; startScan needs an admin."
+    media_server_url: str = Field(
+        default="http://navidrome:4533",
+        validation_alias=_env("media_server_url"),
+        description="Base URL of the media server.",
     )
-    navidrome_password: str = Field(default="", description="Password of the Navidrome user.")
-    navidrome_library: str = Field(
-        default="Music Library", description="Name of the main library in Navidrome."
+    media_server_user: str = Field(
+        default="",
+        validation_alias=_env("media_server_user"),
+        description="Media server admin username; library rescans need an admin.",
     )
-    navidrome_discover_library: str = Field(
-        default="discover", description="Name of the Navidrome library over /data/discover."
+    media_server_password: str = Field(
+        default="",
+        validation_alias=_env("media_server_password"),
+        description="Password of the media server user.",
+    )
+    media_server_library: str = Field(
+        default="Music Library",
+        validation_alias=_env("media_server_library"),
+        description="Name of the main library on the media server.",
+    )
+    media_server_discover_library: str = Field(
+        default="discover",
+        validation_alias=_env("media_server_discover_library"),
+        description="Name of the media server library over /data/discover.",
     )
     backup_dir: Path | None = Field(
         default=None,
@@ -180,6 +215,13 @@ class Settings(BaseSettings):
     @classmethod
     def _upper_level(cls, v: object) -> object:
         return v.upper() if isinstance(v, str) else v
+
+    @field_validator("media_server_kind")
+    @classmethod
+    def _known_kind(cls, v: str) -> str:
+        if v not in MEDIA_SERVER_KINDS:
+            raise ValueError(f"media_server_kind must be one of: {', '.join(MEDIA_SERVER_KINDS)}")
+        return v
 
     @field_validator("database_url")
     @classmethod

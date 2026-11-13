@@ -2,6 +2,6 @@
 {% block title %}Delete playlist - MixSync{% endblock %}
 {% block content %}
 <h1>Delete {{ pl.name }}?</h1>
-<p>No files are deleted. Its tracks in discover keep their retention clock and expire to .trash as usual. The MixSync playlist already in Navidrome is left as it is; delete it there if you do not want it.</p>
+<p>No files are deleted. Its tracks in discover keep their retention clock and expire to .trash as usual. The MixSync playlist already on the media server is left as it is; delete it there if you do not want it.</p>
 <form method="post" action="/discover/{{ pl.id }}/delete">{{ forms.csrf() }}<button type="submit" class="danger">Delete playlist</button> <a href="/discover">Cancel</a></form>
 {% endblock %}

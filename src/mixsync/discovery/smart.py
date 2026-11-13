@@ -1,6 +1,7 @@
 """Smart playlists: rules over the owned library (CONTEXT.md), rebuilt on the playlist's cadence
-and pushed to Navidrome, replacing the playlist there. Nothing here requests a track or touches
-a file: a track is a candidate only if it has a `tracks` row and Navidrome lists it."""
+and pushed to the media server, replacing the playlist there. Nothing here requests a track or
+touches a file: a track is a candidate only if it has a `tracks` row and the media server lists
+it."""
 
 import logging
 from datetime import datetime, timedelta
@@ -23,7 +24,7 @@ from mixsync.watchlist.poller import Rng
 log = logging.getLogger(__name__)
 
 SORTS = {"random": "Random", "added": "Recently added first", "year": "Year, oldest first"}
-NONE_FOUND = "Navidrome lists none of the owned tracks; skipped push"
+NONE_FOUND = "the media server lists none of the owned tracks; skipped push"
 Owned = tuple[str, str | None, datetime]  # (recording MBID, year tag, imported_at)
 INTS = ("year_from", "year_to", "added_days", "unplayed_days")
 
@@ -113,7 +114,7 @@ def pick(
     now: datetime,
     rng: Rng,
 ) -> list[LibrarySong]:
-    """The owned tracks Navidrome lists that meet every rule, sorted, at most `size`."""
+    """The owned tracks the media server lists that meet every rule, sorted, at most `size`."""
     by_mbid: dict[str, LibrarySong] = {}
     for song in songs:
         if song.recording_mbid:
@@ -123,7 +124,7 @@ def pick(
         song = by_mbid.get(mbid)
         if song is None or mbid in hits:
             continue
-        year = int(tag) if tag and tag.isdigit() else song.year  # the file's tag, else Navidrome's
+        year = int(tag) if tag and tag.isdigit() else song.year  # the file's tag, else the server's
         if _matches(rules, song, year, aware(added), now):
             hits[mbid] = (song, year, aware(added))
     rows = list(hits.values())
@@ -183,9 +184,9 @@ class Smart:
             pl = s.get(SmartPlaylist, pid)
             if pl is None:
                 return
-            links, why = d.links(s, pl.user_id, frozenset({"navidrome"}))
+            links, why = d.links(s, pl.user_id, frozenset({d.server}))
             rules, size, sort = dict(pl.rules), pl.size, pl.sort
-            name, existing = pl.name, pl.navidrome_playlist_id
+            name, existing = pl.name, pl.server_playlist_id
             owned: list[Owned] = [
                 (m, y, t)
                 for m, y, t in s.execute(
@@ -200,14 +201,14 @@ class Smart:
         if links is None:
             note: str | None = why
         else:
-            lib = d.library_for(*links["navidrome"])
+            lib = d.library_for(*links[d.server])
             try:
                 folders = await lib.music_folders()
                 note = d.missing_note([d.main_library], folders, "using all libraries")
                 songs = await lib.library_songs(d.folder_id(folders, d.main_library))
                 listed = {song.recording_mbid for song in songs}
                 if owned and not any(m in listed for m, _, _ in owned):
-                    note = NONE_FOUND  # Navidrome not scanned yet: keep the last playlist
+                    note = NONE_FOUND  # not scanned yet: keep the last playlist
                 else:
                     now = d.clock.now()
                     picked = pick(owned, songs, rules, size, sort, now, d.rng)
@@ -215,7 +216,7 @@ class Smart:
                         ids = [song.id for song in picked]
                         new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing)
             except PermanentError as e:  # AuthError, not authorized: retrying would not help
-                note = f"Navidrome: {e}"
+                note = f"{d.label}: {e}"
         with d.sessions.begin() as s:
             pl = s.get(SmartPlaylist, pid)
             if pl is None:
@@ -229,5 +230,5 @@ class Smart:
                 ]
                 pl.last_built_at = now
                 log.info("smart: playlist %s: %d tracks", pid, len(picked))
-            pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id
+            pl.server_playlist_id = new_id or pl.server_playlist_id
             self._schedule_next(s, now, pl, job.id)

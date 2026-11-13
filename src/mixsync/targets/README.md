@@ -4,7 +4,7 @@
 Adapters for the servers that serve the library. v1 supports Navidrome through the Subsonic API; Jellyfin, Plex and Music Assistant come later.
 
 ## Owns / does not own
-- **Owns:** `NavidromeTarget` (a `LibraryTarget`), the minimal typed Subsonic client (`subsonic.py`), rescans, playlist push, stars and play counts.
+- **Owns:** `media_server.py` (the one place a `media_server_kind` becomes adapters), `NavidromeTarget` (a `LibraryTarget`), the minimal typed Subsonic client (`subsonic.py`), rescans, playlist push, stars and play counts.
 - **Does not own:** streaming or playback, or the files themselves.
 
 ## Rules / invariants

@@ -1,9 +1,9 @@
 """Mirrored playlists: a user's read-only copy of a playlist curated elsewhere (CONTEXT.md).
 
 A sync fetches the upstream list, resolves each track to a recording, stores the list in upstream
-order and pushes the owned tracks to Navidrome, replacing the playlist there. Missing tracks are
-requested only when the owner confirms (`request_missing`). Nothing here moves or deletes a file:
-a track that leaves upstream leaves the playlist only.
+order and pushes the owned tracks to the media server, replacing the playlist there. Missing
+tracks are requested only when the owner confirms (`request_missing`). Nothing here moves or
+deletes a file: a track that leaves upstream leaves the playlist only.
 
 Upstream adapters (Spotify file, ListenBrainz loves) implement `Upstream`, are registered by
 `upstream_kind` in the worker, and make a user's mirror with `create`."""
@@ -35,7 +35,7 @@ SOURCE = "playlist"  # Request.source of a confirmed missing track
 UNRESOLVED, OWNED, MISSING = "unresolved", "owned", "missing"
 REQUESTED, NO_RELEASE = "requested", "no known release"
 EMPTY_UPSTREAM = "upstream returned no tracks; kept the last list"
-NONE_FOUND = "Navidrome found none of the owned tracks; skipped push"
+NONE_FOUND = "the media server found none of the owned tracks; skipped push"
 LOVES = "listenbrainz_loves"
 SPOTIFY_API = "spotify_api"
 # kinds whose tracks never become a Request (Spotify's terms, docs/design/services-etiquette.md)
@@ -317,9 +317,9 @@ class Mirror:
                 if fresh:
                     n = request_missing(s, self.discovery.clock.now(), pl, fresh)
                     log.info("mirror: playlist %s: auto-requested %d new tracks", pid, n)
-            links, why = self.discovery.links(s, uid, frozenset({"navidrome"}))
+            links, why = self.discovery.links(s, uid, frozenset({self.discovery.server}))
             pl.last_error = why or None
-            name, existing = pl.name, pl.navidrome_playlist_id
+            name, existing = pl.name, pl.server_playlist_id
             self._schedule_next(s, self.discovery.clock.now(), pl, job.id)
             mbids = [e["recording_mbid"] for e in entries if e["recording_mbid"]]
             main = {
@@ -331,7 +331,7 @@ class Mirror:
             }
         if links is None:
             return
-        await self._push(pid, links["navidrome"], name, existing, entries, main)
+        await self._push(pid, links[self.discovery.server], name, existing, entries, main)
 
     async def _push(
         self,
@@ -342,7 +342,7 @@ class Mirror:
         entries: list[dict[str, Any]],
         main: set[str],
     ) -> None:
-        """Replace the Navidrome playlist with the owned tracks, in upstream order."""
+        """Replace the media server playlist with the owned tracks, in upstream order."""
         d = self.discovery
         lib = d.library_for(*login)
         try:
@@ -359,15 +359,15 @@ class Mirror:
                 song = await lib.resolve(m, e["rec_title"], e["rec_artist"], folder)
                 if song is not None and song not in ids:
                     ids.append(song)
-            if main and not ids:  # Navidrome not scanned yet, or its search is off: keep it
+            if main and not ids:  # not scanned yet, or its search is off: keep it
                 note, new_id = NONE_FOUND, None
             elif ids or existing:  # no owned tracks empties the playlist mixsync made
                 new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing)
             else:
                 new_id = None
         except PermanentError as e:  # AuthError, not authorized: retrying would not help
-            note, new_id = f"Navidrome: {e}", None
+            note, new_id = f"{d.label}: {e}", None
         with d.sessions.begin() as s:
             if (pl := s.get(MirroredPlaylist, pid)) is not None:
                 pl.last_error = note
-                pl.navidrome_playlist_id = new_id or pl.navidrome_playlist_id
+                pl.server_playlist_id = new_id or pl.server_playlist_id

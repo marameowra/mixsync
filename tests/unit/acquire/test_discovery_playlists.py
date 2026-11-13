@@ -377,14 +377,14 @@ async def test_push_replaces_contents_recreates_and_restricts_provisional(rig: R
     assert (
         rig.lib.playlists == {"pl1": ["s1", "s2"]} and rig.lib.names["pl1"] == "MixSync: Discovery"
     )
-    assert rig.pl(pid).navidrome_playlist_id == "pl1"
+    assert rig.pl(pid).server_playlist_id == "pl1"
     assert rig.lib.credentials[-1] == ("navidrome-name", "navidrome-secret")
     rig.lib.disc = {}  # song 2 went away: contents are replaced, not appended
     await rig.disc.push(_record(rig, pid))
     assert rig.lib.playlists == {"pl1": ["s1"]}
     rig.lib.playlists.clear()  # the user deleted it in Navidrome
     await rig.disc.push(_record(rig, pid))
-    assert rig.lib.playlists == {"pl1": ["s1"]} and rig.pl(pid).navidrome_playlist_id == "pl1"
+    assert rig.lib.playlists == {"pl1": ["s1"]} and rig.pl(pid).server_playlist_id == "pl1"
 
 
 def _record(rig: Rig, pid: int) -> JobRecord:

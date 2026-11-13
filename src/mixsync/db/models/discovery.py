@@ -42,8 +42,8 @@ class ProvisionalTrack(TimestampMixin, Base):
     batch_id: Mapped[str] = mapped_column(String(64))
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), default="active")  # active/promoted/trashed
-    navidrome_song_id: Mapped[str | None] = mapped_column(String(64))
-    title: Mapped[str | None] = mapped_column(Text)  # to find it in Navidrome later
+    server_song_id: Mapped[str | None] = mapped_column(String(64))
+    title: Mapped[str | None] = mapped_column(Text)  # to find it on the media server later
     artist: Mapped[str | None] = mapped_column(Text)
     promoted_path: Mapped[str | None] = mapped_column(Text)
     trash_path: Mapped[str | None] = mapped_column(Text)
@@ -65,7 +65,7 @@ class DiscoveryPlaylist(TimestampMixin, Base):
     cadence_days: Mapped[int] = mapped_column(Integer, default=7)
     retention_days: Mapped[int] = mapped_column(Integer, default=30)  # slice 7 reads these two
     keep_plays: Mapped[int] = mapped_column(Integer, default=3)
-    navidrome_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    server_playlist_id: Mapped[str | None] = mapped_column(String(64))
     next_build_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # the last build's picks: [{"recording_mbid", "artist", "title"}], in playlist order
@@ -117,7 +117,7 @@ class MirroredPlaylist(TimestampMixin, Base):
     # [{"artist", "title", "isrc", "recording_mbid", "release_mbid"}]; no recording_mbid is an
     # unresolved track
     entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
-    navidrome_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    server_playlist_id: Mapped[str | None] = mapped_column(String(64))
     next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
@@ -145,7 +145,7 @@ class SmartPlaylist(TimestampMixin, Base):
     size: Mapped[int] = mapped_column(Integer, default=50)
     sort: Mapped[str] = mapped_column(String(16), default="random")  # random | added | year
     cadence_days: Mapped[int] = mapped_column(Integer, default=1)
-    navidrome_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    server_playlist_id: Mapped[str | None] = mapped_column(String(64))
     next_build_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # the last build's tracks: [{"recording_mbid", "artist", "title"}], in playlist order

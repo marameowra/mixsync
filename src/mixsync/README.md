@@ -10,7 +10,7 @@ The Python package. Every subfolder has a README; read it before adding code to 
 | [ratelimit](ratelimit/README.md) | foundation | Per-service token buckets, HTTP cache, User-Agent |
 | [sources](sources/README.md) | adapter | `DownloadSource` implementations (slskd) |
 | [metadata](metadata/README.md) | adapter | MusicBrainz, AcoustID, Cover Art Archive clients |
-| [targets](targets/README.md) | adapter | `LibraryTarget` implementations (Navidrome) |
+| [targets](targets/README.md) | adapter | media server adapters (`LibraryTarget`, `UserLibrary`): Navidrome; `media_server.py` picks them by kind |
 | [match](match/README.md) | logic | Feature extraction, scoring, bands, vetoes |
 | [library](library/README.md) | logic | Paths, safe file ops, tags, canonical releases, importer |
 | [acquire](acquire/README.md) | service | The request pipeline, merge, migration, drop folder, re-check |

@@ -34,12 +34,12 @@ def preview_env(root: Path) -> dict[str, str]:
         # cover art URLs are not settings; the socket guard covers them)
         "MIXSYNC_MB_BASE_URL": DEAD_URL,
         "MIXSYNC_SLSKD_URL": DEAD_URL,
-        "MIXSYNC_NAVIDROME_URL": DEAD_URL,
+        "MIXSYNC_MEDIA_SERVER_URL": DEAD_URL,
         "MIXSYNC_SLSKD_API_KEY": "",
         "MIXSYNC_ACOUSTID_APP_KEY": "",
         "MIXSYNC_ACOUSTID_USER_KEY": "",
-        "MIXSYNC_NAVIDROME_USER": "",
-        "MIXSYNC_NAVIDROME_PASSWORD": "",
+        "MIXSYNC_MEDIA_SERVER_USER": "",
+        "MIXSYNC_MEDIA_SERVER_PASSWORD": "",
     }
 
 

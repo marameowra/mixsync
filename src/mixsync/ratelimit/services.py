@@ -33,7 +33,7 @@ def limits(service: str, settings: Settings) -> ServiceLimits:
         "prowlarr": ServiceLimits(0.5),  # each search fans out to every indexer: 1 req / 2 s
         "qbittorrent": ServiceLimits(None),  # local, like slskd
         "sabnzbd": ServiceLimits(None),  # local, like slskd
-        "navidrome": ServiceLimits(None),
+        "media_server": ServiceLimits(None),  # local, like slskd
     }
     return table[service]
 
