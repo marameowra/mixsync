@@ -403,14 +403,16 @@ def test_0043_requests_never_reuse_an_orphaned_id(settings: Settings) -> None:
                 f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
             )
         )
-        for rid in (1, 2):
+        for _ in range(2):  # ids 1 and 2, assigned by the database
             c.execute(
                 text(
-                    "INSERT INTO requests (id, user_id, release_mbid, artist, album, tried,"
-                    f" no_results_attempts, status, created_at, updated_at)"
-                    f" VALUES ({rid}, 1, 'm', '', '', '[]', 0, 'done', {day}, {day})"
+                    "INSERT INTO requests (user_id, release_mbid, artist, album, tried,"
+                    " no_results_attempts, status, created_at, updated_at)"
+                    f" VALUES (1, 'm', '', '', '[]', 0, 'done', {day}, {day})"
                 )
             )
+        if c.dialect.name == "postgresql":  # requests 3-9 existed once: the sequence passed them
+            c.execute(text("SELECT setval('requests_id_seq', 9)"))
         # a follow hit links request 1: the table rebuild must not trip its foreign key
         c.execute(
             text(
