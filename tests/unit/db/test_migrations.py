@@ -20,7 +20,7 @@ def _version(settings: Settings) -> str | None:
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
     assert _version(settings) == "0044_media_server_names"
-    downgrade("-1")  # the chain runs 0039 -> 0040 -> 0041 -> 0042 -> 0043 -> 0044, one step at a time
+    downgrade("-1")  # the chain runs 0039 -> ... -> 0044, one step at a time
     assert _version(settings) == "0043_requests_autoincrement"
     downgrade("-1")
     assert _version(settings) == "0042_mirrored_spotify_import"
