@@ -106,6 +106,14 @@ class Settings(BaseSettings):
         default=None,
         description="Save path of the mixsync category in qBittorrent: seeding, copied only.",
     )
+    torrent_pack_folders: bool = Field(
+        default=False,
+        description=(
+            "Download single albums from packs: take one album folder from a multi-album"
+            " torrent. Some private trackers may count a partial download against hit-and-run"
+            " or ratio rules."
+        ),
+    )
     sabnzbd_url: str = Field(default="", description="Base URL of SABnzbd.")
     sabnzbd_api_key: str = Field(default="", description="API key for SABnzbd.")
     sabnzbd_dir: Path | None = Field(

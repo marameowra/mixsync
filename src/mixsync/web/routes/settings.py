@@ -62,6 +62,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "qbittorrent_url",
         "qbittorrent_username",
         "sabnzbd_url",
+        "torrent_pack_folders",
     ),
     "Downloads": (
         "max_concurrent_downloads",

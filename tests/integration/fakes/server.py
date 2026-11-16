@@ -1,14 +1,18 @@
-"""Fake slskd, MusicBrainz, AcoustID and Cover Art Archive for the compose suite (ADR 0016).
+"""Fake slskd, Prowlarr, qBittorrent, MusicBrainz, AcoustID and Cover Art Archive for the
+compose suite (ADR 0016).
 
-One HTTP server on :5030. mixsync reaches it as slskd (MIXSYNC_SLSKD_URL), as MusicBrainz
-(MIXSYNC_MB_BASE_URL) and as AcoustID and the Cover Art Archive
-(MIXSYNC_TEST_ONLY_FAKE_SERVICES_URL). It serves the canned albums in ALBUMS: a search returns
-one peer per matching album, an enqueue copies that album's generated FLACs into the downloads
-volume the way slskd saves them, and an AcoustID lookup names a recording by the file's length.
+One HTTP server on :5030. mixsync reaches it as slskd (MIXSYNC_SLSKD_URL), Prowlarr and
+qBittorrent (MIXSYNC_PROWLARR_URL, MIXSYNC_QBITTORRENT_URL), as MusicBrainz (MIXSYNC_MB_BASE_URL)
+and as AcoustID and the Cover Art Archive (MIXSYNC_TEST_ONLY_FAKE_SERVICES_URL). It serves the
+canned albums in ALBUMS: a search returns one peer per matching album, an enqueue copies that
+album's generated FLACs into the downloads volume the way slskd saves them, and an AcoustID
+lookup names a recording by the file's length. PACK_ALBUM is only on Prowlarr, in a pack.
 
-Response shapes follow slskd 0.26 (the version in deploy/compose.yml) as `SlskdSource` reads them.
+Response shapes follow slskd 0.26 (the version in deploy/compose.yml) as `SlskdSource` reads them,
+and Prowlarr's and qBittorrent's API docs as `ProwlarrSource` and `Qbittorrent` read them.
 """
 
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -22,6 +26,7 @@ from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 DOWNLOADS = Path("/downloads")
+TORRENTS = Path("/torrents")  # MIXSYNC_QBITTORRENT_DIR
 FIXTURES = Path("/tmp/fixtures")
 ARTIST = "Integration Artist"
 ARTIST_ID = "1a000000-0000-4000-8000-000000000001"
@@ -50,7 +55,10 @@ def _album(n: int, title: str, peer: str, lengths: list[int], *, lossy: bool) ->
 ALBUMS = [
     _album(1, "Happy Path", "happy-peer", [7, 8, 9], lossy=False),
     _album(2, "Review Band", "review-peer", [10, 11, 12], lossy=True),
+    # not on Soulseek: only Prowlarr finds it, as one folder of a multi-album torrent
+    _album(3, "Pack Album", "", [13, 14, 15], lossy=False),
 ]
+PACK_ALBUM = ALBUMS[2]
 
 
 def _remote(album: dict[str, Any], i: int) -> str:
@@ -59,7 +67,7 @@ def _remote(album: dict[str, Any], i: int) -> str:
 
 
 def _fixture(album: dict[str, Any], i: int) -> Path:
-    return FIXTURES / album["peer"] / _remote(album, i).rpartition("\\")[2]
+    return FIXTURES / (album["peer"] or album["id"]) / _remote(album, i).rpartition("\\")[2]
 
 
 def generate() -> None:
@@ -150,7 +158,7 @@ def application() -> dict[str, Any]:
 async def create_search(request: Request) -> dict[str, Any]:
     body = await request.json()
     text = body["searchText"].casefold()
-    hits = [a for a in ALBUMS if a["title"].casefold() in text]
+    hits = [a for a in ALBUMS if a["peer"] and a["title"].casefold() in text]
     searches[body["id"]] = {"text": body["searchText"], "hits": hits}
     return _search_state(body["id"])
 
@@ -275,6 +283,133 @@ def remove_download(username: str, transfer_id: str) -> Response:
     found = len(kept) != len(transfers.get(username, []))
     transfers[username] = kept
     return Response(status_code=204 if found else 404)
+
+
+# --- Prowlarr and qBittorrent ----------------------------------------------------------------
+# One pack (ADR 0026): PACK_ALBUM's folder and another album's. `torrents/start` writes only the
+# selected files into the save path, as qBittorrent would; the other album is zeros.
+
+PACK = f"{ARTIST} - Discography"
+OTHER = f"{ARTIST} - Other Album (2018)"
+
+
+def _bencode(v: Any) -> bytes:
+    if isinstance(v, int):
+        return b"i%de" % v
+    if isinstance(v, str):
+        v = v.encode()
+    if isinstance(v, bytes):
+        return b"%d:%s" % (len(v), v)
+    if isinstance(v, list):
+        return b"l" + b"".join(_bencode(x) for x in v) + b"e"
+    return b"d" + b"".join(_bencode(k) + _bencode(v[k]) for k in sorted(v)) + b"e"
+
+
+def _pack_files() -> list[tuple[list[str], Path | None, int]]:
+    """(path under the torrent name, the fixture or None for zeros, size) per file."""
+    out: list[tuple[list[str], Path | None, int]] = [
+        ([OTHER, f"0{i} - Other Song {i}.flac"], None, 4096) for i in (1, 2)
+    ]
+    for i in range(len(PACK_ALBUM["tracks"])):
+        f = _fixture(PACK_ALBUM, i)
+        out.append(([PACK_ALBUM["folder"], f.name], f, f.stat().st_size))
+    return out
+
+
+def _pack_info() -> dict[str, Any]:
+    files = [{"length": n, "path": p} for p, _, n in _pack_files()]
+    return {"name": PACK, "piece length": 16384, "pieces": b"\0" * 20, "files": files}
+
+
+qbit: dict[str, Any] = {"added": False, "priority": [], "started": False}
+
+
+@app.get("/api/v1/search")
+def prowlarr_search(query: str = "") -> list[dict[str, Any]]:
+    if PACK_ALBUM["title"].casefold() not in query.casefold():
+        return []
+    return [
+        {
+            "title": PACK,
+            "size": sum(n for _, _, n in _pack_files()),
+            "indexer": "FakeTracker",
+            "protocol": "torrent",
+            "downloadUrl": "http://fakes:5030/1/download?link=pack",
+            "seeders": 5,
+        }
+    ]
+
+
+@app.get("/1/download")
+def prowlarr_download() -> Response:
+    torrent = _bencode({"announce": "http://tracker.invalid/announce", "info": _pack_info()})
+    return Response(torrent, media_type="application/x-bittorrent")
+
+
+def _pack_hash() -> str:
+    return hashlib.sha1(_bencode(_pack_info()), usedforsecurity=False).hexdigest()
+
+
+@app.post("/api/v2/auth/login")
+def qbit_login() -> Response:
+    return Response("Ok.", headers={"set-cookie": "SID=fake; HttpOnly; path=/"})
+
+
+@app.post("/api/v2/torrents/add")
+async def qbit_add(request: Request) -> Response:
+    form = await request.form()
+    assert form.get("stopped") == "true" and form.get("category") == "mixsync"
+    qbit.update(added=True, priority=[1] * len(_pack_files()), started=False)
+    return Response("Ok.")
+
+
+@app.get("/api/v2/torrents/info")
+def qbit_info(hashes: str = "", category: str = "") -> list[dict[str, Any]]:
+    if not qbit["added"] or hashes != _pack_hash() or category != "mixsync":
+        return []
+    done = qbit["started"]
+    return [
+        {
+            "hash": _pack_hash(),
+            "category": "mixsync",
+            "state": "uploading" if done else "stoppedDL",
+            "progress": 1 if done else 0,
+            "completed": 1 if done else 0,
+            "amount_left": 0 if done else 1,
+        }
+    ]
+
+
+@app.get("/api/v2/torrents/files", response_model=None)
+def qbit_files(hash: str = "") -> list[dict[str, Any]] | Response:  # noqa: A002
+    if not qbit["added"] or hash != _pack_hash():
+        return Response("Torrent hash was not found", status_code=404)
+    return [
+        {"index": i, "name": "/".join([PACK, *p]), "size": n, "priority": qbit["priority"][i]}
+        for i, (p, _, n) in enumerate(_pack_files())
+    ]
+
+
+@app.post("/api/v2/torrents/filePrio")
+async def qbit_file_prio(request: Request) -> Response:
+    form = await request.form()
+    for i in str(form["id"]).split("|"):
+        qbit["priority"][int(i)] = int(str(form["priority"]))
+    return Response()
+
+
+@app.post("/api/v2/torrents/start")
+def qbit_start() -> Response:
+    for i, (parts, src, size) in enumerate(_pack_files()):
+        if qbit["priority"][i]:
+            dest = TORRENTS.joinpath(PACK, *parts)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if src is None:
+                dest.write_bytes(b"\0" * size)
+            else:
+                shutil.copyfile(src, dest)
+    qbit["started"] = True
+    return Response()
 
 
 # --- MusicBrainz, AcoustID, Cover Art Archive ---------------------------------------------------

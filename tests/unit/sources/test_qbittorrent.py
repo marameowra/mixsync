@@ -57,6 +57,22 @@ class FakeQbit:
         self.login = "Ok."
         self.add = "Ok."
         self.stop: dict[str, Any] | None = {"state": "stoppedDL"}  # None: no torrents/stop (v4)
+        self.on_add: dict[str, Any] | None = None  # the torrent an accepted add puts in the list
+        self.files: list[dict[str, Any]] = json.loads((CASSETTES / "pack-files.json").read_text())
+        self.prio_status = 200
+
+    def files_reply(self, request: httpx.Request) -> httpx.Response:
+        if not any(t["hash"] == request.url.params["hash"] for t in self.torrents):
+            return httpx.Response(404, text="Torrent hash was not found")
+        return httpx.Response(200, json=self.files)
+
+    def prio_reply(self, request: httpx.Request) -> httpx.Response:
+        if self.prio_status != 200:
+            return httpx.Response(self.prio_status, text="Conflict")
+        f = form(request)
+        for i in f["id"][0].split("|"):
+            self.files[int(i)]["priority"] = int(f["priority"][0])
+        return httpx.Response(200)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.seen.append(request)
@@ -76,7 +92,17 @@ class FakeQbit:
             ]
             return httpx.Response(200, json=rows)
         if path == "torrents/add":
+            if self.add == "Ok." and self.on_add is not None:
+                self.torrents.append(self.on_add)
             return httpx.Response(200, text=self.add)
+        if path == "torrents/files":
+            return self.files_reply(request)
+        if path == "torrents/filePrio":
+            return self.prio_reply(request)
+        if path == "torrents/start" and self.stop is not None:
+            return httpx.Response(200)
+        if path == "torrents/resume" and self.stop is None:  # qBittorrent < 5
+            return httpx.Response(200)
         if path == "torrents/delete":
             return httpx.Response(200)
         if path == "torrents/stop" and self.stop is not None:
@@ -232,3 +258,100 @@ async def test_an_unfinished_torrent_is_paused_before_removal_on_qbittorrent_4(m
     fake.stop = None
     await client.remove_unfinished(HASH)
     assert len(fake.calls("torrents/pause")) == 1 and len(fake.calls("torrents/delete")) == 1
+
+
+# A pack (ADR 0026): tests/cassettes/prowlarr/pack.torrent, whose files /torrents/files lists in
+# pack-files.json. The request wants the "2020 - Test Album" folder: indexes 2 and 3.
+PACK = "Test Artist - Discography (2018-2022) [FLAC]"
+PACK_HASH = "af7ca8794235068c99fa7e04ea4d7180b064ce37"
+TEST_ALBUM = [f"{PACK}\\2020 - Test Album\\0{i}.flac" for i in ("1 - Opening", "2 - Middle")]
+FIRST_ALBUM = [f"{PACK}\\2018 - First Album\\0{i}.flac" for i in ("1 - Alpha", "2 - Beta")]
+
+
+def pack_row(**fields: Any) -> dict[str, Any]:
+    row = json.loads((CASSETTES / "info.json").read_text())[0]
+    return {**row, "hash": PACK_HASH, "name": PACK, "state": "stoppedDL", **fields}
+
+
+def selected(fake: FakeQbit) -> list[int]:
+    return [f["index"] for f in fake.files if f["priority"]]
+
+
+async def test_a_pack_is_added_stopped_with_only_its_folder_selected_then_started(
+    make: Env,
+) -> None:
+    client, fake = make()
+    fake.on_add = pack_row()
+    await client.add(b"pack", PACK_HASH, TEST_ALBUM)
+    (add,) = [r for r in fake.calls("torrents/add") if r.headers.get("cookie")]
+    for field in ("stopped", "paused"):  # qBittorrent 5.x reads one, 4.6 the other
+        assert f'name="{field}"\r\n\r\ntrue\r\n'.encode() in add.content
+    (prio,) = fake.calls("torrents/filePrio")
+    assert form(prio) == {"hash": [PACK_HASH], "id": ["0|1|4|5|6"], "priority": ["0"]}
+    assert selected(fake) == [2, 3]
+    paths = [r.url.path.removeprefix("/api/v2/") for r in fake.seen if r.method == "POST"]
+    assert paths[-3:] == ["torrents/add", "torrents/filePrio", "torrents/start"]
+
+
+async def test_a_pack_is_resumed_on_qbittorrent_4(make: Env) -> None:
+    client, fake = make()
+    fake.on_add, fake.stop = pack_row(), None
+    await client.add(b"pack", PACK_HASH, TEST_ALBUM)
+    assert len(fake.calls("torrents/resume")) == 1 and selected(fake) == [2, 3]
+
+
+async def test_a_pack_whose_selection_fails_is_deleted_and_never_started(make: Env) -> None:
+    client, fake = make()
+    fake.on_add, fake.prio_status = pack_row(), 409
+    with pytest.raises(PermanentError, match="could not select the pack folder"):
+        await client.add(b"pack", PACK_HASH, TEST_ALBUM)
+    (delete,) = fake.calls("torrents/delete")
+    assert form(delete) == {"hashes": [PACK_HASH], "deleteFiles": ["true"]}
+    assert fake.calls("torrents/start") == []
+
+
+async def test_a_second_folder_of_a_shared_pack_is_added_to_the_selection(make: Env) -> None:
+    client, fake = make()
+    fake.torrents = [pack_row(state="stalledUP", progress=1, amount_left=0)]
+    for f in fake.files:  # the first request's folder, already downloaded
+        f["priority"] = int(f["index"] in (2, 3))
+    await client.add(b"pack", PACK_HASH, FIRST_ALBUM)
+    assert [r for r in fake.calls("torrents/add") if r.headers.get("cookie")] == []
+    (prio,) = fake.calls("torrents/filePrio")  # never a priority 0: nothing is deselected
+    assert form(prio) == {"hash": [PACK_HASH], "id": ["0|1"], "priority": ["1"]}
+    assert selected(fake) == [0, 1, 2, 3] and len(fake.calls("torrents/start")) == 1
+    await client.add(b"pack", PACK_HASH, TEST_ALBUM)  # already selected: nothing to do
+    assert len(fake.calls("torrents/filePrio")) == 1 and len(fake.calls("torrents/start")) == 1
+
+
+async def test_a_folder_not_in_a_shared_pack_is_refused_without_touching_it(make: Env) -> None:
+    client, fake = make()
+    fake.torrents = [pack_row(state="downloading")]
+    with pytest.raises(PermanentError, match="not in the torrent"):
+        await client.add(b"pack", PACK_HASH, [f"{PACK}\\9999 - Nope\\01 - x.flac"])
+    assert fake.calls("torrents/filePrio") == [] and fake.calls("torrents/delete") == []
+
+
+async def test_deselect_drops_only_the_given_files_of_an_unfinished_pack(make: Env) -> None:
+    client, fake = make()
+    fake.torrents = [pack_row(state="downloading")]
+    for f in fake.files:
+        f["priority"] = int(f["index"] in (0, 1, 2, 3))
+    await client.deselect(PACK_HASH, FIRST_ALBUM)  # the caller left out what others need
+    (prio,) = fake.calls("torrents/filePrio")
+    assert form(prio) == {"hash": [PACK_HASH], "id": ["0|1"], "priority": ["0"]}
+    assert selected(fake) == [2, 3]
+
+
+@pytest.mark.parametrize("finished", [True, False])
+async def test_deselect_never_touches_a_finished_or_whole_torrent(
+    make: Env, finished: bool
+) -> None:
+    client, fake = make()
+    if finished:
+        fake.torrents = [pack_row(state="stalledUP", progress=1, amount_left=0)]
+        fake.files[0]["priority"] = 0
+    else:  # every file wanted: added whole, not a pack selection
+        fake.torrents = [pack_row(state="downloading")]
+    await client.deselect(PACK_HASH, TEST_ALBUM)
+    assert fake.calls("torrents/filePrio") == []

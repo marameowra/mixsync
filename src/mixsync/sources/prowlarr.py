@@ -132,37 +132,48 @@ def nzb_files(data: bytes, title: str) -> list[tuple[list[str], int]]:
 
 
 def to_candidate(
-    release: dict[str, Any], files: list[tuple[list[str], int]], infohash: str = "", nzb: str = ""
-) -> Candidate | None:
-    """The release's audio files as one Candidate, or None when they span more than one album
-    folder (a discography or pack; picking files from one is #328)."""
-    audio: list[CandidateFile] = []
-    folders: set[tuple[str, ...]] = set()
-    cue = False
+    release: dict[str, Any],
+    files: list[tuple[list[str], int]],
+    infohash: str = "",
+    nzb: str = "",
+    packs: bool = False,
+) -> list[Candidate]:
+    """The release's audio files as one Candidate. A torrent whose audio spans more than one
+    album folder is a pack (ADR 0026): with `packs` on, each folder is a candidate of its own
+    (`match.rank` keeps the pack's best one for a request), else the pack is skipped."""
+    albums: dict[tuple[str, ...], list[CandidateFile]] = {}
+    cues: set[tuple[str, ...]] = set()
     for parts, size in files:
         ext = parts[-1].rpartition(".")[2].lower() if "." in parts[-1] else ""
-        cue = cue or ext == "cue"
-        if ext not in AUDIO:
-            continue
-        folder = parts[:-1]
+        folder = tuple(parts[:-1])
         if len(folder) > 1 and _DISC_DIR.match(folder[-1]):
             folder = folder[:-1]  # CD1 / Disc 2 belong to the album folder above them
-        folders.add(tuple(folder))
-        audio.append(CandidateFile(path="\\".join(parts), size=size, extension=ext))
-    if len(folders) > 1:
-        log.info("prowlarr: %r spans %d album folders; skipped", release["title"], len(folders))
-        return None
-    return Candidate(
-        username=release.get("indexer") or str(release.get("indexerId", "")),
-        folder=release["title"],
-        files=tuple(audio),
-        has_cue=cue,
-        seeders=release.get("seeders") or 0,
-        source="prowlarr",
-        url=without_key(release.get("downloadUrl") or ""),
-        infohash=infohash,
-        nzb_hash=nzb,
-    )
+        if ext == "cue":
+            cues.add(folder)
+        if ext in AUDIO:
+            albums.setdefault(folder, []).append(CandidateFile("\\".join(parts), size, ext))
+    pack = len(albums) > 1
+    if pack and not (packs and infohash):  # an NZB can't be partly downloaded
+        log.info("prowlarr: %r spans %d album folders; skipped", release["title"], len(albums))
+        return []
+    out: list[Candidate] = []
+    for folder, audio in list(albums.items()) or [((), [])]:  # NZB of RAR parts: scores empty
+        sub = "\\".join(folder[1:]) or folder[0] if pack else ""  # folder[0]: the torrent name
+        out.append(
+            Candidate(
+                username=release.get("indexer") or str(release.get("indexerId", "")),
+                folder=f"{release['title']}\\{sub}" if pack else release["title"],
+                files=tuple(audio),
+                has_cue=folder in cues if pack else bool(cues),
+                seeders=release.get("seeders") or 0,
+                source="prowlarr",
+                url=without_key(release.get("downloadUrl") or ""),
+                infohash=infohash,
+                nzb_hash=nzb,
+                pack=pack,
+            )
+        )
+    return out
 
 
 class ProwlarrSource:
@@ -180,6 +191,7 @@ class ProwlarrSource:
         torrents: Qbittorrent | None = None,
         protocols: frozenset[str] = frozenset({"torrent", "usenet"}),
         usenet: Sabnzbd | None = None,
+        packs: bool = False,
     ) -> None:
         self._client = client
         self._base = base_url.rstrip("/")
@@ -188,6 +200,7 @@ class ProwlarrSource:
         self._torrents = torrents
         self._usenet = usenet
         self._protocols = protocols  # others are skipped before any fetch: nothing downloads them
+        self._packs = packs  # the torrent_pack_folders setting
 
     async def _get(self, url: str, **kwargs: Any) -> httpx.Response:
         try:
@@ -238,8 +251,8 @@ class ProwlarrSource:
         for release in usable[:MAX_FETCHES]:
             files, infohash = await self._files(release)
             nzb = nzb_hash(files) if release.get("protocol") == "usenet" else ""
-            if files and (cand := to_candidate(release, files, infohash, nzb)):
-                out.append(cand)
+            if files:
+                out += to_candidate(release, files, infohash, nzb, self._packs)
         return out
 
     async def _download(self, url: str) -> httpx.Response:
@@ -320,7 +333,8 @@ class ProwlarrSource:
         if isinstance(client, Sabnzbd):
             await client.add(response.content, candidate.nzb_hash)
         else:
-            await client.add(response.content, candidate.infohash)
+            only = [f.path for f in candidate.files] if candidate.pack else None
+            await client.add(response.content, candidate.infohash, only)
 
     async def status(self, candidate: Candidate) -> TransferInfo:
         return await self._client_for(candidate).status(candidate)
@@ -335,3 +349,10 @@ class ProwlarrSource:
             await self._torrents.remove_unfinished(candidate.infohash)
         elif self._usenet is not None and candidate.nzb_hash:
             await self._usenet.remove(candidate.nzb_hash)
+
+    async def deselect(self, candidate: Candidate, keep: set[str]) -> None:
+        """A dropped pack folder whose torrent another live request shares: stop downloading its
+        files, except `keep` (the files the other live requests need)."""
+        if self._torrents is not None and candidate.pack:
+            paths = {f.path for f in candidate.files} - keep
+            await self._torrents.deselect(candidate.infohash, paths)

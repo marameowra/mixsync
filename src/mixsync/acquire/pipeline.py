@@ -1027,34 +1027,37 @@ class Pipeline:
         """drop_candidate; the caller then awaits `_cancel` once its transaction is committed."""
         drop_candidate(s, now, req, cand.username, cand.folder, why, source=cand.source, **kw)
 
-    def _shared(self, cand: Candidate, req_id: int) -> bool:
-        """Another live request's job holds the same torrent or SABnzbd job (#452): clearing it
-        would break that request. Own session: never inside the caller's transaction."""
+    def _sharers(self, cand: Candidate, req_id: int) -> list[dict[str, Any]]:
+        """The candidates of other live requests' jobs that hold the same torrent or SABnzbd job
+        (#452): clearing it would break those requests. Own session: never inside the caller's
+        transaction."""
+        out: list[dict[str, Any]] = []
         for key, value in (("infohash", cand.infohash), ("nzb_hash", cand.nzb_hash)):
             if not value:
                 continue
             with self.sessions() as s:
-                if s.scalar(
-                    select(Job.id)
-                    .where(
+                out += s.scalars(
+                    select(Job.payload["candidate"]).where(
                         Job.kind.in_((JobKind.DOWNLOAD, JobKind.VERIFY, JobKind.IMPORT)),
                         Job.status.in_(LIVE),
                         JOB_REQUEST_ID != req_id,
                         Job.payload["candidate"][key].as_string() == value,
                     )
-                    .limit(1)
-                ):
-                    return True
-        return False
+                ).all()
+        return out
 
     async def _cancel(self, cand: Candidate, req_id: int) -> None:
         """Cancel what a dropped candidate still has moving in slskd, so the album stops
-        downloading (an unfinished torrent is removed with its partial files). Finished files
+        downloading (an unfinished torrent is removed with its partial files; in a pack shared
+        with another live request, only the files no such request needs stop). Finished files
         stay; a failed cancel never blocks. Never call it inside a transaction: the source's HTTP
         calls can take minutes, and SQLite's write lock would be held all along (#422)."""
         try:
-            if not self._shared(cand, req_id):
-                await self.sources[cand.source].clear(cand)
+            source = self.sources[cand.source]
+            if not (others := self._sharers(cand, req_id)):
+                await source.clear(cand)
+            elif cand.pack and (deselect := getattr(source, "deselect", None)):  # indexers only
+                await deselect(cand, {f["path"] for c in others for f in c.get("files", ())})
         except Exception:
             log.warning("cancelling transfers of %s skipped", cand.username, exc_info=True)
 
@@ -1070,7 +1073,7 @@ class Pipeline:
                 if not fileops.seeding(src):
                     await asyncio.to_thread(fileops.release, src, batch, root)
             # a dropped album never came from a peer; a seeding torrent is never cleared
-            if cand.username and not seeding and not self._shared(cand, req_id):
+            if cand.username and not seeding and not self._sharers(cand, req_id):
                 await self.sources[cand.source].clear(cand)
         except Exception:
             log.warning("releasing downloads of %s skipped", batch, exc_info=True)

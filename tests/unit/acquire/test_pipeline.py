@@ -723,6 +723,42 @@ async def test_a_shared_download_is_cleared_only_when_no_other_request_uses_it(
     assert env.source.cleared == ([] if other_live else ["peer1"])
 
 
+async def test_a_dropped_pack_folder_spares_the_files_another_live_request_needs(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR 0026: in a pack two requests share, a dropped folder's files stop downloading,
+    except those another live request's candidate still holds; the torrent itself stays."""
+    cand = env.source.add("peer1", "Pack\\Alpha Album")
+    pack = replace(cand, pack=True, infohash="ab" * 20)
+    env.source.catalog["alpha album"] = [pack]
+    env.source.state["peer1"] = TransferStatus.FAILED
+    shared = cand.files[0].path  # say the other request's folder holds this file too
+    other = request(env, str(ALBUM_B.release_id))
+    with env.sessions.begin() as s:
+        s.add(
+            Job(
+                kind=JobKind.DOWNLOAD,
+                payload={
+                    "request_id": other,
+                    "candidate": {"infohash": "ab" * 20, "files": [{"path": shared}]},
+                },
+                status=JobState.RETRY_WAIT,
+                run_after=env.clock.now() + timedelta(days=1),
+            )
+        )
+    deselected: list[tuple[str, set[str]]] = []
+
+    async def deselect(c: Candidate, keep: set[str]) -> None:
+        deselected.append((c.folder, keep))
+
+    monkeypatch.setattr(env.source, "deselect", deselect, raising=False)
+    rid = request(env)
+    await env.drain(until=lambda: status(env, rid) == "no_results")
+    # both requests drop the folder (the other one found it too); each spares the other's files
+    assert ("Pack\\Alpha Album", {shared}) in deselected and env.source.cleared == []
+    assert all(shared in keep for _, keep in deselected)
+
+
 async def test_a_download_rerun_after_its_drop_committed_only_cancels_again(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:

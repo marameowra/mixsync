@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -274,14 +275,72 @@ def test_rank_keeps_every_release_of_one_indexer_and_breaks_ties_on_seeders() ->
 
     def cand(seeders: int) -> Candidate:
         row = {"indexer": "ExampleTracker", "title": "Test Artist - Test Album", "seeders": seeders}
-        c = to_candidate(row, files)
-        assert c is not None
-        return c
+        found = to_candidate(row, files)
+        assert len(found) == 1
+        return found[0]
 
     ranked = rank([cand(3), cand(30)], ALBUM, Profile("default", 0.1, 0.4))
     assert [c.seeders for c, _ in ranked] == [30, 3]
     # no upload slot, queue or speed to judge: an indexer release carries no peer penalty
     assert all(p.penalty == 0 for _, r in ranked for p in r.breakdown if p.key == "peer_health")
+
+
+PACK = "Test Artist - Discography (2018-2022) [FLAC]"  # tests/cassettes/prowlarr/pack.torrent
+PACK_HASH = "af7ca8794235068c99fa7e04ea4d7180b064ce37"
+
+
+def pack_search(
+    make_client: Make, packs: bool, torrents: Qbittorrent | None = None
+) -> ProwlarrSource:
+    row = {**search_results()[0], "title": PACK, "downloadUrl": f"{BASE}/9/download?link=pack"}
+    pack = httpx.Response(200, content=(CASSETTES / "pack.torrent").read_bytes())
+    handler = serve([], [row], {"pack": pack})
+    src = ProwlarrSource(make_client("prowlarr", handler), BASE, "k", torrents, packs=packs)
+    return src
+
+
+async def test_a_pack_yields_its_best_folder_only_with_the_setting_on(make_client: Make) -> None:
+    assert info_hash((CASSETTES / "pack.torrent").read_bytes()) == PACK_HASH
+    assert await pack_search(make_client, packs=False).search(QUERY) == []  # the default
+    found = await pack_search(make_client, packs=True).search(QUERY)
+    assert [c.folder for c in found] == [
+        f"{PACK}\\2018 - First Album",
+        f"{PACK}\\2020 - Test Album",
+        f"{PACK}\\2022 - Live",  # CD1 and CD2 fold into their album folder
+    ]
+    assert all(c.pack and c.infohash == PACK_HASH for c in found)
+    ((best, _),) = rank(found, ALBUM, Profile("default", 0.1, 0.4))  # one per pack
+    assert best.folder == f"{PACK}\\2020 - Test Album"
+    assert [f.path for f in best.files] == [
+        f"{PACK}\\2020 - Test Album\\01 - Opening.flac",
+        f"{PACK}\\2020 - Test Album\\02 - Middle.flac",
+    ]
+
+
+def test_a_single_album_release_beats_a_pack_folder_on_equal_distance() -> None:
+    title = "Test Artist - Test Album"
+    files = torrent_files(torrent(title, [["01 - Opening.flac"], ["02 - Middle.flac"]]))
+    (single,) = to_candidate({"indexer": "ExampleTracker", "title": title, "seeders": 1}, files)
+    folder = replace(single, folder=f"Pack\\{title}", pack=True, infohash="ab" * 20, seeders=99)
+    ranked = rank([folder, single], ALBUM, Profile("default", 0.1, 0.4))
+    assert ranked[0][1].distance == ranked[1][1].distance
+    assert [c.pack for c, _ in ranked] == [False, True]  # seeders break ties only after that
+
+
+async def test_enqueue_hands_qbittorrent_only_the_pack_folders_files(
+    make_client: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    torrents = with_torrents(make_client, [], [])
+    calls: list[tuple[str, list[str] | None]] = []
+
+    async def add(torrent: bytes, infohash: str, only: list[str] | None = None) -> None:
+        calls.append((infohash, only))
+
+    monkeypatch.setattr(torrents, "add", add)
+    src = pack_search(make_client, packs=True, torrents=torrents)
+    best = next(c for c in await src.search(QUERY) if c.folder.endswith("Test Album"))
+    await src.enqueue(best)
+    assert calls == [(PACK_HASH, [f.path for f in best.files])]
 
 
 ALBUM_HASH = "777fdacdb4a99c43a484126da5682b6b8a0c875c"  # the album.torrent fixture's info hash

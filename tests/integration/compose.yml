@@ -22,12 +22,26 @@ x-mixsync: &mixsync
     MIXSYNC_NAVIDROME_USER: admin
     MIXSYNC_NAVIDROME_PASSWORD: integration
     MIXSYNC_SLSKD_SEARCH_DEBOUNCE: "0"
+    # Prowlarr and qBittorrent are the fake too; an album Soulseek lacks comes from a pack
+    MIXSYNC_PROWLARR_URL: http://fakes:5030
+    MIXSYNC_PROWLARR_API_KEY: fake
+    MIXSYNC_QBITTORRENT_URL: http://fakes:5030
+    MIXSYNC_QBITTORRENT_USERNAME: admin
+    MIXSYNC_QBITTORRENT_PASSWORD: fake
+    MIXSYNC_QBITTORRENT_DIR: /torrents
+    MIXSYNC_TORRENT_PACK_FOLDERS: "true"
   volumes:
     - config:/config
     - downloads:/downloads
     - data:/data
+    - torrents:/torrents
 
 services:
+  torrents-dir:  # a new volume is root's; the fake qBittorrent writes it as mixsync
+    <<: *mixsync
+    user: root
+    entrypoint: ["chown", "mixsync", "/torrents"]
+
   mixsync-migrate:
     <<: *mixsync
     command: ["migrate"]
@@ -66,7 +80,11 @@ services:
     entrypoint: ["python", "/it/fakes/server.py"]
     volumes:
       - downloads:/downloads
+      - torrents:/torrents
       - ./fakes:/it/fakes:ro
+    depends_on:
+      torrents-dir:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5030/api/v0/application', timeout=3)"]
       interval: 2s
@@ -101,6 +119,7 @@ services:
     volumes:
       - ../..:/repo:ro
       - data:/data:ro
+      - torrents:/torrents:ro
     depends_on:
       mixsync-web:
         condition: service_healthy
@@ -119,3 +138,4 @@ volumes:
   config:
   downloads:
   data:
+  torrents:
