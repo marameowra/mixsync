@@ -69,6 +69,19 @@ def test_official_beats_earlier_promotion() -> None:
     assert choose([promo, retail], owned={"x": 3}) == "b"  # owned tracks on no listed release
 
 
+def test_media_still_ranks_ahead_of_official() -> None:
+    vinyl = ref("a", formats=("Vinyl",), status="Official", date="2000")
+    promo_cd = ref("b", formats=("CD",), status="Promotion", date="2001")
+    assert choose([vinyl, promo_cd], media=("CD",)) == "b"
+
+
+def test_owned_tracks_beat_official_status() -> None:
+    f = ("CD",)
+    promo = ref("a", formats=f, status="Promotion")
+    official = ref("b", formats=f, status="Official")
+    assert choose([promo, official], owned={"a": 3, "b": 1}) == "a"
+
+
 def test_equal_owned_counts_fall_back_to_metadata_then_id() -> None:
     f = ("CD",)
     owned = {"a": 2, "b": 2}
