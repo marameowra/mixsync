@@ -11,7 +11,7 @@ from mixsync.core.matching import AlbumInfo, TrackInfo
 from mixsync.db.models.discovery import ProvisionalTrack
 from mixsync.db.models.library import Track
 from mixsync.db.models.safety import TagSnapshot
-from mixsync.library import paths, tags
+from mixsync.library import analysis, paths, tags
 from mixsync.library.fileops import FileOps, WriteTags
 
 log = logging.getLogger(__name__)
@@ -105,12 +105,18 @@ def snapshotting_writer(
 
 class Importer:
     def __init__(
-        self, fileops: FileOps, sessions: sessionmaker[Session], clock: Clock, template: str
+        self,
+        fileops: FileOps,
+        sessions: sessionmaker[Session],
+        clock: Clock,
+        template: str,
+        analyze: bool = False,  # queue an ANALYZE job per new library track (audio_analysis)
     ) -> None:
         self.fileops = fileops
         self._sessions = sessions
         self._clock = clock
         self._template = template
+        self._analyze = analyze
 
     def import_release(
         self,
@@ -182,20 +188,22 @@ class Importer:
         with self._sessions.begin() as s:
             if s.scalar(select(Track.id).where(Track.path == rel)) is None:
                 album_artist, album, year = tags.names_of(t)
-                s.add(
-                    Track(
-                        album_artist=album_artist,
-                        album=album,
-                        year=year,
-                        path=rel,
-                        recording_mbid=t.recording_id,
-                        release_mbid=t.release_id,
-                        release_group_mbid=t.release_group_id,
-                        artist_mbids=list(t.artist_ids),
-                        acoustid_id=acoustid_id,
-                        status=status,
-                        batch_id=batch_id,
-                        imported_at=self._clock.now(),
-                        path_template=self._template,
-                    )
+                track = Track(
+                    album_artist=album_artist,
+                    album=album,
+                    year=year,
+                    path=rel,
+                    recording_mbid=t.recording_id,
+                    release_mbid=t.release_id,
+                    release_group_mbid=t.release_group_id,
+                    artist_mbids=list(t.artist_ids),
+                    acoustid_id=acoustid_id,
+                    status=status,
+                    batch_id=batch_id,
+                    imported_at=self._clock.now(),
+                    path_template=self._template,
                 )
+                s.add(track)
+                if self._analyze:
+                    s.flush()
+                    analysis.enqueue_analysis(s, self._clock.now(), track.id)

@@ -33,6 +33,7 @@ class JobKind(StrEnum):
     DB_BACKUP = "db_backup"
     NAME_BACKFILL = "name_backfill"
     MISSING_SCAN = "missing_scan"  # builds a draft; changes no request
+    ANALYZE = "analyze"  # audio analysis of one library track; lowest priority (ADR 0025)
 
 
 class JobState(StrEnum):

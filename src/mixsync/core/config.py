@@ -211,6 +211,13 @@ class Settings(BaseSettings):
     embed_cover: bool = Field(
         default=False, description="Also embed the front cover (up to 1 MB) in imported files."
     )
+    audio_analysis: bool = Field(
+        default=True,
+        description=(
+            "Analyze library tracks (BPM, key, energy, similarity) in the background, at the"
+            " lowest priority. Off: no analysis is queued or run."
+        ),
+    )
     trash_days: int = Field(
         default=30, ge=1, description="Days after which trash in a day folder is purged."
     )
