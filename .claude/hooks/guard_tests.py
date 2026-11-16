@@ -108,6 +108,111 @@ def check_file(tool: str, inp: dict, cwd: Path) -> None:
         deny()
 
 
+def check_patch(patch: str, cwd: Path) -> None:
+    """Check Codex's apply_patch input without trying to apply it."""
+    if "*** Begin Patch" not in patch or "*** End Patch" not in patch:
+        deny()
+    current: Path | None = None
+    operation = ""
+    move_destination: Path | None = None
+    hunks: list[tuple[list[str], list[str]]] = []
+    old_lines: list[str] = []
+    new_lines: list[str] = []
+
+    def finish_hunk() -> None:
+        nonlocal old_lines, new_lines
+        if old_lines or new_lines:
+            hunks.append((old_lines, new_lines))
+        old_lines, new_lines = [], []
+
+    def check_file_change(path: Path, deleted: bool = False) -> None:
+        incoming_move = (
+            move_destination is not None
+            and in_tests(str(move_destination), cwd)
+            and not in_tests(str(path), cwd)
+        )
+        if not in_tests(str(path), cwd) and not incoming_move:
+            return
+        target = (cwd / path).resolve()
+        if deleted:
+            if not relocated([target], cwd):
+                deny()
+            return
+        if operation == "add":
+            before: list[str] = []
+            after = [line for _, additions in hunks for line in additions]
+        else:
+            if not target.is_file():
+                deny()
+            source_lines = target.read_text(errors="replace").splitlines()
+            before = [] if incoming_move else source_lines
+            after = source_lines.copy()
+            for removed, added in hunks:
+                if removed:
+                    width = len(removed)
+                    start = next(
+                        (
+                            i
+                            for i in range(len(after) - width + 1)
+                            if after[i : i + width] == removed
+                        ),
+                        None,
+                    )
+                    if start is None:
+                        deny()
+                    after[start : start + width] = added
+                else:
+                    after.extend(added)
+        if not "\n".join(after).strip():
+            deny()
+        if markers("\n".join(after)) - markers("\n".join(before)) > 0:
+            deny()
+
+    for line in patch.splitlines():
+        if line.startswith("*** Update File: "):
+            finish_hunk()
+            if current is not None:
+                check_file_change(current)
+            hunks = []
+            current = Path(line.removeprefix("*** Update File: "))
+            operation = "update"
+            move_destination = None
+        elif line.startswith("*** Delete File: "):
+            finish_hunk()
+            if current is not None:
+                check_file_change(current)
+            hunks = []
+            operation = "delete"
+            move_destination = None
+            check_file_change(Path(line.removeprefix("*** Delete File: ")), deleted=True)
+            current = None
+        elif line.startswith("*** Add File: "):
+            finish_hunk()
+            if current is not None:
+                check_file_change(current)
+            hunks = []
+            current = Path(line.removeprefix("*** Add File: "))
+            operation = "add"
+            move_destination = None
+        elif line.startswith("*** Move to: ") and current is not None:
+            destination = Path(line.removeprefix("*** Move to: "))
+            move_destination = destination
+            if in_tests(str(current), cwd) and not in_tests(str(destination), cwd):
+                deny()
+        elif line.startswith("@@"):
+            finish_hunk()
+        elif current is not None and line.startswith("+"):
+            new_lines.append(line[1:])
+        elif current is not None and line.startswith("-"):
+            old_lines.append(line[1:])
+        elif current is not None and line.startswith(" "):
+            old_lines.append(line[1:])
+            new_lines.append(line[1:])
+    if current is not None:
+        finish_hunk()
+        check_file_change(current)
+
+
 def main() -> None:
     try:
         data = json.load(sys.stdin)
@@ -115,6 +220,8 @@ def main() -> None:
         cwd = Path(data.get("cwd") or os.getcwd()).resolve()
         if tool == "Bash":
             check_bash(inp["command"], cwd)
+        elif tool == "apply_patch":
+            check_patch(inp["command"], cwd)
         elif tool in ("Edit", "MultiEdit", "Write"):
             check_file(tool, inp, cwd)
     except (ValueError, KeyError, TypeError, OSError):

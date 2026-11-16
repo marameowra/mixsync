@@ -47,3 +47,6 @@ MusicBrainz/AcoustID, organize on disk, and hand off to Navidrome (Plex/Jellyfin
   format. The `reviewer` pass before merge is the independent check; don't spawn extra
   agents to re-verify.
 - The main session runs the full check once before pushing, and opens PRs.
+
+## Codex project context
+- Read `CLAUDE.md` for the GitHub issue repository, triage-label meanings, and domain-document pointers; `AGENTS.md` supplies the shared safety and contribution rules.

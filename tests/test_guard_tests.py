@@ -84,12 +84,107 @@ def test_edit_adding_marker_denied(repo: Path) -> None:
     assert decide(repo, "Edit", other) is False
 
 
+def test_apply_patch_adding_marker_denied(repo: Path) -> None:
+    patch = (
+        f"*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n+@{SKIP}\n"
+        " def test_a(): ...\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
+def test_apply_patch_removing_tests_denied(repo: Path) -> None:
+    (repo / "tests" / "test_a.py").write_text("def test_a(): ...\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n-def test_a(): ...\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
+def test_apply_patch_can_rewrite_test_assertions(repo: Path) -> None:
+    (repo / "tests" / "test_a.py").write_text("def test_a():\n    assert actual == old\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n"
+        "-    assert actual == old\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is False
+
+
+def test_apply_patch_cannot_empty_existing_test_file(repo: Path) -> None:
+    (repo / "tests" / "test_a.py").write_text("def test_a(): ...\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n"
+        "-def test_a(): ...\n+ \n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
+def test_apply_patch_move_within_tests_allowed(repo: Path) -> None:
+    (repo / "tests" / "test_a.py").write_text("def test_a(): ...\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n"
+        "*** Move to: tests/unit/test_a.py\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is False
+
+
+def test_apply_patch_move_into_tests_checks_existing_markers(repo: Path) -> None:
+    (repo / "src" / "old.py").write_text("pytest.skip()\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: src/old.py\n"
+        "*** Move to: tests/test_old.py\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
+def test_apply_patch_files_are_checked_independently(repo: Path) -> None:
+    for name in ("test_a.py", "test_b.py"):
+        (repo / "tests" / name).write_text(f"@{SKIP}\nvalue = 1\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n"
+        f" @{SKIP}\n-value = 1\n+value = 2\n"
+        "*** Update File: tests/test_b.py\n@@\n"
+        f" @{SKIP}\n-value = 1\n+value = 2\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is False
+
+
+def test_apply_patch_non_test_file_allowed(repo: Path) -> None:
+    patch = "*** Begin Patch\n*** Update File: src/a.py\n@@\n+value = 1\n*** End Patch"
+    assert decide(repo, "apply_patch", {"command": patch}) is False
+
+
+def test_apply_patch_adding_empty_test_file_denied(repo: Path) -> None:
+    patch = "*** Begin Patch\n*** Add File: tests/test_empty.py\n*** End Patch"
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
+def test_apply_patch_malformed_denied(repo: Path) -> None:
+    assert decide(repo, "apply_patch", {"command": "not a patch"}) is True
+
+
+def test_apply_patch_cannot_move_test_outside_tests(repo: Path) -> None:
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n*** Move to: src/test_a.py\n"
+        "@@\n def test_a(): ...\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is True
+
+
 def test_edit_keeping_existing_marker_allowed(repo: Path) -> None:
     f = str(repo / "tests" / "test_a.py")
     keep = {"file_path": f, "old_string": f"@{SKIP}\nA", "new_string": f"@{SKIP}\nB"}
     assert decide(repo, "Edit", keep) is False
     drop = {**keep, "new_string": "B"}
     assert decide(repo, "Edit", drop) is False
+
+
+def test_apply_patch_move_within_tests_keeps_existing_marker(repo: Path) -> None:
+    (repo / "tests" / "test_a.py").write_text(f"@{SKIP}\ndef test_a(): ...\n")
+    patch = (
+        "*** Begin Patch\n*** Update File: tests/test_a.py\n"
+        "*** Move to: tests/test_b.py\n@@\n def test_a(): ...\n*** End Patch"
+    )
+    assert decide(repo, "apply_patch", {"command": patch}) is False
 
 
 def test_multiedit_sums_markers(repo: Path) -> None:
