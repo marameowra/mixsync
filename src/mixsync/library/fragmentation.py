@@ -102,23 +102,44 @@ def tagset_from_dict(d: dict[str, Any]) -> tags.TagSet:
     return tags.TagSet(**kw)
 
 
+DURATION_TOLERANCE_S = 3.0  # AcoustID can cluster a radio edit with the album version
+
+
 def build_ops(
     group_tracks: list[Track],
     canon: AlbumInfo,
     template: str,
     exists: Callable[[str], bool],
     size: Callable[[str], int] = lambda _: 0,
+    duration: Callable[[str], float | None] = lambda _: None,
 ) -> list[dict[str, Any]]:
     """What merging the group onto `canon` would do to each verified track not on it:
     `trash` (the canonical release already has that recording), `move` (retag and refile under
     the canonical track) or `keep` (not on the canonical release). No two ops share a target
-    path, and a taken path gets a suffix. `exists` says whether a library path is taken."""
+    path, and a taken path gets a suffix. `exists` says whether a library path is taken.
+    A track with no recording match is also a `trash` when a canonical track has its AcoustID
+    and an audio `duration` (seconds, None if unreadable) within DURATION_TOLERANCE_S."""
     tracks = sorted((t for t in group_tracks if t.status == "verified"), key=lambda t: t.path)
     keepers = {
         t.recording_mbid: t
         for t in tracks
         if t.release_mbid == canon.release_id and t.recording_mbid
     }
+    by_acoustid: dict[str, list[Track]] = defaultdict(list)
+    for t in tracks:
+        if t.release_mbid == canon.release_id and t.acoustid_id:
+            by_acoustid[t.acoustid_id].append(t)  # on canon: the plan never trashes or moves it
+
+    def acoustid_keeper(t: Track) -> Track | None:
+        mine = duration(t.path) if t.acoustid_id else None
+        if mine is None:
+            return None
+        for k in by_acoustid.get(t.acoustid_id or "", []):
+            theirs = duration(k.path)
+            if theirs is not None and abs(mine - theirs) <= DURATION_TOLERANCE_S:
+                return k
+        return None
+
     ops: list[tuple[Track, dict[str, Any]]] = []
     rest: list[Track] = []
     for t in tracks:
@@ -126,6 +147,8 @@ def build_ops(
             continue
         if t.recording_mbid in keepers:
             ops.append((t, {"op": "trash", "keeper": keepers[t.recording_mbid].path}))
+        elif keeper := acoustid_keeper(t):
+            ops.append((t, {"op": "trash", "keeper": keeper.path}))
         else:
             rest.append(t)
     rest.sort(key=lambda t: -size(t.path))  # of several copies of a recording, keep the biggest

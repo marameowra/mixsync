@@ -236,7 +236,9 @@ class Merger:
                 row = s.scalar(select(Track.id).where(Track.path == r))
                 return row is not None or self.fileops.has(r)
 
-            ops = fragmentation.build_ops(tracks, album, self.template, taken, self._size)
+            ops = fragmentation.build_ops(
+                tracks, album, self.template, taken, self._size, self._duration
+            )
         with self.sessions.begin() as s:
             if busy := _open_plan(s, group):  # confirmed since we looked
                 raise PlanInProgress(busy)
@@ -366,6 +368,10 @@ class Merger:
             s.flush()
             plan.batch_id = f"reorganize-{plan.id}"
             return plan.id
+
+    def _duration(self, rel: str) -> float | None:
+        ms = tags.length_ms(self.fileops.library / rel)
+        return None if ms is None else ms / 1000
 
     def _size(self, rel: str) -> int:
         try:
