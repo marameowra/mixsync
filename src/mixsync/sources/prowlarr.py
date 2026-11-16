@@ -343,9 +343,12 @@ class ProwlarrSource:
         return {}  # the clients queue their own jobs; the Soulseek cap is not theirs
 
     async def clear(self, candidate: Candidate) -> None:
-        """Remove an unfinished torrent with its partial files (a finished one seeds on), or
+        """Remove an unfinished torrent with its partial files (a finished one seeds on; a pack
+        folder's files are only deselected while another selected folder is in it), or
         MixSync's SABnzbd job (with its files only if it never completed)."""
-        if self._torrents is not None and candidate.infohash:
+        if self._torrents is not None and candidate.pack:  # never another folder's seed
+            await self._torrents.drop_folder(candidate.infohash, [f.path for f in candidate.files])
+        elif self._torrents is not None and candidate.infohash:
             await self._torrents.remove_unfinished(candidate.infohash)
         elif self._usenet is not None and candidate.nzb_hash:
             await self._usenet.remove(candidate.nzb_hash)

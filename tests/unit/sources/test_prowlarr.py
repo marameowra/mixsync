@@ -442,6 +442,22 @@ async def test_clear_removes_only_an_unfinished_torrent(make_client: Make) -> No
     assert deleted == [f"hashes={ALBUM_HASH}&deleteFiles=true"]
 
 
+async def test_clearing_a_pack_folder_only_drops_that_folder(
+    make_client: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    torrents = with_torrents(make_client, [], [])
+    dropped: list[tuple[str, list[str]]] = []
+
+    async def drop_folder(infohash: str, paths: list[str]) -> None:
+        dropped.append((infohash, paths))
+
+    monkeypatch.setattr(torrents, "drop_folder", drop_folder)
+    src = pack_search(make_client, packs=True, torrents=torrents)
+    best = next(c for c in await src.search(QUERY) if c.folder.endswith("Test Album"))
+    await src.clear(best)  # never remove_unfinished: another folder may seed in it
+    assert dropped == [(PACK_HASH, [f.path for f in best.files])]
+
+
 def ours(caplog: pytest.LogCaptureFixture) -> str:
     """MixSync's log lines; httpx's request log is held at WARNING in production."""
     return "\n".join(r.getMessage() for r in caplog.records if r.name != "httpx")

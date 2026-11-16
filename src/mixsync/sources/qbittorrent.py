@@ -94,8 +94,8 @@ class Qbittorrent:
         """Add the torrent whole. With `only` (a pack folder's candidate paths): stopped, every
         other file set to priority 0, then started. A pack already there (shared with another
         request) gets `only` added to its selection; no selected file is ever deselected."""
-        fresh = only is None or await self.info(infohash) is None
-        if fresh:
+        ours = False  # this call's add was accepted: only then may a failed selection delete it
+        if only is None or await self.info(infohash) is None:
             stopped = {"stopped": "true", "paused": "true"} if only is not None else {}
             response = await self._call(
                 "POST",
@@ -109,15 +109,15 @@ class Qbittorrent:
                     **stopped,  # 5.x reads `stopped`, 4.6 `paused`; each ignores the other
                 },
             )
-            ok = response.status_code == 200 and response.text.strip() == "Ok."
-            if not ok and await self.info(infohash) is None:  # "Fails." answers a re-run's add
+            ours = response.status_code == 200 and response.text.strip() == "Ok."
+            if not ours and await self.info(infohash) is None:  # "Fails." answers a re-run's add
                 raise PermanentError(f"qbittorrent refused the torrent ({response.status_code})")
         if only is None:
             return
         try:
             await self._select(infohash, set(only))
         except (PermanentError, TransientError) as e:
-            if fresh:  # stopped since the add: nothing was downloaded
+            if ours:  # stopped since this add: nothing was downloaded
                 await self._call(
                     "POST", "torrents/delete", data={"hashes": infohash, "deleteFiles": "true"}
                 )
@@ -146,6 +146,9 @@ class Qbittorrent:
             raise PermanentError(f"qbittorrent torrents/filePrio returned {response.status_code}")
 
     async def _select(self, infohash: str, only: set[str]) -> None:
+        # shortcut: read-modify-write of priorities; two workers selecting folders of one new
+        # pack at once can zero each other's files. Unsafe with multiple workers; lock per
+        # infohash if more than one worker runs downloads.
         files = await self._files(infohash)
         if not only <= files.keys():
             raise PermanentError("the pack folder's files are not in the torrent")
@@ -174,6 +177,19 @@ class Qbittorrent:
             return
         if ids := sorted(i for n, (i, p) in files.items() if p and n in paths):
             await self._priority(infohash, ids, 0)
+
+    async def drop_folder(self, infohash: str, paths: Collection[str]) -> None:
+        """A dropped pack folder no live request shares. The torrent goes (with its partial
+        files) only if these files are its whole selection; if any other file is selected, a
+        folder an earlier request imported and seeds, only these files are deselected."""
+        if not unfinished(await self.info(infohash)):
+            return
+        files = await self._files(infohash)
+        whole = all(p for _, p in files.values())  # an add cut short before its selection
+        if whole or not any(p for n, (_, p) in files.items() if n not in paths):
+            await self.remove_unfinished(infohash)
+        else:
+            await self.deselect(infohash, paths)
 
     def local(self, path: str) -> Path:
         """Where a candidate file (backslash-joined torrent path) lands. Torrent paths are

@@ -92,7 +92,7 @@ class FakeQbit:
             ]
             return httpx.Response(200, json=rows)
         if path == "torrents/add":
-            if self.add == "Ok." and self.on_add is not None:
+            if self.on_add is not None:  # "Fails.": another worker's add of it got there first
                 self.torrents.append(self.on_add)
             return httpx.Response(200, text=self.add)
         if path == "torrents/files":
@@ -341,6 +341,43 @@ async def test_deselect_drops_only_the_given_files_of_an_unfinished_pack(make: E
     (prio,) = fake.calls("torrents/filePrio")
     assert form(prio) == {"hash": [PACK_HASH], "id": ["0|1"], "priority": ["0"]}
     assert selected(fake) == [2, 3]
+
+
+async def test_a_failed_selection_never_deletes_a_torrent_another_add_put_there(
+    make: Env,
+) -> None:
+    client, fake = make()
+    fake.on_add, fake.add, fake.prio_status = pack_row(), "Fails.", 409  # another worker's add
+    with pytest.raises(PermanentError, match="could not select the pack folder"):
+        await client.add(b"pack", PACK_HASH, TEST_ALBUM)
+    assert fake.calls("torrents/delete") == []
+
+
+async def test_a_seeding_pack_reopened_for_another_folder_keeps_its_seed_when_dropped(
+    make: Env,
+) -> None:
+    """ADR 0022: an earlier request's folder finished and seeds; a later request selects
+    another folder (the torrent is unfinished again) and drops it. Only its files go."""
+    client, fake = make()
+    fake.torrents = [pack_row(state="stalledUP", progress=1, amount_left=0)]
+    for f in fake.files:  # the earlier request's folder, imported, its job no longer live
+        f["priority"] = int(f["index"] in (2, 3))
+    await client.add(b"pack", PACK_HASH, FIRST_ALBUM)
+    fake.torrents[0] |= {"state": "stalledDL", "progress": 0.8, "amount_left": 1000}
+    await client.drop_folder(PACK_HASH, FIRST_ALBUM)
+    assert fake.calls("torrents/delete") == [] and fake.calls("torrents/stop") == []
+    assert form(fake.calls("torrents/filePrio")[-1])["priority"] == ["0"]
+    assert selected(fake) == [2, 3]
+
+
+async def test_a_dropped_pack_folder_that_is_the_whole_selection_is_removed(make: Env) -> None:
+    client, fake = make()
+    fake.torrents = [pack_row(state="downloading")]
+    for f in fake.files:
+        f["priority"] = int(f["index"] in (2, 3))
+    await client.drop_folder(PACK_HASH, TEST_ALBUM)
+    (delete,) = fake.calls("torrents/delete")
+    assert form(delete) == {"hashes": [PACK_HASH], "deleteFiles": ["true"]}
 
 
 @pytest.mark.parametrize("finished", [True, False])
