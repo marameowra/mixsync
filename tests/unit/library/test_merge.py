@@ -860,3 +860,99 @@ def test_import_after_a_failed_move_does_not_take_the_trashed_path_so_undo_works
     world.merger.undo_plan(pid)
     assert world.plan(pid).status == "undone"
     assert (world.ops.library / old["r3"][0]).exists()
+
+
+def _t(i: int, path: str, release: str, rec: str, acoustid: str | None) -> Track:
+    return Track(
+        id=i, path=path, recording_mbid=rec, release_mbid=release, release_group_mbid=GROUP,
+        artist_mbids=[], acoustid_id=acoustid, status="verified", batch_id="b",
+        imported_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )  # fmt: skip
+
+
+def _acoustid_ops(
+    durations: dict[str, float | None], off_acoustid: str | None = "ac"
+) -> list[dict[str, Any]]:
+    tracks = [_t(1, "keep.flac", CANON, "r1", "ac"), _t(2, "copy.flac", OLD, "rX", off_acoustid)]
+    return fragmentation.build_ops(
+        tracks, CANON_ALBUM, "{title}.{ext}", lambda _: False, duration=lambda p: durations[p]
+    )
+
+
+def test_acoustid_match_within_tolerance_trashes_the_copy() -> None:
+    (op,) = _acoustid_ops({"keep.flac": 200.0, "copy.flac": 201.0})
+    assert (op["op"], op["keeper"], op["track_id"]) == ("trash", "keep.flac", 2)
+
+
+def test_acoustid_tolerance_boundary() -> None:
+    (at,) = _acoustid_ops({"keep.flac": 200.0, "copy.flac": 203.0})
+    (over,) = _acoustid_ops({"keep.flac": 200.0, "copy.flac": 203.01})
+    assert (at["op"], over["op"]) == ("trash", "keep")
+
+
+@pytest.mark.parametrize(
+    "durations",
+    [
+        {"keep.flac": 200.0, "copy.flac": 230.0},
+        {"keep.flac": None, "copy.flac": 200.0},
+        {"keep.flac": 200.0, "copy.flac": None},
+    ],
+)
+def test_acoustid_match_needs_close_readable_durations(durations: dict[str, float | None]) -> None:
+    (op,) = _acoustid_ops(durations)
+    assert op["op"] == "keep"  # rX is not on the canonical release
+
+
+def test_acoustid_match_without_an_acoustid_is_unchanged() -> None:
+    (op,) = _acoustid_ops({"keep.flac": 200.0, "copy.flac": 200.0}, off_acoustid=None)
+    assert op["op"] == "keep"
+
+
+def test_no_durations_are_read_without_an_acoustid_candidate() -> None:
+    tracks = [_t(1, "keep.flac", CANON, "r1", "ac"), _t(2, "copy.flac", OLD, "rX", "other")]
+
+    def boom(_: str) -> float:
+        raise AssertionError("duration read")
+
+    fragmentation.build_ops(tracks, CANON_ALBUM, "{title}.{ext}", lambda _: False, duration=boom)
+
+
+def test_recording_match_wins_over_acoustid() -> None:
+    tracks = [
+        _t(1, "a.flac", CANON, "r1", "ac"),
+        _t(2, "b.flac", CANON, "r2", "ac"),
+        _t(3, "c.flac", OLD, "r2", "ac"),
+    ]
+    ops = fragmentation.build_ops(
+        tracks, CANON_ALBUM, "{title}.{ext}", lambda _: False, duration=lambda _: 200.0
+    )
+    assert [(o["op"], o["keeper"]) for o in ops] == [("trash", "b.flac")]
+
+
+def test_a_recording_with_an_empty_canonical_slot_is_moved_not_trashed() -> None:
+    tracks = [_t(1, "a.flac", CANON, "r1", "ac"), _t(3, "c.flac", OLD, "r2", "ac")]
+    ops = fragmentation.build_ops(
+        tracks, CANON_ALBUM, "{title}.{ext}", lambda _: False, duration=lambda _: 200.0
+    )
+    assert [o["op"] for o in ops] == ["move"]
+
+
+def test_shrines_shaped_group_trashes_every_acoustid_copy() -> None:
+    canon = album(CANON, 1999, *[f"r{i}" for i in range(11)])
+    tracks = [_t(i, f"a{i}.flac", CANON, f"r{i}", f"ac{i}") for i in range(11)]
+    tracks += [_t(20 + i, f"b{i}.flac", OLD, f"x{i}", f"ac{i}") for i in range(11)]
+    ops = fragmentation.build_ops(
+        tracks, canon, "{title}.{ext}", lambda _: False, duration=lambda _: 180.0
+    )
+    assert [o["op"] for o in ops] == ["trash"] * 11
+    assert {o["keeper"] for o in ops} == {f"a{i}.flac" for i in range(11)}
+
+
+def test_unreadable_files_do_not_fail_the_plan(world: World) -> None:
+    (world.ops.library / "junk.flac").write_bytes(b"not audio")
+    with world.sessions.begin() as s:
+        canon_ac = s.scalar(select(Track.acoustid_id).where(Track.release_mbid == CANON))
+        s.add(_t(100, "junk.flac", OLD, "rJ", canon_ac))
+        s.add(_t(101, "missing.flac", OLD, "rM", canon_ac))
+    ops = ops_by_kind(world, build(world))
+    assert {o["track_id"] for o in ops["keep"]} >= {100, 101}

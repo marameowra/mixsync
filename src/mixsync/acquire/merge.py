@@ -370,7 +370,10 @@ class Merger:
             return plan.id
 
     def _duration(self, rel: str) -> float | None:
-        ms = tags.length_ms(self.fileops.library / rel)
+        try:
+            ms = tags.length_ms(self.fileops.library / rel)
+        except Exception:  # missing or corrupt file: not a duplicate, never a failed plan
+            return None
         return None if ms is None else ms / 1000
 
     def _size(self, rel: str) -> int:

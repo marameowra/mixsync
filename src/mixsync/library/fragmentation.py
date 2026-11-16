@@ -130,12 +130,23 @@ def build_ops(
         if t.release_mbid == canon.release_id and t.acoustid_id:
             by_acoustid[t.acoustid_id].append(t)  # on canon: the plan never trashes or moves it
 
+    lengths: dict[str, float | None] = {}
+
+    def length(path: str) -> float | None:
+        if path not in lengths:
+            lengths[path] = duration(path)
+        return lengths[path]
+
+    open_slots = {
+        c.recording_id for c in canon.tracks
+    }  # a recording the canonical lacks is moved in
+
     def acoustid_keeper(t: Track) -> Track | None:
-        mine = duration(t.path) if t.acoustid_id else None
-        if mine is None:
+        cands = by_acoustid.get(t.acoustid_id or "")
+        if not cands or t.recording_mbid in open_slots or (mine := length(t.path)) is None:
             return None
-        for k in by_acoustid.get(t.acoustid_id or "", []):
-            theirs = duration(k.path)
+        for k in cands:
+            theirs = length(k.path)
             if theirs is not None and abs(mine - theirs) <= DURATION_TOLERANCE_S:
                 return k
         return None
