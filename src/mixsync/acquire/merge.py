@@ -9,6 +9,7 @@ guessed.
 """
 
 import asyncio
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -228,7 +229,10 @@ class Merger:
             releases = await self.metadata.browse_group_releases(group)
             if not releases:
                 raise LookupError(f"MusicBrainz lists no releases for {group}")
-            cid = canonical.choose(releases, self.canonical_media, self.canonical_countries)
+            owned = Counter(
+                t.release_mbid for t in tracks if t.status == "verified" and t.release_mbid
+            )
+            cid = canonical.choose(releases, self.canonical_media, self.canonical_countries, owned)
         album = await self.metadata.get_release(cid)
         with self.sessions() as s:  # a lookup per candidate path, not every library path
 

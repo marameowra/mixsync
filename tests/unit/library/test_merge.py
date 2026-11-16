@@ -51,6 +51,7 @@ CANON_ALBUM = album(CANON, 1999, "r1", "r2", "r3")
 class FakeMetadata:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.listed = [CANON]  # tests opt in to listing OLD as well
 
     async def get_release(self, mbid: str) -> AlbumInfo:
         self.calls.append(f"get:{mbid}")
@@ -58,10 +59,11 @@ class FakeMetadata:
 
     async def browse_group_releases(self, release_group_mbid: str) -> list[ReleaseRef]:
         self.calls.append(f"browse:{release_group_mbid}")
-        return [
-            ReleaseRef(OLD, "Album", "Band", "2000", track_count=4),
-            ReleaseRef(CANON, "Album", "Band", "1999", track_count=3),
-        ]
+        refs = {
+            OLD: ReleaseRef(OLD, "Album", "Band", "2000", track_count=4),
+            CANON: ReleaseRef(CANON, "Album", "Band", "1999", track_count=3),
+        }
+        return [refs[r] for r in self.listed]
 
 
 class Boom(BaseException):
@@ -120,7 +122,10 @@ class World:
 
 @pytest.fixture
 def world(
-    ops: FileOps, sessions: sessionmaker[Session], make_src: MakeSrc, settings: Settings
+    ops: FileOps,
+    sessions: sessionmaker[Session],
+    make_src: MakeSrc,
+    settings: Settings,
 ) -> Iterator[World]:
     md = FakeMetadata()
     template = settings.path_template
@@ -183,6 +188,26 @@ def test_build_plan_is_a_dry_run(world: World) -> None:
     assert kinds["move"][0]["new_path"] == "Band/Album (1999)/01-01 Song r1.flac"
     assert kinds["move"][0]["tags"]["release_id"] == CANON
     assert [o["old"]["recording_mbid"] for o in kinds["keep"]] == ["r9"]
+
+
+def test_build_targets_the_release_holding_the_most_owned_tracks(world: World) -> None:
+    world.metadata.listed = [
+        OLD,
+        CANON,
+    ]  # OLD holds 4 verified tracks, CANON 1 and the earlier date
+    assert world.plan(build(world)).canonical_release_mbid == OLD
+
+
+def test_build_counts_only_verified_tracks(world: World) -> None:
+    world.metadata.listed = [OLD, CANON]
+    with world.sessions.begin() as s:
+        for i in range(5):
+            s.add(
+                Track(path=f"u{i}", recording_mbid=f"u{i}", release_mbid=CANON,
+                      release_group_mbid=GROUP, status="unverified", batch_id="b",
+                      imported_at=SystemClock().now())
+            )  # fmt: skip
+    assert world.plan(build(world)).canonical_release_mbid == OLD
 
 
 def test_stored_canonical_skips_the_browse(world: World) -> None:
