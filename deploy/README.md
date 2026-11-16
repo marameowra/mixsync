@@ -42,6 +42,7 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_PROWLARR_URL`, `MIXSYNC_PROWLARR_API_KEY` | Prowlarr connection (torrent and Usenet search, 1 request / 2 s). With qBittorrent set too, torrents are a download source; with SABnzbd, Usenet; either is enough |
 | `MIXSYNC_QBITTORRENT_URL`, `MIXSYNC_QBITTORRENT_USERNAME`, `MIXSYNC_QBITTORRENT_PASSWORD` | qBittorrent Web UI and login (empty if its auth is bypassed for MixSync); also on the settings page |
 | `MIXSYNC_QBITTORRENT_DIR` | save path of MixSync's torrents, the same in both containers; unset = no torrents |
+| `MIXSYNC_TORRENT_PACK_FOLDERS` | `true`: a request may take one album folder from a multi-album torrent (a pack); only that folder's files download ([ADR 0026](../docs/decisions/0026-pack-folders-are-partial-seeding-downloads.md)). Default off: some private trackers may count a partial download against hit-and-run or ratio rules. Also on the settings page |
 | `MIXSYNC_SABNZBD_URL`, `MIXSYNC_SABNZBD_API_KEY` | SABnzbd connection and API key; also on the settings page, never logged |
 | `MIXSYNC_SABNZBD_DIR` | folder of SABnzbd's `mixsync` category, the same in both containers; unset = no Usenet |
 | `MIXSYNC_BACKUP_DIR` | SQLite backup folder (default `/config/backups`); not used on Postgres |

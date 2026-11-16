@@ -341,12 +341,14 @@ def rank(
 ) -> list[tuple[Candidate, MatchResult]]:
     """Best first by band and distance. Ties: free slot, short queue, fast peer (Soulseek), then
     more seeders (torrents; Usenet has none). One folder per Soulseek peer (SK-P08); an indexer
-    release (`username` is the indexer) is its own candidate, so one indexer offers many."""
+    release (`username` is the indexer) is its own candidate, so one indexer offers many. A pack
+    offers only its best folder, and on equal distance a single-album release beats it."""
     scored = sorted(
         ((c, score_candidate(c, album, profile)) for c in candidates),
         key=lambda cr: (
             _ORDER[cr[1].band],
             cr[1].distance,
+            cr[0].pack,
             not cr[0].has_free_slot,
             cr[0].queue_length,
             -cr[0].upload_speed,
@@ -354,8 +356,13 @@ def rank(
         ),
     )
     seen: set[str] = set()
+    packs: set[str] = set()
     out: list[tuple[Candidate, MatchResult]] = []
     for c, r in scored:
+        if c.pack:
+            if c.infohash in packs:
+                continue
+            packs.add(c.infohash)
         if c.source != "slskd" or c.username not in seen:
             seen.add(c.username)
             # only the files that were scored, so the rest is never downloaded

@@ -4,9 +4,14 @@ unfinished one it dropped goes, with its partial files.
 
 Fields of `GET /api/v2/torrents/info` (qBittorrent's WebUI API docs) this module reads: `hash`,
 `progress` (0 to 1), `state` (`error` / `missingFiles` mean the transfer failed), `completed`
-(bytes downloaded and verified).
+(bytes downloaded and verified), `amount_left`. Of `GET /api/v2/torrents/files`: `index`, `name`
+(the path under the save path, `/`-separated), `priority` (0: not downloaded).
+
+A pack folder (ADR 0026) is a partial download: only its files are selected, by file priority.
 """
 
+import asyncio
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +22,7 @@ from mixsync.core.matching import Candidate, TransferInfo, TransferStatus
 from mixsync.ratelimit.client import PoliteClient
 
 CATEGORY = "mixsync"
+FILES_TRIES, FILES_WAIT = 10, 0.5  # a just-added torrent's file list: up to 5 s
 FAILED_STATES = frozenset({"error", "missingFiles"})
 # Only these may be deleted. Never by progress alone: a recheck (checkingUP,
 # checkingResumeData) restarts a finished torrent's progress from 0.
@@ -84,22 +90,106 @@ class Qbittorrent:
         rows: list[dict[str, Any]] = response.json()
         return next((r for r in rows if str(r.get("hash", "")).lower() == infohash), None)
 
-    async def add(self, torrent: bytes, infohash: str) -> None:
+    async def add(self, torrent: bytes, infohash: str, only: Collection[str] | None = None) -> None:
+        """Add the torrent whole. With `only` (a pack folder's candidate paths): stopped, every
+        other file set to priority 0, then started. A pack already there (shared with another
+        request) gets `only` added to its selection; no selected file is ever deselected."""
+        ours = False  # this call's add was accepted: only then may a failed selection delete it
+        if only is None or await self.info(infohash) is None:
+            stopped = {"stopped": "true", "paused": "true"} if only is not None else {}
+            response = await self._call(
+                "POST",
+                "torrents/add",
+                files={"torrents": ("release.torrent", torrent, "application/x-bittorrent")},
+                data={
+                    "category": CATEGORY,
+                    "savepath": str(self.save_dir),
+                    "autoTMM": "false",  # the category's own rules must not move it elsewhere
+                    "contentLayout": "Original",  # files at <save dir>/<torrent name>/, as offered
+                    **stopped,  # 5.x reads `stopped`, 4.6 `paused`; each ignores the other
+                },
+            )
+            ours = response.status_code == 200 and response.text.strip() == "Ok."
+            if not ours and await self.info(infohash) is None:  # "Fails." answers a re-run's add
+                raise PermanentError(f"qbittorrent refused the torrent ({response.status_code})")
+        if only is None:
+            return
+        try:
+            await self._select(infohash, set(only))
+        except (PermanentError, TransientError) as e:
+            if ours:  # stopped since this add: nothing was downloaded
+                await self._call(
+                    "POST", "torrents/delete", data={"hashes": infohash, "deleteFiles": "true"}
+                )
+            raise PermanentError(f"qbittorrent could not select the pack folder: {e}") from e
+
+    async def _files(self, infohash: str) -> dict[str, tuple[int, int]]:
+        """Each file's candidate path (backslash-joined) -> (index, priority). A torrent just
+        added can take a moment to show up."""
+        for _ in range(FILES_TRIES):
+            response = await self._call("GET", "torrents/files", params={"hash": infohash})
+            if response.status_code == 200 and (rows := response.json()):
+                return {
+                    str(f["name"]).replace("/", "\\"): (int(f["index"]), int(f["priority"]))
+                    for f in rows
+                }
+            await asyncio.sleep(FILES_WAIT)
+        raise PermanentError("qbittorrent has no file list for the torrent")
+
+    async def _priority(self, infohash: str, ids: list[int], priority: int) -> None:
         response = await self._call(
             "POST",
-            "torrents/add",
-            files={"torrents": ("release.torrent", torrent, "application/x-bittorrent")},
-            data={
-                "category": CATEGORY,
-                "savepath": str(self.save_dir),
-                "autoTMM": "false",  # the category's own rules must not move it elsewhere
-                "contentLayout": "Original",  # files at <save dir>/<torrent name>/, as offered
-            },
+            "torrents/filePrio",
+            data={"hash": infohash, "id": "|".join(map(str, ids)), "priority": str(priority)},
         )
-        if response.status_code == 200 and response.text.strip() == "Ok.":
+        if response.status_code != 200:
+            raise PermanentError(f"qbittorrent torrents/filePrio returned {response.status_code}")
+
+    async def _select(self, infohash: str, only: set[str]) -> None:
+        # shortcut: read-modify-write of priorities; two workers selecting folders of one new
+        # pack at once can zero each other's files. Unsafe with multiple workers; lock per
+        # infohash if more than one worker runs downloads.
+        files = await self._files(infohash)
+        if not only <= files.keys():
+            raise PermanentError("the pack folder's files are not in the torrent")
+        changed = False
+        # every file wanted: added just now, or by an add cut short before its selection ran
+        if all(p for _, p in files.values()):
+            await self._priority(infohash, [i for n, (i, _) in files.items() if n not in only], 0)
+            changed = True
+        if more := sorted(i for n, (i, p) in files.items() if n in only and not p):
+            await self._priority(infohash, more, 1)
+            changed = True
+        if changed:
+            start = await self._call("POST", "torrents/start", data={"hashes": infohash})
+            if start.status_code == 404:  # qBittorrent < 5 calls it resume
+                start = await self._call("POST", "torrents/resume", data={"hashes": infohash})
+            if start.status_code != 200:
+                raise PermanentError(f"qbittorrent start returned {start.status_code}")
+
+    async def deselect(self, infohash: str, paths: Collection[str]) -> None:
+        """Stop downloading these files of a pack while it is unfinished; the caller leaves out
+        any file another live request needs. A torrent added whole is never touched."""
+        if not paths or not unfinished(await self.info(infohash)):
             return
-        if await self.info(infohash) is None:  # "Fails." also answers a re-run's second add
-            raise PermanentError(f"qbittorrent refused the torrent ({response.status_code})")
+        files = await self._files(infohash)
+        if all(p for _, p in files.values()):  # added whole: not a pack selection
+            return
+        if ids := sorted(i for n, (i, p) in files.items() if p and n in paths):
+            await self._priority(infohash, ids, 0)
+
+    async def drop_folder(self, infohash: str, paths: Collection[str]) -> None:
+        """A dropped pack folder no live request shares. The torrent goes (with its partial
+        files) only if these files are its whole selection; if any other file is selected, a
+        folder an earlier request imported and seeds, only these files are deselected."""
+        if not unfinished(await self.info(infohash)):
+            return
+        files = await self._files(infohash)
+        whole = all(p for _, p in files.values())  # an add cut short before its selection
+        if whole or not any(p for n, (_, p) in files.items() if n not in paths):
+            await self.remove_unfinished(infohash)
+        else:
+            await self.deselect(infohash, paths)
 
     def local(self, path: str) -> Path:
         """Where a candidate file (backslash-joined torrent path) lands. Torrent paths are

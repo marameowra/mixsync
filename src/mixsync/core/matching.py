@@ -154,6 +154,7 @@ class Candidate:
     url: str = ""  # an indexer release's download link, never with the API key in it
     infohash: str = ""  # a torrent's v1 info hash (lowercase hex); Soulseek and Usenet leave it
     nzb_hash: str = ""  # an NZB's file-list SHA-1 (lowercase hex); names its SABnzbd job
+    pack: bool = False  # one album folder of a multi-album torrent (ADR 0026)
 
 
 class TransferStatus(StrEnum):

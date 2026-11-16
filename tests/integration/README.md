@@ -18,10 +18,13 @@ first build.
 - `fakes/server.py`: one fake for slskd (search, responses, enqueue, transfer status, cancel),
   MusicBrainz (`/ws/2/release`), AcoustID (`/v2/lookup`, by the file's length) and the Cover Art
   Archive (always 404). It serves two canned albums and generates their short noise FLACs at
-  startup; an enqueue copies them into the downloads volume where slskd would save them.
+  startup; an enqueue copies them into the downloads volume where slskd would save them. It is
+  also Prowlarr and qBittorrent for a third album Soulseek lacks, offered in a two-album pack:
+  `torrents/start` writes only the selected files into the `torrents` volume.
 - `test_stack.py`: the happy path (the album lands in `/data/library` and Navidrome's
   `getAlbumList2` lists it after mixsync's rescan), a review-band path (low-passed files trip the
-  transcode veto: the album lands in review, not the library), and UI smoke checks (login, a
+  transcode veto: the album lands in review, not the library), a pack folder (only its files land
+  in the save path, and the import copies them; ADR 0026), and UI smoke checks (login, a
   request, the review list and detail pages).
 
 ## Rules

@@ -62,6 +62,7 @@ class AppSettings(TimestampMixin, Base):
     qbittorrent_url: Mapped[str | None] = mapped_column(Text)
     qbittorrent_username: Mapped[str | None] = mapped_column(Text)
     sabnzbd_url: Mapped[str | None] = mapped_column(Text)
+    torrent_pack_folders: Mapped[bool | None]
     # Fernet ciphertext of the secret settings; NULL is not saved
     slskd_api_key_encrypted: Mapped[str | None] = mapped_column(Text)
     media_server_password_encrypted: Mapped[str | None] = mapped_column(Text)

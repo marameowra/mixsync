@@ -9,11 +9,11 @@ import httpx
 import pytest
 
 from tests.integration.conftest import LIBRARY, WEB, csrf, request_album, wait_for
-from tests.integration.fakes.server import ALBUMS, ARTIST
+from tests.integration.fakes.server import ALBUMS, ARTIST, PACK, PACK_ALBUM, TORRENTS
 
 pytestmark = pytest.mark.integration
 
-HAPPY, REVIEW = ALBUMS
+HAPPY, REVIEW, _ = ALBUMS
 
 
 def test_login_page_and_bad_password() -> None:
@@ -61,6 +61,20 @@ def test_review_band_lands_in_review_not_library(web: httpx.Client) -> None:
     assert "looks transcoded" in detail.text  # the veto the fake's low-passed files trip
     assert "Needs review" in web.get("/requests").text
     assert not (LIBRARY / ARTIST / f"{REVIEW['title']} (2020)").exists()
+
+
+def test_a_pack_folder_downloads_alone_and_is_imported(web: httpx.Client) -> None:
+    """ADR 0026: Soulseek lacks the album; Prowlarr finds it in a pack and qBittorrent gets only
+    its folder's files, which the import copies (the seeding originals stay)."""
+    request_album(web, PACK_ALBUM["id"])
+    folder = LIBRARY / ARTIST / f"{PACK_ALBUM['title']} (2020)"
+    wait_for(
+        "the pack folder's album in the library",
+        lambda: True if len(list(folder.glob("*.flac"))) == 3 else None,
+    )
+    saved = sorted(str(p.relative_to(TORRENTS)) for p in TORRENTS.rglob("*") if p.is_file())
+    names = [f"{i:02} - {t['title']}.flac" for i, t in enumerate(PACK_ALBUM["tracks"], 1)]
+    assert saved == [f"{PACK}/{PACK_ALBUM['folder']}/{n}" for n in names]  # never OTHER's
 
 
 def test_review_page_renders_with_its_form(web: httpx.Client) -> None:

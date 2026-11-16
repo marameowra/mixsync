@@ -239,6 +239,7 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
             )
             if "usenet" in protocols and nzb_dir
             else None,
+            packs=settings.torrent_pack_folders,
         )
 
     return Pipeline(

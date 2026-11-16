@@ -1,0 +1,93 @@
+[
+  {
+    "index": 0,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2018 - First Album/01 - Alpha.flac",
+    "size": 28000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 1,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2018 - First Album/02 - Beta.flac",
+    "size": 29000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 2,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2020 - Test Album/01 - Opening.flac",
+    "size": 30000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 3,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2020 - Test Album/02 - Middle.flac",
+    "size": 31000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 4,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2020 - Test Album/cover.jpg",
+    "size": 150000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 5,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2022 - Live/CD1/01 - Opening (Live).flac",
+    "size": 32000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  },
+  {
+    "index": 6,
+    "name": "Test Artist - Discography (2018-2022) [FLAC]/2022 - Live/CD2/01 - Middle (Live).flac",
+    "size": 33000000,
+    "progress": 0,
+    "priority": 1,
+    "is_seed": false,
+    "piece_range": [
+      0,
+      1
+    ],
+    "availability": 1
+  }
+]
