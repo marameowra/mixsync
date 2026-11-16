@@ -54,6 +54,30 @@ def test_most_tracks_then_country_then_status_then_id() -> None:
     assert choose([ref("b", **both), ref("a", **both)]) == "a"
 
 
+def test_owned_tracks_beat_media_and_date() -> None:
+    a = ref("a", formats=("Vinyl",), date="2010")
+    b = ref("b", formats=("CD",), date="2000")
+    assert choose([a, b]) == "b"
+    assert choose([a, b], owned={"a": 14, "b": 1}) == "a"
+
+
+def test_official_beats_earlier_promotion() -> None:
+    f = ("CD",)
+    promo = ref("a", formats=f, date="2000", status="Promotion")
+    retail = ref("b", formats=f, date="2005", status="Official")
+    assert choose([promo, retail]) == "b"
+    assert choose([promo, retail], owned={"x": 3}) == "b"  # owned tracks on no listed release
+
+
+def test_equal_owned_counts_fall_back_to_metadata_then_id() -> None:
+    f = ("CD",)
+    owned = {"a": 2, "b": 2}
+    early = ref("b", formats=f, date="2000")
+    late = ref("a", formats=f, date="2001")
+    assert choose([late, early], owned=owned) == "b"
+    assert choose([ref("b", formats=f), ref("a", formats=f)], owned=owned) == "a"
+
+
 def test_split_maps_by_recording_and_never_twice() -> None:
     canon = [
         TrackInfo("One", recording_id="r1", index=1),

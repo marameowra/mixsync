@@ -1,7 +1,7 @@
 """Canonical release policy: which release of a release group the library files tracks under."""
 
 from collections import defaultdict, deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from mixsync.core.matching import TrackInfo
@@ -18,18 +18,22 @@ def choose(
     releases: Sequence[ReleaseRef],
     media: Sequence[str] = ("Digital Media", "CD"),
     countries: Sequence[str] = ("XW",),
+    owned: Mapping[str, int] | None = None,
 ) -> str:
-    """The id of the best release: preferred media, then earliest date, most tracks, preferred
-    country, Official status; the id breaks any remaining tie so every worker agrees."""
+    """The id of the best release: most owned verified tracks (release id -> count), then
+    preferred media, Official status, earliest date, most tracks, preferred country; the id
+    breaks any remaining tie so every worker agrees."""
+    owned = owned or {}
 
-    def key(r: ReleaseRef) -> tuple[int, bool, str, int, int, bool, str]:
+    def key(r: ReleaseRef) -> tuple[int, int, bool, bool, str, int, int, str]:
         return (
+            -owned.get(r.release_id, 0),
             min((_rank(media, f) for f in r.formats), default=len(media)),
+            r.status != "Official",
             not r.date,  # a missing date sorts last; MB dates are YYYY[-MM[-DD]], so text sorts
             r.date or "",
             -(r.track_count or 0),
             _rank(countries, r.country),
-            r.status != "Official",
             r.release_id,
         )
 

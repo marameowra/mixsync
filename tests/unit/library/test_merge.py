@@ -25,7 +25,7 @@ from mixsync.db.models.safety import FileOp
 from mixsync.db.models.work import Job
 from mixsync.db.names import SqlNameStore
 from mixsync.db.undo import undoable
-from mixsync.library import fileops, fragmentation, tags
+from mixsync.library import canonical, fileops, fragmentation, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.purge import TrashPurger
@@ -118,10 +118,24 @@ class World:
         return files(self.ops.trash_dir)
 
 
+_choose = canonical.choose
+
+
 @pytest.fixture
 def world(
-    ops: FileOps, sessions: sessionmaker[Session], make_src: MakeSrc, settings: Settings
+    ops: FileOps,
+    sessions: sessionmaker[Session],
+    make_src: MakeSrc,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[World]:
+    # Most tests here plan onto CANON though OLD holds more of the files; the owned-count
+    # choice has its own tests below, which restore the real `choose`.
+    monkeypatch.setattr(
+        canonical,
+        "choose",
+        lambda rels, media, countries, owned=None: _choose(rels, media, countries),
+    )
     md = FakeMetadata()
     template = settings.path_template
     w = World(
@@ -183,6 +197,14 @@ def test_build_plan_is_a_dry_run(world: World) -> None:
     assert kinds["move"][0]["new_path"] == "Band/Album (1999)/01-01 Song r1.flac"
     assert kinds["move"][0]["tags"]["release_id"] == CANON
     assert [o["old"]["recording_mbid"] for o in kinds["keep"]] == ["r9"]
+
+
+def test_build_targets_the_release_holding_the_most_owned_tracks(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(canonical, "choose", _choose)
+    pid = build(world)  # OLD holds 4 verified tracks, CANON 1 and the earlier date
+    assert world.plan(pid).canonical_release_mbid == OLD
 
 
 def test_stored_canonical_skips_the_browse(world: World) -> None:
