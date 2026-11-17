@@ -151,3 +151,27 @@ class SmartPlaylist(TimestampMixin, Base):
     # the last build's tracks: [{"recording_mbid", "artist", "title"}], in playlist order
     entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class RadioPlaylist(TimestampMixin, Base):
+    """A user's playlist grown by sonic similarity from a seed (CONTEXT.md: Radio). Owned,
+    analyzed tracks only until gap filling exists, so it never makes requests."""
+
+    __tablename__ = "radio_playlists"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    seed_kind: Mapped[str] = mapped_column(String(16))  # track | album | artist | playlist
+    # track: the track id; album: the release group MBID; artist: the album artist tag;
+    # playlist: "<smart|discovery|mirrored>:<id>", one of the owner's playlists
+    seed_ref: Mapped[str] = mapped_column(String(255))
+    size: Mapped[int] = mapped_column(Integer, default=50)
+    cadence_days: Mapped[int] = mapped_column(Integer, default=7)
+    server_playlist_id: Mapped[str | None] = mapped_column(String(64))
+    next_build_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # the last build's tracks: [{"recording_mbid", "artist", "title", "reason"}], in order
+    entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    last_error: Mapped[str | None] = mapped_column(Text)

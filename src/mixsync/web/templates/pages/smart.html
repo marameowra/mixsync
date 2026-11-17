@@ -23,6 +23,7 @@
 <p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}. {{ p.entries|length }} track{{ "s" if p.entries|length != 1 }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last build: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/smart/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit">Rebuild now</button></form>
+{{ forms.radio("playlist", "smart:" ~ p.id, p.name) }}
 {% if p.entries %}
 <div class="scroll">
 <table>

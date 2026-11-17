@@ -19,8 +19,10 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0048_radio_playlists"
+    downgrade("-1")  # the chain runs 0040 -> ... -> 0048, one step at a time
     assert _version(settings) == "0047_track_analyses"
-    downgrade("-1")  # the chain runs 0040 -> ... -> 0047, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0046_torrent_pack_folders"
     downgrade("-1")
     assert _version(settings) == "0045_restart_requested"
@@ -35,11 +37,11 @@ def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
     upgrade()
-    assert _version(settings) == "0047_track_analyses"
+    assert _version(settings) == "0048_radio_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0047_track_analyses"
+    assert _version(settings) == "0048_radio_playlists"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
