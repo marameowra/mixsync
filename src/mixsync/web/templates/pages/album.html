@@ -6,6 +6,9 @@
 {% set can_edit = "library.edit" in user.capabilities %}
 <h1>{% if kind == "untagged" %}Untagged{% elif kind == "pending" %}Names pending{% else %}{{ albumartist or "(no album artist)" }} - {{ album or "(no album tag)" }}{% if year %} ({{ year }}){% endif %}{% endif %}</h1>
 {% if kind in ("verified", "unverified") %}<p>{{ status(kind) }}</p>{% endif %}
+{% set can_radio = "request" in user.capabilities %}
+{% if can_radio and kind == "verified" and group %}{{ forms.radio("album", group, album or albumartist) }}{% endif %}
+{% if can_radio and kind in ("verified", "unverified") and albumartist %}{{ forms.radio("artist", albumartist, albumartist) }}{% endif %}
 {% if can_edit and kind in ("verified", "unverified") %}
 <form method="post" action="/library/album/delete">{{ forms.csrf() }}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="group" value="{{ group }}"><input type="hidden" name="albumartist" value="{{ albumartist }}"><input type="hidden" name="album" value="{{ album }}"><input type="hidden" name="year" value="{{ year }}"><button class="btn danger" type="submit">Delete album</button></form>
 {% endif %}
@@ -20,7 +23,8 @@
   <tr>
     <td><span class="path">{{ t.path }}</span></td>
     <td>{{ status(t.status) }}</td>
-    <td>{% if can_edit %}<a href="/library/tracks/{{ t.id }}/tags">Restore earlier tags</a>
+    <td>{% if can_radio and t.recording_mbid %}{{ forms.radio("track", t.recording_mbid, t.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]) }}{% endif %}
+      {% if can_edit %}<a href="/library/tracks/{{ t.id }}/tags">Restore earlier tags</a>
       <form method="post" action="/library/tracks/{{ t.id }}/delete">{{ forms.csrf() }}<button class="btn danger" type="submit">Delete track</button></form>{% endif %}</td>
   </tr>
   {% endfor %}

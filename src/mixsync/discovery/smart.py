@@ -1,7 +1,7 @@
 """Smart playlists: rules over the owned library (CONTEXT.md), rebuilt on the playlist's cadence
 and pushed to the media server, replacing the playlist there. Nothing here requests a track or
 touches a file: a track is a candidate only if it has a `tracks` row and the media server lists
-it."""
+it. Radio (`radio.py`) reuses this cycle, rate limit and push with its own pick."""
 
 import logging
 from datetime import datetime, timedelta
@@ -14,7 +14,7 @@ from mixsync.core.clock import aware
 from mixsync.core.errors import PermanentError
 from mixsync.core.jobs import LIVE, JobKind, JobState
 from mixsync.core.types import LibrarySong
-from mixsync.db.models.discovery import SmartPlaylist
+from mixsync.db.models.discovery import RadioPlaylist, SmartPlaylist
 from mixsync.db.models.library import Track
 from mixsync.db.models.work import Job
 from mixsync.db.queue import USER_PRIORITY, JobRecord, enqueue_in
@@ -27,6 +27,13 @@ SORTS = {"random": "Random", "added": "Recently added first", "year": "Year, old
 NONE_FOUND = "the media server lists none of the owned tracks; skipped push"
 Owned = tuple[str, str | None, datetime]  # (recording MBID, year tag, imported_at)
 INTS = ("year_from", "year_to", "added_days", "unplayed_days")
+Built = SmartPlaylist | RadioPlaylist
+# each kind's build job and idempotency key prefix
+KINDS: dict[type[Built], tuple[JobKind, str]] = {
+    SmartPlaylist: (JobKind.SMART_BUILD, "smart"),
+    RadioPlaylist: (JobKind.RADIO_BUILD, "radio"),
+}
+Picked = list[tuple[LibrarySong, dict[str, Any]]]  # (song, extra entry fields), in order
 
 
 def validate_rules(rules: dict[str, Any]) -> None:
@@ -47,24 +54,25 @@ def validate_rules(rules: dict[str, Any]) -> None:
         raise ValueError("the year range must run from the earlier year to the later")
 
 
-def waiting(playlist_id: int) -> Select[Any]:
+def waiting(playlist_id: int, kind: JobKind = JobKind.SMART_BUILD) -> Select[Any]:
     """Builds queued, leased, running or waiting to retry."""
     return select(Job).where(
-        Job.kind == JobKind.SMART_BUILD,
+        Job.kind == kind,
         Job.status.in_(LIVE),
         Job.payload["playlist_id"].as_integer() == playlist_id,
     )
 
 
-def ensure_build(s: Session, now: datetime, pl: SmartPlaylist) -> None:
+def ensure_build(s: Session, now: datetime, pl: Built) -> None:
     """Make sure a build is queued, due at the playlist's next_build_at (or now)."""
-    if s.scalar(waiting(pl.id).limit(1)) is None:
+    kind = KINDS[type(pl)][0]
+    if s.scalar(waiting(pl.id, kind).limit(1)) is None:
         due = aware(pl.next_build_at) if pl.next_build_at else now
         pl.next_build_at = due
-        enqueue_in(s, now, JobKind.SMART_BUILD, {"playlist_id": pl.id}, run_after=due)
+        enqueue_in(s, now, kind, {"playlist_id": pl.id}, run_after=due)
 
 
-def build_now(s: Session, now: datetime, pl: SmartPlaylist) -> bool:
+def build_now(s: Session, now: datetime, pl: Built) -> bool:
     """Bring the queued build forward to now. False if built within the gap."""
     if pl.last_built_at and now - aware(pl.last_built_at) < BUILD_NOW_GAP:
         return False
@@ -74,7 +82,7 @@ def build_now(s: Session, now: datetime, pl: SmartPlaylist) -> bool:
         s.execute(
             update(Job)
             .where(
-                Job.kind == JobKind.SMART_BUILD,
+                Job.kind == KINDS[type(pl)][0],
                 Job.status.in_((JobState.QUEUED, JobState.RETRY_WAIT)),
                 Job.payload["playlist_id"].as_integer() == pl.id,
             )
@@ -138,22 +146,25 @@ def pick(
 
 
 class Smart:
+    model: type[Built] = SmartPlaylist
+
     def __init__(self, discovery: Discovery) -> None:
         self.d = discovery
+        self.kind, self.key = KINDS[self.model]
 
     def handlers(self) -> dict[JobKind, Any]:
-        return {JobKind.SMART_BUILD: self.build}
+        return {self.kind: self.build}
 
     def start_chains(self) -> None:
-        """On startup: every smart playlist gets a build queued if it has none waiting."""
+        """On startup: every playlist of this kind gets a build queued if it has none waiting."""
         now = self.d.clock.now()
         with self.d.sessions.begin() as s:
-            for pl in s.scalars(select(SmartPlaylist)):
+            for pl in s.scalars(select(self.model)):
                 ensure_build(s, now, pl)
 
-    def _schedule_next(self, s: Session, now: datetime, pl: SmartPlaylist, job_id: int) -> None:
+    def _schedule_next(self, s: Session, now: datetime, pl: Built, job_id: int) -> None:
         """Queue the next build, keyed on this job so a re-run adds none."""
-        if s.scalar(waiting(pl.id).where(Job.id != job_id).limit(1)) is not None:
+        if s.scalar(waiting(pl.id, self.kind).where(Job.id != job_id).limit(1)) is not None:
             return
         cadence = timedelta(days=pl.cadence_days)
         nxt = now + cadence + min(cadence * 0.1, JITTER_CAP) * self.d.rng(-1, 1)
@@ -161,10 +172,10 @@ class Smart:
         enqueue_in(
             s,
             now,
-            JobKind.SMART_BUILD,
+            self.kind,
             {"playlist_id": pl.id},
             run_after=nxt,
-            idempotency_key=f"smart:{pl.id}:after:{job_id}",
+            idempotency_key=f"{self.key}:{pl.id}:after:{job_id}",
         )
 
     async def build(self, job: JobRecord) -> None:
@@ -174,61 +185,72 @@ class Smart:
         except Exception:
             # Retries are the queue's; once they run out the chain must go on.
             with self.d.sessions.begin() as s:
-                if pl := s.get(SmartPlaylist, pid):
+                if pl := s.get(self.model, pid):
                     self._schedule_next(s, self.d.clock.now(), pl, job.id)
             raise
+
+    def _read(self, s: Session, pl: Any) -> tuple[list[str], Any] | str:
+        """(the owned recordings, what `_pick` needs), read before the media server is asked.
+        A string instead is why this build picks nothing; the last playlist stays."""
+        owned: list[Owned] = [
+            (m, y, t)
+            for m, y, t in s.execute(
+                select(Track.recording_mbid, Track.year, Track.imported_at)
+                .where(Track.recording_mbid.is_not(None))
+                .order_by(Track.imported_at, Track.id)
+            )
+            if m
+        ]
+        return [m for m, _, _ in owned], (owned, dict(pl.rules), pl.size, pl.sort)
+
+    def _pick(self, state: Any, songs: list[LibrarySong], now: datetime) -> Picked:
+        owned, rules, size, sort = state
+        return [(x, {}) for x in pick(owned, songs, rules, size, sort, now, self.d.rng)]
 
     async def _build(self, job: JobRecord, pid: int) -> None:
         d = self.d
         with d.sessions() as s:
-            pl = s.get(SmartPlaylist, pid)
+            pl = s.get(self.model, pid)
             if pl is None:
                 return
             links, why = d.links(s, pl.user_id, frozenset({d.server}))
-            rules, size, sort = dict(pl.rules), pl.size, pl.sort
             name, existing = pl.name, pl.server_playlist_id
-            owned: list[Owned] = [
-                (m, y, t)
-                for m, y, t in s.execute(
-                    select(Track.recording_mbid, Track.year, Track.imported_at)
-                    .where(Track.recording_mbid.is_not(None))
-                    .order_by(Track.imported_at, Track.id)
-                )
-                if m
-            ]
-        picked: list[LibrarySong] | None = None
+            read = self._read(s, pl)
+        picked: Picked | None = None
         new_id: str | None = None
         if links is None:
             note: str | None = why
+        elif isinstance(read, str):
+            note = read
         else:
+            owned, state = read
             lib = d.library_for(*links[d.server])
             try:
                 folders = await lib.music_folders()
                 note = d.missing_note([d.main_library], folders, "using all libraries")
                 songs = await lib.library_songs(d.folder_id(folders, d.main_library))
                 listed = {song.recording_mbid for song in songs}
-                if owned and not any(m in listed for m, _, _ in owned):
+                if owned and not any(m in listed for m in owned):
                     note = NONE_FOUND  # not scanned yet: keep the last playlist
                 else:
-                    now = d.clock.now()
-                    picked = pick(owned, songs, rules, size, sort, now, d.rng)
+                    picked = self._pick(state, songs, d.clock.now())
                     if picked or existing:  # matching nothing empties the playlist mixsync made
-                        ids = [song.id for song in picked]
+                        ids = [song.id for song, _ in picked]
                         new_id = await lib.push_playlist(f"MixSync: {name}", ids, existing)
             except PermanentError as e:  # AuthError, not authorized: retrying would not help
                 note = f"{d.label}: {e}"
         with d.sessions.begin() as s:
-            pl = s.get(SmartPlaylist, pid)
+            pl = s.get(self.model, pid)
             if pl is None:
                 return
             now = d.clock.now()
             pl.last_error = note
             if picked is not None:
                 pl.entries = [
-                    {"recording_mbid": x.recording_mbid, "artist": x.artist, "title": x.title}
-                    for x in picked
+                    {"recording_mbid": x.recording_mbid, "artist": x.artist, "title": x.title, **e}
+                    for x, e in picked
                 ]
                 pl.last_built_at = now
-                log.info("smart: playlist %s: %d tracks", pid, len(picked))
+                log.info("%s: playlist %s: %d tracks", self.key, pid, len(picked))
             pl.server_playlist_id = new_id or pl.server_playlist_id
             self._schedule_next(s, now, pl, job.id)

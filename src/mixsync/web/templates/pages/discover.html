@@ -34,6 +34,7 @@
 <p>Last built {{ p.last_built_at or "never" }}; next build {{ p.next_build_at or "-" }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last build: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/discover/{{ p.id }}/build">{{ forms.csrf() }}<button type="submit"{% if loop.first %} class="primary"{% endif %}>Build now</button></form>
+{{ forms.radio("playlist", "discovery:" ~ p.id, p.name) }}
 {% if tracks[p.id] %}
 <div class="scroll">
 <table>

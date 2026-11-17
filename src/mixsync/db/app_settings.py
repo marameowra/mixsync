@@ -22,6 +22,7 @@ from mixsync.db.models.discovery import (
     DiscoveryPlaylist,
     MirroredPlaylist,
     ProvisionalTrack,
+    RadioPlaylist,
     SmartPlaylist,
 )
 from mixsync.db.models.infra import WorkerHeartbeat
@@ -137,7 +138,7 @@ def switch_media_server(s: Session, kind: str) -> None:
     """ADR 0024: stored ids belong to the old server, so clear them (the next push creates
     playlists again and tracks are looked up again), and every media server link must be made
     again. Nothing on disk changes."""
-    for model in (DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist):
+    for model in (DiscoveryPlaylist, MirroredPlaylist, SmartPlaylist, RadioPlaylist):
         s.execute(update(model).values(server_playlist_id=None))
     s.execute(update(ProvisionalTrack).values(server_song_id=None))
     # an empty secret never decrypts, so link_secret keeps needs_relink set until a relink

@@ -55,6 +55,7 @@ def nearest(
             TrackAnalysis.vector.is_not(None), *_ok(version)
         )
     ).all()
+    seeds = set(seeds)  # a list would make each row's membership test O(seeds)
     seeded = [v for t, v in rows if t in seeds and v]
     if not seeded:
         return []

@@ -1,5 +1,7 @@
 {# Import with context: {% import "macros/forms.html" as forms with context %} #}
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
+{# Start a Radio from a seed (discovery.radio.seed_tracks names the kinds and refs). #}
+{% macro radio(kind, ref, name) %}<form method="post" action="/radio">{{ csrf() }}<input type="hidden" name="seed_kind" value="{{ kind }}"><input type="hidden" name="seed_ref" value="{{ ref }}"><input type="hidden" name="name" value="{{ ("Radio: " ~ name)[:200] }}"><button type="submit">Radio from this {{ kind }}</button></form>{% endmacro %}
 {# A plan action; changes = move+trash ops, typed back when above the data-safety threshold. #}
 {% macro plan_action(plan, action, label, ops=none) %}
 {% set ops = plan.ops if ops is none else ops %}

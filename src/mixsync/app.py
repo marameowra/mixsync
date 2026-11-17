@@ -26,6 +26,7 @@ from mixsync.web.routes import (
     media,
     migration,
     mirrored,
+    radio,
     requests,
     review,
     smart,
@@ -115,6 +116,7 @@ def create_app(
     app.include_router(discover.router)
     app.include_router(mirrored.router)
     app.include_router(smart.router)
+    app.include_router(radio.router)
     app.include_router(spotify.router)
 
     @app.get("/healthz")

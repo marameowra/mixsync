@@ -30,6 +30,7 @@
 <p>Last synced {{ p.last_synced_at or "never" }}; next sync {{ p.next_sync_at or "-" }}.</p>
 {% if p.last_error %}<p class="notice caution" role="alert"><span aria-hidden="true">▲</span> Last sync: {{ p.last_error }}</p>{% endif %}
 <form method="post" action="/mirrored/{{ p.id }}/sync">{{ forms.csrf() }}<button type="submit">Sync now</button></form>
+{{ forms.radio("playlist", "mirrored:" ~ p.id, p.name) }}
 {% if p.upstream_kind == "spotify_api" %}<p>Imported from Spotify. A sync matches the imported list against your library again without calling Spotify; to pick up changes made on Spotify, import it again. Missing tracks are listed only: Spotify's terms do not allow requesting them.</p>
 {% set stale = stale_at[p.id] %}
 {% if stale and stale <= now %}<p>{{ status("stale") }} Last imported {{ p.imported_at.date() }}. Spotify's terms do not allow keeping its data longer, so only the tracks you own are kept, and the media server playlist stays as it was until you import it again.</p>

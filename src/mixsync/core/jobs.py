@@ -30,6 +30,7 @@ class JobKind(StrEnum):
     MIRROR_SYNC = "mirror_sync"
     SPOTIFY_REIMPORT = "spotify_reimport"  # daily; never requests
     SMART_BUILD = "smart_build"  # owned library only; never requests
+    RADIO_BUILD = "radio_build"  # owned, analyzed tracks only; never requests
     DB_BACKUP = "db_backup"
     NAME_BACKFILL = "name_backfill"
     MISSING_SCAN = "missing_scan"  # builds a draft; changes no request

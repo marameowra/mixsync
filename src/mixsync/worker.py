@@ -32,6 +32,7 @@ from mixsync.discovery.listenbrainz import ListenBrainzClient
 from mixsync.discovery.loves import Loves
 from mixsync.discovery.mirrored import LOVES, Mirror
 from mixsync.discovery.playlists import Discovery
+from mixsync.discovery.radio import Radio
 from mixsync.discovery.resolver import TrackResolver
 from mixsync.discovery.retention import Retention
 from mixsync.discovery.smart import Smart
@@ -393,6 +394,7 @@ def _new_queue(
         },
     )
     smart = Smart(discovery)
+    radio = Radio(discovery)
     reimport = Reimport(
         sessions,
         clock,
@@ -419,6 +421,7 @@ def _new_queue(
         | retention.handlers()
         | mirror.handlers()
         | smart.handlers()
+        | radio.handlers()
         | reimport.handlers()
         | analysis.handlers()
     )
@@ -428,6 +431,7 @@ def _new_queue(
         retention.start_chains()
         mirror.start_chains()
         smart.start_chains()
+        radio.start_chains()
         reimport.start_chains()
 
     startup = (

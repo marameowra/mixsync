@@ -19,8 +19,10 @@ def _version(settings: Settings) -> str | None:
 
 def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     upgrade()
+    assert _version(settings) == "0048_radio_playlists"
+    downgrade("-1")  # the chain runs 0040 -> ... -> 0048, one step at a time
     assert _version(settings) == "0047_track_analyses"
-    downgrade("-1")  # the chain runs 0040 -> ... -> 0047, one step at a time
+    downgrade("-1")
     assert _version(settings) == "0046_torrent_pack_folders"
     downgrade("-1")
     assert _version(settings) == "0045_restart_requested"
@@ -35,11 +37,11 @@ def test_upgrade_downgrade_upgrade(settings: Settings) -> None:
     downgrade("-1")
     assert _version(settings) == "0040_http_cache_expires_index"
     upgrade()
-    assert _version(settings) == "0047_track_analyses"
+    assert _version(settings) == "0048_radio_playlists"
     downgrade("base")
     assert _version(settings) is None
     upgrade()
-    assert _version(settings) == "0047_track_analyses"
+    assert _version(settings) == "0048_radio_playlists"
 
 
 def test_revision_ids_fit_alembic_version() -> None:
@@ -459,6 +461,50 @@ def test_0043_requests_never_reuse_an_orphaned_id(settings: Settings) -> None:
         c.execute(text("DELETE FROM requests WHERE id = 10"))
         c.execute(insert)
         assert c.execute(text("SELECT MAX(id) FROM requests")).scalar() == 11
+
+
+def test_0048_keeps_playlists_and_holds_and_never_reuses_a_playlist_id(
+    settings: Settings,
+) -> None:
+    upgrade("0047_track_analyses")
+    day = "'2026-01-01'"
+    rows = {
+        "discovery_playlists": "(user_id, name, sources, size, unowned_ratio, cadence_days,"
+        " retention_days, keep_plays, entries, created_at, updated_at) VALUES"
+        f" (1, :name, '[]', 50, 0.3, 7, 30, 2, '[]', {day}, {day})",
+        "mirrored_playlists": "(user_id, name, upstream_kind, upstream_ref, cadence_days, entries,"
+        f" created_at, updated_at) VALUES (1, :name, 'spotify', :name, 7, '[]', {day}, {day})",
+        "smart_playlists": "(user_id, name, rules, size, sort, cadence_days, entries, created_at,"
+        f" updated_at) VALUES (1, :name, '[]', 50, 'random', 7, '[]', {day}, {day})",
+    }
+    with make_engine(settings).begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, status, created_at, updated_at)"
+                f" VALUES (1, 'u', 'x', 'active', {day}, {day})"
+            )
+        )
+        for table, values in rows.items():
+            for n in (1, 2):  # ids 1 and 2
+                c.execute(text(f"INSERT INTO {table} {values}"), {"name": f"p{n}"})
+        # a hold on discovery playlist 2: the table rebuild must keep it and its foreign key
+        c.execute(
+            text(
+                "INSERT INTO provisional_holds (user_id, recording_mbid, playlist_id, created_at,"
+                f" updated_at) VALUES (1, 'r', 2, {day}, {day})"
+            )
+        )
+    upgrade()
+    with make_engine(settings).begin() as c:
+        assert c.execute(text("SELECT playlist_id FROM provisional_holds")).scalars().all() == [2]
+        for table in rows:
+            assert c.execute(text(f"SELECT id FROM {table} ORDER BY id")).scalars().all() == [1, 2]
+        for table in ("mirrored_playlists", "smart_playlists"):  # delete the newest, add one
+            c.execute(text(f"DELETE FROM {table} WHERE id = 2"))
+            c.execute(text(f"INSERT INTO {table} {rows[table]}"), {"name": "p3"})
+            assert c.execute(text(f"SELECT MAX(id) FROM {table}")).scalar() == 3
+        if c.dialect.name == "sqlite":
+            assert not c.execute(text("PRAGMA foreign_key_check")).all()
 
 
 def test_0044_keeps_every_media_server_value_under_its_new_name(settings: Settings) -> None:
