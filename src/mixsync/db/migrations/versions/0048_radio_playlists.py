@@ -1,5 +1,9 @@
 """radio_playlists: playlists grown from a seed by sonic similarity (#449)
 
+A Radio seed names a smart, discovery or mirrored playlist by id, so on SQLite those tables
+get AUTOINCREMENT, as requests did in 0043: a deleted playlist's id is never handed to the next
+one, which would quietly become the seed.
+
 Revision ID: 0048_radio_playlists
 Revises: 0047_track_analyses
 """
@@ -11,6 +15,8 @@ revision = "0048_radio_playlists"
 down_revision: str | None = "0047_track_analyses"
 branch_labels = None
 depends_on = None
+
+SEEDS = ("discovery_playlists", "mirrored_playlists", "smart_playlists")
 
 
 def upgrade() -> None:
@@ -38,8 +44,26 @@ def upgrade() -> None:
             name="fk_radio_playlists_user_id_users",
             ondelete="CASCADE",
         ),
+        sqlite_autoincrement=True,
     )
+    bind = op.get_bind()
+    if bind.dialect.name != "sqlite":  # Postgres sequences never reuse values
+        return
+    # The rebuild drops discovery_playlists, which provisional_holds references; SQLite only
+    # lets foreign keys be switched off outside a transaction. Ids are copied unchanged, and
+    # the copy sets each table's sqlite_sequence to its highest id.
+    ctx = op.get_context()
+    with ctx.autocommit_block():
+        bind.exec_driver_sql("PRAGMA foreign_keys=OFF")
+    for table in SEEDS:
+        with op.batch_alter_table(
+            table, recreate="always", table_kwargs={"sqlite_autoincrement": True}
+        ):
+            pass
+    with ctx.autocommit_block():  # commits the rebuild, then restores enforcement
+        bind.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 def downgrade() -> None:
+    """AUTOINCREMENT stays: harmless on the old schema and the rebuild is not worth repeating."""
     op.drop_table("radio_playlists")

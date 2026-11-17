@@ -39,13 +39,11 @@ SEED_GONE = f"the seed has no owned, analyzed track; {REFUSED}"
 
 def seed_tracks(s: Session, user_id: int, kind: str, ref: str) -> list[int]:
     """The owned tracks of a seed, or none when it names nothing (or another user's playlist).
-    ref: a track id, a release group MBID, an album artist tag, or "<kind>:<id>" of a playlist."""
-
-    def num(v: str) -> int | None:  # a form value; Postgres ids are 32-bit
-        return int(v) if v.isascii() and v.isdigit() and len(v) < 10 else None
-
+    ref: a recording MBID (a track seed: never a row id, which SQLite may reuse after a trash),
+    a release group MBID, an album artist tag, or "<kind>:<id>" of a playlist (whose tables
+    never reuse ids, migration 0048)."""
     if kind == "track":
-        where = Track.id == n if (n := num(ref)) is not None else None
+        where = Track.recording_mbid == ref
     elif kind == "album":
         where = Track.release_group_mbid == ref
     elif kind == "artist":
@@ -53,7 +51,9 @@ def seed_tracks(s: Session, user_id: int, kind: str, ref: str) -> list[int]:
     elif kind == "playlist":
         pk, _, pid = ref.partition(":")
         model = PLAYLISTS.get(pk)
-        pl = s.get(model, n) if model and (n := num(pid)) is not None else None
+        # a form value; Postgres ids are 32-bit
+        ok = model and pid.isascii() and pid.isdigit() and len(pid) < 10
+        pl = s.get(model, int(pid)) if model and ok else None
         if pl is None or pl.user_id != user_id:
             return []
         where = Track.recording_mbid.in_(
@@ -91,13 +91,14 @@ def pick(
 ) -> Picked:
     """Up to `size` owned, analyzed tracks the media server lists (`listed`, by recording),
     closest to the seeds' sound first, at most MAX_PER_ARTIST per artist and MAX_PER_ALBUM per
-    album; with `lead` (a one-track seed) the seed track comes first. Each has a reason."""
+    album; with `lead` (a track seed) the seed track comes first. Each has a reason."""
     seed_vectors = vectors(s, seeds)
     if not seed_vectors:
         return []
     ranked = [(t, similarity(d)) for t, d in nearest(s, seeds, k=sys.maxsize)]
+    first = min(seed_vectors)  # a track seed's recording, owned once or more: one copy leads
     if lead:
-        ranked.insert(0, (seeds[0], 1.0))
+        ranked.insert(0, (first, 1.0))
     meta = {
         i: (m, (a[0] if a else None) or aa or None, g or ((aa or "", al) if al else None), p)
         for i, m, a, aa, g, al, p in s.execute(
@@ -140,7 +141,7 @@ def pick(
 
     out: Picked = []
     for t, sim, song in chosen:
-        if lead and t == seeds[0]:
+        if lead and t == first:
             reason = "the seed track"
         else:
             reason = f"sounds close to the seed ({sim:.2f})"

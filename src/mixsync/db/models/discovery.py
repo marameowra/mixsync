@@ -53,7 +53,8 @@ class DiscoveryPlaylist(TimestampMixin, Base):
     """A user's generated playlist: what it draws on, how big, and how long unowned tracks stay."""
 
     __tablename__ = "discovery_playlists"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)  # racing first visits: one default
+    # racing first visits: one default; ids never reused, a Radio seed names one (0048)
+    __table_args__ = (UniqueConstraint("user_id", "name"), {"sqlite_autoincrement": True})
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -105,6 +106,7 @@ class MirroredPlaylist(TimestampMixin, Base):
         UniqueConstraint(
             "user_id", "upstream_kind", "upstream_ref", name="uq_mirrored_playlists_upstream"
         ),
+        {"sqlite_autoincrement": True},  # ids never reused: a Radio seed names one (0048)
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -134,7 +136,7 @@ class SmartPlaylist(TimestampMixin, Base):
     It never makes requests."""
 
     __tablename__ = "smart_playlists"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    __table_args__ = (UniqueConstraint("user_id", "name"), {"sqlite_autoincrement": True})  # 0048
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -158,13 +160,13 @@ class RadioPlaylist(TimestampMixin, Base):
     analyzed tracks only until gap filling exists, so it never makes requests."""
 
     __tablename__ = "radio_playlists"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    __table_args__ = (UniqueConstraint("user_id", "name"), {"sqlite_autoincrement": True})
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255))
     seed_kind: Mapped[str] = mapped_column(String(16))  # track | album | artist | playlist
-    # track: the track id; album: the release group MBID; artist: the album artist tag;
+    # track: the recording MBID; album: the release group MBID; artist: the album artist tag;
     # playlist: "<smart|discovery|mirrored>:<id>", one of the owner's playlists
     seed_ref: Mapped[str] = mapped_column(String(255))
     size: Mapped[int] = mapped_column(Integer, default=50)
