@@ -21,10 +21,11 @@ from typing import Any
 
 import numpy as np
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import Clock
-from mixsync.core.jobs import LIVE, JobKind
+from mixsync.core.jobs import JobKind, JobState
 from mixsync.db.models.library import Track, TrackAnalysis
 from mixsync.db.models.work import Job
 from mixsync.db.queue import JobRecord, enqueue_in
@@ -74,9 +75,10 @@ def analyzer_name() -> str:
 
 
 def _decode(path: Path) -> np.ndarray[Any, np.dtype[np.float32]]:
-    """Mono float samples at SR, decoded by ffmpeg (every format the library holds)."""
+    """Mono float samples at SR, decoded by ffmpeg (every format the library holds): at most
+    MAX_SECONDS and one more second, which tells a longer track."""
     out = subprocess.run(
-        ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-t", str(MAX_SECONDS)]
+        ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-t", str(MAX_SECONDS + 1)]
         + ["-ac", "1", "-ar", str(SR), "-f", "f32le", "-"],
         capture_output=True,
         check=True,
@@ -106,10 +108,12 @@ def analyze_file(path: Path) -> Features:
     import librosa  # slow to import (numba): only the worker that analyzes pays for it
 
     y = _decode(path)
+    long = y.size > MAX_SECONDS * SR
+    y = y[: MAX_SECONDS * SR]
     bpm = float(librosa.feature.tempo(y=y, sr=SR, hop_length=HOP)[0])
     tonic, mode = detect_key(librosa.feature.chroma_cqt(y=y, sr=SR).mean(axis=1))
     energy = 20 * math.log10(max(float(np.sqrt(np.mean(np.square(y)))), 1e-10))
-    bliss = _bliss()
+    bliss = None if long else _bliss()  # bliss decodes the whole file: a long mix gets no vector
     vector = [float(v) for v in bliss.Song(str(path)).analysis] if bliss else None
     if vector and not all(map(math.isfinite, vector)):  # JSON (and Postgres) can't hold NaN
         raise ValueError("bliss returned a non-finite feature")
@@ -124,7 +128,7 @@ def enqueue_analysis(s: Session, now: datetime, track_id: int) -> None:
 
 class AudioAnalysis:
     """ANALYZE jobs. A job with a track_id analyzes that track (queued at import); one without
-    analyzes the next track due. When the last live ANALYZE job ends and tracks are still due, it
+    analyzes the next track due. A job that ends with tracks still due and no ANALYZE job waiting
     queues one more, so a library is backfilled one job at a time, never flooding the queue."""
 
     def __init__(
@@ -158,10 +162,11 @@ class AudioAnalysis:
             .limit(1)
         )
 
-    def _continue(self, s: Session, job_id: int | None) -> None:
-        live = select(Job.id).where(Job.kind == JobKind.ANALYZE, Job.status.in_(LIVE))
-        if job_id is not None:
-            live = live.where(Job.id != job_id)
+    def _continue(self, s: Session) -> None:
+        # Only waiting jobs count: two running jobs that each counted the other would both end
+        # the chain. So at most one chain per worker runs at a time.
+        waiting = (JobState.QUEUED, JobState.RETRY_WAIT)
+        live = select(Job.id).where(Job.kind == JobKind.ANALYZE, Job.status.in_(waiting))
         if s.scalar(live.limit(1)) is None and self._due(s) is not None:
             enqueue_in(s, self.clock.now(), JobKind.ANALYZE, {}, priority=ANALYZE_PRIORITY)
 
@@ -169,18 +174,21 @@ class AudioAnalysis:
         """On startup: queue the backfill if tracks are due and no ANALYZE job is live."""
         if self.enabled:
             with self.sessions.begin() as s:
-                self._continue(s, None)
+                self._continue(s)
 
     async def run(self, job: JobRecord) -> None:
         if self.enabled:  # off: a job queued before the switch does nothing
-            await asyncio.to_thread(self.analyze_one, job.payload.get("track_id"), job.id)
+            await asyncio.to_thread(self.analyze_one, job.payload.get("track_id"))
 
-    def analyze_one(self, track_id: int | None, job_id: int | None = None) -> None:
-        with self.sessions.begin() as s:
-            due = self._due(s, track_id)
-            path = s.scalar(select(Track.path).where(Track.id == due)) if due else None
-            if due is not None:  # recorded first: a crash mid-analysis is never retried
-                self._record(s, due, None, UNFINISHED)
+    def analyze_one(self, track_id: int | None) -> None:
+        try:
+            with self.sessions.begin() as s:
+                due = self._due(s, track_id)
+                path = s.scalar(select(Track.path).where(Track.id == due)) if due else None
+                if due is not None:  # recorded first: a crash mid-analysis is never retried
+                    self._record(s, due, None, UNFINISHED)
+        except IntegrityError:  # another worker's job took this track first: go on
+            due = path = None
         if due is not None and path is not None:
             features, failure = None, None
             try:
@@ -192,7 +200,7 @@ class AudioAnalysis:
                 if s.get(Track, due) is not None:  # trashed meanwhile: its row went with it
                     self._record(s, due, features, failure)
         with self.sessions.begin() as s:
-            self._continue(s, job_id)
+            self._continue(s)
 
     def _record(self, s: Session, track_id: int, f: Features | None, failure: str | None) -> None:
         values = asdict(f) if f else dict.fromkeys(_FIELDS)  # a failure clears older values

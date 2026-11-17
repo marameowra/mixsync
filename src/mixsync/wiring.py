@@ -90,6 +90,7 @@ def build_services(
         tuple(settings.canonical_media),
         tuple(settings.canonical_countries),
         settings.trash_days,
+        analyze=settings.audio_analysis,
     )
     return Services(
         settings=settings,

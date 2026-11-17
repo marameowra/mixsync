@@ -38,7 +38,7 @@ from mixsync.db.models.work import Request as AlbumRequest
 from mixsync.db.names import stored_names
 from mixsync.db.queue import JobRecord, enqueue_in
 from mixsync.db.undo import undoable
-from mixsync.library import canonical, fragmentation, layout, paths, tags
+from mixsync.library import analysis, canonical, fragmentation, layout, paths, tags
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import snapshotting_writer
 
@@ -191,6 +191,7 @@ class Merger:
     canonical_countries: tuple[str, ...] = ("XW",)
     trash_days: int = 30  # an undo is possible this long after the plan finished
     device: Callable[[Path], int] = _device  # tests fake a second mount
+    analyze: bool = False  # queue an ANALYZE job for a restored row (the audio_analysis setting)
 
     def handlers(self) -> dict[JobKind, Callable[[JobRecord], Any]]:
         return {
@@ -741,12 +742,14 @@ class Merger:
         if row is None:  # a trash op deleted the row
             with self.sessions.begin() as s:
                 at = datetime.fromisoformat(old["imported_at"])
-                s.add(
-                    Track(
-                        **{**old, "imported_at": at},
-                        album_artist=names[0],
-                        album=names[1],
-                        year=names[2],
-                    )
+                track = Track(
+                    **{**old, "imported_at": at},
+                    album_artist=names[0],
+                    album=names[1],
+                    year=names[2],
                 )
+                s.add(track)
+                if self.analyze:  # its analysis went with the trashed row
+                    s.flush()
+                    analysis.enqueue_analysis(s, self.clock.now(), track.id)
         self._commit_op(plan_id, i, op, apply, done=False)

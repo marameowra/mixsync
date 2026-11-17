@@ -4,13 +4,16 @@ and the neighbour query."""
 
 import asyncio
 import importlib.util
+import sys
 import wave
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
 from sqlalchemy import Engine, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mixsync.core.clock import SystemClock
@@ -135,7 +138,7 @@ def drain(sessions: sessionmaker[Session], a: AudioAnalysis) -> int:
     queue, ran = JobQueue(engine_of(sessions), SystemClock(), lambda *_: None), 0
     while job := queue.claim("w"):
         queue.start(job.id, "w")
-        a.analyze_one(job.payload.get("track_id"), job.id)
+        a.analyze_one(job.payload.get("track_id"))
         queue.complete(job.id, "w")
         ran += 1
     return ran
@@ -297,3 +300,108 @@ def test_no_live_job_is_left_behind_while_tracks_are_due(
     with sessions() as s:
         assert s.scalar(select(Job.id).where(Job.status.in_(LIVE))) is None
     assert set(rows(sessions)) == {first, second}
+
+
+def test_two_jobs_finishing_together_keep_the_backfill_going(
+    sessions: sessionmaker[Session], ops: FileOps
+) -> None:
+    """Two workers: each job ends while the other still runs; neither may end the chain."""
+    ids = add_tracks(sessions, "1", "2", "3", "4")
+    with sessions.begin() as s:
+        for _ in range(2):
+            enqueue_in(s, datetime.now(UTC), JobKind.ANALYZE, {}, priority=ANALYZE_PRIORITY)
+    queue = JobQueue(engine_of(sessions), SystemClock(), lambda *_: None)
+    a = make(sessions, ops)
+    claimed = [queue.claim(w) for w in ("w1", "w2")]
+    for job, w in zip(claimed, ("w1", "w2"), strict=True):
+        assert job
+        queue.start(job.id, w)
+    for job in claimed:  # both handlers run before either job completes
+        assert job
+        a.analyze_one(job.payload.get("track_id"))
+    for job, w in zip(claimed, ("w1", "w2"), strict=True):
+        assert job
+        queue.complete(job.id, w)
+    with sessions() as s:  # two tracks are still due, so a job must be waiting for them
+        assert s.scalar(select(Job.id).where(Job.status.in_(LIVE))) is not None
+    drain(sessions, a)
+    assert set(rows(sessions)) == set(ids)
+
+
+def test_a_job_that_loses_its_track_to_another_worker_continues_the_chain(
+    sessions: sessionmaker[Session], ops: FileOps, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = add_tracks(sessions, "1", "2")
+    record = AudioAnalysis._record  # pyright: ignore[reportPrivateUsage]
+    lost: list[int] = []
+
+    def racing(self: AudioAnalysis, s: Session, track_id: int, *rest: object) -> None:
+        if not lost:  # the other worker inserted this track's row first
+            lost.append(track_id)
+            raise IntegrityError("INSERT INTO track_analyses", None, Exception("duplicate"))
+        record(self, s, track_id, *rest)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(AudioAnalysis, "_record", racing)
+    a = make(sessions, ops)
+    a.analyze_one(None)  # no error: the job ends well and queues the next one
+    assert lost == [ids[0]] and len(jobs(sessions)) == 1
+    assert drain(sessions, a) == 2  # the fake race wrote no row, so both tracks are still due
+    assert set(rows(sessions)) == set(ids)
+
+
+class FakeBliss(ModuleType):
+    """A stand-in for the bliss_audio extension, which only the image has."""
+
+    def __init__(self, vector: list[float]) -> None:
+        super().__init__("bliss_audio")
+        self.vector, self.calls = vector, 0
+        bliss = self
+
+        class Song:
+            def __init__(self, path: str) -> None:
+                bliss.calls += 1
+                self.analysis = np.array(bliss.vector, dtype=np.float32)
+
+        self.Song = Song
+
+
+def test_a_bliss_vector_is_stored_and_stable(
+    sessions: sessionmaker[Session], ops: FileOps, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bliss = FakeBliss([0.5, -0.25, 1.0])
+    monkeypatch.setitem(sys.modules, "bliss_audio", bliss)
+    triad(ops.library / "t.wav", 261.63, 329.63, 392.0)
+    [tid] = add_tracks(sessions, "t")
+    with sessions.begin() as s:
+        s.get_one(Track, tid).path = "t.wav"
+    first = analyze_file(ops.library / "t.wav")
+    assert first == analyze_file(ops.library / "t.wav") and first.vector == [0.5, -0.25, 1.0]
+    make(sessions, ops, analyze=analyze_file).analyze_one(tid)
+    got = rows(sessions)[tid]
+    assert got.failure is None and got.vector == [0.5, -0.25, 1.0] and bliss.calls == 3
+
+
+def test_a_non_finite_bliss_feature_is_recorded_as_a_failure(
+    sessions: sessionmaker[Session], ops: FileOps, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "bliss_audio", FakeBliss([0.5, float("nan")]))
+    triad(ops.library / "t.wav", 261.63, 329.63, 392.0)
+    [tid] = add_tracks(sessions, "t")
+    with sessions.begin() as s:
+        s.get_one(Track, tid).path = "t.wav"
+    make(sessions, ops, analyze=analyze_file).analyze_one(tid)
+    got = rows(sessions)[tid]
+    assert "non-finite" in (got.failure or "") and got.vector is None and got.bpm is None
+
+
+def test_a_track_longer_than_the_limit_gets_no_bliss_vector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bliss = FakeBliss([1.0, 2.0])
+    monkeypatch.setitem(sys.modules, "bliss_audio", bliss)
+    monkeypatch.setattr(analysis, "MAX_SECONDS", 5)
+    long = analyze_file(triad(tmp_path / "long.wav", 220.0, 261.63, 329.63, seconds=8))
+    assert long.vector is None and bliss.calls == 0  # bliss would decode all of it
+    assert (long.key_tonic, long.key_mode) == ("A", "minor")  # the first 5 s are analyzed
+    short = analyze_file(triad(tmp_path / "short.wav", 220.0, 261.63, 329.63, seconds=4))
+    assert short.vector == [1.0, 2.0] and bliss.calls == 1

@@ -3,17 +3,20 @@
 FROM python:3.13-slim AS bliss
 # Polochon-street/bliss-python has no tags; this commit is its 0.2.0 (on the bliss-audio crate 0.11).
 ARG BLISS_PYTHON_COMMIT=c4bb63b4aaadbc199a4abd7adf23acbe8f6f771d
+ARG BLISS_PYTHON_SHA256=fea946f787dc6aab58efb4eaf880355245bd779f3240ea620777ac0e0ccfbdb1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl build-essential clang \
-    libclang-dev pkg-config libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
+    libclang-dev pkg-config binutils libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
     libavutil-dev libswresample-dev libswscale-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.100.0
 COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uv /usr/local/bin/uv
 ENV PATH="/root/.cargo/bin:$PATH" RUSTFLAGS="-C target-cpu=x86-64"
 WORKDIR /src
-RUN curl -sSfL "https://github.com/Polochon-street/bliss-python/archive/$BLISS_PYTHON_COMMIT.tar.gz" \
-  | tar xz --strip-components=1 \
+RUN curl -sSfL -o /tmp/src.tar.gz \
+    "https://github.com/Polochon-street/bliss-python/archive/$BLISS_PYTHON_COMMIT.tar.gz" \
+ && echo "$BLISS_PYTHON_SHA256  /tmp/src.tar.gz" | sha256sum -c - \
+ && tar xzf /tmp/src.tar.gz --strip-components=1 && rm /tmp/src.tar.gz \
  && sed -i 's/^version = "0.1.10"$/version = "0.2.0"/' pyproject.toml  # stale; Cargo.toml has 0.2.0
 # upstream commits no lockfile; ours pins every crate
 COPY deploy/bliss/Cargo.lock ./
@@ -22,6 +25,10 @@ COPY deploy/bliss/Cargo.lock ./
 RUN uv tool run maturin@1.16.0 build --release --locked --no-default-features \
     -F bliss-audio/default -F time/macros -i python3.13 --compatibility linux --auditwheel skip \
     -o /wheels
+# the point of this build: fail if any AVX-512 (zmm register) instruction made it into the .so
+RUN python -m zipfile -e /wheels/*.whl /tmp/whl \
+ && ! objdump -d /tmp/whl/bliss_audio/*.so | grep -m1 zmm \
+ && rm -r /tmp/whl
 
 FROM python:3.13-slim
 
