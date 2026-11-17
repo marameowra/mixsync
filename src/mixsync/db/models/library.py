@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.engine.default import DefaultExecutionContext
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +49,27 @@ class Track(TimestampMixin, Base):
     year: Mapped[str | None] = mapped_column(String(4))
     # The path template `path` was rendered with (ADR 0019); null until the startup backfill.
     path_template: Mapped[str | None] = mapped_column(Text)
+
+
+class TrackAnalysis(Base):
+    """A track's audio analysis (ADR 0025), in the database only. A row of an older
+    feature_version is due re-analysis; one with a failure is never retried at its version."""
+
+    __tablename__ = "track_analyses"
+
+    # the track's removal (a trash) drops its analysis
+    track_id: Mapped[int] = mapped_column(
+        ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True
+    )
+    analyzer: Mapped[str] = mapped_column(String(64))  # e.g. "bliss-audio 0.2.0 + librosa 1.0.1"
+    feature_version: Mapped[int] = mapped_column(index=True)
+    bpm: Mapped[float | None] = mapped_column(Float)
+    key_tonic: Mapped[str | None] = mapped_column(String(2))  # pitch class: C, C#, ..., B
+    key_mode: Mapped[str | None] = mapped_column(String(5))  # major | minor
+    energy: Mapped[float | None] = mapped_column(Float)  # RMS loudness, dBFS
+    vector: Mapped[list[float] | None] = mapped_column(JSON(none_as_null=True))  # bliss features
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    failure: Mapped[str | None] = mapped_column(Text)
 
 
 class Plan(TimestampMixin, Base):

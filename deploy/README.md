@@ -30,6 +30,7 @@ sabnzbd:     /usenet (rw, optional)
 | `MIXSYNC_MB_BASE_URL` | local MusicBrainz mirror |
 | `MIXSYNC_MB_RATE` | MB requests/s, above 0 and at most 1 (default 1) |
 | `MIXSYNC_TRASH_DAYS` | trash purge age and undo window (default 30; [data safety](../docs/design/data-safety.md)) |
+| `MIXSYNC_AUDIO_ANALYSIS` | `false`: no BPM, key, energy or similarity analysis is queued or run. Default on: each library track is analyzed once, in the database only, at the lowest job priority ([ADR 0025](../docs/decisions/0025-local-audio-analysis-bliss-librosa.md)). Also on the settings page |
 | `MIXSYNC_MAX_CONCURRENT_DOWNLOADS` | active slskd transfer cap (default 3) |
 | `MIXSYNC_SLOW_DOWNLOAD_WINDOW`, `_FLOOR`, `_SHARE` | when a slow transfer stops counting: seconds (60), bytes/s (50000), throughput share (0.10); [services](../docs/design/services-etiquette.md#soulseek) |
 | `MIXSYNC_ACOUSTID_APP_KEY`, `MIXSYNC_ACOUSTID_USER_KEY` | AcoustID keys; the user key is optional ([rules](../docs/design/services-etiquette.md#acoustid)) |

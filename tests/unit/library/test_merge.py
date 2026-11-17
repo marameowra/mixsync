@@ -26,6 +26,7 @@ from mixsync.db.models.work import Job
 from mixsync.db.names import SqlNameStore
 from mixsync.db.undo import undoable
 from mixsync.library import fileops, fragmentation, tags
+from mixsync.library.analysis import ANALYZE_PRIORITY
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.purge import TrashPurger
@@ -380,6 +381,29 @@ def test_undo_restores_everything(world: World) -> None:
     assert any("Album (1999)" in f for f in world.trashed())
     with world.sessions() as s:
         assert s.scalar(select(FileOp.id).where(FileOp.status == "started")) is None
+
+
+def test_undo_queues_analysis_for_a_restored_row_only_with_analysis_on(world: World) -> None:
+    pid = build(world)
+    world.merger.execute(pid)
+    kept = {t.id for t in _rows(world)}
+    world.merger.undo_plan(pid)
+    restored = {t.id for t in _rows(world)} - kept
+    analyze = select(Job.payload).where(Job.kind == JobKind.ANALYZE)
+    with world.sessions() as s:  # the world's merger has the setting off
+        assert restored and s.scalars(analyze).all() == []
+
+    on = replace(world.merger, analyze=True)
+    pid = build(world)
+    on.execute(pid)
+    kept = {t.id for t in _rows(world)}
+    on.undo_plan(pid)
+    restored = {t.id for t in _rows(world)} - kept
+    with world.sessions() as s:  # the trash dropped their analysis: queue them again
+        assert restored and {p["track_id"] for p in s.scalars(analyze)} == restored
+        assert {j.priority for j in s.scalars(select(Job).where(Job.kind == JobKind.ANALYZE))} == {
+            ANALYZE_PRIORITY
+        }
 
 
 def _rows(w: World) -> list[Track]:

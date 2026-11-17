@@ -40,6 +40,7 @@ from mixsync.discovery.spotify_api import Reimport, SpotifyClient, Stored
 from mixsync.discovery.spotify_file import KIND as SPOTIFY_FILE
 from mixsync.discovery.spotify_file import SpotifyFile
 from mixsync.library import tag_undo
+from mixsync.library.analysis import AudioAnalysis
 from mixsync.library.fileops import FileOps
 from mixsync.library.importer import Importer
 from mixsync.library.name_backfill import NameBackfill
@@ -257,7 +258,9 @@ def _pipeline(services: Services, acoustid: AcoustIdClient) -> Pipeline:
         metadata=services.musicbrainz,
         fingerprint=fingerprint,
         acoustid=acoustid,
-        importer=Importer(services.fileops, sessions, clock, settings.path_template),
+        importer=Importer(
+            services.fileops, sessions, clock, settings.path_template, settings.audio_analysis
+        ),
         reencode=True,
         flac_level=settings.flac_level,
         embed_cover=settings.embed_cover,
@@ -351,6 +354,7 @@ def _new_queue(
         countries=tuple(settings.canonical_countries),
     )
     backfill = NameBackfill(sessions, clock, fileops)
+    analysis = AudioAnalysis(sessions, clock, fileops.library, settings.audio_analysis)
     scanner = MissingScan(sessions, clock, pipeline.metadata)
     purger = TrashPurger(sessions, clock, fileops, settings.trash_days)
     nightly = NightlyBackup(
@@ -416,6 +420,7 @@ def _new_queue(
         | mirror.handlers()
         | smart.handlers()
         | reimport.handlers()
+        | analysis.handlers()
     )
 
     def discovery_startup() -> None:
@@ -435,6 +440,7 @@ def _new_queue(
         dropper.start_chains,
         adopt.start_chains,
         discovery_startup,
+        analysis.start_chains,
     )
 
     return queue, f"{socket.gethostname()}:{os.getpid()}", handlers, startup

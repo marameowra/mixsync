@@ -29,8 +29,10 @@ from mixsync.db.models.discovery import (
     SmartPlaylist,
 )
 from mixsync.db.models.infra import WorkerHeartbeat
+from mixsync.db.models.library import Track, TrackAnalysis
 from mixsync.db.queue import JobQueue
 from mixsync.db.secretbox import SecretBox
+from mixsync.library.analysis import FEATURE_VERSION
 from mixsync.library.paths import render
 from mixsync.web.routes.settings import GROUPS, READ_ONLY
 from mixsync.wiring import build_services
@@ -282,6 +284,33 @@ def test_an_unreadable_secret_is_flagged_and_the_env_value_is_used(
     page = client.get("/settings").text
     assert "Saved value unreadable, re-enter." in field(page, "slskd_api_key")
     assert "from environment" in field(page, "slskd_api_key")
+
+
+def test_the_page_shows_how_many_tracks_are_analyzed(
+    client: TestClient, sf: sessionmaker[Session]
+) -> None:
+    now = datetime.now(UTC)
+    with sf.begin() as s:
+        tracks = [Track(path=p, status="verified", batch_id="b", imported_at=now) for p in "abc"]
+        s.add_all(tracks)
+        s.flush()
+        for t, failure in ((tracks[0], None), (tracks[1], "bad file")):
+            s.add(
+                TrackAnalysis(
+                    track_id=t.id,
+                    analyzer="x",
+                    feature_version=FEATURE_VERSION,
+                    analyzed_at=now,
+                    failure=failure,
+                )
+            )
+        s.add(  # an older version is due again, so not counted
+            TrackAnalysis(track_id=tracks[2].id, analyzer="x", feature_version=0, analyzed_at=now)
+        )
+    login(client, "root")
+    page = client.get("/settings").text
+    assert "1 of 3 library tracks analyzed; 1 could not be analyzed." in page
+    assert "lowest priority" in field(page, "audio_analysis")
 
 
 def test_every_editable_field_is_in_exactly_one_group() -> None:

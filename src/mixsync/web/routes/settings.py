@@ -36,6 +36,7 @@ from mixsync.db.app_settings import (
 from mixsync.db.auth import AuthUser
 from mixsync.db.models.auth import AppSettings, MatchingProfile
 from mixsync.db.models.library import Plan
+from mixsync.library import analysis
 from mixsync.match.profiles import confidence, from_confidence
 from mixsync.web.deps import Box, Db, require
 from mixsync.web.routes.account import percent
@@ -88,6 +89,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "timezone",
         "path_template",
     ),
+    "Audio analysis": ("audio_analysis",),
     "Logging": ("log_level",),
 }
 # bootstrap and mount settings shown read-only; secrets and the database URL (it may carry a
@@ -227,6 +229,7 @@ def _page(
             "users": server_link_users(db),
         },
         "dirty": bool(errors),
+        "analysis": analysis.counts(db),
         **_restart(request, db),
     }
     return templates.TemplateResponse(

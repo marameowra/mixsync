@@ -54,6 +54,8 @@ def test_a_worker_graph_shares_one_of_each_client(
     assert pipeline.importer.fileops is services.fileops
     assert _owner(handlers, JobKind.DISCOVERY_BUILD).box is services.secret_box
     assert _owner(handlers, JobKind.ACOUSTID_SUBMIT).acoustid is pipeline.acoustid
+    analysis = _owner(handlers, JobKind.ANALYZE)
+    assert analysis.library == services.fileops.library and analysis.enabled  # on by default
 
 
 def test_web_resolves_merger_watch_and_namer_to_one_provider(

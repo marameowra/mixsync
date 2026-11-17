@@ -26,6 +26,7 @@
   {% for title, fields in groups.items() %}
   <fieldset>
     <legend>{{ title }}</legend>
+    {% if title == "Audio analysis" %}<p class="help" id="analysis-status">{{ analysis[0] }} of {{ analysis[2] }} library tracks analyzed{% if analysis[1] %}; {{ analysis[1] }} could not be analyzed{% endif %}.</p>{% endif %}
     {% for f in fields %}
     <div class="field{% if f.error %} invalid{% endif %}">
       <label for="f-{{ f.name }}">{{ f.name }}</label>
